@@ -1,0 +1,61 @@
+/* Reset */
+body {
+    font-family: 'Poppins', Arial, sans-serif;
+    background-color: #f4f7fc;
+    color: #333;
+    line-height: 1.6;
+}
+
+/* Header */
+h1, h2, h3 {
+    color: #4CAF50;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+/* Custom Table */
+.table {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.table th {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.table tbody tr:hover {
+    background-color: #f1f1f1;
+}
+
+/* Custom Buttons */
+button, a {
+    display: inline-block;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+button:hover, a:hover {
+    background-color: #3e8e41;
+}
+
+.centered {
+    text-align: center;
+}
+
+/* Chart.js */
+.chart-container {
+    position: relative;
+    margin: auto;
+    height: 400px;
+    width: 90%;
+    max-width: 1200px;
+}
