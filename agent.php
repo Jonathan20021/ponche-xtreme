@@ -10,7 +10,10 @@ include 'db.php';
 
 $user_id = $_SESSION['user_id'];
 $date_filter = $_GET['dates'] ?? date('Y-m-d');
+$start_date = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));
+$end_date = $_GET['end_date'] ?? date('Y-m-d');
 
+// Query for daily records
 $query = "
     SELECT 
         attendance.type,
@@ -26,7 +29,7 @@ $stmt = $pdo->prepare($query);
 $stmt->execute([$user_id, $date_filter]);
 $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Consulta modificada para calcular el tiempo total excluyendo lunch y break
+// Query for daily time summary
 $time_summary_query = "
     SELECT 
         SUM(CASE WHEN type = 'Break' THEN TIMESTAMPDIFF(SECOND, timestamp, (
@@ -84,9 +87,44 @@ $time_summary_query = "
     WHERE user_id = ? AND DATE(timestamp) = ?
 ";
 
+// New query for accumulated payments
+$accumulated_payments_query = "
+    SELECT 
+        DATE(timestamp) as work_date,
+        SUM(CASE WHEN type = 'Entry' THEN TIMESTAMPDIFF(SECOND, timestamp, (
+            SELECT MAX(a.timestamp) 
+            FROM attendance a 
+            WHERE a.user_id = attendance.user_id 
+            AND DATE(a.timestamp) = DATE(attendance.timestamp)
+            AND a.type = 'Exit'
+        )) ELSE 0 END) -
+        SUM(CASE WHEN type = 'Break' THEN TIMESTAMPDIFF(SECOND, timestamp, (
+            SELECT MIN(a.timestamp) 
+            FROM attendance a 
+            WHERE a.user_id = attendance.user_id 
+            AND a.timestamp > attendance.timestamp 
+            AND DATE(a.timestamp) = DATE(attendance.timestamp)
+        )) ELSE 0 END) -
+        SUM(CASE WHEN type = 'Lunch' THEN TIMESTAMPDIFF(SECOND, timestamp, (
+            SELECT MIN(a.timestamp) 
+            FROM attendance a 
+            WHERE a.user_id = attendance.user_id 
+            AND a.timestamp > attendance.timestamp 
+            AND DATE(a.timestamp) = DATE(attendance.timestamp)
+        )) ELSE 0 END) as total_work_seconds
+    FROM attendance
+    WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
+    GROUP BY DATE(timestamp)
+    ORDER BY work_date ASC
+";
+
 $time_summary_stmt = $pdo->prepare($time_summary_query);
 $time_summary_stmt->execute([$user_id, $date_filter]);
 $time_summary = $time_summary_stmt->fetch(PDO::FETCH_ASSOC);
+
+$accumulated_payments_stmt = $pdo->prepare($accumulated_payments_query);
+$accumulated_payments_stmt->execute([$user_id, $start_date, $end_date]);
+$accumulated_payments = $accumulated_payments_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $hourly_rates = [
     'ematos' => 200.00,
@@ -97,7 +135,7 @@ $hourly_rates = [
     'Rmota' => 110.00,
     'abatista' => 200.00,
     'ydominguez' => 110.00,
-    'elara@presta-max.com' => 200.00,
+    'elara' => 200.00,
     'omorel' => 110.00,
     'rbueno' => 200.00,
     'xalfonso' => 200.00,
@@ -109,67 +147,135 @@ $hourly_rate = $hourly_rates[$username] ?? 0;
 $total_work_hours = $time_summary['total_work'] / 3600;
 $total_payment = round($total_work_hours * $hourly_rate, 2);
 
+// Calculate accumulated payments
+$accumulated_total = 0;
+foreach ($accumulated_payments as $payment) {
+    $accumulated_total += ($payment['total_work_seconds'] / 3600) * $hourly_rate;
+}
+
 include 'header_agent.php'; 
 ?>
 
-<div class="container mx-auto mt-6">
-    <h2 class="text-2xl font-bold mb-4">Work Time Summary (Daily)</h2>
-    <form method="GET" class="mb-4">
-        <label for="dates" class="block text-lg font-bold mb-2">Select Date:</label>
-        <input type="date" name="dates" id="dates" value="<?= htmlspecialchars($date_filter) ?>" class="p-2 border rounded w-full md:w-1/3">
-        <button type="submit" class="bg-blue-500 text-white py-2 px-4 mt-2 rounded hover:bg-blue-700">Filter</button>
-    </form>
+<div class="container mx-auto px-4 py-8">
+    <!-- Daily Summary Section -->
+    <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Daily Work Summary</h2>
+        
+        <form method="GET" class="mb-6">
+            <div class="flex flex-wrap gap-4 items-end">
+                <div class="flex-1 min-w-[200px]">
+                    <label for="dates" class="block text-sm font-medium text-gray-700 mb-1">Select Date:</label>
+                    <input type="date" name="dates" id="dates" value="<?= htmlspecialchars($date_filter) ?>" 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                    Filter
+                </button>
+            </div>
+        </form>
 
-    <div class="bg-white p-6 rounded shadow-md">
-        <table class="w-full border-collapse bg-white shadow-md rounded mt-4">
-            <thead>
-                <tr class="bg-gray-200">
-                    <th class="p-2 border">Break Time (hh:mm:ss)</th>
-                    <th class="p-2 border">Lunch Time (hh:mm:ss)</th>
-                    <th class="p-2 border">Follow Up Time (hh:mm:ss)</th>
-                    <th class="p-2 border">Ready Time (hh:mm:ss)</th>
-                    <th class="p-2 border">Work Time (hh:mm:ss)</th>
-                    <th class="p-2 border">Total Payment ($)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $time_summary['total_break'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $time_summary['total_lunch'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $time_summary['total_follow_up'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $time_summary['total_ready'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $time_summary['total_work'] ?: 0) ?></td>
-                    <td class="p-2 border">$<?= number_format($total_payment, 2) ?></td>
-                </tr>
-            </tbody>
-        </table>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-blue-50 p-4 rounded-lg">
+                <h3 class="text-lg font-semibold text-blue-800 mb-2">Work Time</h3>
+                <p class="text-2xl font-bold text-blue-600"><?= gmdate('H:i:s', $time_summary['total_work'] ?: 0) ?></p>
+            </div>
+            <div class="bg-green-50 p-4 rounded-lg">
+                <h3 class="text-lg font-semibold text-green-800 mb-2">Daily Payment</h3>
+                <p class="text-2xl font-bold text-green-600">$<?= number_format($total_payment, 2) ?></p>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-lg">
+                <h3 class="text-lg font-semibold text-purple-800 mb-2">Break Time</h3>
+                <p class="text-2xl font-bold text-purple-600"><?= gmdate('H:i:s', $time_summary['total_break'] ?: 0) ?></p>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php if (!empty($records)): ?>
+                        <?php foreach ($records as $record): ?>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($record['type']) ?></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($record['record_date']) ?></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($record['record_time']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="3" class="px-6 py-4 text-center text-gray-500">No records found for the selected date.</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <div class="bg-white p-6 rounded-lg shadow-lg mt-8">
-        <h3 class="text-lg font-semibold mb-4">Attendance Records</h3>
-        <table class="w-full border-collapse bg-white shadow-md rounded mt-4">
-            <thead>
-                <tr class="bg-gray-200">
-                    <th class="p-2 border">Type</th>
-                    <th class="p-2 border">Date</th>
-                    <th class="p-2 border">Time</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($records)): ?>
-                    <?php foreach ($records as $record): ?>
-                        <tr>
-                            <td class="p-2 border"><?= htmlspecialchars($record['type']) ?></td>
-                            <td class="p-2 border"><?= htmlspecialchars($record['record_date']) ?></td>
-                            <td class="p-2 border"><?= htmlspecialchars($record['record_time']) ?></td>
+    <!-- Accumulated Payments Section -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Accumulated Payments</h2>
+        
+        <form method="GET" class="mb-6">
+            <div class="flex flex-wrap gap-4 items-end">
+                <div class="flex-1 min-w-[200px]">
+                    <label for="start_date" class="block text-sm font-medium text-gray-700 mb-1">Start Date:</label>
+                    <input type="date" name="start_date" id="start_date" value="<?= htmlspecialchars($start_date) ?>" 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex-1 min-w-[200px]">
+                    <label for="end_date" class="block text-sm font-medium text-gray-700 mb-1">End Date:</label>
+                    <input type="date" name="end_date" id="end_date" value="<?= htmlspecialchars($end_date) ?>" 
+                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition-colors">
+                    Calculate
+                </button>
+            </div>
+        </form>
+
+        <div class="bg-green-50 p-6 rounded-lg mb-6">
+            <h3 class="text-lg font-semibold text-green-800 mb-2">Total Accumulated Payment</h3>
+            <p class="text-3xl font-bold text-green-600">$<?= number_format($accumulated_total, 2) ?></p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Work Hours</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php foreach ($accumulated_payments as $payment): ?>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= htmlspecialchars($payment['work_date']) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><?= number_format($payment['total_work_seconds'] / 3600, 2) ?> hrs</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$<?= number_format(($payment['total_work_seconds'] / 3600) * $hourly_rate, 2) ?></td>
                         </tr>
                     <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="4" class="text-center p-4">No records found for the selected date.</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add any interactive features here
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    dateInputs.forEach(input => {
+        input.addEventListener('change', function() {
+            this.form.submit();
+        });
+    });
+});
+</script>

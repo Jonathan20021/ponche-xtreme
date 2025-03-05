@@ -36,7 +36,7 @@ $hourly_rates = [
     'Rmota' => 110.00,
     'abatista' => 200.00,
     'ydominguez' => 110.00,
-    'elara@presta-max.com' => 200.00,
+    'elara' => 200.00,
     'omorel' => 110.00,
     'rbueno' => 200.00,
     'xalfonso' => 200.00,
@@ -52,68 +52,67 @@ $records_per_page = 10;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($current_page - 1) * $records_per_page;
 
-// Consulta para el reporte detallado diario con paginación
+// Consulta optimizada para obtener datos de tendencias
+$trend_query = "
+    WITH daily_work AS (
+        SELECT 
+            DATE(a.timestamp) as work_date,
+            a.user_id,
+            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) as first_entry,
+            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) as last_exit
+        FROM attendance a
+        WHERE a.timestamp >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+        GROUP BY DATE(a.timestamp), a.user_id
+    )
+    SELECT 
+        DATE_FORMAT(work_date, '%Y-%m') as month,
+        COUNT(DISTINCT user_id) as total_employees,
+        AVG(TIMESTAMPDIFF(SECOND, first_entry, COALESCE(last_exit, CONCAT(work_date, ' 19:00:00')))) as avg_work_time,
+        COUNT(CASE WHEN first_entry > CONCAT(work_date, ' 10:00:00') THEN 1 END) as late_count
+    FROM daily_work
+    GROUP BY DATE_FORMAT(work_date, '%Y-%m')
+    ORDER BY month DESC
+";
+
+$trend_data = $pdo->query($trend_query)->fetchAll(PDO::FETCH_ASSOC);
+
+// Consulta optimizada para el reporte diario
 $query_daily = "
+    WITH daily_attendance AS (
+        SELECT 
+            DATE(a.timestamp) as work_date,
+            a.user_id,
+            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) as first_entry,
+            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) as last_exit,
+            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) as lunch_count,
+            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) as break_count,
+            SUM(CASE WHEN a.type IN ('Meeting', 'Coaching') THEN 1 ELSE 0 END) as meeting_count
+        FROM attendance a
+        WHERE a.timestamp BETWEEN ? AND ?
+        GROUP BY DATE(a.timestamp), a.user_id
+    )
     SELECT 
         u.full_name AS employee,
         u.username,
-        DATE(a.timestamp) AS work_date,
-        MIN(CASE WHEN a.type IN ('Entry') THEN a.timestamp END) AS first_entry,
-        COALESCE(
-            MAX(CASE WHEN a.type IN ('Exit') THEN a.timestamp END),
-            CONCAT(DATE(a.timestamp), ' 19:00:00')
-        ) AS last_exit,
-        SUM(CASE WHEN a.type = 'Lunch' THEN TIMESTAMPDIFF(SECOND, a.timestamp, (
-            SELECT MIN(a2.timestamp) 
-            FROM attendance a2 
-            WHERE a2.user_id = a.user_id 
-            AND a2.timestamp > a.timestamp 
-            AND a2.type NOT IN ('Lunch')
-        )) ELSE 0 END) AS total_lunch,
-        SUM(CASE WHEN a.type = 'Break' THEN TIMESTAMPDIFF(SECOND, a.timestamp, (
-            SELECT MIN(a2.timestamp) 
-            FROM attendance a2 
-            WHERE a2.user_id = a.user_id 
-            AND a2.timestamp > a.timestamp 
-            AND a2.type NOT IN ('Break')
-        )) ELSE 0 END) AS total_break,
-        SUM(CASE WHEN a.type IN ('Meeting', 'Coaching') THEN TIMESTAMPDIFF(SECOND, a.timestamp, (
-            SELECT MIN(a2.timestamp) 
-            FROM attendance a2 
-            WHERE a2.user_id = a.user_id 
-            AND a2.timestamp > a.timestamp 
-            AND a2.type NOT IN ('Meeting', 'Coaching')
-        )) ELSE 0 END) AS total_meeting_coaching,
+        da.work_date,
+        da.first_entry,
+        COALESCE(da.last_exit, CONCAT(da.work_date, ' 19:00:00')) as last_exit,
+        (da.lunch_count * 45 * 60) as total_lunch,
+        (da.break_count * 15 * 60) as total_break,
+        (da.meeting_count * 45 * 60) as total_meeting_coaching,
         GREATEST(
             TIMESTAMPDIFF(SECOND, 
-                MIN(CASE WHEN a.type IN ('Entry') THEN a.timestamp END), 
-                COALESCE(
-                    MAX(CASE WHEN a.type IN ('Exit') THEN a.timestamp END),
-                    CONCAT(DATE(a.timestamp), ' 19:00:00')
-                )
-            ) 
-            - SUM(CASE WHEN a.type = 'Lunch' THEN TIMESTAMPDIFF(SECOND, a.timestamp, (
-                SELECT MIN(a2.timestamp) 
-                FROM attendance a2 
-                WHERE a2.user_id = a.user_id 
-                AND a2.timestamp > a.timestamp 
-                AND a2.type NOT IN ('Lunch')
-            )) ELSE 0 END)
-            - SUM(CASE WHEN a.type = 'Break' THEN TIMESTAMPDIFF(SECOND, a.timestamp, (
-                SELECT MIN(a2.timestamp) 
-                FROM attendance a2 
-                WHERE a2.user_id = a.user_id 
-                AND a2.timestamp > a.timestamp 
-                AND a2.type NOT IN ('Break')
-            )) ELSE 0 END),
+                da.first_entry, 
+                COALESCE(da.last_exit, CONCAT(da.work_date, ' 19:00:00'))
+            ) - 
+            (da.lunch_count * 45 * 60) - 
+            (da.break_count * 15 * 60),
             0
-        ) AS total_work_time
-    FROM attendance a
-    JOIN users u ON a.user_id = u.id
-    WHERE a.timestamp BETWEEN ? AND ?
-    GROUP BY u.full_name, u.username, DATE(a.timestamp)
-    ORDER BY u.full_name, DATE(a.timestamp)
-    LIMIT $offset, $records_per_page;
+        ) as total_work_time
+    FROM daily_attendance da
+    JOIN users u ON da.user_id = u.id
+    ORDER BY u.full_name, da.work_date
+    LIMIT $offset, $records_per_page
 ";
 
 $stmt = $pdo->prepare($query_daily);
@@ -129,71 +128,31 @@ $total_records = $pdo->query("
 ")->fetchColumn();
 $total_pages = ceil($total_records / $records_per_page);
 
-// Consulta para el reporte mensual consolidado
+// Consulta optimizada para el reporte mensual
 $query_monthly = "
+    WITH monthly_attendance AS (
+        SELECT 
+            a.user_id,
+            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) as lunch_count,
+            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) as break_count,
+            SUM(CASE WHEN a.type IN ('Meeting', 'Coaching') THEN 1 ELSE 0 END) as meeting_count,
+            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) as first_entry,
+            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) as last_exit
+        FROM attendance a
+        WHERE a.timestamp BETWEEN ? AND ?
+        GROUP BY a.user_id
+    )
     SELECT 
         u.full_name AS employee,
         u.username,
-        SUM(
-            CASE 
-                WHEN a.type = 'Lunch' THEN 
-                    TIMESTAMPDIFF(SECOND, a.timestamp, (
-                        SELECT MIN(a2.timestamp) 
-                        FROM attendance a2 
-                        WHERE a2.user_id = a.user_id 
-                        AND a2.timestamp > a.timestamp 
-                        AND a2.type NOT IN ('Lunch')
-                    )) 
-                ELSE 0 
-            END
-        ) AS total_lunch,
-        SUM(
-            CASE 
-                WHEN a.type = 'Break' THEN 
-                    TIMESTAMPDIFF(SECOND, a.timestamp, (
-                        SELECT MIN(a2.timestamp) 
-                        FROM attendance a2 
-                        WHERE a2.user_id = a.user_id 
-                        AND a2.timestamp > a.timestamp 
-                        AND a2.type NOT IN ('Break')
-                    )) 
-                ELSE 0 
-            END
-        ) AS total_break,
-        SUM(
-            CASE 
-                WHEN a.type IN ('Meeting', 'Coaching') THEN 
-                    TIMESTAMPDIFF(SECOND, a.timestamp, (
-                        SELECT MIN(a2.timestamp) 
-                        FROM attendance a2 
-                        WHERE a2.user_id = a.user_id 
-                        AND a2.timestamp > a.timestamp 
-                        AND a2.type NOT IN ('Meeting', 'Coaching')
-                    )) 
-                ELSE 0 
-            END
-        ) AS total_meeting_coaching,
-        SUM(
-            CASE 
-                WHEN a.type = 'Entry' THEN 
-                    TIMESTAMPDIFF(SECOND, a.timestamp, (
-                        SELECT MAX(a2.timestamp) 
-                        FROM attendance a2 
-                        WHERE a2.user_id = a.user_id 
-                        AND a2.timestamp > a.timestamp 
-                        AND a2.type = 'Exit'
-                    )) 
-                ELSE 0 
-            END
-        ) AS total_work_time
-    FROM attendance a
-    JOIN users u ON a.user_id = u.id
-    WHERE a.timestamp BETWEEN ? AND ?
-    GROUP BY u.full_name, u.username
-    ORDER BY u.full_name;
+        (ma.lunch_count * 45 * 60) as total_lunch,
+        (ma.break_count * 15 * 60) as total_break,
+        (ma.meeting_count * 45 * 60) as total_meeting_coaching,
+        TIMESTAMPDIFF(SECOND, ma.first_entry, COALESCE(ma.last_exit, CONCAT(DATE(ma.first_entry), ' 19:00:00'))) as total_work_time
+    FROM monthly_attendance ma
+    JOIN users u ON ma.user_id = u.id
+    ORDER BY u.full_name
 ";
-
-
 
 $stmt_monthly = $pdo->prepare($query_monthly);
 $stmt_monthly->execute([$start_date, $end_date]);
@@ -201,135 +160,250 @@ $monthly_data = $stmt_monthly->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <?php include 'header.php'; ?>
-<div class="container mx-auto mt-6">
-    <h2 class="text-2xl font-bold mb-4">Monthly Employee Performance Report</h2>
-    <form method="GET" class="mb-4">
-    <label for="month" class="font-bold">Select Month:</label>
-    <input type="month" name="month" id="month" value="<?= htmlspecialchars($date_filter) ?>" class="p-2 border rounded">
-    <button type="submit" class="bg-green-500 text-white py-2 px-4 ml-2 rounded hover:bg-green-700">
-        Filter
-    </button>
-    <a href="download_excel.php?month=<?= htmlspecialchars($date_filter) ?>" 
-   class="bg-blue-500 text-white py-2 px-4 ml-2 rounded hover:bg-blue-700">
-   Download Excel
-</a>
 
-</form>
+<!-- Modern Dashboard Layout -->
+<div class="container mx-auto px-4 py-8">
+    <!-- Header Section -->
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-800">HR Analytics Dashboard</h1>
+            <p class="text-gray-600">Employee Performance & Attendance Report</p>
+        </div>
+        <div class="flex space-x-4">
+            <form method="GET" class="flex items-center space-x-2">
+                <input type="month" name="month" value="<?= htmlspecialchars($date_filter) ?>" 
+                       class="rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+                    Filter
+                </button>
+            </form>
+            <div class="flex space-x-2">
+                <a href="download_excel.php?month=<?= htmlspecialchars($date_filter) ?>" 
+                   class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">
+                    <i class="fas fa-file-excel mr-2"></i>Excel
+                </a>
+                <a href="download_pdf.php?month=<?= htmlspecialchars($date_filter) ?>" 
+                   class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
+                    <i class="fas fa-file-pdf mr-2"></i>PDF
+                </a>
+            </div>
+        </div>
+    </div>
 
+    <!-- Key Metrics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <?php
+        $total_employees = count($monthly_data);
+        $avg_adh = array_sum(array_column($monthly_data, 'total_work_time')) / ($total_employees * $scheduled_hours_per_day) * 100;
+        $late_count = count(array_filter($report_data, function($row) use ($goals) {
+            return strtotime($row['first_entry']) > strtotime($row['work_date'] . ' ' . $goals['sch_in']);
+        }));
+        $total_earned = array_sum(array_map(function($row) use ($hourly_rates) {
+            return ($row['total_work_time'] / 3600) * ($hourly_rates[$row['username']] ?? 0);
+        }, $monthly_data));
+        ?>
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-500 text-sm font-medium">Total Employees</h3>
+            <p class="text-3xl font-bold text-gray-900"><?= $total_employees ?></p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-500 text-sm font-medium">Average Adherence</h3>
+            <p class="text-3xl font-bold text-gray-900"><?= number_format($avg_adh, 1) ?>%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-500 text-sm font-medium">Late Arrivals</h3>
+            <p class="text-3xl font-bold text-gray-900"><?= $late_count ?></p>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-500 text-sm font-medium">Total Amount Earned</h3>
+            <p class="text-3xl font-bold text-gray-900">$<?= number_format($total_earned, 2) ?></p>
+        </div>
+    </div>
 
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-4">Attendance Trends</h3>
+            <canvas id="attendanceTrend"></canvas>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-4">Employee Performance Distribution</h3>
+            <canvas id="performanceDistribution"></canvas>
+        </div>
+    </div>
 
-    <table class="w-full border-collapse bg-white shadow-md rounded mt-4">
-        <thead>
-            <tr class="bg-gray-200">
-                <th class="p-2 border">Employee</th>
-                <th class="p-2 border">Date</th>
-                <th class="p-2 border">First Entry</th>
-                <th class="p-2 border">Last Exit</th>
-                <th class="p-2 border">Lunch Time</th>
-                <th class="p-2 border">Break Time</th>
-                <th class="p-2 border">Meeting/Coaching</th>
-                <th class="p-2 border">Work Time</th>
-                <th class="p-2 border">Late?</th>
-                <th class="p-2 border">ABS (%)</th>
-                <th class="p-2 border">Amount of Hours Paid</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($report_data as $row): ?>
-                <?php
-                $work_time = $row['total_work_time'] ?: 0;
+    <!-- Detailed Reports -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="p-6 border-b">
+            <h2 class="text-xl font-semibold">Detailed Employee Report</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Entry</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Exit</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lunch Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Break Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meeting/Coaching</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Work Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ABS (%)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php foreach ($report_data as $row): ?>
+                        <?php
+                        $work_time = $row['total_work_time'] ?: 0;
+                        $abs_percent = ($work_time / $scheduled_hours_per_day) * 100;
+                        $late = (strtotime($row['first_entry']) > strtotime($row['work_date'] . ' ' . $goals['sch_in']));
+                        $status_class = $late ? 'text-red-600' : 'text-green-600';
+                        $performance_class = $abs_percent >= 90 ? 'text-green-600' : ($abs_percent >= 80 ? 'text-yellow-600' : 'text-red-600');
+                        $hourly_rate = $hourly_rates[$row['username']] ?? 0;
+                        $earned = ($work_time / 3600) * $hourly_rate;
+                        ?>
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['employee']) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['work_date']) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['first_entry'] ?: 'N/A') ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['last_exit'] ?: 'N/A') ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_lunch'] ?: 0) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_break'] ?: 0) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_meeting_coaching'] ?: 0) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $work_time) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="<?= $status_class ?>">
+                                    <?= $late ? 'Late' : 'On Time' ?>
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="<?= $performance_class ?>">
+                                    <?= number_format($abs_percent, 2) ?>%
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">$<?= number_format($earned, 2) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-                // Calcula ABS (%) basado en las horas programadas
-                $abs_percent = ($work_time / $scheduled_hours_per_day) * 100;
-
-                $late = (strtotime($row['first_entry']) > strtotime($row['work_date'] . ' ' . $goals['sch_in']));
-
-                // Calcular el monto de horas pagadas
-                $hourly_rate = $hourly_rates[$row['username']] ?? 0;
-                $earned = ($work_time / 3600) * $hourly_rate;
-                ?>
-                <tr>
-                    <td class="p-2 border"><?= htmlspecialchars($row['employee']) ?></td>
-                    <td class="p-2 border"><?= htmlspecialchars($row['work_date']) ?></td>
-                    <td class="p-2 border"><?= htmlspecialchars($row['first_entry'] ?: 'N/A') ?></td>
-                    <td class="p-2 border"><?= htmlspecialchars($row['last_exit'] ?: 'N/A') ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $row['total_lunch'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $row['total_break'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $row['total_meeting_coaching'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $work_time) ?></td>
-                    <td class="p-2 border"><?= $late ? 'Yes' : 'No' ?></td>
-                    <td class="p-2 border"><?= number_format($abs_percent, 2) ?>%</td>
-                    <td class="p-2 border">$<?= number_format($earned, 2) ?></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-    <nav aria-label="Table Pagination">
-        <ul class="pagination justify-content-center">
-            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                <li class="page-item <?= ($i == $current_page) ? 'active' : '' ?>">
-                    <a class="page-link" href="?page=<?= $i ?>&month=<?= htmlspecialchars($date_filter) ?>"><?= $i ?></a>
-                </li>
-            <?php endfor; ?>
-        </ul>
-    </nav>
+    <!-- Monthly Consolidated Report -->
+    <div class="bg-white rounded-lg shadow overflow-hidden mt-8">
+        <div class="p-6 border-b">
+            <h2 class="text-xl font-semibold">Monthly Consolidated Report</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Lunch Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Break Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Meeting/Coaching</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Work Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADH (%)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Earned</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php foreach ($monthly_data as $row): ?>
+                        <?php
+                        $work_time = $row['total_work_time'] ?: 0;
+                        $adh_percent = ($work_time / ($scheduled_hours_per_day * count($report_data))) * 100;
+                        $hourly_rate = $hourly_rates[$row['username']] ?? 0;
+                        $earned = ($work_time / 3600) * $hourly_rate;
+                        ?>
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['employee']) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_lunch'] ?: 0) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_break'] ?: 0) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_meeting_coaching'] ?: 0) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $work_time) ?></td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="<?= $adh_percent >= 90 ? 'text-green-600' : ($adh_percent >= 80 ? 'text-yellow-600' : 'text-red-600') ?>">
+                                    <?= number_format($adh_percent, 2) ?>%
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">$<?= number_format($earned, 2) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<!-- Sección de Reporte Mensual Consolidado -->
-<div class="container mx-auto mt-6">
-    <h2 class="text-2xl font-bold mb-4">Monthly Consolidated Employee Report</h2>
-    <table class="w-full border-collapse bg-white shadow-md rounded mt-4">
-        <thead>
-            <tr class="bg-gray-200">
-                <th class="p-2 border">Employee</th>
-                <th class="p-2 border">Total Lunch Time</th>
-                <th class="p-2 border">Total Break Time</th>
-                <th class="p-2 border">Total Meeting/Coaching</th>
-                <th class="p-2 border">Total Work Time</th>
-                <th class="p-2 border">ADH (%)</th>
-                <th class="p-2 border">Amount Earned</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php 
-            foreach ($monthly_data as $row): 
-                $username = $row['username'];
-                $work_time = $row['total_work_time'] ?: 0; // Total Work Time en segundos
-
-                // Calcular el monto ganado (Amount Earned)
-                $hourly_rate = $hourly_rates[$username] ?? 0; // Tarifa por hora
-                $earned = ($work_time / 3600) * $hourly_rate; // Convertir a horas y multiplicar por la tarifa
-
-                // Calcular ADH basado en el tiempo trabajado y las horas programadas
-                $adh_percent = ($work_time / ($scheduled_hours_per_day * count($report_data))) * 100;
-            ?>
-                <tr>
-                    <td class="p-2 border"><?= htmlspecialchars($row['employee']) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $row['total_lunch'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $row['total_break'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $row['total_meeting_coaching'] ?: 0) ?></td>
-                    <td class="p-2 border"><?= gmdate('H:i:s', $work_time) ?></td>
-                    <td class="p-2 border"><?= number_format($adh_percent, 2) ?>%</td>
-                    <td class="p-2 border">$<?= number_format($earned, 2) ?></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-
-
-<!-- Scripts DataTables -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<!-- Include Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    $(document).ready(function() {
-        $('#employeeTable').DataTable({
-            paging: true,
-            searching: true,
-            ordering: true,
-            pageLength: 10,
-            lengthChange: true
-        });
-    });
+// Attendance Trend Chart
+const trendCtx = document.getElementById('attendanceTrend').getContext('2d');
+new Chart(trendCtx, {
+    type: 'line',
+    data: {
+        labels: <?= json_encode(array_column(array_reverse($trend_data), 'month')) ?>,
+        datasets: [{
+            label: 'Average Work Time (hours)',
+            data: <?= json_encode(array_map(function($item) {
+                return $item['avg_work_time'] / 3600;
+            }, array_reverse($trend_data))) ?>,
+            borderColor: 'rgb(59, 130, 246)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// Performance Distribution Chart
+const performanceCtx = document.getElementById('performanceDistribution').getContext('2d');
+const performanceData = <?= json_encode(array_map(function($row) use ($scheduled_hours_per_day) {
+    return ($row['total_work_time'] / $scheduled_hours_per_day) * 100;
+}, $monthly_data)) ?>;
+
+new Chart(performanceCtx, {
+    type: 'bar',
+    data: {
+        labels: ['< 80%', '80-90%', '90-100%', '> 100%'],
+        datasets: [{
+            label: 'Number of Employees',
+            data: [
+                performanceData.filter(x => x < 80).length,
+                performanceData.filter(x => x >= 80 && x < 90).length,
+                performanceData.filter(x => x >= 90 && x < 100).length,
+                performanceData.filter(x => x >= 100).length
+            ],
+            backgroundColor: [
+                'rgb(239, 68, 68)',
+                'rgb(234, 179, 8)',
+                'rgb(34, 197, 94)',
+                'rgb(59, 130, 246)'
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
 </script>
+
+<!-- Include Tailwind CSS -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<!-- Include Font Awesome -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">

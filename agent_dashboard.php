@@ -89,13 +89,17 @@ $hourly_rates = [
     'Rmota' => 110.00,
     'abatista' => 200.00,
     'ydominguez' => 110.00,
-    'elara@presta-max.com' => 200.00,
+    'elara' => 200.00,
     'omorel' => 110.00,
     'rbueno' => 200.00
 ];
 $hourly_rate = $hourly_rates[$username] ?? 0;
 $total_work_hours = $time_summary['total_work'] / 3600;
 $total_payment = round($total_work_hours * $hourly_rate, 2);
+
+// Calcular productividad
+$total_time = $time_summary['total_work'] + $time_summary['total_break'] + $time_summary['total_lunch'] + $time_summary['total_follow_up'] + $time_summary['total_ready'];
+$productivity_score = $total_time > 0 ? round(($time_summary['total_work'] / $total_time) * 100, 1) : 0;
 ?>
 
 <?php include 'header_agent.php'; ?>
@@ -106,113 +110,239 @@ $total_payment = round($total_work_hours * $hourly_rate, 2);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <title>Agent Dashboard</title>
 </head>
-<body class="bg-gray-100 text-gray-800">
-    <div class="container mx-auto mt-8">
-        <h1 class="text-3xl font-bold text-center mb-6">Welcome, <?= htmlspecialchars($full_name) ?></h1>
+<body class="bg-gray-50 text-gray-800">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header Section -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">Welcome, <?= htmlspecialchars($full_name) ?></h1>
+                <p class="text-gray-600">Here's your performance overview for today</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="relative">
+                    <input type="text" id="datePicker" class="bg-white border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" value="<?= $date_filter ?>">
+                </div>
+            </div>
+        </div>
+
+        <!-- Productivity Score -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">Productivity Score</h3>
+                    <p class="text-gray-600">Based on your work time vs total time</p>
+                </div>
+                <div class="relative">
+                    <div class="w-24 h-24">
+                        <canvas id="productivityChart"></canvas>
+                    </div>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <span class="text-2xl font-bold"><?= $productivity_score ?>%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Summary Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold">Total Break Time</h3>
-                <p class="text-2xl"><?= gmdate("H:i:s", $time_summary['total_break']) ?></p>
+            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Work Time</h3>
+                    <i class="fas fa-briefcase text-blue-500 text-xl"></i>
+                </div>
+                <p class="text-3xl font-bold text-blue-600"><?= gmdate("H:i", $time_summary['total_work']) ?></p>
+                <p class="text-sm text-gray-600 mt-2">Hours worked today</p>
             </div>
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold">Total Lunch Time</h3>
-                <p class="text-2xl"><?= gmdate("H:i:s", $time_summary['total_lunch']) ?></p>
+            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Break Time</h3>
+                    <i class="fas fa-coffee text-orange-500 text-xl"></i>
+                </div>
+                <p class="text-3xl font-bold text-orange-600"><?= gmdate("H:i", $time_summary['total_break']) ?></p>
+                <p class="text-sm text-gray-600 mt-2">Total breaks taken</p>
             </div>
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold">Total Follow Up Time</h3>
-                <p class="text-2xl"><?= gmdate("H:i:s", $time_summary['total_follow_up']) ?></p>
+            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Lunch Time</h3>
+                    <i class="fas fa-utensils text-green-500 text-xl"></i>
+                </div>
+                <p class="text-3xl font-bold text-green-600"><?= gmdate("H:i", $time_summary['total_lunch']) ?></p>
+                <p class="text-sm text-gray-600 mt-2">Lunch break duration</p>
             </div>
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold">Total Ready Time</h3>
-                <p class="text-2xl"><?= gmdate("H:i:s", $time_summary['total_ready']) ?></p>
-            </div>
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold">Total Work Time</h3>
-                <p class="text-2xl"><?= gmdate("H:i:s", $time_summary['total_work']) ?></p>
-            </div>
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold">Total Payment</h3>
-                <p class="text-2xl">$<?= number_format($total_payment, 2) ?></p>
+            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Daily Payment</h3>
+                    <i class="fas fa-dollar-sign text-yellow-500 text-xl"></i>
+                </div>
+                <p class="text-3xl font-bold text-yellow-600">$<?= number_format($total_payment, 2) ?></p>
+                <p class="text-sm text-gray-600 mt-2">Based on <?= number_format($total_work_hours, 1) ?> hours</p>
             </div>
         </div>
 
-        <!-- Charts -->
+        <!-- Charts Section -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Work Time Breakdown -->
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold mb-4">Work Time Breakdown</h3>
-                <canvas id="timeBreakdownChart"></canvas>
+            <!-- Time Distribution Chart -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Time Distribution</h3>
+                <canvas id="timeBreakdownChart" height="300"></canvas>
             </div>
 
-            <!-- Attendance by Type -->
-            <div class="bg-white p-6 rounded shadow">
-                <h3 class="text-lg font-semibold mb-4">Attendance by Type</h3>
-                <canvas id="attendanceTypeChart"></canvas>
+            <!-- Activity Timeline -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Activity Timeline</h3>
+                <div class="space-y-4">
+                    <?php foreach ($records as $record): ?>
+                        <div class="flex items-center space-x-4">
+                            <div class="w-2 h-2 rounded-full <?php
+                                echo match($record['type']) {
+                                    'Entry' => 'bg-green-500',
+                                    'Exit' => 'bg-red-500',
+                                    'Break' => 'bg-orange-500',
+                                    'Lunch' => 'bg-yellow-500',
+                                    'Ready' => 'bg-blue-500',
+                                    'Follow Up' => 'bg-purple-500',
+                                    default => 'bg-gray-500'
+                                };
+                            ?>"></div>
+                            <div>
+                                <p class="font-medium"><?= htmlspecialchars($record['type']) ?></p>
+                                <p class="text-sm text-gray-600"><?= htmlspecialchars($record['record_time']) ?></p>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
             </div>
         </div>
 
-        <!-- Table of Records -->
-        <div class="bg-white p-6 rounded shadow">
-            <h3 class="text-lg font-semibold mb-4">Attendance Records</h3>
-            <table class="w-full border-collapse bg-white shadow-md rounded mt-4">
-                <thead>
-                    <tr class="bg-gray-200">
-                        <th class="p-2 border">Type</th>
-                        <th class="p-2 border">Date</th>
-                        <th class="p-2 border">Time</th>
-
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (!empty($records)): ?>
-                        <?php foreach ($records as $record): ?>
-                            <tr>
-                                <td class="p-2 border"><?= htmlspecialchars($record['type']) ?></td>
-                                <td class="p-2 border"><?= htmlspecialchars($record['record_date']) ?></td>
-                                <td class="p-2 border"><?= htmlspecialchars($record['record_time']) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="4" class="text-center p-4">No records found for the selected date.</td>
+        <!-- Detailed Records Table -->
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-800">Detailed Records</h3>
+                <div class="flex space-x-2">
+                    <button class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                        <i class="fas fa-download mr-2"></i>Export
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
                         </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <?php if (!empty($records)): ?>
+                            <?php foreach ($records as $record): ?>
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <?php
+                                            echo match($record['type']) {
+                                                'Entry' => 'bg-green-100 text-green-800',
+                                                'Exit' => 'bg-red-100 text-red-800',
+                                                'Break' => 'bg-orange-100 text-orange-800',
+                                                'Lunch' => 'bg-yellow-100 text-yellow-800',
+                                                'Ready' => 'bg-blue-100 text-blue-800',
+                                                'Follow Up' => 'bg-purple-100 text-purple-800',
+                                                default => 'bg-gray-100 text-gray-800'
+                                            };
+                                        ?>">
+                                            <?= htmlspecialchars($record['type']) ?>
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <?= htmlspecialchars($record['record_date']) ?>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <?= htmlspecialchars($record['record_time']) ?>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <?= htmlspecialchars($record['ip_address']) ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-center text-gray-500">
+                                    No records found for the selected date.
+                                </td>
+                            </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <script>
-        const timeBreakdownData = {
-            labels: ['Break', 'Lunch', 'Follow Up', 'Ready', 'Work'],
-            datasets: [{
-                label: 'Time in Seconds',
-                data: [<?= $time_summary['total_break'] ?>, <?= $time_summary['total_lunch'] ?>, <?= $time_summary['total_follow_up'] ?>, <?= $time_summary['total_ready'] ?>, <?= $time_summary['total_work'] ?>],
-                backgroundColor: ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff'],
-            }]
-        };
-
-        const attendanceTypeData = {
-            labels: <?= json_encode(array_column($records, 'type')) ?>,
-            datasets: [{
-                label: 'Attendance Count',
-                data: <?= json_encode(array_count_values(array_column($records, 'type'))) ?>,
-                backgroundColor: '#ffcc00',
-            }]
-        };
-
-        new Chart(document.getElementById('timeBreakdownChart'), {
-            type: 'doughnut',
-            data: timeBreakdownData,
+        // Initialize date picker
+        flatpickr("#datePicker", {
+            dateFormat: "Y-m-d",
+            maxDate: "today",
+            onChange: function(selectedDates, dateStr) {
+                window.location.href = `?dates=${dateStr}`;
+            }
         });
 
-        new Chart(document.getElementById('attendanceTypeChart'), {
-            type: 'bar',
-            data: attendanceTypeData,
+        // Productivity Chart
+        new Chart(document.getElementById('productivityChart'), {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [<?= $productivity_score ?>, <?= 100 - $productivity_score ?>],
+                    backgroundColor: ['#3B82F6', '#E5E7EB'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                cutout: '80%',
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // Time Breakdown Chart
+        new Chart(document.getElementById('timeBreakdownChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Work', 'Break', 'Lunch', 'Follow Up', 'Ready'],
+                datasets: [{
+                    data: [
+                        <?= $time_summary['total_work'] ?>,
+                        <?= $time_summary['total_break'] ?>,
+                        <?= $time_summary['total_lunch'] ?>,
+                        <?= $time_summary['total_follow_up'] ?>,
+                        <?= $time_summary['total_ready'] ?>
+                    ],
+                    backgroundColor: [
+                        '#3B82F6',
+                        '#F97316',
+                        '#22C55E',
+                        '#A855F7',
+                        '#0EA5E9'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
         });
     </script>
 </body>
