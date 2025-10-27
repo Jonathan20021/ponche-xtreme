@@ -2,13 +2,13 @@
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: index.php'); // Redirige a la página de login si no hay sesión activa
+    header('Location: index.php'); // Redirect to login page if no active session
     exit;
 }
 
 include 'db.php';
 
-// Consulta para estadísticas generales
+// Consulta para estadisticas generales
 $total_users = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $entries_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND DATE(timestamp) = CURDATE()")->fetchColumn();
 $exits_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Exit' AND DATE(timestamp) = CURDATE()")->fetchColumn();
@@ -18,7 +18,7 @@ $active_users = $pdo->query("
     WHERE DATE(timestamp) = CURDATE()
 ")->fetchColumn();
 
-// Datos para gráficos
+// Datos para grÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡ficos
 $category_data = $pdo->query("
     SELECT type, COUNT(*) as count 
     FROM attendance 
@@ -39,7 +39,7 @@ $work_time_data = $pdo->query("
     GROUP BY users.username
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// Cálculo del porcentaje total de tardanzas generales
+// CÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡lculo del porcentaje total de tardanzas generales
 $tardiness_data = $pdo->query("
     SELECT 
         COUNT(CASE WHEN type = 'Entry' AND TIME(timestamp) > '10:05:00' THEN 1 END) AS late_entries,
@@ -66,7 +66,7 @@ if ($tardiness_data['total_entries'] > 0) {
     $late_breaks_percent = round(($tardiness_data['late_breaks'] / $tardiness_data['total_entries']) * 100, 2);
 }
 
-// Cálculo del porcentaje de tardanzas solo para Entry
+// CÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡lculo del porcentaje de tardanzas solo para Entry
 $tardiness_entry_data = $pdo->query("
     SELECT 
         COUNT(CASE WHEN TIME(timestamp) > '10:05:00' THEN 1 END) AS late_entries,
@@ -87,7 +87,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xtreme Dashboard 2.0</title>
+    <title>Evallish BPO Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -101,7 +101,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
         <!-- Dashboard Header -->
         <div class="flex justify-between items-center mb-8">
             <div>
-                <h1 class="text-3xl font-bold text-gray-800">Xtreme Dashboard</h1>
+                <h1 class="text-3xl font-bold text-gray-800">Evallish BPO Dashboard</h1>
                 <p class="text-gray-600">Last updated: <span id="lastUpdate"></span></p>
             </div>
             <button id="refreshData" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center">
@@ -258,7 +258,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
         const tardinessLabels = ['Late Entries', 'Late Lunches', 'Late Breaks'];
         const tardinessData = [<?= $late_entries_percent ?>, <?= $late_lunches_percent ?>, <?= $late_breaks_percent ?>];
 
-        // Configuración común para todos los gráficos
+        // ConfiguraciÃƒÆ’Ã†a€™Ãƒa€šÃ‚a³n comÃƒÆ’Ã†a€™Ãƒa€šÃ‚aºn para todos los grÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡ficos
         Chart.defaults.font.size = 12;
         Chart.defaults.responsive = true;
         Chart.defaults.maintainAspectRatio = false;
@@ -447,3 +447,4 @@ if ($tardiness_entry_data['total_entries'] > 0) {
     </script>
 </body>
 </html>
+

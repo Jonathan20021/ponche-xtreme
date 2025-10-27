@@ -1,17 +1,27 @@
 <?php
 session_start();
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: index.php'); // Redirige a la página de login si no hay sesión activa
-    exit;
-}
-
 include 'db.php';
+
+ensurePermission('records');
+
+$scheduleConfig = getScheduleConfig($pdo);
+$hourly_rates = getUserHourlyRates($pdo);
+$entryThreshold = date('H:i:s', strtotime($scheduleConfig['entry_time'] . ' +5 minutes'));
+$lunchThreshold = $scheduleConfig['lunch_time'];
+$breakThreshold = $scheduleConfig['break_time'];
 
 $search = $_GET['search'] ?? '';
 $user_filter = $_GET['user'] ?? '';
 $date_filter = $_GET['dates'] ?? '';
 $type_filter = $_GET['type'] ?? '';
+$dateValues = [];
+$datePlaceholders = '';
+if ($date_filter) {
+    $dateValues = array_values(array_filter(array_map('trim', explode(',', $date_filter))));
+    if (!empty($dateValues)) {
+        $datePlaceholders = implode(',', array_fill(0, count($dateValues), '?'));
+    }
+}
 
 // Consulta para registros
 
@@ -41,11 +51,9 @@ if ($user_filter) {
     $query .= " AND users.username = ?";
     $params[] = $user_filter;
 }
-if ($date_filter) {
-    $dates = explode(',', $date_filter);
-    $placeholders = implode(',', array_fill(0, count($dates), '?'));
-    $query .= " AND DATE(attendance.timestamp) IN ($placeholders)";
-    $params = array_merge($params, $dates);
+if (!empty($dateValues)) {
+    $query .= " AND DATE(attendance.timestamp) IN ($datePlaceholders)";
+    $params = array_merge($params, $dateValues);
 }
 if ($type_filter) {
     $query .= " AND attendance.type = ?";
@@ -57,7 +65,7 @@ $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Usuarios únicos para filtro
+// Usuarios unicos para filtro
 $users = $pdo->query("SELECT DISTINCT username FROM users ORDER BY username")->fetchAll(PDO::FETCH_COLUMN);
 
 $summary_query = "
@@ -117,10 +125,9 @@ if ($user_filter) {
     $summary_query .= " AND users.username = ?";
     $summary_params[] = $user_filter;
 }
-if ($date_filter) {
-    $placeholders = implode(',', array_fill(0, count($dates), '?'));
-    $summary_query .= " AND DATE(attendance.timestamp) IN ($placeholders)";
-    $summary_params = array_merge($summary_params, $dates);
+if (!empty($dateValues)) {
+    $summary_query .= " AND DATE(attendance.timestamp) IN ($datePlaceholders)";
+    $summary_params = array_merge($summary_params, $dateValues);
 }
 
 $summary_query .= " GROUP BY users.full_name, users.username, record_date ORDER BY record_date DESC";
@@ -129,21 +136,6 @@ $summary_stmt->execute($summary_params);
 $work_summary = $summary_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Lista de salarios por usuario
-$hourly_rates = [
-    'ematos' => 200.00,
-    'Jcoronado' => 200.00,
-    'Jmirabel' => 200.00,
-    'Gbonilla' => 110.00,
-    'Ecapellan' => 110.00,
-    'Rmota' => 110.00,
-    'abatista' => 200.00,
-    'ydominguez' => 110.00,
-    'elara@presta-max.com' => 200.00,
-    'omorel' => 110.00,
-    'rbueno' => 200.00,
-    'xalfonso' => 200.00,
-    'jalmonte' => 110.00
-];
 
 // Agregar columna del monto a pagar
 foreach ($work_summary as &$summary) {
@@ -158,29 +150,29 @@ foreach ($work_summary as &$summary) {
 }
 
 
-// Cálculo de Porcentaje de Tardanza Diario
+// Colculo de Porcentaje de Tardanza Diario
 $tardiness_query = "
     SELECT 
         users.full_name,
         users.username, 
         DATE(attendance.timestamp) AS record_date,
-        COUNT(CASE WHEN attendance.type = 'Entry' AND TIME(attendance.timestamp) > '10:05:00' THEN 1 END) AS late_entries,
-        COUNT(CASE WHEN attendance.type = 'Lunch' AND TIME(attendance.timestamp) > '14:00:00' THEN 1 END) AS late_lunches,
-        COUNT(CASE WHEN attendance.type = 'Break' AND TIME(attendance.timestamp) > '17:00:00' THEN 1 END) AS late_breaks,
+        COUNT(CASE WHEN attendance.type = 'Entry' AND TIME(attendance.timestamp) > ? THEN 1 END) AS late_entries,
+        COUNT(CASE WHEN attendance.type = 'Lunch' AND TIME(attendance.timestamp) > ? THEN 1 END) AS late_lunches,
+        COUNT(CASE WHEN attendance.type = 'Break' AND TIME(attendance.timestamp) > ? THEN 1 END) AS late_breaks,
         COUNT(*) AS total_entries
     FROM attendance 
     JOIN users ON attendance.user_id = users.id 
     WHERE 1=1
 ";
 
-$tardiness_params = [];
+$tardiness_params = [$entryThreshold, $lunchThreshold, $breakThreshold];
 if ($user_filter) {
     $tardiness_query .= " AND users.username = ?";
     $tardiness_params[] = $user_filter;
 }
-if ($date_filter) {
-    $tardiness_query .= " AND DATE(attendance.timestamp) IN ($placeholders)";
-    $tardiness_params = array_merge($tardiness_params, $dates);
+if (!empty($dateValues)) {
+    $tardiness_query .= " AND DATE(attendance.timestamp) IN ($datePlaceholders)";
+    $tardiness_params = array_merge($tardiness_params, $dateValues);
 }
 
 $tardiness_query .= " GROUP BY users.full_name, users.username, record_date ORDER BY record_date DESC";
@@ -322,7 +314,7 @@ $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC);
     <div class="section-card p-6 mb-8">
         <form method="GET" class="space-y-4" id="filterForm">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <!-- Search Input con diseño mejorado -->
+                <!-- Search Input con diseno mejorado -->
                 <div class="flex flex-col">
                     <label class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Search</label>
                     <div class="relative">
@@ -718,3 +710,4 @@ $(document).ready(function() {
 </script>
 
 <?php include 'footer.php'; ?>
+

@@ -13,12 +13,31 @@ USE `ponche`;
 -- Disable FK checks while dropping and recreating tables
 SET FOREIGN_KEY_CHECKS = 0;
 
+DROP TABLE IF EXISTS `section_permissions`;
+DROP TABLE IF EXISTS `roles`;
+DROP TABLE IF EXISTS `schedule_config`;
 DROP TABLE IF EXISTS `admin_login_logs`;
 DROP TABLE IF EXISTS `administrative_hours`;
 DROP TABLE IF EXISTS `attendance`;
 DROP TABLE IF EXISTS `users`;
+DROP TABLE IF EXISTS `departments`;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- -----------------------------------------------------
+-- Table `departments`
+-- -----------------------------------------------------
+CREATE TABLE `departments` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(150) NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `departments_name_unique` (`name`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------
 -- Table `users`
@@ -29,12 +48,72 @@ CREATE TABLE `users` (
   `full_name` VARCHAR(150) NOT NULL,
   `password` VARCHAR(255) NOT NULL COMMENT 'Passwords are stored as plain text by the current application.',
   `role` VARCHAR(50) NOT NULL DEFAULT 'AGENT',
+  `hourly_rate` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  `monthly_salary` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `hourly_rate_dop` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `monthly_salary_dop` DECIMAL(14,2) NOT NULL DEFAULT 0.00,
+  `preferred_currency` VARCHAR(3) NOT NULL DEFAULT 'USD',
+  `department_id` INT UNSIGNED DEFAULT NULL,
   `reset_token` VARCHAR(64) DEFAULT NULL,
   `token_expiry` DATETIME DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `users_username_unique` (`username`),
-  KEY `idx_users_role` (`role`)
+  KEY `idx_users_role` (`role`),
+  KEY `idx_users_department` (`department_id`),
+  CONSTRAINT `fk_users_department`
+    FOREIGN KEY (`department_id`)
+    REFERENCES `departments` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------
+-- Table `roles`
+-- -----------------------------------------------------
+CREATE TABLE `roles` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(100) NOT NULL,
+  `label` VARCHAR(150) DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `roles_name_unique` (`name`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------
+-- Table `schedule_config`
+-- -----------------------------------------------------
+CREATE TABLE `schedule_config` (
+  `id` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `entry_time` TIME NOT NULL DEFAULT '10:00:00',
+  `exit_time` TIME NOT NULL DEFAULT '19:00:00',
+  `lunch_time` TIME NOT NULL DEFAULT '14:00:00',
+  `break_time` TIME NOT NULL DEFAULT '17:00:00',
+  `lunch_minutes` INT NOT NULL DEFAULT 45,
+  `break_minutes` INT NOT NULL DEFAULT 15,
+  `meeting_minutes` INT NOT NULL DEFAULT 45,
+  `scheduled_hours` DECIMAL(5,2) NOT NULL DEFAULT 8.00,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------
+-- Table `section_permissions`
+-- -----------------------------------------------------
+CREATE TABLE `section_permissions` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `section_key` VARCHAR(100) NOT NULL,
+  `role` VARCHAR(50) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `section_role_unique` (`section_key`, `role`)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
@@ -105,11 +184,76 @@ CREATE TABLE `admin_login_logs` (
   COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------
+-- -----------------------------------------------------
 -- Seed data
 -- -----------------------------------------------------
-INSERT INTO `users` (`username`, `full_name`, `password`, `role`)
-VALUES
-  ('admin', 'System Administrator', 'admin123', 'Admin'),
-  ('itmanager', 'IT Manager', 'password123', 'IT'),
-  ('agentdemo', 'Demo Agent', 'defaultpassword', 'AGENT');
+INSERT INTO `roles` (`name`, `label`) VALUES
+  ('Admin', 'Administrator'),
+  ('OperationsManager', 'Operations Manager'),
+  ('IT', 'IT'),
+  ('HR', 'Human Resources'),
+  ('GeneralManager', 'General Manager'),
+  ('Supervisor', 'Supervisor'),
+  ('QA', 'Quality Assurance'),
+  ('AGENT', 'Agent');
 
+INSERT INTO `departments` (`name`, `description`) VALUES
+  ('Operations', 'Operations and service delivery'),
+  ('Human Resources', 'People and talent management'),
+  ('Technology', 'IT and systems team'),
+  ('Quality Assurance', 'QA and compliance'),
+  ('Client Services', 'Client success and account management');
+
+INSERT INTO `users` (`username`, `full_name`, `password`, `role`, `hourly_rate`, `monthly_salary`, `hourly_rate_dop`, `monthly_salary_dop`, `preferred_currency`, `department_id`)
+VALUES
+  ('admin', 'System Administrator', 'admin123', 'Admin', 0.00, 0.00, 0.00, 0.00, 'USD', NULL),
+  ('itmanager', 'IT Manager', 'password123', 'IT', 0.00, 0.00, 0.00, 0.00, 'USD', (SELECT id FROM departments WHERE name = 'Technology')),
+  ('agentdemo', 'Demo Agent', 'defaultpassword', 'AGENT', 120.00, 19200.00, 6720.00, 1075200.00, 'USD', (SELECT id FROM departments WHERE name = 'Operations'));
+
+INSERT INTO `schedule_config` (`id`, `entry_time`, `exit_time`, `lunch_time`, `break_time`, `lunch_minutes`, `break_minutes`, `meeting_minutes`, `scheduled_hours`)
+VALUES (1, '10:00:00', '19:00:00', '14:00:00', '17:00:00', 45, 15, 45, 8.00);
+
+INSERT INTO `section_permissions` (`section_key`, `role`) VALUES
+  ('dashboard', 'Admin'),
+  ('dashboard', 'OperationsManager'),
+  ('dashboard', 'IT'),
+  ('dashboard', 'HR'),
+  ('dashboard', 'GeneralManager'),
+  ('dashboard', 'Supervisor'),
+  ('records', 'Admin'),
+  ('records', 'OperationsManager'),
+  ('records', 'IT'),
+  ('records', 'HR'),
+  ('records', 'GeneralManager'),
+  ('records', 'Supervisor'),
+  ('records_qa', 'Admin'),
+  ('records_qa', 'IT'),
+  ('records_qa', 'QA'),
+  ('records_qa', 'Supervisor'),
+  ('view_admin_hours', 'Admin'),
+  ('view_admin_hours', 'HR'),
+  ('view_admin_hours', 'IT'),
+  ('hr_report', 'IT'),
+  ('hr_report', 'HR'),
+  ('adherence_report', 'IT'),
+  ('adherence_report', 'HR'),
+  ('operations_dashboard', 'Admin'),
+  ('operations_dashboard', 'OperationsManager'),
+  ('operations_dashboard', 'IT'),
+  ('operations_dashboard', 'HR'),
+  ('operations_dashboard', 'Supervisor'),
+  ('login_logs', 'IT'),
+  ('register_attendance', 'Admin'),
+  ('register_attendance', 'IT'),
+  ('settings', 'Admin'),
+  ('settings', 'IT'),
+  ('download_excel', 'IT'),
+  ('download_excel', 'HR'),
+  ('download_excel_daily', 'IT'),
+  ('download_excel_daily', 'HR'),
+  ('agent_dashboard', 'AGENT'),
+  ('agent_dashboard', 'IT'),
+  ('agent_dashboard', 'Supervisor'),
+  ('agent_records', 'AGENT'),
+  ('agent_records', 'IT'),
+  ('agent_records', 'Supervisor');

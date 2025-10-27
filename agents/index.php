@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['employee_id'])) {
-    header('Location: login_agent.php'); // Redirige si no hay sesión activa
+    header('Location: login_agent.php'); // Redirige si no hay sesion activa
     exit;
 }
 
@@ -10,7 +10,7 @@ include '../db.php';
 $employee_id = $_SESSION['employee_id'];
 $username = $_SESSION['username'];
 
-// Métricas personales
+// Metricas personales
 $query = "
     SELECT 
         COUNT(*) AS total_punches,
@@ -26,7 +26,7 @@ $total_punches = $metrics['total_punches'];
 $late_entries = $metrics['late_entries'];
 ?>
 
-<?php include 'header_agent.php'; ?>
+<?php include '../header_agent.php'; ?>
 <div class="container mx-auto mt-6">
     <h2 class="text-2xl font-bold mb-4">Welcome, <?= htmlspecialchars($username) ?>!</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -42,5 +42,4 @@ $late_entries = $metrics['late_entries'];
         </div>
     </div>
 </div>
-</body>
-</html>
+<?php include '../footer.php'; ?>

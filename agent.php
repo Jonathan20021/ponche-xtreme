@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 
 if (!isset($_SESSION['user_id'])) {
@@ -126,21 +126,7 @@ $accumulated_payments_stmt = $pdo->prepare($accumulated_payments_query);
 $accumulated_payments_stmt->execute([$user_id, $start_date, $end_date]);
 $accumulated_payments = $accumulated_payments_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$hourly_rates = [
-    'ematos' => 200.00,
-    'Jcoronado' => 200.00,
-    'Jmirabel' => 200.00,
-    'Gbonilla' => 110.00,
-    'Ecapellan' => 110.00,
-    'Rmota' => 110.00,
-    'abatista' => 200.00,
-    'ydominguez' => 110.00,
-    'elara' => 200.00,
-    'omorel' => 110.00,
-    'rbueno' => 200.00,
-    'xalfonso' => 200.00,
-    'jalmonte' => 110.00
-];
+$hourly_rates = getUserHourlyRates($pdo);
 
 $username = $_SESSION['username'];
 $hourly_rate = $hourly_rates[$username] ?? 0;
@@ -279,3 +265,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+<?php include 'footer.php'; ?>
+

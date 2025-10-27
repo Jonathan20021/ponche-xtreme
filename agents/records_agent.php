@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['employee_id'])) {
-    header('Location: login_agent.php'); // Redirige si no hay sesión activa
+    header('Location: login_agent.php'); // Redirige si no hay sesion activa
     exit;
 }
 
@@ -25,7 +25,7 @@ $stmt = $pdo->prepare($records_query);
 $stmt->execute([$employee_id]);
 $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Calcular métricas de tardanzas
+// Calcular metricas de tardanzas
 $tardiness_query = "
     SELECT 
         COUNT(CASE WHEN type = 'Entry' AND TIME(timestamp) > '10:05:00' THEN 1 END) AS late_entries,
@@ -48,7 +48,7 @@ if ($tardiness_data['total_entries'] > 0) {
 }
 ?>
 
-<?php include 'header_agent.php'; ?>
+<?php include '../header_agent.php'; ?>
 <div class="container mx-auto mt-6">
     <h2 class="text-2xl font-bold mb-4">My Attendance Records</h2>
 
@@ -87,5 +87,4 @@ if ($tardiness_data['total_entries'] > 0) {
         </table>
     </div>
 </div>
-</body>
-</html>
+<?php include '../footer.php'; ?>

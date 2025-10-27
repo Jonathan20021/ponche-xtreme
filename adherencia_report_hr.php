@@ -1,409 +1,833 @@
 <?php
 session_start();
+require_once __DIR__ . '/db.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: index.php');
-    exit;
+ensurePermission('adherence_report');
+
+function formatHoursMinutes(int $seconds): string
+{
+    $seconds = max(0, $seconds);
+    $hours = intdiv($seconds, 3600);
+    $minutes = intdiv($seconds % 3600, 60);
+    return sprintf('%d:%02d', $hours, $minutes);
 }
 
-// Verificar rol de usuario
-if (!in_array($_SESSION['role'], ['IT', 'HR'])) {
-    header('Location: unauthorized.php');
-    exit;
+$schedule = getScheduleConfig($pdo);
+$compensation = getUserCompensation($pdo);
+
+function calculateAmountFromSeconds(int $seconds, float $rate): float
+{
+    if ($seconds <= 0 || $rate <= 0) {
+        return 0.0;
+    }
+    $rateCents = (int) round($rate * 100);
+    if ($rateCents <= 0) {
+        return 0.0;
+    }
+    $amountCents = (int) round(($seconds * $rateCents) / 3600);
+    return $amountCents / 100;
 }
 
-include 'db.php';
+$entryTime = $schedule['entry_time'] ?? '10:00:00';
+$exitTime = $schedule['exit_time'] ?? '19:00:00';
+$lunchMinutes = max(0, (int) ($schedule['lunch_minutes'] ?? 45));
+$breakMinutes = max(0, (int) ($schedule['break_minutes'] ?? 15));
+$meetingMinutes = max(0, (int) ($schedule['meeting_minutes'] ?? 45));
+$scheduledHours = max((float) ($schedule['scheduled_hours'] ?? 8), 0.0);
 
-// Definir las metas para los horarios
-$goals = [
-    'sch_in' => '10:00:00', // Hora de entrada
-    'sch_out' => '19:00:00', // Hora de salida
-    'lunch' => 45 * 60, // 45 minutos (en segundos)
-    'break' => 15 * 60, // 15 minutos (en segundos)
-    'meeting_coaching' => 45 * 60 // 45 minutos (en segundos)
-];
+$lunchSeconds = $lunchMinutes * 60;
+$breakSeconds = $breakMinutes * 60;
+$meetingSeconds = $meetingMinutes * 60;
+$scheduledSecondsPerDay = max((int) round($scheduledHours * 3600), 1);
 
-// Horas programadas por día (en segundos)
-$scheduled_hours_per_day = 8 * 3600; // 8 horas
+$selectedMonth = $_GET['month'] ?? date('Y-m');
+if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
+    $selectedMonth = date('Y-m');
+}
 
-// Tarifas por hora para los empleados
-$hourly_rates = [
-    'ematos' => 200.00,
-    'Jcoronado' => 200.00,
-    'Jmirabel' => 200.00,
-    'Gbonilla' => 110.00,
-    'Ecapellan' => 110.00,
-    'Rmota' => 110.00,
-    'abatista' => 200.00,
-    'ydominguez' => 110.00,
-    'elara' => 200.00,
-    'omorel' => 110.00,
-    'rbueno' => 200.00,
-    'xalfonso' => 200.00,
-    'jalmonte' => 110.00
-];
+$startDate = $selectedMonth . '-01';
+$endDate = date('Y-m-t', strtotime($startDate));
+$startBound = $startDate . ' 00:00:00';
+$endBound = $endDate . ' 23:59:59';
 
-$date_filter = $_GET['month'] ?? date('Y-m');
-$start_date = $date_filter . '-01';
-$end_date = date('Y-m-t', strtotime($start_date));
+$recordsPerPage = 15;
+$currentPage = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($currentPage - 1) * $recordsPerPage;
 
-// Configuración de paginación
-$records_per_page = 10;
-$current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$offset = ($current_page - 1) * $records_per_page;
+$countSql = "
+    SELECT COUNT(*) FROM (
+        SELECT DATE(timestamp) AS work_date, user_id
+        FROM attendance
+        WHERE timestamp BETWEEN :start AND :end
+        GROUP BY DATE(timestamp), user_id
+    ) AS sub
+";
+$countStmt = $pdo->prepare($countSql);
+$countStmt->execute([
+    ':start' => $startBound,
+    ':end' => $endBound,
+]);
+$totalRecords = (int) $countStmt->fetchColumn();
+$totalPages = max(1, (int) ceil($totalRecords / $recordsPerPage));
 
-// Consulta optimizada para obtener datos de tendencias
-$trend_query = "
-    WITH daily_work AS (
-        SELECT 
-            DATE(a.timestamp) as work_date,
+if ($currentPage > $totalPages) {
+    $currentPage = $totalPages;
+    $offset = ($currentPage - 1) * $recordsPerPage;
+}
+
+$dailySql = "
+    WITH raw AS (
+        SELECT
+            DATE(a.timestamp) AS work_date,
             a.user_id,
-            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) as first_entry,
-            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) as last_exit
+            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) AS first_entry,
+            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) AS last_exit,
+            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) AS lunch_count,
+            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) AS break_count,
+            SUM(CASE WHEN a.type IN ('Meeting', 'Coaching') THEN 1 ELSE 0 END) AS meeting_count
         FROM attendance a
-        WHERE a.timestamp >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+        WHERE a.timestamp BETWEEN :start AND :end
+        GROUP BY DATE(a.timestamp), a.user_id
+    ),
+    prepared AS (
+        SELECT
+            r.work_date,
+            r.user_id,
+            r.first_entry,
+            IFNULL(r.last_exit, CONCAT(r.work_date, ' ', :exit_time)) AS last_exit,
+            r.lunch_count * :lunch_seconds AS lunch_seconds,
+            r.break_count * :break_seconds AS break_seconds,
+            r.meeting_count * :meeting_seconds AS meeting_seconds,
+            GREATEST(
+                IF(r.first_entry IS NULL, 0,
+                    IFNULL(
+                        TIMESTAMPDIFF(SECOND, r.first_entry, IFNULL(r.last_exit, CONCAT(r.work_date, ' ', :exit_time))),
+                        0
+                    )
+                ) - (r.lunch_count * :lunch_seconds) - (r.break_count * :break_seconds),
+                0
+            ) AS productive_seconds
+        FROM raw r
+    )
+    SELECT
+        u.full_name AS employee,
+        u.username,
+        d.name AS department_name,
+        p.work_date,
+        p.first_entry,
+        p.last_exit,
+        p.lunch_seconds,
+        p.break_seconds,
+        p.meeting_seconds,
+        p.productive_seconds
+    FROM prepared p
+    JOIN users u ON u.id = p.user_id
+    LEFT JOIN departments d ON d.id = u.department_id
+    ORDER BY u.full_name, p.work_date
+    LIMIT :offset, :limit
+";
+
+$dailyStmt = $pdo->prepare($dailySql);
+$dailyStmt->bindValue(':start', $startBound);
+$dailyStmt->bindValue(':end', $endBound);
+$dailyStmt->bindValue(':exit_time', $exitTime);
+$dailyStmt->bindValue(':lunch_seconds', $lunchSeconds, PDO::PARAM_INT);
+$dailyStmt->bindValue(':break_seconds', $breakSeconds, PDO::PARAM_INT);
+$dailyStmt->bindValue(':meeting_seconds', $meetingSeconds, PDO::PARAM_INT);
+$dailyStmt->bindValue(':offset', (int) $offset, PDO::PARAM_INT);
+$dailyStmt->bindValue(':limit', (int) $recordsPerPage, PDO::PARAM_INT);
+$dailyStmt->execute();
+$dailyRowsRaw = $dailyStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$dailyRows = [];
+$monthlyAggregates = [];
+$adherenceAccumulator = 0;
+$adherenceSamples = 0;
+$totalEarnedUsd = 0;
+$totalEarnedDop = 0;
+$totalLate = 0;
+$totalProductiveSeconds = 0;
+
+foreach ($dailyRowsRaw as $row) {
+    $productive = max(0, (int) $row['productive_seconds']);
+    $comp = $compensation[$row['username']] ?? [
+        'hourly_rate' => 0.0,
+        'hourly_rate_dop' => 0.0,
+        'monthly_salary' => 0.0,
+        'monthly_salary_dop' => 0.0,
+        'department_name' => null,
+    ];
+    $rateUsd = (float) $comp['hourly_rate'];
+    $rateDop = (float) ($comp['hourly_rate_dop'] ?? 0.0);
+    $departmentName = $row['department_name'] ?? ($comp['department_name'] ?? 'Sin departamento');
+    $monthlySalaryUsd = (float) $comp['monthly_salary'];
+    $monthlySalaryDop = (float) ($comp['monthly_salary_dop'] ?? 0.0);
+    $amountUsd = calculateAmountFromSeconds($productive, $rateUsd);
+    $amountDop = calculateAmountFromSeconds($productive, $rateDop);
+    $adherencePercent = $productive > 0
+        ? min(round(($productive / $scheduledSecondsPerDay) * 100, 1), 999)
+        : 0.0;
+
+    $status = 'Sin datos';
+    if ($productive >= $scheduledSecondsPerDay) {
+        $status = 'En meta';
+    } elseif ($productive > 0) {
+        $status = 'Parcial';
+    }
+
+    $isLate = false;
+    if (!empty($row['first_entry'])) {
+        $entryMoment = strtotime($row['first_entry']);
+        $scheduledMoment = strtotime($row['work_date'] . ' ' . $entryTime);
+        if ($entryMoment !== false && $scheduledMoment !== false && $entryMoment > $scheduledMoment) {
+            $isLate = true;
+            $totalLate++;
+        }
+    }
+
+    $dailyRows[] = [
+        'employee' => $row['employee'],
+        'username' => $row['username'],
+        'department' => $departmentName,
+        'work_date' => $row['work_date'],
+        'first_entry' => $row['first_entry'],
+        'last_exit' => $row['last_exit'],
+        'lunch_seconds' => (int) $row['lunch_seconds'],
+        'break_seconds' => (int) $row['break_seconds'],
+        'meeting_seconds' => (int) $row['meeting_seconds'],
+        'productive_seconds' => $productive,
+        'adherence_percent' => $adherencePercent,
+        'status' => $status,
+        'amount_usd' => $amountUsd,
+        'amount_dop' => $amountDop,
+        'is_late' => $isLate,
+    ];
+
+    if (!isset($monthlyAggregates[$row['username']])) {
+        $monthlyAggregates[$row['username']] = [
+            'employee' => $row['employee'],
+            'username' => $row['username'],
+            'department' => $departmentName,
+            'days_worked' => 0,
+            'productive_seconds' => 0,
+            'lunch_seconds' => 0,
+            'break_seconds' => 0,
+            'meeting_seconds' => 0,
+            'late_days' => 0,
+            'amount_usd' => 0.0,
+            'amount_dop' => 0.0,
+            'hourly_rate_usd' => $rateUsd,
+            'hourly_rate_dop' => $rateDop,
+            'monthly_salary_usd' => $monthlySalaryUsd,
+            'monthly_salary_dop' => $monthlySalaryDop,
+        ];
+    }
+
+    $monthlyAggregates[$row['username']]['days_worked']++;
+    $monthlyAggregates[$row['username']]['productive_seconds'] += $productive;
+    $monthlyAggregates[$row['username']]['lunch_seconds'] += (int) $row['lunch_seconds'];
+    $monthlyAggregates[$row['username']]['break_seconds'] += (int) $row['break_seconds'];
+    $monthlyAggregates[$row['username']]['meeting_seconds'] += (int) $row['meeting_seconds'];
+    $monthlyAggregates[$row['username']]['amount_usd'] += $amountUsd;
+    $monthlyAggregates[$row['username']]['amount_dop'] += $amountDop;
+    if ($isLate) {
+        $monthlyAggregates[$row['username']]['late_days']++;
+    }
+
+    if ($productive > 0) {
+        $adherenceAccumulator += min($adherencePercent, 100);
+        $adherenceSamples++;
+    }
+
+    $totalEarnedUsd += $amountUsd;
+    $totalEarnedDop += $amountDop;
+    $totalProductiveSeconds += $productive;
+}
+$monthlySummary = array_values($monthlyAggregates);
+usort($monthlySummary, static function (array $a, array $b): int {
+    return strcasecmp($a['employee'], $b['employee']);
+});
+
+$totalMonthlyBaseUsd = 0.0;
+$totalMonthlyBaseDop = 0.0;
+$departmentAggregates = [];
+foreach ($monthlySummary as &$item) {
+    $expectedSeconds = max($item['days_worked'] * $scheduledSecondsPerDay, 1);
+    $item['hours'] = $item['productive_seconds'] / 3600;
+    $item['expected_hours'] = $expectedSeconds / 3600;
+    $item['adherence_percent'] = $item['productive_seconds'] > 0
+        ? min(round(($item['productive_seconds'] / $expectedSeconds) * 100, 1), 999)
+        : 0.0;
+    $totalMonthlyBaseUsd += $item['monthly_salary_usd'];
+    $totalMonthlyBaseDop += $item['monthly_salary_dop'];
+
+    $deptKey = $item['department'] ?? 'Sin departamento';
+    if (!isset($departmentAggregates[$deptKey])) {
+        $departmentAggregates[$deptKey] = [
+            'name' => $deptKey,
+            'members' => 0,
+            'hours' => 0.0,
+            'actual_pay_usd' => 0.0,
+            'actual_pay_dop' => 0.0,
+            'monthly_salary_usd' => 0.0,
+            'monthly_salary_dop' => 0.0,
+        ];
+    }
+    $departmentAggregates[$deptKey]['members']++;
+    $departmentAggregates[$deptKey]['hours'] += $item['hours'];
+    $departmentAggregates[$deptKey]['actual_pay_usd'] += $item['amount_usd'];
+    $departmentAggregates[$deptKey]['actual_pay_dop'] += $item['amount_dop'];
+    $departmentAggregates[$deptKey]['monthly_salary_usd'] += $item['monthly_salary_usd'];
+    $departmentAggregates[$deptKey]['monthly_salary_dop'] += $item['monthly_salary_dop'];
+    $item['difference_usd'] = $item['amount_usd'] - $item['monthly_salary_usd'];
+    $item['difference_dop'] = $item['amount_dop'] - $item['monthly_salary_dop'];
+}
+unset($item);
+
+$departmentSummaryList = array_values($departmentAggregates);
+usort($departmentSummaryList, static function (array $a, array $b): int {
+    return $b['actual_pay_usd'] <=> $a['actual_pay_usd'];
+});
+
+$departmentChartData = [
+    'labels' => [],
+    'actual_usd' => [],
+    'base_usd' => [],
+    'actual_dop' => [],
+    'base_dop' => [],
+];
+foreach ($departmentSummaryList as $dept) {
+    $departmentChartData['labels'][] = $dept['name'];
+    $departmentChartData['actual_usd'][] = round($dept['actual_pay_usd'], 2);
+    $departmentChartData['base_usd'][] = round($dept['monthly_salary_usd'], 2);
+    $departmentChartData['actual_dop'][] = round($dept['actual_pay_dop'], 2);
+    $departmentChartData['base_dop'][] = round($dept['monthly_salary_dop'], 2);
+}
+
+$payrollVarianceUsd = $totalEarnedUsd - $totalMonthlyBaseUsd;
+$payrollVarianceDop = $totalEarnedDop - $totalMonthlyBaseDop;
+
+$averageAdherence = $adherenceSamples > 0 ? round($adherenceAccumulator / $adherenceSamples, 1) : 0;
+$totalEmployees = count($monthlySummary);
+$totalHoursWorked = $totalProductiveSeconds / 3600;
+
+$trendStart = date('Y-m-01', strtotime('-5 months'));
+$trendEnd = date('Y-m-t');
+
+$trendSql = "
+    WITH work_log AS (
+        SELECT
+            DATE(a.timestamp) AS work_date,
+            a.user_id,
+            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) AS first_entry,
+            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) AS last_exit
+        FROM attendance a
+        WHERE a.timestamp BETWEEN :trend_start AND :trend_end
         GROUP BY DATE(a.timestamp), a.user_id
     )
-    SELECT 
-        DATE_FORMAT(work_date, '%Y-%m') as month,
-        COUNT(DISTINCT user_id) as total_employees,
-        AVG(TIMESTAMPDIFF(SECOND, first_entry, COALESCE(last_exit, CONCAT(work_date, ' 19:00:00')))) as avg_work_time,
-        COUNT(CASE WHEN first_entry > CONCAT(work_date, ' 10:00:00') THEN 1 END) as late_count
-    FROM daily_work
+    SELECT
+        DATE_FORMAT(work_date, '%Y-%m') AS month,
+        COUNT(DISTINCT user_id) AS total_employees,
+        AVG(
+            CASE
+                WHEN first_entry IS NULL THEN 0
+                ELSE IFNULL(
+                    TIMESTAMPDIFF(SECOND, first_entry, IFNULL(last_exit, CONCAT(work_date, ' ', :exit_time))),
+                    0
+                )
+            END
+        ) AS avg_work_seconds,
+        SUM(
+            CASE
+                WHEN first_entry IS NOT NULL AND TIME(first_entry) > :entry_time THEN 1
+                ELSE 0
+            END
+        ) AS late_count
+    FROM work_log
     GROUP BY DATE_FORMAT(work_date, '%Y-%m')
-    ORDER BY month DESC
+    ORDER BY month ASC
 ";
 
-$trend_data = $pdo->query($trend_query)->fetchAll(PDO::FETCH_ASSOC);
+$trendStmt = $pdo->prepare($trendSql);
+$trendStmt->execute([
+    ':trend_start' => $trendStart . ' 00:00:00',
+    ':trend_end' => $trendEnd . ' 23:59:59',
+    ':exit_time' => $exitTime,
+    ':entry_time' => $entryTime,
+]);
+$trendRows = $trendStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Consulta optimizada para el reporte diario
-$query_daily = "
-    WITH daily_attendance AS (
-        SELECT 
-            DATE(a.timestamp) as work_date,
-            a.user_id,
-            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) as first_entry,
-            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) as last_exit,
-            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) as lunch_count,
-            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) as break_count,
-            SUM(CASE WHEN a.type IN ('Meeting', 'Coaching') THEN 1 ELSE 0 END) as meeting_count
-        FROM attendance a
-        WHERE a.timestamp BETWEEN ? AND ?
-        GROUP BY DATE(a.timestamp), a.user_id
-    )
-    SELECT 
-        u.full_name AS employee,
-        u.username,
-        da.work_date,
-        da.first_entry,
-        COALESCE(da.last_exit, CONCAT(da.work_date, ' 19:00:00')) as last_exit,
-        (da.lunch_count * 45 * 60) as total_lunch,
-        (da.break_count * 15 * 60) as total_break,
-        (da.meeting_count * 45 * 60) as total_meeting_coaching,
-        GREATEST(
-            TIMESTAMPDIFF(SECOND, 
-                da.first_entry, 
-                COALESCE(da.last_exit, CONCAT(da.work_date, ' 19:00:00'))
-            ) - 
-            (da.lunch_count * 45 * 60) - 
-            (da.break_count * 15 * 60),
-            0
-        ) as total_work_time
-    FROM daily_attendance da
-    JOIN users u ON da.user_id = u.id
-    ORDER BY u.full_name, da.work_date
-    LIMIT $offset, $records_per_page
-";
+$departmentChartJson = json_encode($departmentChartData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
 
-$stmt = $pdo->prepare($query_daily);
-$stmt->execute([$start_date, $end_date]);
-$report_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Calcular el total de páginas
-$total_records = $pdo->query("
-    SELECT COUNT(DISTINCT u.full_name, DATE(a.timestamp)) AS total
-    FROM attendance a
-    JOIN users u ON a.user_id = u.id
-    WHERE a.timestamp BETWEEN '$start_date' AND '$end_date'
-")->fetchColumn();
-$total_pages = ceil($total_records / $records_per_page);
-
-// Consulta optimizada para el reporte mensual
-$query_monthly = "
-    WITH monthly_attendance AS (
-        SELECT 
-            a.user_id,
-            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) as lunch_count,
-            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) as break_count,
-            SUM(CASE WHEN a.type IN ('Meeting', 'Coaching') THEN 1 ELSE 0 END) as meeting_count,
-            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) as first_entry,
-            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) as last_exit
-        FROM attendance a
-        WHERE a.timestamp BETWEEN ? AND ?
-        GROUP BY a.user_id
-    )
-    SELECT 
-        u.full_name AS employee,
-        u.username,
-        (ma.lunch_count * 45 * 60) as total_lunch,
-        (ma.break_count * 15 * 60) as total_break,
-        (ma.meeting_count * 45 * 60) as total_meeting_coaching,
-        TIMESTAMPDIFF(SECOND, ma.first_entry, COALESCE(ma.last_exit, CONCAT(DATE(ma.first_entry), ' 19:00:00'))) as total_work_time
-    FROM monthly_attendance ma
-    JOIN users u ON ma.user_id = u.id
-    ORDER BY u.full_name
-";
-
-$stmt_monthly = $pdo->prepare($query_monthly);
-$stmt_monthly->execute([$start_date, $end_date]);
-$monthly_data = $stmt_monthly->fetchAll(PDO::FETCH_ASSOC);
+include __DIR__ . '/header.php';
 ?>
-
-<?php include 'header.php'; ?>
-
-<!-- Modern Dashboard Layout -->
-<div class="container mx-auto px-4 py-8">
-    <!-- Header Section -->
-    <div class="flex justify-between items-center mb-8">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-800">HR Analytics Dashboard</h1>
-            <p class="text-gray-600">Employee Performance & Attendance Report</p>
-        </div>
-        <div class="flex space-x-4">
-            <form method="GET" class="flex items-center space-x-2">
-                <input type="month" name="month" value="<?= htmlspecialchars($date_filter) ?>" 
-                       class="rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
-                    Filter
+<section class="space-y-10">
+    <div class="glass-card">
+        <div class="panel-heading">
+            <div>
+                <span class="tag-pill">Reporte de adherencia</span>
+                <h2>Seguimiento mensual de jornadas</h2>
+            </div>
+            <form method="get" class="flex flex-wrap items-center gap-3">
+                <label class="text-sm text-slate-400">
+                    Mes
+                    <input type="month" name="month" value="<?= htmlspecialchars($selectedMonth) ?>" class="mt-1 w-40">
+                </label>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-filter"></i>
+                    Aplicar
                 </button>
             </form>
-            <div class="flex space-x-2">
-                <a href="download_excel.php?month=<?= htmlspecialchars($date_filter) ?>" 
-                   class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">
-                    <i class="fas fa-file-excel mr-2"></i>Excel
-                </a>
-                <a href="download_pdf.php?month=<?= htmlspecialchars($date_filter) ?>" 
-                   class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
-                    <i class="fas fa-file-pdf mr-2"></i>PDF
-                </a>
+        </div>
+        <p class="text-sm text-slate-400 max-w-2xl">
+            Los calculos consideran los objetivos configurados en la seccion de horarios. Las lineas de tiempo omiten descansos y comidas para evaluar las horas productivas efectivas.
+        </p>
+    </div>
+
+    <div class="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-5">
+        <div class="metric-card">
+            <span class="label">Colaboradores activos</span>
+            <span class="value"><?= number_format($totalEmployees) ?></span>
+            <span class="trend neutral"><i class="fas fa-users"></i> En el mes seleccionado</span>
+        </div>
+        <div class="metric-card">
+            <span class="label">Adherencia promedio</span>
+            <span class="value"><?= number_format($averageAdherence, 1) ?>%</span>
+            <span class="trend <?= $averageAdherence >= 95 ? 'positive' : ($averageAdherence >= 80 ? 'neutral' : 'negative') ?>">
+                <i class="fas fa-chart-line"></i> Objetivo 100%
+            </span>
+        </div>
+        <div class="metric-card">
+            <span class="label">Horas productivas</span>
+            <span class="value"><?= number_format($totalHoursWorked, 1) ?> h</span>
+            <span class="trend neutral"><i class="fas fa-clock"></i> Calculadas sin descansos</span>
+        </div>
+        <div class="metric-card">
+            <span class="label">Pago horas (USD)</span>
+            <span class="value">$<?= number_format($totalEarnedUsd, 2) ?></span>
+            <span class="trend <?= $payrollVarianceUsd >= 0 ? 'positive' : 'negative' ?>">
+                <i class="fas fa-balance-scale"></i>
+                Base $<?= number_format($totalMonthlyBaseUsd, 2) ?> (<?= $payrollVarianceUsd >= 0 ? '+' : '' ?>$<?= number_format($payrollVarianceUsd, 2) ?>)
+            </span>
+        </div>
+        <div class="metric-card">
+            <span class="label">Pago horas (DOP)</span>
+            <span class="value">RD$<?= number_format($totalEarnedDop, 2) ?></span>
+            <span class="trend <?= $payrollVarianceDop >= 0 ? 'positive' : 'negative' ?>">
+                <i class="fas fa-coins"></i>
+                Base RD$<?= number_format($totalMonthlyBaseDop, 2) ?> (<?= $payrollVarianceDop >= 0 ? '+' : '' ?>RD$<?= number_format($payrollVarianceDop, 2) ?>)
+            </span>
+        </div>
+    </div>
+
+    <div class="glass-card space-y-6">
+        <div class="panel-heading">
+            <div>
+                <h2>Analitica por departamento</h2>
+                <p class="text-sm text-slate-400">Distribucion de horas y pagos contra la base mensual configurada.</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="section-card p-6">
+                <canvas id="departmentChart" class="w-full h-72"></canvas>
+            </div>
+            <div class="section-card p-0 overflow-hidden">
+                <table class="table-auto w-full text-sm">
+                    <thead>
+                        <tr>
+                            <th>Departamento</th>
+                            <th>Integrantes</th>
+                            <th>Horas</th>
+                            <th>Pago USD</th>
+                            <th>Base USD</th>
+                            <th>Dif USD</th>
+                            <th>Pago DOP</th>
+                            <th>Base DOP</th>
+                            <th>Dif DOP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($departmentSummaryList)): ?>
+                            <tr>
+                                <td colspan="9" class="text-center py-6 text-slate-400">No hay informacion disponible para el periodo.</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($departmentSummaryList as $dept): ?>
+                                <?php
+                                    $deptDifferenceUsd = $dept['actual_pay_usd'] - $dept['monthly_salary_usd'];
+                                    $deptDifferenceDop = $dept['actual_pay_dop'] - $dept['monthly_salary_dop'];
+                                ?>
+                                <tr>
+                                    <td class="font-semibold text-primary"><?= htmlspecialchars($dept['name']) ?></td>
+                                    <td><?= number_format($dept['members']) ?></td>
+                                    <td><?= number_format($dept['hours'], 1) ?> h</td>
+                                    <td>$<?= number_format($dept['actual_pay_usd'], 2) ?></td>
+                                    <td>$<?= number_format($dept['monthly_salary_usd'], 2) ?></td>
+                                    <td class="<?= $deptDifferenceUsd >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
+                                        <?= $deptDifferenceUsd >= 0 ? '+' : '' ?>$<?= number_format($deptDifferenceUsd, 2) ?>
+                                    </td>
+                                    <td>RD$<?= number_format($dept['actual_pay_dop'], 2) ?></td>
+                                    <td>RD$<?= number_format($dept['monthly_salary_dop'], 2) ?></td>
+                                    <td class="<?= $deptDifferenceDop >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
+                                        <?= $deptDifferenceDop >= 0 ? '+' : '' ?>RD$<?= number_format($deptDifferenceDop, 2) ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
-    <!-- Key Metrics Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <?php
-        $total_employees = count($monthly_data);
-        $avg_adh = array_sum(array_column($monthly_data, 'total_work_time')) / ($total_employees * $scheduled_hours_per_day) * 100;
-        $late_count = count(array_filter($report_data, function($row) use ($goals) {
-            return strtotime($row['first_entry']) > strtotime($row['work_date'] . ' ' . $goals['sch_in']);
-        }));
-        $total_earned = array_sum(array_map(function($row) use ($hourly_rates) {
-            return ($row['total_work_time'] / 3600) * ($hourly_rates[$row['username']] ?? 0);
-        }, $monthly_data));
-        ?>
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-gray-500 text-sm font-medium">Total Employees</h3>
-            <p class="text-3xl font-bold text-gray-900"><?= $total_employees ?></p>
+    <div class="glass-card">
+        <div class="panel-heading">
+            <div>
+                <h2>Evolucion de los ultimos seis meses</h2>
+                <p class="text-sm text-slate-400">Promedio de horas trabajadas por colaborador y llegadas tarde registradas.</p>
+            </div>
         </div>
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-gray-500 text-sm font-medium">Average Adherence</h3>
-            <p class="text-3xl font-bold text-gray-900"><?= number_format($avg_adh, 1) ?>%</p>
-        </div>
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-gray-500 text-sm font-medium">Late Arrivals</h3>
-            <p class="text-3xl font-bold text-gray-900"><?= $late_count ?></p>
-        </div>
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-gray-500 text-sm font-medium">Total Amount Earned</h3>
-            <p class="text-3xl font-bold text-gray-900">$<?= number_format($total_earned, 2) ?></p>
+        <div class="relative h-72">
+            <canvas id="trendChart" class="w-full h-full"></canvas>
         </div>
     </div>
 
-    <!-- Charts Section -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-semibold mb-4">Attendance Trends</h3>
-            <canvas id="attendanceTrend"></canvas>
-        </div>
-        <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-semibold mb-4">Employee Performance Distribution</h3>
-            <canvas id="performanceDistribution"></canvas>
-        </div>
-    </div>
-
-    <!-- Detailed Reports -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="p-6 border-b">
-            <h2 class="text-xl font-semibold">Detailed Employee Report</h2>
+    <div class="glass-card">
+        <div class="panel-heading">
+            <div>
+                <h2>Detalle diario</h2>
+                <p class="text-sm text-slate-400">Incluye horas productivas, entradas tardias y montos generados.</p>
+            </div>
+            <div class="text-sm text-slate-400">
+                Pagina <?= number_format($currentPage) ?> de <?= number_format($totalPages) ?> (<?= number_format($totalRecords) ?> registros)
+            </div>
         </div>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+            <table class="table-auto w-full text-sm">
+                <thead>
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Entry</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Exit</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lunch Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Break Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meeting/Coaching</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Work Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ABS (%)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                        <th>Colaborador</th>
+                        <th>Departamento</th>
+                        <th>Fecha</th>
+                        <th>Entrada</th>
+                        <th>Salida</th>
+                        <th>Productivo</th>
+                        <th>Adherencia</th>
+                        <th>Pago USD</th>
+                        <th>Pago DOP</th>
+                        <th>Estado</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <?php foreach ($report_data as $row): ?>
-                        <?php
-                        $work_time = $row['total_work_time'] ?: 0;
-                        $abs_percent = ($work_time / $scheduled_hours_per_day) * 100;
-                        $late = (strtotime($row['first_entry']) > strtotime($row['work_date'] . ' ' . $goals['sch_in']));
-                        $status_class = $late ? 'text-red-600' : 'text-green-600';
-                        $performance_class = $abs_percent >= 90 ? 'text-green-600' : ($abs_percent >= 80 ? 'text-yellow-600' : 'text-red-600');
-                        $hourly_rate = $hourly_rates[$row['username']] ?? 0;
-                        $earned = ($work_time / 3600) * $hourly_rate;
-                        ?>
+                <tbody>
+                    <?php if (empty($dailyRows)): ?>
                         <tr>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['employee']) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['work_date']) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['first_entry'] ?: 'N/A') ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['last_exit'] ?: 'N/A') ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_lunch'] ?: 0) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_break'] ?: 0) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_meeting_coaching'] ?: 0) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $work_time) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="<?= $status_class ?>">
-                                    <?= $late ? 'Late' : 'On Time' ?>
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="<?= $performance_class ?>">
-                                    <?= number_format($abs_percent, 2) ?>%
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">$<?= number_format($earned, 2) ?></td>
+                            <td colspan="10" class="text-center py-6 text-slate-400">No se encontraron registros para el mes seleccionado.</td>
                         </tr>
-                    <?php endforeach; ?>
+                    <?php else: ?>
+                        <?php foreach ($dailyRows as $row): ?>
+                            <tr>
+                                <td>
+                                    <div class="font-semibold"><?= htmlspecialchars($row['employee']) ?></div>
+                                    <div class="text-xs text-slate-400"><?= htmlspecialchars($row['username']) ?></div>
+                                </td>
+                                <td><?= htmlspecialchars($row['department']) ?></td>
+                                <td><?= htmlspecialchars($row['work_date']) ?></td>
+                                <td>
+                                    <?php if (!empty($row['first_entry'])): ?>
+                                        <span class="<?= $row['is_late'] ? 'badge badge--danger' : 'badge' ?>">
+                                            <?= htmlspecialchars(date('H:i', strtotime($row['first_entry']))) ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="text-slate-400">Sin registro</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?= htmlspecialchars(!empty($row['last_exit']) ? date('H:i', strtotime($row['last_exit'])) : 'Sin registro') ?></td>
+                                <td><?= htmlspecialchars(formatHoursMinutes($row['productive_seconds'])) ?></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-24 h-2 rounded-full overflow-hidden" style="background-color: rgba(148, 163, 184, 0.25);">
+                                            <div class="h-2" style="width: <?= min($row['adherence_percent'], 100) ?>%; background-color: var(--accent-cyan);"></div>
+                                        </div>
+                                        <span><?= number_format($row['adherence_percent'], 1) ?>%</span>
+                                    </div>
+                                </td>
+                                <td>$<?= number_format($row['amount_usd'], 2) ?></td>
+                                <td>RD$<?= number_format($row['amount_dop'], 2) ?></td>
+                                <td><?= htmlspecialchars($row['status']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php if ($totalPages > 1): ?>
+            <div class="flex flex-wrap items-center justify-between mt-6 text-sm text-slate-300">
+                <div>
+                    Mostrando <?= number_format(min($totalRecords, $offset + 1)) ?> -
+                    <?= number_format(min($totalRecords, $offset + $recordsPerPage)) ?> de
+                    <?= number_format($totalRecords) ?>
+                </div>
+                <div class="flex items-center gap-2">
+                    <?php if ($currentPage > 1): ?>
+                        <a class="btn-secondary" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $currentPage - 1 ?>">
+                            <i class="fas fa-arrow-left"></i>
+                            Anterior
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($currentPage < $totalPages): ?>
+                        <a class="btn-secondary" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $currentPage + 1 ?>">
+                            Siguiente
+                            <i class="fas fa-arrow-right"></i>
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <div class="glass-card">
+        <div class="panel-heading">
+            <div>
+                <h2>Resumen mensual por colaborador</h2>
+                <p class="text-sm text-slate-400">Comparativo entre horas esperadas y productivas, con registro de retardos.</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="table-auto w-full text-sm">
+                <thead>
+                    <tr>
+                        <th>Colaborador</th>
+                        <th>Departamento</th>
+                        <th>Dias</th>
+                        <th>Horas esperadas</th>
+                        <th>Horas productivas</th>
+                        <th>Adherencia</th>
+                        <th>Retardos</th>
+                        <th>Pago USD</th>
+                        <th>Base USD</th>
+                        <th>Dif USD</th>
+                        <th>Pago DOP</th>
+                        <th>Base DOP</th>
+                        <th>Dif DOP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($monthlySummary)): ?>
+                        <tr>
+                            <td colspan="13" class="text-center py-6 text-slate-400">No se registraron jornadas para el periodo.</td>
+                        </tr>
+                    <?php else: ?>
+                            <?php foreach ($monthlySummary as $item): ?>
+                                <tr>
+                                    <td>
+                                        <div class="font-semibold"><?= htmlspecialchars($item['employee']) ?></div>
+                                        <div class="text-xs text-slate-400"><?= htmlspecialchars($item['username']) ?></div>
+                                    </td>
+                                    <td><?= htmlspecialchars($item['department']) ?></td>
+                                    <td><?= number_format($item['days_worked']) ?></td>
+                                    <td><?= number_format($item['expected_hours'], 1) ?> h</td>
+                                    <td><?= number_format($item['hours'], 1) ?> h</td>
+                                    <td><?= number_format($item['adherence_percent'], 1) ?>%</td>
+                                    <td><?= number_format($item['late_days']) ?></td>
+                                    <td>$<?= number_format($item['amount_usd'], 2) ?></td>
+                                    <td>$<?= number_format($item['monthly_salary_usd'], 2) ?></td>
+                                    <td class="<?= $item['difference_usd'] >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
+                                        <?= $item['difference_usd'] >= 0 ? '+' : '' ?>$<?= number_format($item['difference_usd'], 2) ?>
+                                    </td>
+                                    <td>RD$<?= number_format($item['amount_dop'], 2) ?></td>
+                                    <td>RD$<?= number_format($item['monthly_salary_dop'], 2) ?></td>
+                                    <td class="<?= $item['difference_dop'] >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
+                                        <?= $item['difference_dop'] >= 0 ? '+' : '' ?>RD$<?= number_format($item['difference_dop'], 2) ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                 </tbody>
             </table>
         </div>
     </div>
+</section>
 
-    <!-- Monthly Consolidated Report -->
-    <div class="bg-white rounded-lg shadow overflow-hidden mt-8">
-        <div class="p-6 border-b">
-            <h2 class="text-xl font-semibold">Monthly Consolidated Report</h2>
-        </div>
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Lunch Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Break Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Meeting/Coaching</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Work Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADH (%)</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Earned</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <?php foreach ($monthly_data as $row): ?>
-                        <?php
-                        $work_time = $row['total_work_time'] ?: 0;
-                        $adh_percent = ($work_time / ($scheduled_hours_per_day * count($report_data))) * 100;
-                        $hourly_rate = $hourly_rates[$row['username']] ?? 0;
-                        $earned = ($work_time / 3600) * $hourly_rate;
-                        ?>
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= htmlspecialchars($row['employee']) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_lunch'] ?: 0) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_break'] ?: 0) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $row['total_meeting_coaching'] ?: 0) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap"><?= gmdate('H:i:s', $work_time) ?></td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="<?= $adh_percent >= 90 ? 'text-green-600' : ($adh_percent >= 80 ? 'text-yellow-600' : 'text-red-600') ?>">
-                                    <?= number_format($adh_percent, 2) ?>%
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">$<?= number_format($earned, 2) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- Include Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Attendance Trend Chart
-const trendCtx = document.getElementById('attendanceTrend').getContext('2d');
-new Chart(trendCtx, {
-    type: 'line',
-    data: {
-        labels: <?= json_encode(array_column(array_reverse($trend_data), 'month')) ?>,
-        datasets: [{
-            label: 'Average Work Time (hours)',
-            data: <?= json_encode(array_map(function($item) {
-                return $item['avg_work_time'] / 3600;
-            }, array_reverse($trend_data))) ?>,
-            borderColor: 'rgb(59, 130, 246)',
-            tension: 0.1
-        }]
-    },
-    options: {
-        responsive: true,
-        scales: {
-            y: {
-                beginAtZero: true
-            }
-        }
-    }
+const departmentChartData = <?= $departmentChartJson ?>;
+const trendData = <?= json_encode($trendRows, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+const trendMonths = trendData.map(item => item.month);
+const trendHours = trendData.map(item => {
+    const seconds = Number(item.avg_work_seconds || 0);
+    return (seconds / 3600).toFixed(2);
 });
+const trendLate = trendData.map(item => Number(item.late_count || 0));
 
-// Performance Distribution Chart
-const performanceCtx = document.getElementById('performanceDistribution').getContext('2d');
-const performanceData = <?= json_encode(array_map(function($row) use ($scheduled_hours_per_day) {
-    return ($row['total_work_time'] / $scheduled_hours_per_day) * 100;
-}, $monthly_data)) ?>;
+const palette = getComputedStyle(document.body);
+const cyan = palette.getPropertyValue('--accent-cyan') || '#22d3ee';
+const emerald = palette.getPropertyValue('--accent-emerald') || '#34d399';
+const textColor = palette.getPropertyValue('--text-primary') || '#e2e8f0';
+const mutedColor = palette.getPropertyValue('--text-muted') || '#94a3b8';
+const amber = '#f59e0b';
+const violet = '#8b5cf6';
 
-new Chart(performanceCtx, {
-    type: 'bar',
-    data: {
-        labels: ['< 80%', '80-90%', '90-100%', '> 100%'],
-        datasets: [{
-            label: 'Number of Employees',
-            data: [
-                performanceData.filter(x => x < 80).length,
-                performanceData.filter(x => x >= 80 && x < 90).length,
-                performanceData.filter(x => x >= 90 && x < 100).length,
-                performanceData.filter(x => x >= 100).length
-            ],
-            backgroundColor: [
-                'rgb(239, 68, 68)',
-                'rgb(234, 179, 8)',
-                'rgb(34, 197, 94)',
-                'rgb(59, 130, 246)'
+const departmentCtx = document.getElementById('departmentChart');
+if (typeof Chart !== 'undefined') {
+    if (departmentCtx && departmentChartData.labels.length) {
+        new Chart(departmentCtx, {
+            type: 'bar',
+            data: {
+                labels: departmentChartData.labels,
+                datasets: [
+                    {
+                        label: 'Pago USD',
+                        data: departmentChartData.actual_usd,
+                        backgroundColor: cyan.trim(),
+                        borderRadius: 8,
+                    },
+                    {
+                        label: 'Base USD',
+                        data: departmentChartData.base_usd,
+                        backgroundColor: emerald.trim(),
+                        borderRadius: 8,
+                    },
+                    {
+                        label: 'Pago DOP',
+                        data: departmentChartData.actual_dop,
+                        backgroundColor: amber,
+                        borderRadius: 8,
+                    },
+                    {
+                        label: 'Base DOP',
+                        data: departmentChartData.base_dop,
+                        backgroundColor: violet,
+                        borderRadius: 8,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: textColor.trim(),
+                            font: { family: 'Inter' }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: mutedColor.trim() },
+                        grid: { color: 'rgba(148, 163, 184, 0.12)' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: mutedColor.trim() },
+                        grid: { color: 'rgba(148, 163, 184, 0.12)' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+const ctx = document.getElementById('trendChart');
+if (ctx && typeof Chart !== 'undefined') {
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: trendMonths,
+            datasets: [
+                {
+                    label: 'Horas promedio',
+                    data: trendHours,
+                    yAxisID: 'y',
+                    borderColor: cyan.trim(),
+                    backgroundColor: 'rgba(34, 211, 238, 0.15)',
+                    tension: 0.35,
+                    fill: true,
+                    pointRadius: 4,
+                    pointBackgroundColor: cyan.trim(),
+                },
+                {
+                    label: 'Retardos',
+                    data: trendLate,
+                    yAxisID: 'y1',
+                    borderColor: emerald.trim(),
+                    backgroundColor: 'rgba(52, 211, 153, 0.15)',
+                    tension: 0.25,
+                    fill: false,
+                    pointRadius: 4,
+                    pointBackgroundColor: emerald.trim(),
+                    type: 'bar',
+                    barThickness: 26,
+                }
             ]
-        }]
-    },
-    options: {
-        responsive: true,
-        scales: {
-            y: {
-                beginAtZero: true
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: textColor.trim(),
+                        font: {
+                            family: 'Inter'
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            if (context.dataset.label === 'Horas promedio') {
+                                return `${context.dataset.label}: ${context.parsed.y} h`;
+                            }
+                            return `${context.dataset.label}: ${context.parsed.y}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Horas',
+                        color: mutedColor.trim()
+                    },
+                    ticks: {
+                        color: mutedColor.trim()
+                    },
+                    grid: {
+                        color: 'rgba(148, 163, 184, 0.15)'
+                    }
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Retardos',
+                        color: mutedColor.trim()
+                    },
+                    ticks: {
+                        color: mutedColor.trim()
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: mutedColor.trim()
+                    },
+                    grid: {
+                        color: 'rgba(148, 163, 184, 0.12)'
+                    }
+                }
             }
         }
-    }
-});
+    });
+}
 </script>
-
-<!-- Include Tailwind CSS -->
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-<!-- Include Font Awesome -->
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+<?php include __DIR__ . '/footer.php'; ?>

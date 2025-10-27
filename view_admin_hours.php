@@ -4,10 +4,7 @@ include 'db.php';
 
 date_default_timezone_set('America/Santo_Domingo');
 
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['Admin', 'HR', 'IT'])) {
-    header('Location: index.php');
-    exit;
-}
+ensurePermission('view_admin_hours');
 
 // Pagination settings
 $records_per_page = 10;

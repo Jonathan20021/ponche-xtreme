@@ -1,6 +1,6 @@
 <?php
 session_start();
-
+// Verificar si el usuario esta logueado y tiene el rol correcto
 // Verificar si el usuario está logueado y tiene el rol correcto
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['AGENT', 'IT', 'Supervisor'])) {
     header('Location: login_agent.php');
@@ -80,19 +80,7 @@ $time_summary_stmt->execute([$user_id, $date_filter]);
 $time_summary = $time_summary_stmt->fetch(PDO::FETCH_ASSOC);
 
 // Calcular el pago
-$hourly_rates = [
-    'ematos' => 200.00,
-    'Jcoronado' => 200.00,
-    'Jmirabel' => 200.00,
-    'Gbonilla' => 110.00,
-    'Ecapellan' => 110.00,
-    'Rmota' => 110.00,
-    'abatista' => 200.00,
-    'ydominguez' => 110.00,
-    'elara' => 200.00,
-    'omorel' => 110.00,
-    'rbueno' => 200.00
-];
+$hourly_rates = getUserHourlyRates($pdo);
 $hourly_rate = $hourly_rates[$username] ?? 0;
 $total_work_hours = $time_summary['total_work'] / 3600;
 $total_payment = round($total_work_hours * $hourly_rate, 2);
@@ -345,6 +333,8 @@ $productivity_score = $total_time > 0 ? round(($time_summary['total_work'] / $to
             }
         });
     </script>
-</body>
-</html>
+<?php include 'footer.php'; ?>
+
+
+
 
