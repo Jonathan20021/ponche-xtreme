@@ -99,12 +99,12 @@ if ($tardiness_entry_data['total_entries'] > 0) {
     
     <div class="container mx-auto px-4 py-8">
         <!-- Dashboard Header -->
-        <div class="flex justify-between items-center mb-8">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
                 <h1 class="text-3xl font-bold text-gray-800">Evallish BPO Dashboard</h1>
                 <p class="text-gray-600">Last updated: <span id="lastUpdate"></span></p>
             </div>
-            <button id="refreshData" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center">
+            <button id="refreshData" class="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2">
                 <i class="fas fa-sync-alt mr-2"></i> Refresh Data
             </button>
         </div>
@@ -201,9 +201,9 @@ if ($tardiness_entry_data['total_entries'] > 0) {
 
         <!-- Tardiness Breakdown -->
         <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
                 <h3 class="text-xl font-semibold text-gray-800">Tardiness Breakdown</h3>
-                <div class="flex space-x-2">
+                <div class="flex flex-wrap gap-2">
                     <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Daily</button>
                     <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Weekly</button>
                     <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Monthly</button>

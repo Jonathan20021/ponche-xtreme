@@ -48,25 +48,37 @@ if ($isAuthenticated) {
     <link href="<?= htmlspecialchars($assetBase) ?>/css/theme.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/alpinejs" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
     <title>Evallish BPO Control</title>
 </head>
 
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <header class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
         <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <div class="h-10 w-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
-                    <i class="fas fa-bolt"></i>
+            <div class="flex items-center justify-between gap-3 w-full md:w-auto">
+                <div class="flex items-center gap-3">
+                    <div class="h-10 w-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-semibold text-white">Evallish BPO Control</h1>
+                        <?php if ($userDisplayName): ?>
+                            <p class="text-xs text-slate-400">Bienvenido, <?= htmlspecialchars($userDisplayName) ?></p>
+                        <?php endif; ?>
+                    </div>
                 </div>
-                <div>
-                    <h1 class="text-xl font-semibold text-white">Evallish BPO Control</h1>
-                    <?php if ($userDisplayName): ?>
-                        <p class="text-xs text-slate-400">Bienvenido, <?= htmlspecialchars($userDisplayName) ?></p>
-                    <?php endif; ?>
-                </div>
+                <button type="button"
+                        class="mobile-nav-toggle md:hidden"
+                        data-nav-toggle
+                        data-nav-target="primary-nav"
+                        aria-controls="primary-nav"
+                        aria-expanded="false">
+                    <i class="fas fa-bars"></i>
+                    Menu
+                </button>
             </div>
 
-            <nav class="flex flex-wrap items-center gap-2">
+            <nav id="primary-nav" class="main-nav flex flex-wrap items-center gap-2" data-open="false" data-nav>
                 <?php if ($isAuthenticated): ?>
                     <?php foreach ($navItems as $sectionKey => $item): ?>
                         <?php if (userHasPermission($sectionKey)): ?>

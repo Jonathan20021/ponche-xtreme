@@ -106,21 +106,21 @@ $productivity_score = $total_time > 0 ? round(($time_summary['total_work'] / $to
 <body class="bg-gray-50 text-gray-800">
     <div class="container mx-auto px-4 py-8">
         <!-- Header Section -->
-        <div class="flex justify-between items-center mb-8">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
                 <h1 class="text-3xl font-bold text-gray-800">Welcome, <?= htmlspecialchars($full_name) ?></h1>
                 <p class="text-gray-600">Here's your performance overview for today</p>
             </div>
-            <div class="flex items-center space-x-4">
-                <div class="relative">
-                    <input type="text" id="datePicker" class="bg-white border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" value="<?= $date_filter ?>">
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="relative w-full sm:w-auto">
+                    <input type="text" id="datePicker" class="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" value="<?= $date_filter ?>">
                 </div>
             </div>
         </div>
 
         <!-- Productivity Score -->
         <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h3 class="text-lg font-semibold text-gray-800">Productivity Score</h3>
                     <p class="text-gray-600">Based on your work time vs total time</p>
@@ -209,10 +209,10 @@ $productivity_score = $total_time > 0 ? round(($time_summary['total_work'] / $to
 
         <!-- Detailed Records Table -->
         <div class="bg-white p-6 rounded-lg shadow-lg">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
                 <h3 class="text-lg font-semibold text-gray-800">Detailed Records</h3>
-                <div class="flex space-x-2">
-                    <button class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                <div class="flex flex-wrap gap-2">
+                    <button class="w-full sm:w-auto px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
                         <i class="fas fa-download mr-2"></i>Export
                     </button>
                 </div>

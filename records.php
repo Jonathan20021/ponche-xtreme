@@ -229,86 +229,6 @@ $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <?php include 'header.php'; ?>
 
-<style>
-    /* Animaciones y efectos */
-    .fade-in {
-        animation: fadeIn 0.5s ease-in;
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Estilos mejorados para tablas */
-    .custom-table {
-        border-radius: 0.5rem;
-        overflow: hidden;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    }
-
-    .custom-table th {
-        background: linear-gradient(to right, #4F46E5, #6366F1);
-        color: white !important;
-        text-transform: uppercase;
-        font-weight: 600;
-        font-size: 0.75rem;
-    }
-
-    .custom-table tr:hover {
-        transform: scale(1.01);
-        transition: all 0.2s ease;
-    }
-
-    /* Estilos para badges */
-    .status-badge {
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-weight: 600;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-
-    /* Estilos para botones */
-    .btn-primary {
-        background: linear-gradient(to right, #4F46E5, #6366F1);
-        transition: all 0.3s ease;
-    }
-
-    .btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
-    }
-
-    /* Estilos para cards */
-    .section-card {
-        background: white;
-        border-radius: 1rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        transition: all 0.3s ease;
-    }
-
-    .section-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    }
-
-    /* Estilos para el modo oscuro */
-    .dark .section-card {
-        background: #1F2937;
-        border: 1px solid #374151;
-    }
-
-    .dark .custom-table th {
-        background: linear-gradient(to right, #3730A3, #4F46E5);
-    }
-
-    .dark .status-badge {
-        opacity: 0.9;
-    }
-</style>
-
 <div class="container mx-auto px-4 py-8 fade-in">
     <!-- Filtros -->
     <div class="section-card p-6 mb-8">
@@ -366,12 +286,14 @@ $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC);
                 </div>
             </div>
 
-            <div class="flex justify-between items-center mt-6">
-                <button type="submit" class="btn-primary px-6 py-2.5 rounded-lg text-white font-semibold">
-                    <i class="fas fa-filter mr-2"></i> Apply Filters
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end mt-6">
+                <button type="submit" class="btn-primary w-full sm:w-auto">
+                    <i class="fas fa-filter"></i>
+                    Apply Filters
                 </button>
-                <button type="button" id="reload-button" class="bg-gray-500 hover:bg-gray-600 px-6 py-2.5 rounded-lg text-white font-semibold transition-all duration-300">
-                    <i class="fas fa-sync-alt mr-2"></i> Reload Data
+                <button type="button" id="reload-button" class="btn-secondary w-full sm:w-auto">
+                    <i class="fas fa-sync-alt"></i>
+                    Reload Data
                 </button>
             </div>
         </form>
@@ -379,35 +301,41 @@ $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC);
 
     <!-- Records Table -->
     <div class="section-card p-6 mb-8">
-        <div class="flex justify-between items-center mb-6">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between mb-6">
             <h2 class="text-2xl font-bold text-gray-800 dark:text-white">
                 <i class="fas fa-table mr-2"></i> Record Details
             </h2>
-            <div class="flex space-x-4">
-                <button id="exportExcel" class="btn-primary px-4 py-2 rounded-lg text-white font-semibold">
-                    <i class="fas fa-file-excel mr-2"></i>Export Excel
+            <div class="table-actions w-full xl:w-auto justify-end">
+                <button id="exportCsv" class="btn-secondary w-full sm:w-auto">
+                    <i class="fas fa-file-csv"></i>
+                    Export CSV
                 </button>
-                <button id="exportPDF" class="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg text-white font-semibold transition-all duration-300">
-                    <i class="fas fa-file-pdf mr-2"></i>Export PDF
+                <button id="exportExcel" class="btn-primary w-full sm:w-auto">
+                    <i class="fas fa-file-excel"></i>
+                    Export Excel
+                </button>
+                <button id="exportPDF" class="btn-secondary w-full sm:w-auto">
+                    <i class="fas fa-file-pdf"></i>
+                    Export PDF
                 </button>
             </div>
         </div>
 
         <div class="overflow-x-auto">
-            <table id="recordsTable" class="custom-table w-full">
+            <table id="recordsTable" class="data-table js-datatable" data-export-name="attendance-records">
                 <thead>
-                    <tr class="bg-gray-100 dark:bg-gray-700">
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">ID</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Full Name</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Username</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">IP</th>
-                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    <tr>
+                        <th>ID</th>
+                        <th>Full Name</th>
+                        <th>Username</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>IP</th>
+                        <th class="text-center">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody>
                     <?php foreach ($records as $record): ?>
                         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200">
                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100"><?= $record['id'] ?></td>
@@ -631,7 +559,7 @@ $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC);
 $(document).ready(function() {
     // Initialize DataTables with custom styling
     const tableConfig = {
-        dom: '<"flex justify-between items-center mb-4"Bf>rtip',
+        dom: '<"flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4"Bf>rtip',
         buttons: [
             {
                 extend: 'excel',

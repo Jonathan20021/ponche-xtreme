@@ -37,21 +37,34 @@ $currentPath = basename($_SERVER['PHP_SELF']);
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <link href="<?= htmlspecialchars($assetBase) ?>/css/theme.css" rel="stylesheet">
+    <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
     <title>Agent Area</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <header class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
         <div class="max-w-5xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <div class="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300">
-                    <i class="fas fa-user"></i>
+            <div class="flex items-center justify-between gap-3 w-full md:w-auto">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-semibold text-white">Evallish BPO Agents</h1>
+                        <p class="text-xs text-slate-400"><?= htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username'] ?? '') ?></p>
+                    </div>
                 </div>
-                <div>
-                    <h1 class="text-lg font-semibold text-white">Evallish BPO Agents</h1>
-                    <p class="text-xs text-slate-400"><?= htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username'] ?? '') ?></p>
-                </div>
+                <button type="button"
+                        class="mobile-nav-toggle md:hidden"
+                        data-nav-toggle
+                        data-nav-target="agent-nav"
+                        aria-controls="agent-nav"
+                        aria-expanded="false">
+                    <i class="fas fa-bars"></i>
+                    Menu
+                </button>
             </div>
-            <nav class="flex flex-wrap items-center gap-2">
+
+            <nav id="agent-nav" class="main-nav flex flex-wrap items-center gap-2" data-open="false" data-nav>
                 <?php foreach ($agentNavItems as $sectionKey => $item): ?>
                     <?php if (userHasPermission($sectionKey)): ?>
                         <?php

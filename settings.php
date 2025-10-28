@@ -438,8 +438,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="status-banner error"><?= htmlspecialchars($message) ?></div>
         <?php endforeach; ?>
 
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <article class="glass-card space-y-5">
+        <div id="quick-actions-grid" class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <article id="create-user-card" class="glass-card space-y-5">
                 <div class="flex items-center gap-3">
                     <div class="h-10 w-10 rounded-xl bg-cyan-500/15 text-primary flex items-center justify-center">
                         <i class="fas fa-user-plus text-cyan-300"></i>
@@ -468,7 +468,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <div>
                                 <label class="form-label">Rol</label>
                                 <input type="text" name="role" list="role-options" required class="input-control" placeholder="Ej. Admin">
-                                <p class="text-muted text-xs mt-1">Puedes crear roles desde el panel de la derecha.</p>
+                                <p class="text-muted text-xs mt-1">Puedes crear roles desde la pestana Roles y permisos.</p>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -528,7 +528,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 </form>
             </article>
 
-            <article class="glass-card space-y-5">
+            <article id="create-role-card" class="glass-card space-y-5">
                 <div class="flex items-center gap-3">
                     <div class="h-10 w-10 rounded-xl bg-indigo-500/15 text-primary flex items-center justify-center">
                         <i class="fas fa-layer-group text-indigo-300"></i>
@@ -559,7 +559,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 </form>
             </article>
 
-            <article class="glass-card space-y-5">
+            <article id="create-department-card" class="glass-card space-y-5">
                 <div class="flex items-center gap-3">
                     <div class="h-10 w-10 rounded-xl bg-emerald-400/15 text-primary flex items-center justify-center">
                         <i class="fas fa-sitemap text-emerald-300"></i>
@@ -587,7 +587,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </article>
         </div>
 
-        <section class="glass-card space-y-6">
+        <section id="schedule-card" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Horario objetivo para analiticas</h2>
@@ -643,7 +643,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </form>
         </section>
 
-        <section class="glass-card space-y-6">
+        <section id="manage-users-section" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Gestionar usuarios existentes</h2>
@@ -737,7 +737,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </form>
         </section>
 
-        <section class="glass-card space-y-6">
+        <section id="departments-section" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Departamentos y equipos</h2>
@@ -794,7 +794,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </form>
         </section>
 
-        <section class="glass-card space-y-6">
+        <section id="roles-section" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Roles registrados</h2>
@@ -843,7 +843,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </form>
         </section>
 
-        <section class="glass-card space-y-6">
+        <section id="permissions-section" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Permisos por seccion</h2>
@@ -887,6 +887,189 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         </section>
     </div>
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const tabConfig = [
+        {
+            key: 'users',
+            label: 'Usuarios',
+            icon: 'fas fa-users-cog',
+            selectors: ['#create-user-card', '#manage-users-section']
+        },
+        {
+            key: 'departments',
+            label: 'Departamentos',
+            icon: 'fas fa-sitemap',
+            selectors: ['#create-department-card', '#departments-section']
+        },
+        {
+            key: 'roles',
+            label: 'Roles y permisos',
+            icon: 'fas fa-user-shield',
+            selectors: ['#create-role-card', '#roles-section', '#permissions-section']
+        },
+        {
+            key: 'schedule',
+            label: 'Horario objetivo',
+            icon: 'fas fa-clock',
+            selectors: ['#schedule-card']
+        }
+    ];
+
+    const firstTarget = document.querySelector(tabConfig[0]?.selectors[0] || '');
+    if (!firstTarget) {
+        return;
+    }
+
+    const style = document.createElement('style');
+    style.textContent = `
+        .settings-tabs-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .settings-tab-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.65rem 1.4rem;
+            border-radius: 9999px;
+            background: rgba(13, 148, 136, 0.12);
+            color: #0f172a;
+            font-weight: 600;
+            border: 1px solid transparent;
+            transition: all 0.2s ease-in-out;
+        }
+        .settings-tab-button:hover {
+            background: rgba(13, 148, 136, 0.2);
+            transform: translateY(-1px);
+        }
+        .settings-tab-button.is-active {
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            color: #ffffff;
+            box-shadow: 0 12px 28px rgba(59, 130, 246, 0.25);
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+        .settings-tab-panel {
+            display: none;
+        }
+        .settings-tab-panel.is-active {
+            display: block;
+            animation: settingsFade 0.25s ease-in-out;
+        }
+        @keyframes settingsFade {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    const host = document.createElement('div');
+    host.className = 'settings-tabs space-y-8';
+
+    const nav = document.createElement('nav');
+    nav.className = 'settings-tabs-nav';
+    nav.setAttribute('role', 'tablist');
+    host.appendChild(nav);
+
+    const panelsWrapper = document.createElement('div');
+    panelsWrapper.className = 'settings-tab-panels space-y-12';
+    host.appendChild(panelsWrapper);
+
+    const quickGrid = document.getElementById('quick-actions-grid');
+    if (quickGrid) {
+        quickGrid.parentNode.insertBefore(host, quickGrid);
+    } else {
+        firstTarget.parentNode.insertBefore(host, firstTarget);
+    }
+
+    const panels = new Map();
+    const buttons = new Map();
+
+    tabConfig.forEach(function (config) {
+        const panel = document.createElement('div');
+        panel.className = 'settings-tab-panel space-y-8';
+        panel.dataset.tabPanel = config.key;
+        panel.id = `settings-panel-${config.key}`;
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-hidden', 'true');
+        panel.setAttribute('tabindex', '0');
+        panelsWrapper.appendChild(panel);
+        panels.set(config.key, panel);
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.id = `settings-tab-${config.key}`;
+        button.className = 'settings-tab-button';
+        button.dataset.tabTarget = config.key;
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', 'false');
+        button.setAttribute('aria-controls', panel.id);
+        button.innerHTML = `<i class=\"${config.icon}\"></i><span>${config.label}</span>`;
+        nav.appendChild(button);
+        buttons.set(config.key, button);
+
+        panel.setAttribute('aria-labelledby', button.id);
+
+        config.selectors.forEach(function (selector) {
+            const element = document.querySelector(selector);
+            if (element) {
+                panel.appendChild(element);
+            }
+        });
+    });
+
+    if (quickGrid && quickGrid.childElementCount === 0) {
+        quickGrid.remove();
+    }
+
+    function setActiveTab(key) {
+        panels.forEach(function (panel, panelKey) {
+            const isActive = panelKey === key;
+            panel.classList.toggle('is-active', isActive);
+            panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+        });
+
+        buttons.forEach(function (button, buttonKey) {
+            const isActive = buttonKey === key;
+            button.classList.toggle('is-active', isActive);
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            button.setAttribute('tabindex', isActive ? '0' : '-1');
+        });
+
+        try {
+            localStorage.setItem('settings-active-tab', key);
+        } catch (error) {
+            /* ignore storage errors */
+        }
+    }
+
+    let initialTab = tabConfig[0]?.key;
+    try {
+        const stored = localStorage.getItem('settings-active-tab');
+        if (stored && panels.has(stored)) {
+            initialTab = stored;
+        }
+    } catch (error) {
+        /* ignore storage errors */
+    }
+
+    setActiveTab(initialTab);
+
+    buttons.forEach(function (button, key) {
+        button.addEventListener('click', function () {
+            setActiveTab(key);
+        });
+    });
+});
+</script>
 
 <datalist id="role-options">
     <?php foreach ($rolesList as $roleRow): ?>
