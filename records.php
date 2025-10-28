@@ -29,6 +29,23 @@ foreach ($attendanceTypes as $typeRow) {
     $attendanceTypeMap[$slug] = $typeRow;
 }
 
+$durationTypes = array_values(array_filter($attendanceTypes, function (array $typeRow): bool {
+    return ((int) ($typeRow['is_active'] ?? 0) === 1) && ((int) ($typeRow['is_unique_daily'] ?? 0) === 0);
+}));
+
+$summaryColumns = array_map(function (array $typeRow): array {
+    return [
+        'slug' => $typeRow['slug'],
+        'label' => $typeRow['label'] ?? $typeRow['slug'],
+        'icon_class' => $typeRow['icon_class'] ?? 'fas fa-circle',
+    ];
+}, $durationTypes);
+
+$nonWorkSlugs = array_values(array_filter(array_unique([
+    sanitizeAttendanceTypeSlug('BREAK'),
+    sanitizeAttendanceTypeSlug('LUNCH'),
+])));
+
 $search = trim($_GET['search'] ?? '');
 $user_filter = trim($_GET['user'] ?? '');
 $date_filter = $_GET['dates'] ?? '';
@@ -123,58 +140,30 @@ $users = $pdo->query("SELECT DISTINCT username FROM users ORDER BY username")->f
 
 $summary_query = "
     SELECT 
+        attendance.user_id,
         users.full_name,
         users.username, 
         DATE(attendance.timestamp) AS record_date,
-        SUM(CASE WHEN UPPER(attendance.type) = 'BREAK' THEN TIMESTAMPDIFF(SECOND, attendance.timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS break_time,
-        SUM(CASE WHEN UPPER(attendance.type) = 'LUNCH' THEN TIMESTAMPDIFF(SECOND, attendance.timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS lunch_time,
-        SUM(CASE WHEN UPPER(attendance.type) = 'FOLLOW_UP' THEN TIMESTAMPDIFF(SECOND, attendance.timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS follow_up_time,
-        SUM(CASE WHEN UPPER(attendance.type) = 'READY' THEN TIMESTAMPDIFF(SECOND, attendance.timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS ready_time,
-        SUM(CASE WHEN UPPER(attendance.type) = 'ENTRY' THEN TIMESTAMPDIFF(SECOND, attendance.timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND UPPER(a.type) = 'EXIT'
-        )) ELSE 0 END) - 
-        SUM(CASE WHEN UPPER(attendance.type) IN ('BREAK', 'LUNCH') THEN TIMESTAMPDIFF(SECOND, attendance.timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS work_time
+        attendance.type AS type_slug,
+        attendance.timestamp,
+        attendance.ip_address
     FROM attendance 
     JOIN users ON attendance.user_id = users.id 
     WHERE 1=1
 ";
 
 $summary_params = [];
-if ($user_filter) {
+if ($search !== '') {
+    $like = "%$search%";
+    $summary_query .= " AND (
+        users.full_name COLLATE {$collation} LIKE ?
+        OR users.username COLLATE {$collation} LIKE ?
+        OR attendance.type COLLATE {$collation} LIKE ?
+        OR attendance.ip_address LIKE ?
+    )";
+    array_push($summary_params, $like, $like, $like, $like);
+}
+if ($user_filter !== '') {
     $summary_query .= " AND users.username = ?";
     $summary_params[] = $user_filter;
 }
@@ -182,26 +171,104 @@ if (!empty($dateValues)) {
     $summary_query .= " AND DATE(attendance.timestamp) IN ($datePlaceholders)";
     $summary_params = array_merge($summary_params, $dateValues);
 }
-
-$summary_query .= " GROUP BY users.full_name, users.username, record_date ORDER BY record_date DESC";
-$summary_stmt = $pdo->prepare($summary_query);
-$summary_stmt->execute($summary_params);
-$work_summary = $summary_stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Lista de salarios por usuario
-
-// Agregar columna del monto a pagar
-foreach ($work_summary as &$summary) {
-    $username = $summary['username'];
-    $hourly_rate = isset($hourly_rates[$username]) ? $hourly_rates[$username] : 0;
-
-    // Calcular horas trabajadas (restando el tiempo de lunch y break)
-    $work_hours = ($summary['work_time'] / 3600);
-
-    // Calcular el monto a pagar
-    $summary['total_payment'] = round($work_hours * $hourly_rate, 2);
+if ($type_filter !== '') {
+    $summary_query .= " AND UPPER(attendance.type COLLATE {$collation}) = ?";
+    $summary_params[] = $type_filter;
 }
 
+$summary_query .= " ORDER BY users.username COLLATE {$collation}, record_date, attendance.timestamp";
+$summary_stmt = $pdo->prepare($summary_query);
+$summary_stmt->execute($summary_params);
+$raw_summary_rows = $summary_stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+$work_summary = [];
+$currentGroup = null;
+$currentKey = null;
+
+$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $hourly_rates): void {
+    if ($group === null) {
+        return;
+    }
+
+    $events = $group['events'];
+    $eventCount = count($events);
+    $durationsAll = [];
+
+    if ($eventCount >= 2) {
+        for ($i = 0; $i < $eventCount - 1; $i++) {
+            $start = $events[$i]['timestamp'];
+            $end = $events[$i + 1]['timestamp'];
+            $delta = max(0, $end - $start);
+
+            if ($delta <= 0) {
+                continue;
+            }
+
+            $slug = $events[$i]['slug'];
+            $durationsAll[$slug] = ($durationsAll[$slug] ?? 0) + $delta;
+        }
+    }
+
+    $durationMap = [];
+    foreach ($summaryColumns as $column) {
+        $columnSlug = $column['slug'];
+        $durationMap[$columnSlug] = $durationsAll[$columnSlug] ?? 0;
+    }
+
+    $totalSeconds = array_sum($durationsAll);
+    $pauseSeconds = 0;
+    foreach ($nonWorkSlugs as $pauseSlug) {
+        $pauseSeconds += $durationsAll[$pauseSlug] ?? 0;
+    }
+
+    $workSeconds = max(0, $totalSeconds - $pauseSeconds);
+    $hourlyRate = isset($hourly_rates[$group['username']]) ? (float) $hourly_rates[$group['username']] : 0.0;
+
+    $work_summary[] = [
+        'full_name' => $group['full_name'],
+        'username' => $group['username'],
+        'record_date' => $group['record_date'],
+        'durations' => $durationMap,
+        'work_seconds' => $workSeconds,
+        'total_payment' => round(($workSeconds / 3600) * $hourlyRate, 2),
+    ];
+
+    $group = null;
+};
+
+foreach ($raw_summary_rows as $row) {
+    $slug = sanitizeAttendanceTypeSlug($row['type_slug'] ?? '');
+    if ($slug === '') {
+        continue;
+    }
+
+    $timestamp = strtotime($row['timestamp']);
+    if ($timestamp === false) {
+        continue;
+    }
+
+    $recordDate = $row['record_date'] ?? date('Y-m-d', $timestamp);
+    $key = $row['user_id'] . '|' . $recordDate;
+
+    if ($currentKey !== $key) {
+        $finalizeSummaryGroup($currentGroup);
+        $currentKey = $key;
+        $currentGroup = [
+            'user_id' => $row['user_id'],
+            'full_name' => $row['full_name'],
+            'username' => $row['username'],
+            'record_date' => $recordDate,
+            'events' => [],
+        ];
+    }
+
+    $currentGroup['events'][] = [
+        'slug' => $slug,
+        'timestamp' => $timestamp,
+    ];
+}
+
+$finalizeSummaryGroup($currentGroup);
 
 // Colculo de Porcentaje de Tardanza Diario
 $tardiness_query = "
@@ -233,6 +300,8 @@ $tardiness_stmt = $pdo->prepare($tardiness_query);
 $tardiness_stmt->execute($tardiness_params);
 $tardiness_data = $tardiness_stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$referenceDate = !empty($dateValues) ? $dateValues[0] : date('Y-m-d');
+
 $missing_entry_query = "
     SELECT 
         users.full_name AS agent_name,
@@ -241,18 +310,18 @@ $missing_entry_query = "
         attendance.type AS first_type
     FROM attendance
     JOIN users ON attendance.user_id = users.id
-    WHERE DATE(attendance.timestamp) = CURDATE() 
+    WHERE DATE(attendance.timestamp) = ? 
     AND attendance.user_id NOT IN (
         SELECT DISTINCT user_id 
         FROM attendance 
-        WHERE DATE(timestamp) = CURDATE() AND UPPER(type) = 'ENTRY'
+        WHERE DATE(timestamp) = ? AND UPPER(type) = 'ENTRY'
     )
     GROUP BY users.id
     ORDER BY first_time ASC
 ";
 
 $stmt = $pdo->prepare($missing_entry_query);
-$stmt->execute();
+$stmt->execute([$referenceDate, $referenceDate]);
 $missing_entry_data = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 $missing_entry_data = array_map(function (array $row) use ($attendanceTypeMap): array {
     $slug = sanitizeAttendanceTypeSlug($row['first_type'] ?? '');
@@ -283,7 +352,7 @@ $missing_exit_query = "
 
 // Ejecutar la consulta con el filtro de fecha
 $stmt_missing_exit = $pdo->prepare($missing_exit_query);
-$stmt_missing_exit->execute([$date_filter, $date_filter]);
+$stmt_missing_exit->execute([$referenceDate, $referenceDate]);
 $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC) ?: [];
 $missing_exit_data = array_map(function (array $row) use ($attendanceTypeMap): array {
     $slug = sanitizeAttendanceTypeSlug($row['first_type'] ?? '');
@@ -470,10 +539,9 @@ $tardinessTotal = count($tardiness_data);
                         <th>Nombre</th>
                         <th>Usuario</th>
                         <th>Fecha</th>
-                        <th>Break</th>
-                        <th>Lunch</th>
-                        <th>Follow up</th>
-                        <th>Ready</th>
+                        <?php foreach ($summaryColumns as $column): ?>
+                            <th><?= htmlspecialchars($column['label']) ?></th>
+                        <?php endforeach; ?>
                         <th>Horas trabajadas</th>
                         <th>Pago (USD)</th>
                     </tr>
@@ -484,11 +552,11 @@ $tardinessTotal = count($tardiness_data);
                             <td><?= htmlspecialchars($summary['full_name']) ?></td>
                             <td><?= htmlspecialchars($summary['username']) ?></td>
                             <td><?= htmlspecialchars($summary['record_date']) ?></td>
-                            <td><?= gmdate('H:i:s', $summary['break_time']) ?></td>
-                            <td><?= gmdate('H:i:s', $summary['lunch_time']) ?></td>
-                            <td><?= gmdate('H:i:s', $summary['follow_up_time']) ?></td>
-                            <td><?= $summary['ready_time'] ? gmdate('H:i:s', $summary['ready_time']) : '00:00:00' ?></td>
-                            <td><?= gmdate('H:i:s', $summary['work_time']) ?></td>
+                            <?php foreach ($summaryColumns as $column): ?>
+                                <?php $seconds = (int) ($summary['durations'][$column['slug']] ?? 0); ?>
+                                <td><?= gmdate('H:i:s', max(0, $seconds)) ?></td>
+                            <?php endforeach; ?>
+                            <td><?= gmdate('H:i:s', max(0, (int) $summary['work_seconds'])) ?></td>
                             <td>$<?= number_format($summary['total_payment'], 2) ?></td>
                         </tr>
                     <?php endforeach; ?>
