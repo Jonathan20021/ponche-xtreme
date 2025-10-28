@@ -49,6 +49,65 @@ if (!function_exists('getScheduleConfig')) {
     }
 }
 
+if (!function_exists('getUserExitTimes')) {
+    /**
+     * Returns a map of username => configured exit time (HH:MM:SS).
+     */
+    function getUserExitTimes(PDO $pdo): array
+    {
+        try {
+            $columnStmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'exit_time'");
+            $hasExitColumn = $columnStmt && $columnStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$hasExitColumn) {
+                return [];
+            }
+        } catch (PDOException $e) {
+            return [];
+        }
+
+        try {
+            $stmt = $pdo->query("
+                SELECT 
+                    username, 
+                    exit_time 
+                FROM users 
+                WHERE exit_time IS NOT NULL AND exit_time <> ''
+            ");
+        } catch (PDOException $e) {
+            return [];
+        }
+
+        $exitTimes = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $username = $row['username'] ?? null;
+            if ($username === null) {
+                continue;
+            }
+
+            $rawTime = trim((string) ($row['exit_time'] ?? ''));
+            if ($rawTime === '') {
+                continue;
+            }
+
+            if (strlen($rawTime) === 5) {
+                $rawTime .= ':00';
+            }
+
+            if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $rawTime) === 1) {
+                $exitTimes[$username] = $rawTime;
+                continue;
+            }
+
+            $parsed = strtotime($rawTime);
+            if ($parsed !== false) {
+                $exitTimes[$username] = date('H:i:s', $parsed);
+            }
+        }
+
+        return $exitTimes;
+    }
+}
+
 if (!function_exists('userHasPermission')) {
     /**
      * Checks whether the authenticated role has access to the given section.

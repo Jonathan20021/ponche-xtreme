@@ -38,6 +38,38 @@ function normalize_hex_color(string $color, string $default = '#6366f1'): string
     return strtoupper($default);
 }
 
+if (!function_exists('normalize_exit_time_input')) {
+    /**
+     * Normalizes a time input to HH:MM:SS or null.
+     */
+    function normalize_exit_time_input($value): ?string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{2}:\d{2}$/', $raw)) {
+            $raw .= ':00';
+        }
+
+        if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $raw)) {
+            return $raw;
+        }
+
+        $parsed = strtotime($raw);
+        return $parsed !== false ? date('H:i:s', $parsed) : null;
+    }
+}
+
+$hasUserExitColumn = false;
+try {
+    $columnStmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'exit_time'");
+    $hasUserExitColumn = $columnStmt && $columnStmt->fetch(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $hasUserExitColumn = false;
+}
+
 try {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_POST['delete_department_id']) && !isset($_POST['action'])) {

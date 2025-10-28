@@ -14,6 +14,12 @@ if (!function_exists('sanitizeHexColorValue')) {
 
 $scheduleConfig = getScheduleConfig($pdo);
 $hourly_rates = getUserHourlyRates($pdo);
+$userExitTimes = function_exists('getUserExitTimes') ? getUserExitTimes($pdo) : [];
+$defaultExitTime = trim((string) ($scheduleConfig['exit_time'] ?? ''));
+if ($defaultExitTime !== '' && strlen($defaultExitTime) === 5) {
+    $defaultExitTime .= ':00';
+}
+$exitSlug = sanitizeAttendanceTypeSlug('EXIT');
 $entryThreshold = date('H:i:s', strtotime($scheduleConfig['entry_time'] . ' +5 minutes'));
 $lunchThreshold = $scheduleConfig['lunch_time'];
 $breakThreshold = $scheduleConfig['break_time'];
@@ -185,7 +191,7 @@ $work_summary = [];
 $currentGroup = null;
 $currentKey = null;
 
-$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $hourly_rates): void {
+$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $hourly_rates, $userExitTimes, $defaultExitTime, $exitSlug): void {
     if ($group === null) {
         return;
     }
@@ -222,6 +228,52 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
     }
 
     $workSeconds = max(0, $totalSeconds - $pauseSeconds);
+
+    $recordDate = $group['record_date'] ?? null;
+    $username = $group['username'] ?? null;
+    $overtimeSeconds = 0;
+
+    if ($recordDate !== null) {
+        $configuredExit = $defaultExitTime;
+        if ($username !== null && isset($userExitTimes[$username]) && $userExitTimes[$username] !== '') {
+            $configuredExit = $userExitTimes[$username];
+        }
+
+        $configuredExit = trim((string) $configuredExit);
+        if ($configuredExit !== '') {
+            if (strlen($configuredExit) === 5) {
+                $configuredExit .= ':00';
+            }
+            if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $configuredExit) !== 1) {
+                $parsedExit = strtotime($configuredExit);
+                if ($parsedExit !== false) {
+                    $configuredExit = date('H:i:s', $parsedExit);
+                } else {
+                    $configuredExit = '';
+                }
+            }
+
+            if ($configuredExit !== '') {
+                $scheduledExitTs = strtotime($recordDate . ' ' . $configuredExit);
+                if ($scheduledExitTs !== false && $eventCount > 0) {
+                    $actualExitTs = null;
+                    for ($idx = $eventCount - 1; $idx >= 0; $idx--) {
+                        if ($events[$idx]['slug'] === $exitSlug) {
+                            $actualExitTs = $events[$idx]['timestamp'];
+                            break;
+                        }
+                    }
+                    if ($actualExitTs === null) {
+                        $actualExitTs = $events[$eventCount - 1]['timestamp'];
+                    }
+                    if ($actualExitTs !== null && $actualExitTs > $scheduledExitTs) {
+                        $overtimeSeconds = $actualExitTs - $scheduledExitTs;
+                    }
+                }
+            }
+        }
+    }
+
     $hourlyRate = isset($hourly_rates[$group['username']]) ? (float) $hourly_rates[$group['username']] : 0.0;
 
     $work_summary[] = [
@@ -230,6 +282,7 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
         'record_date' => $group['record_date'],
         'durations' => $durationMap,
         'work_seconds' => $workSeconds,
+        'overtime_seconds' => $overtimeSeconds,
         'total_payment' => round(($workSeconds / 3600) * $hourlyRate, 2),
     ];
 
@@ -543,6 +596,7 @@ $tardinessTotal = count($tardiness_data);
                             <th><?= htmlspecialchars($column['label']) ?></th>
                         <?php endforeach; ?>
                         <th>Horas trabajadas</th>
+                        <th>Horas extra</th>
                         <th>Pago (USD)</th>
                     </tr>
                 </thead>
@@ -557,6 +611,7 @@ $tardinessTotal = count($tardiness_data);
                                 <td><?= gmdate('H:i:s', max(0, $seconds)) ?></td>
                             <?php endforeach; ?>
                             <td><?= gmdate('H:i:s', max(0, (int) $summary['work_seconds'])) ?></td>
+                            <td><?= gmdate('H:i:s', max(0, (int) ($summary['overtime_seconds'] ?? 0))) ?></td>
                             <td>$<?= number_format($summary['total_payment'], 2) ?></td>
                         </tr>
                     <?php endforeach; ?>
