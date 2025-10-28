@@ -257,3 +257,31 @@ INSERT INTO `section_permissions` (`section_key`, `role`) VALUES
   ('agent_records', 'AGENT'),
   ('agent_records', 'IT'),
   ('agent_records', 'Supervisor');
+
+-- Attendance types
+CREATE TABLE IF NOT EXISTS attendance_types (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    label VARCHAR(120) NOT NULL,
+    icon_class VARCHAR(120) DEFAULT 'fas fa-circle',
+    shortcut_key VARCHAR(5) DEFAULT NULL,
+    color_start VARCHAR(7) NOT NULL DEFAULT '#6366f1',
+    color_end VARCHAR(7) NOT NULL DEFAULT '#4338ca',
+    sort_order INT NOT NULL DEFAULT 0,
+    is_unique_daily TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO attendance_types (slug, label, icon_class, shortcut_key, color_start, color_end, sort_order, is_unique_daily)
+SELECT * FROM (
+    SELECT 'ENTRY', 'Entry', 'fas fa-sign-in-alt', 'E', '#22c55e', '#16a34a', 10, 1 UNION ALL
+    SELECT 'BREAK', 'Break', 'fas fa-coffee', 'B', '#3b82f6', '#2563eb', 20, 0 UNION ALL
+    SELECT 'LUNCH', 'Lunch', 'fas fa-utensils', 'L', '#eab308', '#ca8a04', 30, 0 UNION ALL
+    SELECT 'MEETING', 'Meeting', 'fas fa-users', 'M', '#a855f7', '#7c3aed', 40, 0 UNION ALL
+    SELECT 'FOLLOW_UP', 'Follow Up', 'fas fa-tasks', 'F', '#6366f1', '#4338ca', 50, 0 UNION ALL
+    SELECT 'READY', 'Ready', 'fas fa-check', 'R', '#8b5cf6', '#6d28d9', 60, 0 UNION ALL
+    SELECT 'EXIT', 'Exit', 'fas fa-sign-out-alt', 'X', '#ef4444', '#dc2626', 70, 1
+) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM attendance_types);

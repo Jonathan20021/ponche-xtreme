@@ -49,8 +49,8 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                         <i class="fas fa-user"></i>
                     </div>
                     <div>
-                        <h1 class="text-lg font-semibold text-white">Evallish BPO Agents</h1>
-                        <p class="text-xs text-slate-400"><?= htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username'] ?? '') ?></p>
+                        <h1 class="brand-title text-lg font-semibold">Evallish BPO Agents</h1>
+                        <p class="brand-subtitle text-xs"><?= htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username'] ?? '') ?></p>
                     </div>
                 </div>
                 <button type="button"

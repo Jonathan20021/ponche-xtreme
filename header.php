@@ -56,17 +56,17 @@ if ($isAuthenticated) {
     <header class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
         <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div class="flex items-center justify-between gap-3 w-full md:w-auto">
-                <div class="flex items-center gap-3">
-                    <div class="h-10 w-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
-                        <i class="fas fa-bolt"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-xl font-semibold text-white">Evallish BPO Control</h1>
-                        <?php if ($userDisplayName): ?>
-                            <p class="text-xs text-slate-400">Bienvenido, <?= htmlspecialchars($userDisplayName) ?></p>
-                        <?php endif; ?>
-                    </div>
+            <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
+                    <i class="fas fa-bolt"></i>
                 </div>
+                <div>
+                    <h1 class="brand-title text-xl font-semibold">Evallish BPO Control</h1>
+                    <?php if ($userDisplayName): ?>
+                        <p class="brand-subtitle text-xs">Bienvenido, <?= htmlspecialchars($userDisplayName) ?></p>
+                    <?php endif; ?>
+                </div>
+            </div>
                 <button type="button"
                         class="mobile-nav-toggle md:hidden"
                         data-nav-toggle

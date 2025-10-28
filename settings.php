@@ -1,4 +1,4 @@
-i<?php
+<?php
 session_start();
 include 'db.php';
 
@@ -27,6 +27,15 @@ $sections = [
 function sanitize_role_name(string $value): string
 {
     return preg_replace('/[^A-Za-z0-9_]/', '', $value);
+}
+
+function normalize_hex_color(string $color, string $default = '#6366f1'): string
+{
+    $color = trim($color);
+    if (preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
+        return strtoupper($color);
+    }
+    return strtoupper($default);
 }
 
 try {
@@ -320,6 +329,135 @@ try {
                 $successMessages[] = 'Departamento eliminado.';
                 break;
 
+            case 'create_attendance_type':
+                $label = trim($_POST['attendance_label'] ?? '');
+                $slugInput = trim($_POST['attendance_slug'] ?? $label);
+                $icon = trim($_POST['attendance_icon'] ?? 'fas fa-circle');
+                $shortcut = strtoupper(trim($_POST['attendance_shortcut'] ?? ''));
+                $sortOrder = (int) ($_POST['attendance_sort_order'] ?? 0);
+                $colorStart = normalize_hex_color($_POST['attendance_color_start'] ?? '#6366f1', '#6366f1');
+                $colorEnd = normalize_hex_color($_POST['attendance_color_end'] ?? $colorStart, $colorStart);
+                $isUnique = isset($_POST['attendance_unique']) ? 1 : 0;
+                $isActive = isset($_POST['attendance_active']) ? 1 : 0;
+
+                if ($label === '') {
+                    $errorMessages[] = 'El nombre del tipo es obligatorio.';
+                    break;
+                }
+
+                $slug = sanitizeAttendanceTypeSlug($slugInput);
+                if ($slug === '') {
+                    $errorMessages[] = 'Debes definir un identificador valido para el tipo.';
+                    break;
+                }
+
+                $shortcut = $shortcut !== '' ? mb_substr($shortcut, 0, 2) : null;
+
+                $exists = $pdo->prepare("SELECT COUNT(*) FROM attendance_types WHERE slug = ?");
+                $exists->execute([$slug]);
+                if ((int) $exists->fetchColumn() > 0) {
+                    $errorMessages[] = "Ya existe un tipo con el identificador '{$slug}'.";
+                    break;
+                }
+
+                $insertType = $pdo->prepare("
+                    INSERT INTO attendance_types (slug, label, icon_class, shortcut_key, color_start, color_end, sort_order, is_unique_daily, is_active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $insertType->execute([
+                    $slug,
+                    $label,
+                    $icon !== '' ? $icon : 'fas fa-circle',
+                    $shortcut,
+                    $colorStart,
+                    $colorEnd,
+                    $sortOrder,
+                    $isUnique,
+                    $isActive
+                ]);
+
+                $successMessages[] = "Tipo de asistencia '{$label}' creado correctamente.";
+                break;
+
+            case 'update_attendance_types':
+                $labels = $_POST['attendance_label'] ?? [];
+                $slugs = $_POST['attendance_slug'] ?? [];
+                $icons = $_POST['attendance_icon'] ?? [];
+                $shortcuts = $_POST['attendance_shortcut'] ?? [];
+                $colorStarts = $_POST['attendance_color_start'] ?? [];
+                $colorEnds = $_POST['attendance_color_end'] ?? [];
+                $sortOrders = $_POST['attendance_sort_order'] ?? [];
+                $uniques = $_POST['attendance_unique'] ?? [];
+                $actives = $_POST['attendance_active'] ?? [];
+
+                $updated = false;
+                $updateStmt = $pdo->prepare("
+                    UPDATE attendance_types 
+                    SET slug = ?, label = ?, icon_class = ?, shortcut_key = ?, color_start = ?, color_end = ?, sort_order = ?, is_unique_daily = ?, is_active = ?, updated_at = NOW()
+                    WHERE id = ?
+                ");
+                $duplicateCheck = $pdo->prepare("SELECT COUNT(*) FROM attendance_types WHERE slug = ? AND id <> ?");
+
+                foreach ($labels as $id => $labelValue) {
+                    $id = (int) $id;
+                    $labelValue = trim($labelValue ?? '');
+                    if ($id <= 0 || $labelValue === '') {
+                        continue;
+                    }
+
+                    $slugValue = sanitizeAttendanceTypeSlug($slugs[$id] ?? $labelValue);
+                    if ($slugValue === '') {
+                        $errorMessages[] = "El tipo con ID {$id} requiere un identificador valido.";
+                        continue;
+                    }
+
+                    $duplicateCheck->execute([$slugValue, $id]);
+                    if ((int) $duplicateCheck->fetchColumn() > 0) {
+                        $errorMessages[] = "Ya existe otro tipo con el identificador '{$slugValue}'.";
+                        continue;
+                    }
+
+                    $iconValue = trim($icons[$id] ?? 'fas fa-circle');
+                    $shortcutValue = strtoupper(trim($shortcuts[$id] ?? ''));
+                    $shortcutValue = $shortcutValue !== '' ? mb_substr($shortcutValue, 0, 2) : null;
+                    $colorStartValue = normalize_hex_color($colorStarts[$id] ?? '#6366f1', '#6366f1');
+                    $colorEndValue = normalize_hex_color($colorEnds[$id] ?? $colorStartValue, $colorStartValue);
+                    $sortOrderValue = (int) ($sortOrders[$id] ?? 0);
+                    $isUniqueValue = isset($uniques[$id]) ? 1 : 0;
+                    $isActiveValue = isset($actives[$id]) ? 1 : 0;
+
+                    $updateStmt->execute([
+                        $slugValue,
+                        $labelValue,
+                        $iconValue !== '' ? $iconValue : 'fas fa-circle',
+                        $shortcutValue,
+                        $colorStartValue,
+                        $colorEndValue,
+                        $sortOrderValue,
+                        $isUniqueValue,
+                        $isActiveValue,
+                        $id
+                    ]);
+                    $updated = true;
+                }
+
+                if ($updated) {
+                    $successMessages[] = 'Tipos de asistencia actualizados correctamente.';
+                }
+                break;
+
+            case 'delete_attendance_type':
+                $typeId = isset($_POST['attendance_type_id']) ? (int) $_POST['attendance_type_id'] : 0;
+                if ($typeId <= 0) {
+                    $errorMessages[] = 'Tipo de asistencia invalido.';
+                    break;
+                }
+
+                $deleteType = $pdo->prepare("DELETE FROM attendance_types WHERE id = ?");
+                $deleteType->execute([$typeId]);
+                $successMessages[] = 'Tipo de asistencia eliminado.';
+                break;
+
             case 'update_permissions':
                 $permissions = $_POST['permissions'] ?? [];
                 $extraPermissions = $_POST['extra_permissions'] ?? [];
@@ -402,6 +540,16 @@ $roleNames = array_column($rolesList, 'name');
 $roleLabels = [];
 foreach ($rolesList as $roleRow) {
     $roleLabels[$roleRow['name']] = $roleRow['label'] ?? $roleRow['name'];
+}
+
+$attendanceTypesList = getAttendanceTypes($pdo, false);
+$attendanceTypeActiveCount = 0;
+$attendanceTypeMap = [];
+foreach ($attendanceTypesList as $typeRow) {
+    $attendanceTypeMap[$typeRow['slug']] = $typeRow;
+    if ((int) ($typeRow['is_active'] ?? 0) === 1) {
+        $attendanceTypeActiveCount++;
+    }
 }
 
 $permStmt = $pdo->query("SELECT section_key, role FROM section_permissions ORDER BY section_key, role");
@@ -587,6 +735,152 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </article>
         </div>
 
+        <article id="create-attendance-type-card" class="glass-card space-y-5">
+            <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-fuchsia-500/20 border border-fuchsia-500/40 flex items-center justify-center text-fuchsia-300">
+                    <i class="fas fa-plus"></i>
+                </div>
+                <div>
+                    <h2 class="text-primary text-lg font-semibold">Crear tipo de asistencia</h2>
+                    <p class="text-muted text-sm">Configura nuevos botones para el registro de asistencia.</p>
+                </div>
+            </div>
+            <form method="POST" class="space-y-4">
+                <input type="hidden" name="action" value="create_attendance_type">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label">Nombre visible</label>
+                        <input type="text" name="attendance_label" class="input-control" required placeholder="Ej. Capacitación">
+                    </div>
+                    <div>
+                        <label class="form-label">Identificador (slug)</label>
+                        <input type="text" name="attendance_slug" class="input-control" placeholder="Se genera automáticamente si lo dejas vacío">
+                    </div>
+                    <div>
+                        <label class="form-label">Icono (Font Awesome)</label>
+                        <input type="text" name="attendance_icon" class="input-control" value="fas fa-circle" placeholder="fas fa-briefcase">
+                    </div>
+                    <div>
+                        <label class="form-label">Atajo de teclado</label>
+                        <input type="text" name="attendance_shortcut" class="input-control text-center" maxlength="2" placeholder="Opcional">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label">Color inicio</label>
+                        <input type="color" name="attendance_color_start" class="input-control" value="#6366f1">
+                    </div>
+                    <div>
+                        <label class="form-label">Color fin</label>
+                        <input type="color" name="attendance_color_end" class="input-control" value="#4338ca">
+                    </div>
+                    <div>
+                        <label class="form-label">Orden</label>
+                        <input type="number" name="attendance_sort_order" class="input-control" value="0">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label class="inline-flex items-center gap-2 text-sm text-muted">
+                        <input type="checkbox" name="attendance_unique" value="1" class="accent-cyan-500">
+                        Único por día
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm text-muted">
+                        <input type="checkbox" name="attendance_active" value="1" class="accent-cyan-500" checked>
+                        Activo
+                    </label>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar tipo
+                    </button>
+                </div>
+            </form>
+        </article>
+
+        <section id="attendance-types-section" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">Tipos de asistencia</h2>
+                    <p class="text-muted text-sm">Modifica etiquetas, colores e iconos de los botones usados en punch.php.</p>
+                </div>
+                <span class="chip"><i class="fas fa-fingerprint"></i> <?= $attendanceTypeActiveCount ?> activos</span>
+            </div>
+            <form method="POST" class="space-y-4">
+                <input type="hidden" name="attendance_type_id" value="">
+                <div class="responsive-scroll">
+                    <table class="data-table w-full text-sm">
+                        <thead>
+                            <tr>
+                                <th>Orden</th>
+                                <th>Identificador</th>
+                                <th>Nombre</th>
+                                <th>Icono</th>
+                                <th>Color inicio</th>
+                                <th>Color fin</th>
+                                <th>Atajo</th>
+                                <th>Único/día</th>
+                                <th>Activo</th>
+                                <th class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($attendanceTypesList)): ?>
+                                <tr><td colspan="10" class="data-table-empty">Aún no has configurado tipos de asistencia.</td></tr>
+                            <?php else: ?>
+                                <?php foreach ($attendanceTypesList as $type): ?>
+                                    <?php $typeId = (int) $type['id']; ?>
+                                    <tr>
+                                        <td>
+                                            <input type="number" name="attendance_sort_order[<?= $typeId ?>]" value="<?= (int) $type['sort_order'] ?>" class="input-control">
+                                        </td>
+                                        <td>
+                                            <input type="text" name="attendance_slug[<?= $typeId ?>]" value="<?= htmlspecialchars($type['slug']) ?>" class="input-control">
+                                        </td>
+                                        <td>
+                                            <input type="text" name="attendance_label[<?= $typeId ?>]" value="<?= htmlspecialchars($type['label']) ?>" class="input-control">
+                                        </td>
+                                        <td>
+                                            <input type="text" name="attendance_icon[<?= $typeId ?>]" value="<?= htmlspecialchars($type['icon_class'] ?? 'fas fa-circle') ?>" class="input-control">
+                                        </td>
+                                        <td>
+                                            <input type="color" name="attendance_color_start[<?= $typeId ?>]" value="<?= htmlspecialchars($type['color_start'] ?? '#6366f1') ?>" class="input-control h-11">
+                                        </td>
+                                        <td>
+                                            <input type="color" name="attendance_color_end[<?= $typeId ?>]" value="<?= htmlspecialchars($type['color_end'] ?? '#4338ca') ?>" class="input-control h-11">
+                                        </td>
+                                        <td>
+                                            <input type="text" name="attendance_shortcut[<?= $typeId ?>]" value="<?= htmlspecialchars($type['shortcut_key'] ?? '') ?>" class="input-control text-center" maxlength="2">
+                                        </td>
+                                        <td class="text-center">
+                                            <input type="checkbox" name="attendance_unique[<?= $typeId ?>]" value="1" class="accent-cyan-500" <?= ((int) ($type['is_unique_daily'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                        </td>
+                                        <td class="text-center">
+                                            <input type="checkbox" name="attendance_active[<?= $typeId ?>]" value="1" class="accent-cyan-500" <?= ((int) ($type['is_active'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="submit" name="action" value="delete_attendance_type" class="btn-danger btn-sm w-full justify-center" formnovalidate onclick="this.form.elements['attendance_type_id'].value='<?= $typeId ?>'; return confirm('¿Eliminar el tipo <?= htmlspecialchars($type['label']) ?>?');">
+                                                <i class="fas fa-trash-alt"></i>
+                                                Eliminar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php if (!empty($attendanceTypesList)): ?>
+                <div class="flex justify-end">
+                    <button type="submit" name="action" value="update_attendance_types" class="btn-primary" onclick="this.form.elements['attendance_type_id'].value='';">
+                        <i class="fas fa-save"></i>
+                        Actualizar tipos
+                    </button>
+                </div>
+                <?php endif; ?>
+            </form>
+        </section>
+
         <section id="schedule-card" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
@@ -653,8 +947,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
             <form method="POST" class="space-y-4">
                 <input type="hidden" name="action" value="update_users">
-                <div class="overflow-x-auto">
-                    <table class="table-auto w-full text-sm">
+                <div class="responsive-scroll">
+                    <table class="data-table manage-users-table">
                         <thead>
                             <tr>
                                 <th>Usuario</th>
@@ -908,6 +1202,12 @@ document.addEventListener('DOMContentLoaded', function () {
             label: 'Roles y permisos',
             icon: 'fas fa-user-shield',
             selectors: ['#create-role-card', '#roles-section', '#permissions-section']
+        },
+        {
+            key: 'attendance',
+            label: 'Tipos de punch',
+            icon: 'fas fa-fingerprint',
+            selectors: ['#create-attendance-type-card', '#attendance-types-section']
         },
         {
             key: 'schedule',

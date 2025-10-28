@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // Nueva conexion a la base de datos
 $host = 'localhost';
 $dbname = 'ponche';
@@ -88,7 +88,7 @@ if (!function_exists('ensurePermission')) {
     function ensurePermission(string $sectionKey, string $redirect = 'unauthorized.php'): void
     {
         if (!isset($_SESSION['user_id']) || !userHasPermission($sectionKey)) {
-            header('Location: ' . $redirect);
+            header('Location: ' . $redirect . '?section=' . urlencode($sectionKey));
             exit;
         }
     }
@@ -194,6 +194,55 @@ if (!function_exists('ensureRoleExists')) {
 
         if (!in_array($roleName, $roleCache, true)) {
             $roleCache[] = $roleName;
+        }
+    }
+}
+
+if (!function_exists('sanitizeAttendanceTypeSlug')) {
+    /**
+     * Normalizes the slug for attendance types.
+     */
+    function sanitizeAttendanceTypeSlug(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        $transliterated = $value;
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+            if ($converted !== false && $converted !== null) {
+                $transliterated = $converted;
+            }
+        }
+
+        $transliterated = preg_replace('/[^A-Za-z0-9]+/', '_', $transliterated);
+        $transliterated = trim($transliterated, '_');
+
+        return strtoupper($transliterated);
+    }
+}
+
+if (!function_exists('getAttendanceTypes')) {
+    /**
+     * Retrieves attendance types optionally filtered by active state.
+     */
+    function getAttendanceTypes(PDO $pdo, bool $activeOnly = false): array
+    {
+        try {
+            $sql = "SELECT id, slug, label, icon_class, shortcut_key, color_start, color_end, sort_order, is_unique_daily, is_active
+                    FROM attendance_types";
+            if ($activeOnly) {
+                $sql .= " WHERE is_active = 1";
+            }
+            $sql .= " ORDER BY sort_order ASC, label ASC";
+
+            $stmt = $pdo->query($sql);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            // Tabla inexistente u otro error, devolver arreglo vacio para degradacion elegante
+            return [];
         }
     }
 }

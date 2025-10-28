@@ -141,6 +141,16 @@ a:hover {
     border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
+.brand-title {
+    color: #e2e8f0;
+    transition: color 0.2s ease;
+}
+
+.brand-subtitle {
+    color: rgba(148, 163, 184, 0.82);
+    transition: color 0.2s ease;
+}
+
 .pill-option {
     display: inline-flex;
     align-items: center;
@@ -710,9 +720,11 @@ form .form-group + .form-group {
     font-size: 0.7rem;
     letter-spacing: 0.14em;
     font-weight: 600;
-    color: rgba(226, 232, 240, 0.75);
-    background: linear-gradient(135deg, rgba(30, 64, 175, 0.25), rgba(14, 116, 144, 0.35));
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    color: rgba(226, 232, 240, 0.92);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.32), rgba(13, 148, 136, 0.28));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
 }
 
 .data-table tbody td {
@@ -746,6 +758,68 @@ form .form-group + .form-group {
 
 .dt-button-hidden {
     display: none !important;
+}
+
+.custom-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-lg);
+}
+
+.custom-table thead th {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    font-weight: 600;
+    color: rgba(15, 23, 42, 0.85);
+    background: linear-gradient(135deg, rgba(214, 226, 255, 0.85), rgba(191, 219, 254, 0.75));
+}
+
+.custom-table tbody td {
+    font-size: 0.92rem;
+    color: var(--text-primary);
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.custom-table tbody tr:hover {
+    background: rgba(34, 211, 238, 0.08);
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: rgba(34, 211, 238, 0.12);
+    color: var(--accent-cyan);
+    border: 1px solid rgba(34, 211, 238, 0.35);
+}
+
+body.theme-dark .data-table thead th {
+    color: rgba(226, 232, 240, 0.92);
+    background: linear-gradient(135deg, rgba(30, 64, 175, 0.55), rgba(8, 145, 178, 0.5));
+}
+
+body.theme-light .data-table thead th {
+    color: rgba(15, 23, 42, 0.82);
+    background: linear-gradient(135deg, rgba(191, 219, 254, 0.75), rgba(125, 211, 252, 0.65));
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    text-shadow: none;
+}
+
+body.theme-dark .custom-table thead th {
+    color: rgba(226, 232, 240, 0.9);
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.5), rgba(6, 148, 162, 0.45));
 }
 
 @media (max-width: 768px) {
@@ -935,11 +1009,45 @@ body.theme-light .badge {
     color: #0e7490;
     border-color: rgba(14, 165, 233, 0.35);
 }
-
 body.theme-light .badge--danger {
     background: rgba(248, 113, 113, 0.18);
     color: #b91c1c;
     border-color: rgba(248, 113, 113, 0.35);
+}
+body.theme-light .badge--success {
+    background: rgba(34, 197, 94, 0.18);
+    color: #047857;
+    border-color: rgba(34, 197, 94, 0.35);
+}
+body.theme-light .badge--warning {
+    background: rgba(250, 204, 21, 0.2);
+    color: #b45309;
+    border-color: rgba(250, 204, 21, 0.4);
+}
+body.theme-light .badge--info {
+    background: rgba(59, 130, 246, 0.18);
+    color: #1d4ed8;
+    border-color: rgba(59, 130, 246, 0.35);
+}
+
+.page-hero .chip {
+    color: rgba(226, 232, 240, 0.92);
+    background: rgba(148, 163, 184, 0.18);
+    border: 1px solid rgba(148, 163, 184, 0.32);
+}
+
+body.theme-light .page-hero .chip {
+    color: rgba(241, 245, 249, 0.98);
+    background: rgba(15, 23, 42, 0.35);
+    border-color: rgba(148, 163, 184, 0.45);
+}
+
+body.theme-light .brand-title {
+    color: #1f2937;
+}
+
+body.theme-light .brand-subtitle {
+    color: #475569;
 }
 
 body.theme-light .btn-secondary {
@@ -976,3 +1084,111 @@ body.theme-light .status-banner.success {
     border-color: rgba(16, 185, 129, 0.35);
     color: #065f46;
 }
+
+.site-footer .footer-title {
+    color: #f1f5f9;
+}
+
+.site-footer .footer-text,
+.site-footer .footer-links a,
+.site-footer .footer-text-muted {
+    color: rgba(203, 213, 225, 0.85);
+}
+
+.site-footer .footer-links a:hover {
+    color: var(--accent-cyan);
+}
+
+body.theme-light .site-footer {
+    background: rgba(248, 250, 252, 0.92);
+    border-color: rgba(203, 213, 225, 0.6);
+}
+
+body.theme-light .site-footer .footer-title {
+    color: #1f2937;
+}
+
+body.theme-light .site-footer .footer-text,
+body.theme-light .site-footer .footer-links a,
+body.theme-light .site-footer .footer-text-muted {
+    color: #475569;
+}
+
+body.theme-light .site-footer .footer-links a:hover {
+    color: #2563eb;
+}
+
+
+.manage-users-table th {
+    white-space: nowrap;
+}
+
+.manage-users-table td {
+    vertical-align: middle;
+}
+
+.manage-users-table input.input-control,
+.manage-users-table select.select-control {
+    min-width: 110px;
+    width: 100%;
+}
+
+.manage-users-table .input-control,
+.manage-users-table .select-control {
+    text-align: center;
+}
+
+.manage-users-table .text-primary,
+.manage-users-table .text-muted {
+    text-align: left;
+}
+
+.manage-users-table td:first-child,
+.manage-users-table td:nth-child(2) {
+    min-width: 160px;
+}
+
+.manage-users-table td:last-child {
+    min-width: 120px;
+}
+
+.unauthorized-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.78));
+    padding: 2rem;
+}
+
+.unauthorized-card {
+    width: min(420px, 100%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 2.5rem;
+    text-align: center;
+}
+
+.unauthorized-card h1 {
+    margin-bottom: 1rem;
+    font-size: 1.75rem;
+    color: var(--text-primary);
+}
+
+.unauthorized-card p {
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+}
+
+body.theme-light .unauthorized-page {
+    background: linear-gradient(135deg, rgba(241, 245, 249, 0.9), rgba(226, 232, 240, 0.65));
+}
+
+body.theme-light .unauthorized-card {
+    background: rgba(255, 255, 255, 0.96);
+    border-color: rgba(203, 213, 225, 0.5);
+    box-shadow: 0 20px 35px rgba(15, 23, 42, 0.12);
+}
+
