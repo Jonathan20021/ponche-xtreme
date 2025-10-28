@@ -186,12 +186,32 @@ try {
 
                 ensureRoleExists($pdo, $role, $role);
 
+                // Generate employee code: EMP-YYYY-XXXX
+                $currentYear = date('Y');
+                
+                // Get the highest employee code for the current year
+                $codeStmt = $pdo->prepare("SELECT employee_code FROM users WHERE employee_code LIKE ? ORDER BY employee_code DESC LIMIT 1");
+                $codeStmt->execute(["EMP-{$currentYear}-%"]);
+                $lastCode = $codeStmt->fetch();
+                
+                if ($lastCode && $lastCode['employee_code']) {
+                    // Extract the sequential number and increment it
+                    $lastNumber = (int)substr($lastCode['employee_code'], -4);
+                    $newNumber = $lastNumber + 1;
+                } else {
+                    // First employee of the year
+                    $newNumber = 1;
+                }
+                
+                $employeeCode = sprintf("EMP-%s-%04d", $currentYear, $newNumber);
+
                 $createStmt = $pdo->prepare("
-                    INSERT INTO users (username, full_name, password, role, hourly_rate, monthly_salary, hourly_rate_dop, monthly_salary_dop, preferred_currency, department_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, monthly_salary, hourly_rate_dop, monthly_salary_dop, preferred_currency, department_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $createStmt->execute([
                     $username,
+                    $employeeCode,
                     $fullName,
                     $password,
                     $role,
@@ -203,7 +223,7 @@ try {
                     $departmentId
                 ]);
 
-                $successMessages[] = "Usuario '{$username}' creado correctamente.";
+                $successMessages[] = "Usuario '{$username}' creado correctamente con código de empleado {$employeeCode}.";
                 break;
 
             case 'update_users':
@@ -215,10 +235,12 @@ try {
                 $passwords = $_POST['password'] ?? [];
                 $departmentSelections = $_POST['department_id'] ?? [];
                 $preferredCurrencies = $_POST['preferred_currency'] ?? [];
+                $exitTimes = $_POST['exit_time'] ?? [];
+                $overtimeMultipliers = $_POST['overtime_multiplier'] ?? [];
 
                 $pdo->beginTransaction();
-                $updateWithRoleStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, monthly_salary = ?, hourly_rate_dop = ?, monthly_salary_dop = ?, preferred_currency = ?, department_id = ?, role = ? WHERE id = ?");
-                $updateWithoutRoleStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, monthly_salary = ?, hourly_rate_dop = ?, monthly_salary_dop = ?, preferred_currency = ?, department_id = ? WHERE id = ?");
+                $updateWithRoleStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, monthly_salary = ?, hourly_rate_dop = ?, monthly_salary_dop = ?, preferred_currency = ?, department_id = ?, exit_time = ?, overtime_multiplier = ?, role = ? WHERE id = ?");
+                $updateWithoutRoleStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, monthly_salary = ?, hourly_rate_dop = ?, monthly_salary_dop = ?, preferred_currency = ?, department_id = ?, exit_time = ?, overtime_multiplier = ? WHERE id = ?");
                 $passwordStmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
 
                 foreach ($hourlyRatesUsd as $userId => $rateUsdInput) {
@@ -255,11 +277,17 @@ try {
                         }
                     }
 
+                    $exitTimeValue = normalize_exit_time_input($exitTimes[$userId] ?? '');
+                    $overtimeMultiplierValue = null;
+                    if (isset($overtimeMultipliers[$userId]) && trim($overtimeMultipliers[$userId]) !== '') {
+                        $overtimeMultiplierValue = max(1.0, (float) $overtimeMultipliers[$userId]);
+                    }
+
                     if ($newRole !== '') {
                         ensureRoleExists($pdo, $newRole, $newRole);
-                        $updateWithRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $newRole, $userId]);
+                        $updateWithRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $newRole, $userId]);
                     } else {
-                        $updateWithoutRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $userId]);
+                        $updateWithoutRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $userId]);
                     }
 
                     if ($newPassword !== '') {
@@ -280,8 +308,11 @@ try {
                 $breakMinutes = max(0, (int) ($_POST['break_minutes'] ?? 15));
                 $meetingMinutes = max(0, (int) ($_POST['meeting_minutes'] ?? 45));
                 $scheduledHours = isset($_POST['scheduled_hours']) ? (float) $_POST['scheduled_hours'] : 8.0;
+                $overtimeEnabled = isset($_POST['overtime_enabled']) ? 1 : 0;
+                $overtimeMultiplier = max(1.0, (float) ($_POST['overtime_multiplier'] ?? 1.50));
+                $overtimeStartMinutes = max(0, (int) ($_POST['overtime_start_minutes'] ?? 0));
 
-                $scheduleStmt = $pdo->prepare("UPDATE schedule_config SET entry_time = ?, exit_time = ?, lunch_time = ?, break_time = ?, lunch_minutes = ?, break_minutes = ?, meeting_minutes = ?, scheduled_hours = ?, updated_at = NOW() WHERE id = 1");
+                $scheduleStmt = $pdo->prepare("UPDATE schedule_config SET entry_time = ?, exit_time = ?, lunch_time = ?, break_time = ?, lunch_minutes = ?, break_minutes = ?, meeting_minutes = ?, scheduled_hours = ?, overtime_enabled = ?, overtime_multiplier = ?, overtime_start_minutes = ?, updated_at = NOW() WHERE id = 1");
                 $scheduleStmt->execute([
                     $entryTime,
                     $exitTime,
@@ -290,7 +321,10 @@ try {
                     $lunchMinutes,
                     $breakMinutes,
                     $meetingMinutes,
-                    $scheduledHours
+                    $scheduledHours,
+                    $overtimeEnabled,
+                    $overtimeMultiplier,
+                    $overtimeStartMinutes
                 ]);
 
                 $successMessages[] = 'Metas de horarios actualizadas.';
@@ -519,7 +553,65 @@ try {
                 }
 
                 $pdo->commit();
+                
+                // Clear permission cache for real-time updates
+                include_once 'find_accessible_page.php';
+                clearPermissionCache();
+                
                 $successMessages[] = 'Permisos actualizados correctamente.';
+                
+                // Force page reload to update menu in real-time
+                header('Location: settings.php?tab=roles&permissions_updated=1#permissions-section');
+                exit;
+                break;
+
+            case 'add_rate_change':
+                $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
+                $rateUsd = isset($_POST['new_rate_usd']) ? (float) $_POST['new_rate_usd'] : 0;
+                $rateDop = isset($_POST['new_rate_dop']) ? (float) $_POST['new_rate_dop'] : 0;
+                $effectiveDate = trim($_POST['effective_date'] ?? '');
+                $notes = trim($_POST['rate_notes'] ?? '');
+
+                if ($userId <= 0) {
+                    $errorMessages[] = 'Usuario invalido.';
+                    break;
+                }
+
+                if ($effectiveDate === '') {
+                    $errorMessages[] = 'La fecha efectiva es obligatoria.';
+                    break;
+                }
+
+                if ($rateUsd < 0 || $rateDop < 0) {
+                    $errorMessages[] = 'Las tarifas no pueden ser negativas.';
+                    break;
+                }
+
+                $createdBy = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
+                
+                if (addHourlyRateHistory($pdo, $userId, $rateUsd, $rateDop, $effectiveDate, $createdBy, $notes !== '' ? $notes : null)) {
+                    // Also update the current rate in users table
+                    $updateStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, hourly_rate_dop = ? WHERE id = ?");
+                    $updateStmt->execute([$rateUsd, $rateDop, $userId]);
+                    
+                    $successMessages[] = 'Cambio de tarifa registrado correctamente.';
+                } else {
+                    $errorMessages[] = 'No se pudo registrar el cambio de tarifa.';
+                }
+                break;
+
+            case 'delete_rate_history':
+                $historyId = isset($_POST['history_id']) ? (int) $_POST['history_id'] : 0;
+                if ($historyId <= 0) {
+                    $errorMessages[] = 'ID de historial invalido.';
+                    break;
+                }
+
+                if (deleteRateHistoryEntry($pdo, $historyId)) {
+                    $successMessages[] = 'Entrada de historial eliminada.';
+                } else {
+                    $errorMessages[] = 'No se pudo eliminar la entrada de historial.';
+                }
                 break;
         }
     }
@@ -550,6 +642,8 @@ $userStmt = $pdo->query("
         u.monthly_salary_dop,
         u.preferred_currency,
         u.department_id,
+        u.exit_time,
+        u.overtime_multiplier,
         u.created_at,
         r.label AS role_label,
         d.name AS department_name
@@ -959,8 +1053,60 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <label class="form-label">Horas programadas al dia</label>
                     <input type="number" min="0" step="0.25" name="scheduled_hours" value="<?= htmlspecialchars((string) $scheduleConfig['scheduled_hours']) ?>" class="input-control">
                 </div>
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <p class="text-muted text-xs">Aplica a todos los reportes de adherencia, HR y paneles operativos.</p>
+                
+                <div class="section-card p-5 space-y-4 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border border-cyan-500/20">
+                    <div class="flex items-center gap-3">
+                        <div class="h-10 w-10 rounded-xl bg-cyan-500/15 text-primary flex items-center justify-center">
+                            <i class="fas fa-clock text-cyan-400"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-primary text-base font-semibold">Configuracion de Horas Extras</h3>
+                            <p class="text-muted text-xs">Las horas extras se calculan automaticamente despues de la hora de salida configurada para cada empleado.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="inline-flex items-center gap-2 text-sm text-primary font-medium mb-2">
+                                <input type="checkbox" name="overtime_enabled" value="1" class="accent-cyan-500" <?= ((int) ($scheduleConfig['overtime_enabled'] ?? 1) === 1) ? 'checked' : '' ?>>
+                                Activar calculo de horas extras
+                            </label>
+                            <p class="text-muted text-xs ml-6">Habilita el sistema de horas extras en todos los reportes.</p>
+                        </div>
+                        <div>
+                            <label class="form-label">
+                                Multiplicador de pago
+                                <i class="fas fa-info-circle text-xs text-muted ml-1" title="Factor por el cual se multiplica la tarifa por hora para calcular el pago de horas extras. Ejemplo: 1.5 = tiempo y medio, 2.0 = tiempo doble"></i>
+                            </label>
+                            <input type="number" min="1.0" step="0.01" name="overtime_multiplier" value="<?= htmlspecialchars((string) ($scheduleConfig['overtime_multiplier'] ?? 1.50)) ?>" class="input-control" placeholder="1.50">
+                            <p class="text-muted text-xs mt-1">Ej: 1.5 = tiempo y medio, 2.0 = doble</p>
+                        </div>
+                        <div>
+                            <label class="form-label">
+                                Minutos de gracia
+                                <i class="fas fa-info-circle text-xs text-muted ml-1" title="Minutos despues de la hora de salida antes de comenzar a contar horas extras. Ejemplo: 15 minutos = las horas extras comienzan 15 minutos despues de la hora de salida"></i>
+                            </label>
+                            <input type="number" min="0" step="1" name="overtime_start_minutes" value="<?= htmlspecialchars((string) ($scheduleConfig['overtime_start_minutes'] ?? 0)) ?>" class="input-control" placeholder="0">
+                            <p class="text-muted text-xs mt-1">Minutos despues de la salida para iniciar conteo</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                        <h4 class="text-primary text-sm font-semibold mb-2 flex items-center gap-2">
+                            <i class="fas fa-calculator text-blue-500"></i>
+                            Como se calculan las horas extras:
+                        </h4>
+                        <ul class="text-muted text-xs space-y-1 ml-6 list-disc">
+                            <li>El sistema detecta la hora de salida (EXIT) de cada empleado</li>
+                            <li>Compara con la hora de salida configurada (global o personalizada por empleado)</li>
+                            <li>Si trabajo mas alla de la hora de salida + minutos de gracia, se cuentan como horas extras</li>
+                            <li>El pago se calcula: (Horas extras × Tarifa por hora × Multiplicador)</li>
+                            <li>Cada empleado puede tener su propio multiplicador personalizado desde la seccion de usuarios</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end">
                     <button type="submit" class="btn-secondary">
                         <i class="fas fa-save"></i>
                         Guardar metas
@@ -992,6 +1138,14 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <th>Mensual USD</th>
                                 <th>Mensual DOP</th>
                                 <th>Moneda</th>
+                                <th title="Hora de salida personalizada para este empleado">
+                                    Hora Salida
+                                    <i class="fas fa-info-circle text-xs text-muted ml-1" title="Hora de salida personalizada. Si se deja vacio, se usa la hora global del sistema."></i>
+                                </th>
+                                <th title="Multiplicador personalizado de horas extras">
+                                    Mult. HE
+                                    <i class="fas fa-info-circle text-xs text-muted ml-1" title="Multiplicador de horas extras personalizado (ej: 1.5, 2.0). Si se deja vacio, se usa el multiplicador global."></i>
+                                </th>
                                 <th>Nueva contrasena</th>
                                 <th>Creado</th>
                             </tr>
@@ -1039,6 +1193,14 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                     </select>
                                 </td>
                                 <td>
+                                    <input type="time" name="exit_time[<?= (int) $user['id'] ?>]" value="<?= $user['exit_time'] ? htmlspecialchars(substr($user['exit_time'], 0, 5)) : '' ?>" class="input-control" placeholder="HH:MM">
+                                    <p class="text-muted text-xs mt-1">Vacio = usar global</p>
+                                </td>
+                                <td>
+                                    <input type="number" name="overtime_multiplier[<?= (int) $user['id'] ?>]" value="<?= $user['overtime_multiplier'] !== null ? htmlspecialchars(number_format((float) $user['overtime_multiplier'], 2, '.', '')) : '' ?>" step="0.01" min="1.0" class="input-control" placeholder="1.50">
+                                    <p class="text-muted text-xs mt-1">Vacio = usar global</p>
+                                </td>
+                                <td>
                                     <input type="text" name="password[<?= (int) $user['id'] ?>]" placeholder="Opcional" class="input-control">
                                     <p class="text-muted text-xs mt-1">Se mantiene si se deja vacio.</p>
                                 </td>
@@ -1061,6 +1223,166 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     </button>
                 </div>
             </form>
+        </section>
+
+        <section id="rate-history-section" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">Historial de cambios de tarifas</h2>
+                    <p class="text-muted text-sm">Registra aumentos de pago por fecha efectiva. Los registros historicos mantendran su tarifa original.</p>
+                </div>
+                <span class="chip"><i class="fas fa-history"></i> Gestion de aumentos</span>
+            </div>
+
+            <!-- Add Rate Change Form -->
+            <div class="section-card p-5 space-y-4 bg-gradient-to-br from-emerald-500/5 to-cyan-500/5 border border-emerald-500/20">
+                <div class="flex items-center gap-3">
+                    <div class="h-10 w-10 rounded-xl bg-emerald-500/15 text-primary flex items-center justify-center">
+                        <i class="fas fa-dollar-sign text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-primary text-base font-semibold">Registrar cambio de tarifa</h3>
+                        <p class="text-muted text-xs">Define una nueva tarifa con fecha efectiva. Los calculos usaran la tarifa vigente en cada fecha.</p>
+                    </div>
+                </div>
+                
+                <form method="POST" class="space-y-4" id="rate-change-form">
+                    <input type="hidden" name="action" value="add_rate_change">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                            <label class="form-label">Usuario</label>
+                            <select name="user_id" id="rate-user-select" required class="select-control">
+                                <option value="">Selecciona un usuario</option>
+                                <?php foreach ($users as $user): ?>
+                                    <option value="<?= (int) $user['id'] ?>" 
+                                            data-rate-usd="<?= htmlspecialchars(number_format((float) $user['hourly_rate'], 2, '.', '')) ?>"
+                                            data-rate-dop="<?= htmlspecialchars(number_format((float) $user['hourly_rate_dop'], 2, '.', '')) ?>">
+                                        <?= htmlspecialchars($user['full_name']) ?> (<?= htmlspecialchars($user['username']) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">
+                                Nueva tarifa USD
+                                <span id="current-rate-usd" class="text-xs text-muted ml-1"></span>
+                            </label>
+                            <input type="number" name="new_rate_usd" id="rate-usd-input" step="0.01" min="0" required class="input-control" placeholder="0.00">
+                        </div>
+                        <div>
+                            <label class="form-label">
+                                Nueva tarifa DOP
+                                <span id="current-rate-dop" class="text-xs text-muted ml-1"></span>
+                            </label>
+                            <input type="number" name="new_rate_dop" id="rate-dop-input" step="0.01" min="0" required class="input-control" placeholder="0.00">
+                        </div>
+                        <div>
+                            <label class="form-label">Fecha efectiva</label>
+                            <input type="date" name="effective_date" required class="input-control" value="<?= date('Y-m-d') ?>">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label">Notas (opcional)</label>
+                        <textarea name="rate_notes" class="textarea-control" rows="2" placeholder="Ej: Aumento anual, promocion, ajuste por inflacion..."></textarea>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-plus-circle"></i>
+                            Registrar cambio de tarifa
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Rate History by User -->
+            <div class="space-y-6">
+                <?php foreach ($users as $user): ?>
+                    <?php 
+                        $userId = (int) $user['id'];
+                        $rateHistory = getUserRateHistory($pdo, $userId);
+                        if (empty($rateHistory)) continue;
+                    ?>
+                    <div class="section-card p-5 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-primary text-lg font-semibold"><?= htmlspecialchars($user['full_name']) ?></h3>
+                                <p class="text-muted text-sm">
+                                    <i class="fas fa-user"></i> <?= htmlspecialchars($user['username']) ?>
+                                    <?php if (!empty($user['department_name'])): ?>
+                                        | <i class="fas fa-building"></i> <?= htmlspecialchars($user['department_name']) ?>
+                                    <?php endif; ?>
+                                </p>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-primary font-semibold">Tarifa actual</div>
+                                <div class="text-sm text-muted">
+                                    USD: $<?= number_format((float) $user['hourly_rate'], 2) ?> | 
+                                    DOP: $<?= number_format((float) $user['hourly_rate_dop'], 2) ?>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="responsive-scroll">
+                            <table class="data-table w-full text-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha efectiva</th>
+                                        <th>Tarifa USD</th>
+                                        <th>Tarifa DOP</th>
+                                        <th>Notas</th>
+                                        <th>Registrado por</th>
+                                        <th>Fecha registro</th>
+                                        <th class="text-center">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($rateHistory as $history): ?>
+                                        <tr>
+                                            <td>
+                                                <span class="chip">
+                                                    <i class="fas fa-calendar"></i>
+                                                    <?= htmlspecialchars(date('d/m/Y', strtotime($history['effective_date']))) ?>
+                                                </span>
+                                            </td>
+                                            <td class="font-semibold text-primary">$<?= number_format((float) $history['hourly_rate_usd'], 2) ?></td>
+                                            <td class="font-semibold text-primary">$<?= number_format((float) $history['hourly_rate_dop'], 2) ?></td>
+                                            <td class="text-muted text-xs"><?= htmlspecialchars($history['notes'] ?? '-') ?></td>
+                                            <td class="text-muted text-xs"><?= htmlspecialchars($history['created_by_username'] ?? 'Sistema') ?></td>
+                                            <td class="text-muted text-xs"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($history['created_at']))) ?></td>
+                                            <td class="text-center">
+                                                <form method="POST" style="display: inline;" onsubmit="return confirm('¿Eliminar esta entrada del historial?');">
+                                                    <input type="hidden" name="action" value="delete_rate_history">
+                                                    <input type="hidden" name="history_id" value="<?= (int) $history['id'] ?>">
+                                                    <button type="submit" class="btn-danger btn-sm">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+                
+                <?php 
+                    $hasAnyHistory = false;
+                    foreach ($users as $user) {
+                        if (!empty(getUserRateHistory($pdo, (int) $user['id']))) {
+                            $hasAnyHistory = true;
+                            break;
+                        }
+                    }
+                    if (!$hasAnyHistory):
+                ?>
+                    <div class="section-card p-8 text-center">
+                        <i class="fas fa-history text-5xl text-muted opacity-30 mb-4"></i>
+                        <p class="text-muted">No hay historial de cambios de tarifas registrado.</p>
+                        <p class="text-muted text-sm mt-2">Usa el formulario de arriba para registrar el primer cambio.</p>
+                    </div>
+                <?php endif; ?>
+            </div>
         </section>
 
         <section id="departments-section" class="glass-card space-y-6">
@@ -1222,6 +1544,12 @@ document.addEventListener('DOMContentLoaded', function () {
             label: 'Usuarios',
             icon: 'fas fa-users-cog',
             selectors: ['#create-user-card', '#manage-users-section']
+        },
+        {
+            key: 'rates',
+            label: 'Historial de tarifas',
+            icon: 'fas fa-history',
+            selectors: ['#rate-history-section']
         },
         {
             key: 'departments',
@@ -1400,6 +1728,73 @@ document.addEventListener('DOMContentLoaded', function () {
             setActiveTab(key);
         });
     });
+
+    // Auto-fill rate change form when user is selected
+    const rateUserSelect = document.getElementById('rate-user-select');
+    const rateUsdInput = document.getElementById('rate-usd-input');
+    const rateDopInput = document.getElementById('rate-dop-input');
+    const currentRateUsdSpan = document.getElementById('current-rate-usd');
+    const currentRateDopSpan = document.getElementById('current-rate-dop');
+
+    if (rateUserSelect && rateUsdInput && rateDopInput) {
+        rateUserSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            
+            if (selectedOption.value) {
+                const rateUsd = selectedOption.getAttribute('data-rate-usd');
+                const rateDop = selectedOption.getAttribute('data-rate-dop');
+                
+                // Fill the input fields with current rates
+                rateUsdInput.value = rateUsd || '0.00';
+                rateDopInput.value = rateDop || '0.00';
+                
+                // Show current rates in labels
+                if (currentRateUsdSpan) {
+                    currentRateUsdSpan.textContent = '(actual: $' + (rateUsd || '0.00') + ')';
+                }
+                if (currentRateDopSpan) {
+                    currentRateDopSpan.textContent = '(actual: $' + (rateDop || '0.00') + ')';
+                }
+            } else {
+                // Clear fields if no user selected
+                rateUsdInput.value = '';
+                rateDopInput.value = '';
+                if (currentRateUsdSpan) currentRateUsdSpan.textContent = '';
+                if (currentRateDopSpan) currentRateDopSpan.textContent = '';
+            }
+        });
+    }
+
+    // Auto-reload page after permission update to reflect changes in real-time
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('permissions_updated')) {
+        // Switch to roles tab
+        const tabParam = urlParams.get('tab');
+        if (tabParam) {
+            setActiveTab(tabParam);
+        }
+        
+        // Remove the parameter from URL
+        const newUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, newUrl);
+        
+        // Create and show success message
+        const container = document.querySelector('.max-w-7xl.mx-auto.px-6.py-10');
+        if (container) {
+            const banner = document.createElement('div');
+            banner.className = 'status-banner success';
+            banner.textContent = 'Permisos actualizados correctamente. Los cambios se reflejan inmediatamente.';
+            container.insertBefore(banner, container.firstChild.nextSibling);
+            banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Remove banner after 5 seconds
+            setTimeout(() => {
+                banner.style.transition = 'opacity 0.5s';
+                banner.style.opacity = '0';
+                setTimeout(() => banner.remove(), 500);
+            }, 5000);
+        }
+    }
 });
 </script>
 

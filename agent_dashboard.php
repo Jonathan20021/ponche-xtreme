@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT', 'IT', 'Supervisor'], true)) {
     header('Location: login_agent.php');
@@ -126,11 +126,6 @@ $heroMetrics = [
         'note' => 'Registro del día',
     ],
     [
-        'label' => 'Pago estimado',
-        'value' => '$' . number_format($total_payment, 2),
-        'note' => $hourly_rate > 0 ? 'Tarifa ' . number_format($hourly_rate, 2) . '/h' : 'Sin tarifa definida',
-    ],
-    [
         'label' => 'Eventos registrados',
         'value' => (string) count($records),
         'note' => 'Movimientos del día',
@@ -162,15 +157,6 @@ foreach ($durationTypes as $typeMeta) {
         'color_end' => $colorEnd,
     ];
 }
-
-$insightCards[] = [
-    'label' => 'Pago estimado',
-    'value' => '$' . number_format($total_payment, 2),
-    'description' => number_format($workSeconds / 3600, 2) . ' hrs registradas',
-    'icon' => 'fas fa-dollar-sign',
-    'color_start' => '#F59E0B',
-    'color_end' => '#F97316',
-];
 
 $insightCards[] = [
     'label' => 'Productividad',

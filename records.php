@@ -15,10 +15,14 @@ if (!function_exists('sanitizeHexColorValue')) {
 $scheduleConfig = getScheduleConfig($pdo);
 $hourly_rates = getUserHourlyRates($pdo);
 $userExitTimes = function_exists('getUserExitTimes') ? getUserExitTimes($pdo) : [];
+$userOvertimeMultipliers = function_exists('getUserOvertimeMultipliers') ? getUserOvertimeMultipliers($pdo) : [];
 $defaultExitTime = trim((string) ($scheduleConfig['exit_time'] ?? ''));
 if ($defaultExitTime !== '' && strlen($defaultExitTime) === 5) {
     $defaultExitTime .= ':00';
 }
+$overtimeEnabled = (int) ($scheduleConfig['overtime_enabled'] ?? 1) === 1;
+$defaultOvertimeMultiplier = (float) ($scheduleConfig['overtime_multiplier'] ?? 1.50);
+$overtimeStartMinutes = (int) ($scheduleConfig['overtime_start_minutes'] ?? 0);
 $exitSlug = sanitizeAttendanceTypeSlug('EXIT');
 $entryThreshold = date('H:i:s', strtotime($scheduleConfig['entry_time'] . ' +5 minutes'));
 $lunchThreshold = $scheduleConfig['lunch_time'];
@@ -191,7 +195,7 @@ $work_summary = [];
 $currentGroup = null;
 $currentKey = null;
 
-$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $hourly_rates, $userExitTimes, $defaultExitTime, $exitSlug): void {
+$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $hourly_rates, $userExitTimes, $defaultExitTime, $exitSlug, $overtimeEnabled, $defaultOvertimeMultiplier, $overtimeStartMinutes, $userOvertimeMultipliers, $pdo): void {
     if ($group === null) {
         return;
     }
@@ -231,9 +235,19 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
 
     $recordDate = $group['record_date'] ?? null;
     $username = $group['username'] ?? null;
+    $userId = $group['user_id'] ?? null;
     $overtimeSeconds = 0;
+    $overtimePayment = 0.0;
 
-    if ($recordDate !== null) {
+    // Get hourly rate for the specific date (uses rate history)
+    $hourlyRate = 0.0;
+    if ($userId !== null && $recordDate !== null) {
+        $hourlyRate = getUserHourlyRateForDate($pdo, $userId, $recordDate, 'USD');
+    } else if (isset($hourly_rates[$username])) {
+        $hourlyRate = (float) $hourly_rates[$username];
+    }
+
+    if ($recordDate !== null && $overtimeEnabled) {
         $configuredExit = $defaultExitTime;
         if ($username !== null && isset($userExitTimes[$username]) && $userExitTimes[$username] !== '') {
             $configuredExit = $userExitTimes[$username];
@@ -256,6 +270,9 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
             if ($configuredExit !== '') {
                 $scheduledExitTs = strtotime($recordDate . ' ' . $configuredExit);
                 if ($scheduledExitTs !== false && $eventCount > 0) {
+                    // Apply overtime start offset
+                    $scheduledExitTs += ($overtimeStartMinutes * 60);
+                    
                     $actualExitTs = null;
                     for ($idx = $eventCount - 1; $idx >= 0; $idx--) {
                         if ($events[$idx]['slug'] === $exitSlug) {
@@ -268,13 +285,20 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
                     }
                     if ($actualExitTs !== null && $actualExitTs > $scheduledExitTs) {
                         $overtimeSeconds = $actualExitTs - $scheduledExitTs;
+                        
+                        // Calculate overtime payment with multiplier using historical rate
+                        $overtimeMultiplier = $defaultOvertimeMultiplier;
+                        if ($username !== null && isset($userOvertimeMultipliers[$username]) && $userOvertimeMultipliers[$username] !== null) {
+                            $overtimeMultiplier = $userOvertimeMultipliers[$username];
+                        }
+                        $overtimePayment = round(($overtimeSeconds / 3600) * $hourlyRate * $overtimeMultiplier, 2);
                     }
                 }
             }
         }
     }
 
-    $hourlyRate = isset($hourly_rates[$group['username']]) ? (float) $hourly_rates[$group['username']] : 0.0;
+    $regularPayment = round(($workSeconds / 3600) * $hourlyRate, 2);
 
     $work_summary[] = [
         'full_name' => $group['full_name'],
@@ -283,7 +307,8 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
         'durations' => $durationMap,
         'work_seconds' => $workSeconds,
         'overtime_seconds' => $overtimeSeconds,
-        'total_payment' => round(($workSeconds / 3600) * $hourlyRate, 2),
+        'overtime_payment' => $overtimePayment,
+        'total_payment' => $regularPayment + $overtimePayment,
     ];
 
     $group = null;
@@ -596,8 +621,12 @@ $tardinessTotal = count($tardiness_data);
                             <th><?= htmlspecialchars($column['label']) ?></th>
                         <?php endforeach; ?>
                         <th>Horas trabajadas</th>
-                        <th>Horas extra</th>
-                        <th>Pago (USD)</th>
+                        <th title="Horas extras calculadas despues de la hora de salida configurada">
+                            Horas extra
+                            <i class="fas fa-info-circle text-xs text-muted ml-1" title="Las horas extras se calculan automaticamente despues de la hora de salida de cada empleado. El multiplicador se aplica al pago."></i>
+                        </th>
+                        <th title="Pago por horas extras con multiplicador aplicado">Pago HE (USD)</th>
+                        <th>Pago Total (USD)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -612,7 +641,8 @@ $tardinessTotal = count($tardiness_data);
                             <?php endforeach; ?>
                             <td><?= gmdate('H:i:s', max(0, (int) $summary['work_seconds'])) ?></td>
                             <td><?= gmdate('H:i:s', max(0, (int) ($summary['overtime_seconds'] ?? 0))) ?></td>
-                            <td>$<?= number_format($summary['total_payment'], 2) ?></td>
+                            <td>$<?= number_format($summary['overtime_payment'] ?? 0, 2) ?></td>
+                            <td><strong>$<?= number_format($summary['total_payment'], 2) ?></strong></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

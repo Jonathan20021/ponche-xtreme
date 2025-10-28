@@ -1,12 +1,8 @@
 <?php
 session_start();
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: index.php'); // Redirige a la página de login si no hay sesión activa
-    exit;
-}
-
 include 'db.php';
+
+ensurePermission('operations_dashboard');
 
 // Obtener la fecha seleccionada
 $date_filter = $_GET['date'] ?? date('Y-m-d');

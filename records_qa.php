@@ -1,12 +1,8 @@
 <?php
 session_start();
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: index.php'); // Redirige a la página de login si no hay sesión activa
-    exit;
-}
-
 include 'db.php';
+
+ensurePermission('records_qa');
 
 $search = $_GET['search'] ?? '';
 $user_filter = $_GET['user'] ?? '';

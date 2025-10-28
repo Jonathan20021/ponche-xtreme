@@ -45,6 +45,7 @@ CREATE TABLE `departments` (
 CREATE TABLE `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `username` VARCHAR(50) NOT NULL,
+  `employee_code` VARCHAR(20) DEFAULT NULL COMMENT 'Codigo de empleado generado automaticamente (formato: EMP-YYYY-XXXX)',
   `full_name` VARCHAR(150) NOT NULL,
   `password` VARCHAR(255) NOT NULL COMMENT 'Passwords are stored as plain text by the current application.',
   `role` VARCHAR(50) NOT NULL DEFAULT 'AGENT',
@@ -54,13 +55,17 @@ CREATE TABLE `users` (
   `monthly_salary_dop` DECIMAL(14,2) NOT NULL DEFAULT 0.00,
   `preferred_currency` VARCHAR(3) NOT NULL DEFAULT 'USD',
   `department_id` INT UNSIGNED DEFAULT NULL,
+  `exit_time` TIME DEFAULT NULL COMMENT 'Hora de salida personalizada para este empleado',
+  `overtime_multiplier` DECIMAL(4,2) DEFAULT NULL COMMENT 'Multiplicador personalizado de horas extras (NULL = usar configuracion global)',
   `reset_token` VARCHAR(64) DEFAULT NULL,
   `token_expiry` DATETIME DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `users_username_unique` (`username`),
+  UNIQUE KEY `users_employee_code_unique` (`employee_code`),
   KEY `idx_users_role` (`role`),
   KEY `idx_users_department` (`department_id`),
+  KEY `idx_users_employee_code` (`employee_code`),
   CONSTRAINT `fk_users_department`
     FOREIGN KEY (`department_id`)
     REFERENCES `departments` (`id`)
@@ -99,6 +104,9 @@ CREATE TABLE `schedule_config` (
   `break_minutes` INT NOT NULL DEFAULT 15,
   `meeting_minutes` INT NOT NULL DEFAULT 45,
   `scheduled_hours` DECIMAL(5,2) NOT NULL DEFAULT 8.00,
+  `overtime_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Activar calculo de horas extras',
+  `overtime_multiplier` DECIMAL(4,2) NOT NULL DEFAULT 1.50 COMMENT 'Multiplicador para pago de horas extras (ej: 1.5 = tiempo y medio)',
+  `overtime_start_minutes` INT NOT NULL DEFAULT 0 COMMENT 'Minutos despues de la hora de salida para comenzar a contar horas extras',
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB
@@ -204,14 +212,14 @@ INSERT INTO `departments` (`name`, `description`) VALUES
   ('Quality Assurance', 'QA and compliance'),
   ('Client Services', 'Client success and account management');
 
-INSERT INTO `users` (`username`, `full_name`, `password`, `role`, `hourly_rate`, `monthly_salary`, `hourly_rate_dop`, `monthly_salary_dop`, `preferred_currency`, `department_id`)
+INSERT INTO `users` (`username`, `employee_code`, `full_name`, `password`, `role`, `hourly_rate`, `monthly_salary`, `hourly_rate_dop`, `monthly_salary_dop`, `preferred_currency`, `department_id`)
 VALUES
-  ('admin', 'System Administrator', 'admin123', 'Admin', 0.00, 0.00, 0.00, 0.00, 'USD', NULL),
-  ('itmanager', 'IT Manager', 'password123', 'IT', 0.00, 0.00, 0.00, 0.00, 'USD', (SELECT id FROM departments WHERE name = 'Technology')),
-  ('agentdemo', 'Demo Agent', 'defaultpassword', 'AGENT', 120.00, 19200.00, 6720.00, 1075200.00, 'USD', (SELECT id FROM departments WHERE name = 'Operations'));
+  ('admin', 'EMP-2025-0001', 'System Administrator', 'admin123', 'Admin', 0.00, 0.00, 0.00, 0.00, 'USD', NULL),
+  ('itmanager', 'EMP-2025-0002', 'IT Manager', 'password123', 'IT', 0.00, 0.00, 0.00, 0.00, 'USD', (SELECT id FROM departments WHERE name = 'Technology')),
+  ('agentdemo', 'EMP-2025-0003', 'Demo Agent', 'defaultpassword', 'AGENT', 120.00, 19200.00, 6720.00, 1075200.00, 'USD', (SELECT id FROM departments WHERE name = 'Operations'));
 
-INSERT INTO `schedule_config` (`id`, `entry_time`, `exit_time`, `lunch_time`, `break_time`, `lunch_minutes`, `break_minutes`, `meeting_minutes`, `scheduled_hours`)
-VALUES (1, '10:00:00', '19:00:00', '14:00:00', '17:00:00', 45, 15, 45, 8.00);
+INSERT INTO `schedule_config` (`id`, `entry_time`, `exit_time`, `lunch_time`, `break_time`, `lunch_minutes`, `break_minutes`, `meeting_minutes`, `scheduled_hours`, `overtime_enabled`, `overtime_multiplier`, `overtime_start_minutes`)
+VALUES (1, '10:00:00', '19:00:00', '14:00:00', '17:00:00', 45, 15, 45, 8.00, 1, 1.50, 0);
 
 INSERT INTO `section_permissions` (`section_key`, `role`) VALUES
   ('dashboard', 'Admin'),

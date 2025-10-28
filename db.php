@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // Nueva conexion a la base de datos
 $host = 'localhost';
 $dbname = 'ponche';
@@ -33,12 +33,15 @@ if (!function_exists('getScheduleConfig')) {
                 'break_minutes' => 15,
                 'meeting_minutes' => 45,
                 'scheduled_hours' => 8.00,
+                'overtime_enabled' => 1,
+                'overtime_multiplier' => 1.50,
+                'overtime_start_minutes' => 0,
             ];
 
             $insert = $pdo->prepare("
                 INSERT INTO schedule_config 
-                (id, entry_time, exit_time, lunch_time, break_time, lunch_minutes, break_minutes, meeting_minutes, scheduled_hours)
-                VALUES (1, :entry_time, :exit_time, :lunch_time, :break_time, :lunch_minutes, :break_minutes, :meeting_minutes, :scheduled_hours)
+                (id, entry_time, exit_time, lunch_time, break_time, lunch_minutes, break_minutes, meeting_minutes, scheduled_hours, overtime_enabled, overtime_multiplier, overtime_start_minutes)
+                VALUES (1, :entry_time, :exit_time, :lunch_time, :break_time, :lunch_minutes, :break_minutes, :meeting_minutes, :scheduled_hours, :overtime_enabled, :overtime_multiplier, :overtime_start_minutes)
             ");
             $insert->execute($default);
 
@@ -128,15 +131,12 @@ if (!function_exists('userHasPermission')) {
             return false;
         }
 
-        static $permissionCache = [];
+        // Query database directly without caching to ensure real-time permission checks
+        $stmt = $pdo->prepare("SELECT role FROM section_permissions WHERE section_key = ?");
+        $stmt->execute([$sectionKey]);
+        $allowedRoles = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
 
-        if (!array_key_exists($sectionKey, $permissionCache)) {
-            $stmt = $pdo->prepare("SELECT role FROM section_permissions WHERE section_key = ?");
-            $stmt->execute([$sectionKey]);
-            $permissionCache[$sectionKey] = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        }
-
-        return in_array($role, $permissionCache[$sectionKey], true);
+        return in_array($role, $allowedRoles, true);
     }
 }
 
@@ -336,6 +336,7 @@ if (!function_exists('getUserCompensation')) {
                 u.monthly_salary_dop,
                 u.preferred_currency,
                 u.department_id,
+                u.overtime_multiplier,
                 d.name AS department_name
             FROM users u
             LEFT JOIN departments d ON d.id = u.department_id
@@ -350,9 +351,142 @@ if (!function_exists('getUserCompensation')) {
                 'preferred_currency' => $row['preferred_currency'] ?? 'USD',
                 'department_id' => $row['department_id'] !== null ? (int) $row['department_id'] : null,
                 'department_name' => $row['department_name'] ?? null,
+                'overtime_multiplier' => $row['overtime_multiplier'] !== null ? (float) $row['overtime_multiplier'] : null,
             ];
         }
         return $data;
+    }
+}
+
+if (!function_exists('getUserOvertimeMultipliers')) {
+    /**
+     * Returns a map of username => overtime multiplier (or null if using global config).
+     */
+    function getUserOvertimeMultipliers(PDO $pdo): array
+    {
+        $stmt = $pdo->query("SELECT username, overtime_multiplier FROM users");
+        $multipliers = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $multipliers[$row['username']] = $row['overtime_multiplier'] !== null ? (float) $row['overtime_multiplier'] : null;
+        }
+        return $multipliers;
+    }
+}
+
+if (!function_exists('getUserHourlyRateForDate')) {
+    /**
+     * Returns the hourly rate for a specific user on a specific date.
+     * Uses the hourly_rate_history table to find the applicable rate.
+     * Falls back to current user rate if no history exists.
+     */
+    function getUserHourlyRateForDate(PDO $pdo, int $userId, string $date, string $currency = 'USD'): float
+    {
+        try {
+            // Check if hourly_rate_history table exists
+            $tableCheck = $pdo->query("SHOW TABLES LIKE 'hourly_rate_history'");
+            if (!$tableCheck || !$tableCheck->fetch()) {
+                // Table doesn't exist, fall back to current rate
+                return getUserCurrentHourlyRate($pdo, $userId, $currency);
+            }
+
+            // Find the most recent rate effective on or before the given date
+            $column = $currency === 'DOP' ? 'hourly_rate_dop' : 'hourly_rate_usd';
+            $stmt = $pdo->prepare("
+                SELECT {$column} as rate
+                FROM hourly_rate_history
+                WHERE user_id = ? AND effective_date <= ?
+                ORDER BY effective_date DESC, id DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$userId, $date]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($result && isset($result['rate'])) {
+                return (float) $result['rate'];
+            }
+
+            // No history found, use current rate
+            return getUserCurrentHourlyRate($pdo, $userId, $currency);
+        } catch (PDOException $e) {
+            // Error accessing history, fall back to current rate
+            return getUserCurrentHourlyRate($pdo, $userId, $currency);
+        }
+    }
+}
+
+if (!function_exists('getUserCurrentHourlyRate')) {
+    /**
+     * Returns the current hourly rate for a user from the users table.
+     */
+    function getUserCurrentHourlyRate(PDO $pdo, int $userId, string $currency = 'USD'): float
+    {
+        $column = $currency === 'DOP' ? 'hourly_rate_dop' : 'hourly_rate';
+        $stmt = $pdo->prepare("SELECT {$column} as rate FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $result ? (float) $result['rate'] : 0.0;
+    }
+}
+
+if (!function_exists('addHourlyRateHistory')) {
+    /**
+     * Adds a new hourly rate entry to the history table.
+     */
+    function addHourlyRateHistory(PDO $pdo, int $userId, float $rateUsd, float $rateDop, string $effectiveDate, ?int $createdBy = null, ?string $notes = null): bool
+    {
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO hourly_rate_history (user_id, hourly_rate_usd, hourly_rate_dop, effective_date, created_by, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            return $stmt->execute([$userId, $rateUsd, $rateDop, $effectiveDate, $createdBy, $notes]);
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('getUserRateHistory')) {
+    /**
+     * Returns all rate history entries for a user, ordered by effective date descending.
+     */
+    function getUserRateHistory(PDO $pdo, int $userId): array
+    {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    h.id,
+                    h.hourly_rate_usd,
+                    h.hourly_rate_dop,
+                    h.effective_date,
+                    h.created_at,
+                    h.notes,
+                    u.username as created_by_username
+                FROM hourly_rate_history h
+                LEFT JOIN users u ON u.id = h.created_by
+                WHERE h.user_id = ?
+                ORDER BY h.effective_date DESC, h.id DESC
+            ");
+            $stmt->execute([$userId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+}
+
+if (!function_exists('deleteRateHistoryEntry')) {
+    /**
+     * Deletes a specific rate history entry.
+     */
+    function deleteRateHistoryEntry(PDO $pdo, int $historyId): bool
+    {
+        try {
+            $stmt = $pdo->prepare("DELETE FROM hourly_rate_history WHERE id = ?");
+            return $stmt->execute([$historyId]);
+        } catch (PDOException $e) {
+            return false;
+        }
     }
 }
 ?>

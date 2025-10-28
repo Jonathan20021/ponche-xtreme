@@ -1,12 +1,8 @@
 <?php
 session_start();
-
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'IT') {
-    header('Location: index.php');
-    exit;
-}
-
 include 'db.php';
+
+ensurePermission('login_logs');
 
 // Consultar los registros de inicio de sesión
 $query = "

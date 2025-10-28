@@ -46,8 +46,22 @@ if (isset($_POST['login'])) {
         ");
         $log_stmt->execute([$user['id'], $username, $user['role'], $local_ip, $location, $public_ip]);
 
-        header('Location: dashboard.php');
-        exit;
+        // Store additional session data
+        $_SESSION['username'] = $user['username'];
+        $_SESSION['full_name'] = $user['full_name'];
+
+        // Find the first accessible page and redirect there
+        include 'find_accessible_page.php';
+        $accessiblePage = findAccessiblePage();
+        
+        if ($accessiblePage === null) {
+            // User has no access to any page
+            session_destroy();
+            $error = "Tu cuenta no tiene permisos para acceder a ninguna seccion del sistema.";
+        } else {
+            header('Location: ' . $accessiblePage);
+            exit;
+        }
     } else {
         $error = "Credenciales invalidas o permisos insuficientes.";
     }

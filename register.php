@@ -20,9 +20,29 @@ if (isset($_POST['register'])) {
         if ($exists && (int)$exists['count'] > 0) {
             $error = "El usuario {$username} ya esta registrado.";
         } else {
-            $insert = $pdo->prepare("INSERT INTO users (username, full_name, password, role) VALUES (?, ?, ?, ?)");
-            $insert->execute([$username, $full_name, $password, $role]);
-            $success = "Usuario {$username} creado correctamente. Puedes usar el portal de marcaciones.";
+            // Generate employee code: EMP-YYYY-XXXX
+            $currentYear = date('Y');
+            
+            // Get the highest employee code for the current year
+            $codeStmt = $pdo->prepare("SELECT employee_code FROM users WHERE employee_code LIKE ? ORDER BY employee_code DESC LIMIT 1");
+            $codeStmt->execute(["EMP-{$currentYear}-%"]);
+            $lastCode = $codeStmt->fetch();
+            
+            if ($lastCode && $lastCode['employee_code']) {
+                // Extract the sequential number and increment it
+                $lastNumber = (int)substr($lastCode['employee_code'], -4);
+                $newNumber = $lastNumber + 1;
+            } else {
+                // First employee of the year
+                $newNumber = 1;
+            }
+            
+            $employeeCode = sprintf("EMP-%s-%04d", $currentYear, $newNumber);
+            
+            // Insert user with employee code
+            $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role) VALUES (?, ?, ?, ?, ?)");
+            $insert->execute([$username, $employeeCode, $full_name, $password, $role]);
+            $success = "Usuario {$username} creado correctamente con código de empleado {$employeeCode}. Puedes usar el portal de marcaciones.";
         }
     }
 }

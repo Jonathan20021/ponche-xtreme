@@ -1,12 +1,8 @@
 <?php
 session_start();
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: index.php'); // Redirect to login page if no active session
-    exit;
-}
-
 include 'db.php';
+
+ensurePermission('dashboard');
 
 // Consulta para estadisticas generales
 $total_users = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
