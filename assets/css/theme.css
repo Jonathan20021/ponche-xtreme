@@ -689,6 +689,42 @@ form .form-group + .form-group {
     transition: all 0.2s ease-in-out;
 }
 
+.nav-dropdown {
+    position: relative;
+}
+
+.nav-dropdown-button {
+    width: auto;
+}
+
+.nav-dropdown.is-open [data-nav-dropdown-icon] {
+    transform: rotate(180deg);
+}
+
+.nav-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    display: none;
+    flex-direction: column;
+    min-width: 220px;
+    padding: 0.5rem;
+    border-radius: var(--radius-md);
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: 0 18px 35px rgba(8, 47, 73, 0.35);
+    backdrop-filter: blur(12px);
+    z-index: 20;
+}
+
+.nav-dropdown.is-open .nav-dropdown-menu {
+    display: flex;
+}
+
+.nav-dropdown-menu .nav-dropdown-link + .nav-dropdown-link {
+    margin-top: 0.35rem;
+}
+
 @media (max-width: 1024px) {
     .panel-heading {
         flex-direction: column;
@@ -704,6 +740,24 @@ form .form-group + .form-group {
     .panel-heading .btn-primary,
     .panel-heading .btn-secondary {
         align-self: flex-start;
+    }
+
+    .nav-dropdown {
+        width: 100%;
+    }
+
+    .nav-dropdown-button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .nav-dropdown-menu {
+        position: static;
+        width: 100%;
+        margin-top: 0.35rem;
+        box-shadow: none;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.88);
     }
 }
 
@@ -760,6 +814,284 @@ form .form-group + .form-group {
     display: none !important;
 }
 
+.agent-dashboard,
+.agent-records {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.dashboard-hero {
+    position: relative;
+    padding: clamp(1.75rem, 2vw + 1.25rem, 2.5rem);
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(59, 130, 246, 0.08));
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    overflow: hidden;
+}
+
+.dashboard-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(120% 120% at 0% 0%, rgba(14, 165, 233, 0.22), transparent);
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.dashboard-hero .hero-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+    position: relative;
+    z-index: 1;
+}
+
+.hero-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.hero-metric {
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+}
+
+.hero-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.85rem;
+    text-align: center;
+}
+
+.hero-progress .progress-circle {
+    position: relative;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: conic-gradient(#22d3ee var(--progress, 0%), rgba(148, 163, 184, 0.25) 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #e0f2fe;
+}
+
+.hero-progress .progress-circle::after {
+    content: '';
+    position: absolute;
+    inset: 12px;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.hero-progress .progress-circle span {
+    position: relative;
+    z-index: 1;
+}
+
+.hero-range-filter {
+    margin-top: 1.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    position: relative;
+    z-index: 1;
+}
+
+.hero-range-filter label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.hero-range-filter .input-control {
+    width: 180px;
+}
+
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+}
+
+.metric-card {
+    position: relative;
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    background: rgba(15, 23, 42, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    overflow: hidden;
+}
+
+.metric-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--metric-start, rgba(59, 130, 246, 0.35)) 0%, var(--metric-end, rgba(13, 148, 136, 0.32)) 100%);
+    opacity: 0.45;
+    z-index: -1;
+}
+
+.metric-card .metric-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: rgba(241, 245, 249, 0.92);
+    color: #0f172a;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 10px 18px rgba(15, 23, 42, 0.35);
+}
+
+.metric-card .metric-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(226, 232, 240, 0.72);
+    margin-bottom: 0.4rem;
+}
+
+.metric-card .metric-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.metric-card .metric-sub {
+    font-size: 0.85rem;
+    color: rgba(226, 232, 240, 0.6);
+    margin-top: 0.3rem;
+}
+
+.insight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.chart-card {
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-card canvas {
+    width: 100%;
+    max-width: 360px;
+}
+
+.chart-card.is-empty canvas {
+    opacity: 0.18;
+}
+
+.chart-empty {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.timeline-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.timeline {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding-left: 1.5rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 6px;
+    width: 2px;
+    background: rgba(148, 163, 184, 0.25);
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: 0.75rem;
+}
+
+.timeline-dot {
+    position: absolute;
+    top: 0.3rem;
+    left: -1.05rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--dot-color, #38BDF8);
+    box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.18);
+}
+
+.timeline-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.timeline-title i {
+    font-size: 0.75rem;
+    opacity: 0.75;
+}
+
+.timeline-time {
+    font-size: 0.8rem;
+    color: rgba(226, 232, 240, 0.6);
+    margin-top: 0.2rem;
+}
+
+.timeline-empty {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.table-card header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.table-card header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.table-card header span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
 .custom-table {
     width: 100%;
     border-collapse: collapse;
@@ -1192,3 +1524,124 @@ body.theme-light .unauthorized-card {
     box-shadow: 0 20px 35px rgba(15, 23, 42, 0.12);
 }
 
+body.theme-light .dashboard-hero {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(34, 211, 238, 0.18));
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+body.theme-light .dashboard-hero::after {
+    background: radial-gradient(140% 120% at 0% 0%, rgba(56, 189, 248, 0.35), transparent);
+    opacity: 0.5;
+}
+
+body.theme-light .hero-metric {
+    background: rgba(248, 250, 252, 0.9);
+    border-color: rgba(203, 213, 225, 0.6);
+    color: #1e293b;
+}
+
+body.theme-light .hero-progress .progress-circle {
+    background: conic-gradient(#0ea5e9 var(--progress, 0%), rgba(203, 213, 225, 0.45) 0);
+    color: #0f172a;
+}
+
+body.theme-light .hero-progress .progress-circle::after {
+    background: rgba(255, 255, 255, 0.96);
+    border-color: rgba(148, 163, 184, 0.4);
+}
+
+body.theme-light .hero-range-filter label {
+    color: #475569;
+}
+
+body.theme-light .metric-card {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(148, 163, 184, 0.28);
+    color: #0f172a;
+}
+
+body.theme-light .metric-card::before {
+    opacity: 0.55;
+}
+
+body.theme-light .metric-card .metric-icon {
+    background: rgba(15, 23, 42, 0.08);
+    color: #1f2937;
+}
+
+body.theme-light .metric-card .metric-label {
+    color: rgba(71, 85, 105, 0.85);
+}
+
+body.theme-light .metric-card .metric-sub {
+    color: rgba(71, 85, 105, 0.8);
+}
+
+body.theme-light .glass-card.timeline-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+body.theme-light .timeline::before {
+    background: rgba(148, 163, 184, 0.35);
+}
+
+body.theme-light .timeline-title {
+    color: #1f2937;
+}
+
+body.theme-light .timeline-time {
+    color: rgba(71, 85, 105, 0.8);
+}
+
+body.theme-light .timeline-empty {
+    color: rgba(71, 85, 105, 0.75);
+}
+
+body.theme-light .chart-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+body.theme-light .chart-empty {
+    color: rgba(71, 85, 105, 0.75);
+}
+
+body.theme-light .table-card header span {
+    color: rgba(71, 85, 105, 0.75);
+}
+
+body.theme-light .timeline-dot {
+    box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.25);
+}
+body.theme-light .metric-card .metric-value {
+    color: #0f172a;
+    opacity: 1;
+}
+
+body.theme-light .metric-card .metric-icon {
+    background: rgba(15, 23, 42, 0.08);
+    color: #1f2937;
+    box-shadow: 0 10px 15px rgba(15, 23, 42, 0.08);
+}
+
+body.theme-light .metric-card .metric-label,
+body.theme-light .metric-card .metric-sub {
+    color: rgba(71, 85, 105, 0.8);
+}
+
+body.theme-light .hero-progress .progress-circle {
+    color: #0f172a;
+}
+
+body.theme-light .hero-progress .progress-circle span {
+    opacity: 1;
+}
+
+body.theme-light .hero-metric {
+    color: #1f2937;
+}
+
+body.theme-light .hero-metric .text-muted {
+    color: rgba(71, 85, 105, 0.75);
+}

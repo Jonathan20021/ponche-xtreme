@@ -8,12 +8,29 @@ require_once __DIR__ . '/db.php';
 $navItems = [
     'dashboard' => ['label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'fa-gauge'],
     'records' => ['label' => 'Records', 'href' => 'records.php', 'icon' => 'fa-table'],
-    'records_qa' => ['label' => 'Records QA', 'href' => 'records_qa.php', 'icon' => 'fa-clipboard-check'],
     'view_admin_hours' => ['label' => 'Admin Hours', 'href' => 'view_admin_hours.php', 'icon' => 'fa-user-clock'],
     'hr_report' => ['label' => 'HR Report', 'href' => 'hr_report.php', 'icon' => 'fa-briefcase'],
     'adherence_report' => ['label' => 'Adherence', 'href' => 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
     'operations_dashboard' => ['label' => 'Operations', 'href' => 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
     'register_attendance' => ['label' => 'Register Hours', 'href' => 'register_attendance.php', 'icon' => 'fa-calendar-plus'],
+    'agents' => [
+        'label' => 'Agents',
+        'icon' => 'fa-user-friends',
+        'children' => [
+            [
+                'section' => 'agent_dashboard',
+                'label' => 'Agent Dashboard',
+                'href' => 'agent_dashboard.php',
+                'icon' => 'fa-chart-bar',
+            ],
+            [
+                'section' => 'register_attendance',
+                'label' => 'Punch',
+                'href' => 'punch.php',
+                'icon' => 'fa-fingerprint',
+            ],
+        ],
+    ],
     'login_logs' => ['label' => 'Login Logs', 'href' => 'login_logs.php', 'icon' => 'fa-shield-alt'],
     'settings' => ['label' => 'Settings', 'href' => 'settings.php', 'icon' => 'fa-sliders-h'],
 ];
@@ -81,7 +98,55 @@ if ($isAuthenticated) {
             <nav id="primary-nav" class="main-nav flex flex-wrap items-center gap-2" data-open="false" data-nav>
                 <?php if ($isAuthenticated): ?>
                     <?php foreach ($navItems as $sectionKey => $item): ?>
-                        <?php if (userHasPermission($sectionKey)): ?>
+                        <?php if (isset($item['children']) && is_array($item['children'])): ?>
+                            <?php
+                                $childLinks = [];
+                                foreach ($item['children'] as $child) {
+                                    $childSection = $child['section'] ?? null;
+                                    if ($childSection && !userHasPermission($childSection)) {
+                                        continue;
+                                    }
+                                    $childLinks[] = $child;
+                                }
+                                if (empty($childLinks)) {
+                                    continue;
+                                }
+                                $isActiveDropdown = false;
+                                foreach ($childLinks as $child) {
+                                    if ($currentPath === basename($child['href'])) {
+                                        $isActiveDropdown = true;
+                                        break;
+                                    }
+                                }
+                                $dropdownButtonClasses = $isActiveDropdown
+                                    ? 'nav-dropdown-button group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors'
+                                    : 'nav-dropdown-button group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors';
+                            ?>
+                            <div class="nav-dropdown" data-nav-dropdown>
+                                <button type="button"
+                                        class="<?= $dropdownButtonClasses ?>"
+                                        data-nav-dropdown-trigger
+                                        aria-expanded="<?= $isActiveDropdown ? 'true' : 'false' ?>">
+                                    <i class="fas <?= htmlspecialchars($item['icon'] ?? 'fa-layer-group') ?> text-xs"></i>
+                                    <span><?= htmlspecialchars($item['label']) ?></span>
+                                    <i class="fas fa-chevron-down text-xs opacity-70 transition-transform" data-nav-dropdown-icon style="font-size: 0.65rem;"></i>
+                                </button>
+                                <div class="nav-dropdown-menu" data-nav-dropdown-menu hidden>
+                                    <?php foreach ($childLinks as $child): ?>
+                                        <?php
+                                            $childActive = $currentPath === basename($child['href']);
+                                            $childClasses = $childActive
+                                                ? 'nav-dropdown-link inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold bg-cyan-500/20 text-cyan-100 transition-colors'
+                                                : 'nav-dropdown-link inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-200 hover:text-white hover:bg-slate-700/70 transition-colors';
+                                        ?>
+                                        <a href="<?= htmlspecialchars($child['href']) ?>" class="<?= $childClasses ?>">
+                                            <i class="fas <?= htmlspecialchars($child['icon'] ?? 'fa-circle') ?> text-xs"></i>
+                                            <span><?= htmlspecialchars($child['label']) ?></span>
+                                        </a>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php elseif (userHasPermission($sectionKey)): ?>
                             <?php
                                 $isActive = $currentPath === basename($item['href']);
                                 $classes = $isActive

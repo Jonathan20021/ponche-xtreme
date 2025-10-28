@@ -45,6 +45,67 @@
             });
         });
 
+        (function () {
+            var dropdowns = [];
+
+            document.querySelectorAll('[data-nav-dropdown]').forEach(function (dropdown) {
+                var trigger = dropdown.querySelector('[data-nav-dropdown-trigger]');
+                var menu = dropdown.querySelector('[data-nav-dropdown-menu]');
+                if (!trigger || !menu) {
+                    return;
+                }
+
+                var close = function () {
+                    dropdown.classList.remove('is-open');
+                    trigger.setAttribute('aria-expanded', 'false');
+                };
+
+                var ensureClosed = function () {
+                    dropdown.classList.remove('is-open');
+                    trigger.setAttribute('aria-expanded', 'false');
+                    menu.setAttribute('hidden', '');
+                };
+
+                ensureClosed();
+
+                trigger.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    var isOpen = dropdown.classList.contains('is-open');
+
+                    dropdowns.forEach(function (entry) {
+                        if (entry.dropdown !== dropdown) {
+                            entry.close(true);
+                        }
+                    });
+
+                    if (!isOpen) {
+                        dropdown.classList.add('is-open');
+                        trigger.setAttribute('aria-expanded', 'true');
+                        menu.removeAttribute('hidden');
+                    } else {
+                        ensureClosed();
+                    }
+                });
+
+                dropdowns.push({
+                    dropdown: dropdown,
+                    close: function (force) {
+                        if (force || dropdown.classList.contains('is-open')) {
+                            ensureClosed();
+                        }
+                    }
+                });
+            });
+
+            document.addEventListener('click', function (event) {
+                dropdowns.forEach(function (entry) {
+                    if (!entry.dropdown.contains(event.target)) {
+                        entry.close(true);
+                    }
+                });
+            });
+        })();
+
         document.querySelectorAll('table').forEach(function (table) {
             if (table.dataset.skipResponsive === 'true') {
                 return;

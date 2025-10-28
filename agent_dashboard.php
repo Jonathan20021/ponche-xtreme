@@ -1,340 +1,368 @@
-<?php
+﻿<?php
 session_start();
-// Verificar si el usuario esta logueado y tiene el rol correcto
-// Verificar si el usuario está logueado y tiene el rol correcto
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['AGENT', 'IT', 'Supervisor'])) {
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT', 'IT', 'Supervisor'], true)) {
     header('Location: login_agent.php');
     exit;
 }
 
 include 'db.php';
 
-// Obtener el ID del usuario logueado
-$user_id = $_SESSION['user_id'];
-$username = $_SESSION['username'];
-$full_name = $_SESSION['full_name'];
+if (!function_exists('sanitizeHexColorValue')) {
+    function sanitizeHexColorValue(?string $color, string $fallback = '#6366F1'): string
+    {
+        $value = strtoupper(trim((string) $color));
+        return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : strtoupper($fallback);
+    }
+}
 
-// Filtros
+$user_id = (int) $_SESSION['user_id'];
+$username = $_SESSION['username'] ?? null;
+$full_name = $_SESSION['full_name'] ?? null;
+
+if ($username === null || $full_name === null) {
+    $userStmt = $pdo->prepare('SELECT username, full_name FROM users WHERE id = ?');
+    $userStmt->execute([$user_id]);
+    $userRow = $userStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    if ($username === null) {
+        $username = $userRow['username'] ?? '';
+        $_SESSION['username'] = $username;
+    }
+    if ($full_name === null) {
+        $full_name = $userRow['full_name'] ?? 'Agente';
+        $_SESSION['full_name'] = $full_name;
+    }
+}
+
 $date_filter = $_GET['dates'] ?? date('Y-m-d');
 
-// Consulta de desglose de tiempo para el usuario actual
-$query = "
-    SELECT 
-        attendance.type,
-        DATE(attendance.timestamp) AS record_date,
-        TIME(attendance.timestamp) AS record_time,
-        attendance.ip_address
-    FROM attendance
-    WHERE attendance.user_id = ? AND DATE(attendance.timestamp) = ?
-    ORDER BY attendance.timestamp ASC
-";
+$attendanceTypes = getAttendanceTypes($pdo, false);
+$attendanceTypeMap = [];
+$durationTypes = [];
+foreach ($attendanceTypes as $typeRow) {
+    $slug = sanitizeAttendanceTypeSlug($typeRow['slug'] ?? '');
+    if ($slug === '') {
+        continue;
+    }
+    $typeRow['slug'] = $slug;
+    $attendanceTypeMap[$slug] = $typeRow;
+    if ((int) ($typeRow['is_active'] ?? 0) === 1 && (int) ($typeRow['is_unique_daily'] ?? 0) === 0) {
+        $durationTypes[] = [
+            'slug' => $slug,
+            'label' => $typeRow['label'] ?? $slug,
+        ];
+    }
+}
 
-$stmt = $pdo->prepare($query);
-$stmt->execute([$user_id, $date_filter]);
-$records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$nonWorkSlugs = [
+    sanitizeAttendanceTypeSlug('BREAK'),
+    sanitizeAttendanceTypeSlug('LUNCH'),
+];
 
-// Calcular el desglose de tiempo
-$time_summary_query = "
-    SELECT 
-        SUM(CASE WHEN type = 'Break' THEN TIMESTAMPDIFF(SECOND, timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS total_break,
-        SUM(CASE WHEN type = 'Lunch' THEN TIMESTAMPDIFF(SECOND, timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS total_lunch,
-        SUM(CASE WHEN type = 'Follow Up' THEN TIMESTAMPDIFF(SECOND, timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS total_follow_up,
-        SUM(CASE WHEN type = 'Ready' THEN TIMESTAMPDIFF(SECOND, timestamp, (
-            SELECT MIN(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND a.timestamp > attendance.timestamp 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-        )) ELSE 0 END) AS total_ready,
-        SUM(CASE WHEN type = 'Entry' THEN TIMESTAMPDIFF(SECOND, timestamp, (
-            SELECT MAX(a.timestamp) 
-            FROM attendance a 
-            WHERE a.user_id = attendance.user_id 
-            AND DATE(a.timestamp) = DATE(attendance.timestamp)
-            AND a.type = 'Exit'
-        )) ELSE 0 END) AS total_work
+$eventsStmt = $pdo->prepare('SELECT type, timestamp, TIME(timestamp) AS record_time, ip_address
     FROM attendance
     WHERE user_id = ? AND DATE(timestamp) = ?
-";
+    ORDER BY timestamp ASC');
+$eventsStmt->execute([$user_id, $date_filter]);
+$eventRows = $eventsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-$time_summary_stmt = $pdo->prepare($time_summary_query);
-$time_summary_stmt->execute([$user_id, $date_filter]);
-$time_summary = $time_summary_stmt->fetch(PDO::FETCH_ASSOC);
+$records = [];
+$events = [];
+foreach ($eventRows as $row) {
+    $slug = sanitizeAttendanceTypeSlug($row['type'] ?? '');
+    if ($slug === '') {
+        continue;
+    }
+    $meta = $attendanceTypeMap[$slug] ?? null;
+    $label = $meta['label'] ?? ($row['type'] ?? $slug);
+    $icon = $meta['icon_class'] ?? 'fas fa-circle';
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#38BDF8', '#38BDF8');
+    $timestamp = strtotime($row['timestamp'] ?? '');
+    if ($timestamp === false) {
+        continue;
+    }
 
-// Calcular el pago
+    $records[] = [
+        'label' => $label,
+        'time' => $row['record_time'],
+        'ip' => $row['ip_address'] ?? 'N/A',
+        'color' => $colorStart,
+        'icon' => $icon,
+    ];
+
+    $events[] = [
+        'slug' => $slug,
+        'timestamp' => $timestamp,
+    ];
+}
+
+$durations = [];
+if (count($events) >= 2) {
+    for ($i = 0; $i < count($events) - 1; $i++) {
+        $delta = max(0, $events[$i + 1]['timestamp'] - $events[$i]['timestamp']);
+        if ($delta <= 0) {
+            continue;
+        }
+        $slug = $events[$i]['slug'];
+        $durations[$slug] = ($durations[$slug] ?? 0) + $delta;
+    }
+}
+
+$totalSeconds = array_sum($durations);
+$pauseSeconds = 0;
+foreach ($nonWorkSlugs as $pauseSlug) {
+    $pauseSeconds += $durations[$pauseSlug] ?? 0;
+}
+$workSeconds = max(0, $totalSeconds - $pauseSeconds);
+
 $hourly_rates = getUserHourlyRates($pdo);
 $hourly_rate = $hourly_rates[$username] ?? 0;
-$total_work_hours = $time_summary['total_work'] / 3600;
-$total_payment = round($total_work_hours * $hourly_rate, 2);
+$total_payment = round(($workSeconds / 3600) * $hourly_rate, 2);
+$productivity_score = $totalSeconds > 0 ? round(($workSeconds / $totalSeconds) * 100, 1) : 0;
 
-// Calcular productividad
-$total_time = $time_summary['total_work'] + $time_summary['total_break'] + $time_summary['total_lunch'] + $time_summary['total_follow_up'] + $time_summary['total_ready'];
-$productivity_score = $total_time > 0 ? round(($time_summary['total_work'] / $total_time) * 100, 1) : 0;
+$heroMetrics = [
+    [
+        'label' => 'Horas trabajadas',
+        'value' => gmdate('H:i', $workSeconds),
+        'note' => 'Registro del día',
+    ],
+    [
+        'label' => 'Pago estimado',
+        'value' => '$' . number_format($total_payment, 2),
+        'note' => $hourly_rate > 0 ? 'Tarifa ' . number_format($hourly_rate, 2) . '/h' : 'Sin tarifa definida',
+    ],
+    [
+        'label' => 'Eventos registrados',
+        'value' => (string) count($records),
+        'note' => 'Movimientos del día',
+    ],
+];
+
+$insightCards = [
+    [
+        'label' => 'Horas productivas',
+        'value' => gmdate('H:i:s', $workSeconds),
+        'description' => 'Tiempo válido para pago',
+        'icon' => 'fas fa-briefcase',
+        'color_start' => '#38BDF8',
+        'color_end' => '#2563EB',
+    ],
+];
+
+foreach ($durationTypes as $typeMeta) {
+    $slug = $typeMeta['slug'];
+    $meta = $attendanceTypeMap[$slug] ?? null;
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#6366F1', '#6366F1');
+    $colorEnd = sanitizeHexColorValue($meta['color_end'] ?? $colorStart, $colorStart);
+    $insightCards[] = [
+        'label' => $typeMeta['label'],
+        'value' => gmdate('H:i:s', max(0, $durations[$slug] ?? 0)),
+        'description' => 'Tiempo acumulado',
+        'icon' => $meta['icon_class'] ?? 'fas fa-circle',
+        'color_start' => $colorStart,
+        'color_end' => $colorEnd,
+    ];
+}
+
+$insightCards[] = [
+    'label' => 'Pago estimado',
+    'value' => '$' . number_format($total_payment, 2),
+    'description' => number_format($workSeconds / 3600, 2) . ' hrs registradas',
+    'icon' => 'fas fa-dollar-sign',
+    'color_start' => '#F59E0B',
+    'color_end' => '#F97316',
+];
+
+$insightCards[] = [
+    'label' => 'Productividad',
+    'value' => $productivity_score . '%',
+    'description' => 'Tiempo productivo vs total',
+    'icon' => 'fas fa-bolt',
+    'color_start' => '#C084FC',
+    'color_end' => '#7C3AED',
+];
+
+$chartLabels = [];
+$chartData = [];
+$chartColors = [];
+$chartTotal = 0;
+
+if ($workSeconds > 0) {
+    $chartLabels[] = 'Productivo';
+    $chartData[] = $workSeconds;
+    $chartColors[] = '#38BDF8';
+    $chartTotal += $workSeconds;
+}
+
+foreach ($durationTypes as $typeMeta) {
+    $slug = $typeMeta['slug'];
+    $value = $durations[$slug] ?? 0;
+    if ($value <= 0) {
+        continue;
+    }
+    $meta = $attendanceTypeMap[$slug] ?? null;
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#6366F1', '#6366F1');
+    $chartLabels[] = $typeMeta['label'];
+    $chartData[] = $value;
+    $chartColors[] = $colorStart;
+    $chartTotal += $value;
+}
+
+$chartLabelsJson = json_encode($chartLabels, JSON_UNESCAPED_UNICODE);
+$chartDataJson = json_encode($chartData);
+$chartColorsJson = json_encode($chartColors);
 ?>
 
 <?php include 'header_agent.php'; ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <title>Agent Dashboard</title>
-</head>
-<body class="bg-gray-50 text-gray-800">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header Section -->
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-800">Welcome, <?= htmlspecialchars($full_name) ?></h1>
-                <p class="text-gray-600">Here's your performance overview for today</p>
+<div class="agent-dashboard">
+    <section class="dashboard-hero glass-card">
+        <div class="hero-main">
+            <div class="space-y-2">
+                <span class="badge badge--info">Sesión agente</span>
+                <h1 class="text-2xl font-semibold text-primary">Hola, <?= htmlspecialchars($full_name) ?></h1>
+                <p class="text-muted text-sm">Resumen de productividad para <?= htmlspecialchars(date('d \d\e M \d\e Y', strtotime($date_filter))) ?></p>
             </div>
-            <div class="flex flex-wrap items-center gap-3">
-                <div class="relative w-full sm:w-auto">
-                    <input type="text" id="datePicker" class="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" value="<?= $date_filter ?>">
+            <div class="hero-progress">
+                <span class="text-sm text-muted uppercase tracking-[0.18em]">Productividad</span>
+                <div class="progress-circle" style="--progress: <?= min($productivity_score, 100) ?>%;">
+                    <span><?= $productivity_score ?>%</span>
                 </div>
             </div>
         </div>
-
-        <!-- Productivity Score -->
-        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
-            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h3 class="text-lg font-semibold text-gray-800">Productivity Score</h3>
-                    <p class="text-gray-600">Based on your work time vs total time</p>
+        <div class="hero-metric-grid">
+            <?php foreach ($heroMetrics as $metric): ?>
+                <div class="hero-metric">
+                    <p class="text-xs text-muted uppercase tracking-[0.18em]"><?= htmlspecialchars($metric['label']) ?></p>
+                    <p class="text-xl font-semibold text-primary"><?= htmlspecialchars($metric['value']) ?></p>
+                    <p class="text-xs text-muted"><?= htmlspecialchars($metric['note']) ?></p>
                 </div>
-                <div class="relative">
-                    <div class="w-24 h-24">
-                        <canvas id="productivityChart"></canvas>
-                    </div>
-                    <div class="absolute inset-0 flex items-center justify-center">
-                        <span class="text-2xl font-bold"><?= $productivity_score ?>%</span>
-                    </div>
-                </div>
-            </div>
+            <?php endforeach; ?>
         </div>
+        <form method="get" class="hero-range-filter">
+            <label>
+                <span>Detalle del día</span>
+                <input type="date" name="dates" id="dates" value="<?= htmlspecialchars($date_filter) ?>" class="input-control">
+            </label>
+            <button type="submit" class="btn-primary">Actualizar</button>
+        </form>
+    </section>
 
-        <!-- Summary Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-gray-800">Work Time</h3>
-                    <i class="fas fa-briefcase text-blue-500 text-xl"></i>
-                </div>
-                <p class="text-3xl font-bold text-blue-600"><?= gmdate("H:i", $time_summary['total_work']) ?></p>
-                <p class="text-sm text-gray-600 mt-2">Hours worked today</p>
-            </div>
-            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-gray-800">Break Time</h3>
-                    <i class="fas fa-coffee text-orange-500 text-xl"></i>
-                </div>
-                <p class="text-3xl font-bold text-orange-600"><?= gmdate("H:i", $time_summary['total_break']) ?></p>
-                <p class="text-sm text-gray-600 mt-2">Total breaks taken</p>
-            </div>
-            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-gray-800">Lunch Time</h3>
-                    <i class="fas fa-utensils text-green-500 text-xl"></i>
-                </div>
-                <p class="text-3xl font-bold text-green-600"><?= gmdate("H:i", $time_summary['total_lunch']) ?></p>
-                <p class="text-sm text-gray-600 mt-2">Lunch break duration</p>
-            </div>
-            <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-gray-800">Daily Payment</h3>
-                    <i class="fas fa-dollar-sign text-yellow-500 text-xl"></i>
-                </div>
-                <p class="text-3xl font-bold text-yellow-600">$<?= number_format($total_payment, 2) ?></p>
-                <p class="text-sm text-gray-600 mt-2">Based on <?= number_format($total_work_hours, 1) ?> hours</p>
-            </div>
-        </div>
+    <section class="metric-grid">
+        <?php foreach ($insightCards as $card): ?>
+            <article class="metric-card" style="--metric-start: <?= htmlspecialchars($card['color_start'], ENT_QUOTES, 'UTF-8') ?>; --metric-end: <?= htmlspecialchars($card['color_end'], ENT_QUOTES, 'UTF-8') ?>;">
+                <div class="metric-icon"><i class="<?= htmlspecialchars($card['icon']) ?>"></i></div>
+                <p class="metric-label"><?= htmlspecialchars($card['label']) ?></p>
+                <p class="metric-value"><?= htmlspecialchars($card['value']) ?></p>
+                <p class="metric-sub"><?= htmlspecialchars($card['description']) ?></p>
+            </article>
+        <?php endforeach; ?>
+    </section>
 
-        <!-- Charts Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Time Distribution Chart -->
-            <div class="bg-white p-6 rounded-lg shadow-lg">
-                <h3 class="text-lg font-semibold text-gray-800 mb-4">Time Distribution</h3>
-                <canvas id="timeBreakdownChart" height="300"></canvas>
-            </div>
+    <div class="insight-grid">
+        <article class="glass-card chart-card <?= $chartTotal <= 0 ? 'is-empty' : '' ?>">
+            <header class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-primary">Distribución de tiempo</h2>
+            </header>
+            <canvas id="timeBreakdownChart" aria-label="Distribución de tiempo" role="img"></canvas>
+            <p class="chart-empty <?= $chartTotal > 0 ? 'hidden' : '' ?>" data-chart-empty>Sin datos suficientes para graficar en esta fecha.</p>
+        </article>
 
-            <!-- Activity Timeline -->
-            <div class="bg-white p-6 rounded-lg shadow-lg">
-                <h3 class="text-lg font-semibold text-gray-800 mb-4">Activity Timeline</h3>
-                <div class="space-y-4">
+        <article class="glass-card timeline-card">
+            <header>
+                <h2 class="text-lg font-semibold text-primary">Timeline de actividades</h2>
+                <p class="text-sm text-muted">Historial cronológico de tus marcaciones.</p>
+            </header>
+            <?php if (!empty($records)): ?>
+                <ol class="timeline">
                     <?php foreach ($records as $record): ?>
-                        <div class="flex items-center space-x-4">
-                            <div class="w-2 h-2 rounded-full <?php
-                                echo match($record['type']) {
-                                    'Entry' => 'bg-green-500',
-                                    'Exit' => 'bg-red-500',
-                                    'Break' => 'bg-orange-500',
-                                    'Lunch' => 'bg-yellow-500',
-                                    'Ready' => 'bg-blue-500',
-                                    'Follow Up' => 'bg-purple-500',
-                                    default => 'bg-gray-500'
-                                };
-                            ?>"></div>
-                            <div>
-                                <p class="font-medium"><?= htmlspecialchars($record['type']) ?></p>
-                                <p class="text-sm text-gray-600"><?= htmlspecialchars($record['record_time']) ?></p>
+                        <li class="timeline-item">
+                            <span class="timeline-dot" style="--dot-color: <?= htmlspecialchars($record['color'], ENT_QUOTES, 'UTF-8') ?>;"></span>
+                            <div class="timeline-content">
+                                <div class="timeline-title">
+                                    <i class="<?= htmlspecialchars($record['icon']) ?>"></i>
+                                    <span><?= htmlspecialchars($record['label']) ?></span>
+                                </div>
+                                <div class="timeline-time"><?= htmlspecialchars($record['time']) ?> &ndash; <?= htmlspecialchars($record['ip']) ?></div>
                             </div>
-                        </div>
+                        </li>
                     <?php endforeach; ?>
-                </div>
-            </div>
-        </div>
-
-        <!-- Detailed Records Table -->
-        <div class="bg-white p-6 rounded-lg shadow-lg">
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-800">Detailed Records</h3>
-                <div class="flex flex-wrap gap-2">
-                    <button class="w-full sm:w-auto px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-                        <i class="fas fa-download mr-2"></i>Export
-                    </button>
-                </div>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="bg-gray-50">
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        <?php if (!empty($records)): ?>
-                            <?php foreach ($records as $record): ?>
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <?php
-                                            echo match($record['type']) {
-                                                'Entry' => 'bg-green-100 text-green-800',
-                                                'Exit' => 'bg-red-100 text-red-800',
-                                                'Break' => 'bg-orange-100 text-orange-800',
-                                                'Lunch' => 'bg-yellow-100 text-yellow-800',
-                                                'Ready' => 'bg-blue-100 text-blue-800',
-                                                'Follow Up' => 'bg-purple-100 text-purple-800',
-                                                default => 'bg-gray-100 text-gray-800'
-                                            };
-                                        ?>">
-                                            <?= htmlspecialchars($record['type']) ?>
-                                        </span>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <?= htmlspecialchars($record['record_date']) ?>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <?= htmlspecialchars($record['record_time']) ?>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <?= htmlspecialchars($record['ip_address']) ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="4" class="px-6 py-4 text-center text-gray-500">
-                                    No records found for the selected date.
-                                </td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                </ol>
+            <?php else: ?>
+                <p class="timeline-empty">Aún no hay eventos registrados para esta fecha.</p>
+            <?php endif; ?>
+        </article>
     </div>
 
-    <script>
-        // Initialize date picker
-        flatpickr("#datePicker", {
-            dateFormat: "Y-m-d",
-            maxDate: "today",
-            onChange: function(selectedDates, dateStr) {
-                window.location.href = `?dates=${dateStr}`;
-            }
-        });
+    <article class="glass-card table-card">
+        <header>
+            <h2>Detalle de eventos</h2>
+            <span><?= count($records) ?> eventos</span>
+        </header>
+        <div class="responsive-scroll">
+            <table class="data-table" data-skip-responsive="true">
+                <thead>
+                    <tr>
+                        <th>Evento</th>
+                        <th>Hora</th>
+                        <th>IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (!empty($records)): ?>
+                        <?php foreach ($records as $record): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($record['label']) ?></td>
+                                <td><?= htmlspecialchars($record['time']) ?></td>
+                                <td><?= htmlspecialchars($record['ip']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="3" class="data-table-empty">No se encontraron registros.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </article>
+</div>
 
-        // Productivity Chart
-        new Chart(document.getElementById('productivityChart'), {
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+    const ctx = document.getElementById('timeBreakdownChart');
+    const labels = <?= $chartLabelsJson ?>;
+    const data = <?= $chartDataJson ?>;
+    const colors = <?= $chartColorsJson ?>;
+    const total = <?= (float) $chartTotal ?>;
+
+    if (ctx && total > 0 && Array.isArray(data) && data.length) {
+        new Chart(ctx, {
             type: 'doughnut',
             data: {
+                labels: labels,
                 datasets: [{
-                    data: [<?= $productivity_score ?>, <?= 100 - $productivity_score ?>],
-                    backgroundColor: ['#3B82F6', '#E5E7EB'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                cutout: '80%',
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                }
-            }
-        });
-
-        // Time Breakdown Chart
-        new Chart(document.getElementById('timeBreakdownChart'), {
-            type: 'doughnut',
-            data: {
-                labels: ['Work', 'Break', 'Lunch', 'Follow Up', 'Ready'],
-                datasets: [{
-                    data: [
-                        <?= $time_summary['total_work'] ?>,
-                        <?= $time_summary['total_break'] ?>,
-                        <?= $time_summary['total_lunch'] ?>,
-                        <?= $time_summary['total_follow_up'] ?>,
-                        <?= $time_summary['total_ready'] ?>
-                    ],
-                    backgroundColor: [
-                        '#3B82F6',
-                        '#F97316',
-                        '#22C55E',
-                        '#A855F7',
-                        '#0EA5E9'
-                    ],
-                    borderWidth: 0
+                    data: data,
+                    backgroundColor: colors,
+                    borderWidth: 0,
                 }]
             },
             options: {
                 responsive: true,
+                cutout: '70%',
                 plugins: {
                     legend: {
-                        position: 'right'
+                        position: 'right',
+                        labels: {
+                            color: '#E2E8F0',
+                            font: { size: 12 }
+                        }
                     }
                 }
             }
         });
-    </script>
+    }
+})();
+
+document.getElementById('dates')?.addEventListener('change', function () {
+    this.form.submit();
+});
+</script>
 <?php include 'footer.php'; ?>
-
-
-
-
