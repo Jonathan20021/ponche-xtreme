@@ -8,20 +8,37 @@ $successMessages = [];
 $errorMessages = [];
 
 $sections = [
-    'dashboard' => 'Dashboard',
-    'records' => 'Records',
-    'records_qa' => 'QA Records',
-    'view_admin_hours' => 'Administrative Hours',
-    'hr_report' => 'HR Report',
-    'adherence_report' => 'Adherence Report',
-    'operations_dashboard' => 'Operations Dashboard',
-    'register_attendance' => 'Register Administrative Hours',
-    'login_logs' => 'Login Logs',
-    'download_excel' => 'Monthly Excel Export',
-    'download_excel_daily' => 'Daily Excel Export',
-    'settings' => 'Configuration',
-    'agent_dashboard' => 'Agent Dashboard',
-    'agent_records' => 'Agent Records'
+    // Core System
+    'dashboard' => ['label' => 'Dashboard', 'category' => 'Sistema Principal', 'icon' => 'fa-gauge', 'description' => 'Panel principal del sistema'],
+    'settings' => ['label' => 'Configuración', 'category' => 'Sistema Principal', 'icon' => 'fa-sliders-h', 'description' => 'Configuración general del sistema'],
+    'login_logs' => ['label' => 'Logs de Acceso', 'category' => 'Sistema Principal', 'icon' => 'fa-shield-alt', 'description' => 'Historial de inicios de sesión'],
+    
+    // Records & Reports
+    'records' => ['label' => 'Registros', 'category' => 'Registros y Reportes', 'icon' => 'fa-table', 'description' => 'Registros de asistencia'],
+    'records_qa' => ['label' => 'Registros QA', 'category' => 'Registros y Reportes', 'icon' => 'fa-clipboard-check', 'description' => 'Registros de control de calidad'],
+    'view_admin_hours' => ['label' => 'Horas Administrativas', 'category' => 'Registros y Reportes', 'icon' => 'fa-user-clock', 'description' => 'Vista de horas administrativas'],
+    'hr_report' => ['label' => 'Reporte HR', 'category' => 'Registros y Reportes', 'icon' => 'fa-briefcase', 'description' => 'Reportes de recursos humanos'],
+    'adherence_report' => ['label' => 'Reporte de Adherencia', 'category' => 'Registros y Reportes', 'icon' => 'fa-chart-line', 'description' => 'Análisis de adherencia al horario'],
+    'operations_dashboard' => ['label' => 'Dashboard de Operaciones', 'category' => 'Registros y Reportes', 'icon' => 'fa-sitemap', 'description' => 'Panel de operaciones'],
+    'download_excel' => ['label' => 'Exportar Excel Mensual', 'category' => 'Registros y Reportes', 'icon' => 'fa-file-excel', 'description' => 'Exportación mensual a Excel'],
+    'download_excel_daily' => ['label' => 'Exportar Excel Diario', 'category' => 'Registros y Reportes', 'icon' => 'fa-file-excel', 'description' => 'Exportación diaria a Excel'],
+    
+    // Attendance
+    'register_attendance' => ['label' => 'Registrar Horas', 'category' => 'Asistencia', 'icon' => 'fa-calendar-plus', 'description' => 'Registro de horas administrativas'],
+    
+    // HR Module
+    'hr_dashboard' => ['label' => 'Dashboard HR', 'category' => 'Recursos Humanos', 'icon' => 'fa-chart-pie', 'description' => 'Panel principal de recursos humanos'],
+    'hr_employees' => ['label' => 'Empleados', 'category' => 'Recursos Humanos', 'icon' => 'fa-id-card', 'description' => 'Gestión de empleados'],
+    'hr_trial_period' => ['label' => 'Período de Prueba', 'category' => 'Recursos Humanos', 'icon' => 'fa-hourglass-half', 'description' => 'Seguimiento de período de prueba (90 días)'],
+    'hr_payroll' => ['label' => 'Nómina', 'category' => 'Recursos Humanos', 'icon' => 'fa-money-bill-wave', 'description' => 'Control de nómina y pagos'],
+    'hr_birthdays' => ['label' => 'Cumpleaños', 'category' => 'Recursos Humanos', 'icon' => 'fa-birthday-cake', 'description' => 'Calendario de cumpleaños'],
+    'hr_permissions' => ['label' => 'Permisos', 'category' => 'Recursos Humanos', 'icon' => 'fa-clipboard-list', 'description' => 'Solicitudes de permisos'],
+    'hr_vacations' => ['label' => 'Vacaciones', 'category' => 'Recursos Humanos', 'icon' => 'fa-umbrella-beach', 'description' => 'Solicitudes de vacaciones'],
+    'hr_calendar' => ['label' => 'Calendario HR', 'category' => 'Recursos Humanos', 'icon' => 'fa-calendar-alt', 'description' => 'Calendario integrado de eventos'],
+    
+    // Agents
+    'agent_dashboard' => ['label' => 'Dashboard de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-chart-bar', 'description' => 'Panel para agentes'],
+    'agent_records' => ['label' => 'Registros de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-list', 'description' => 'Registros de agentes']
 ];
 
 function sanitize_role_name(string $value): string
@@ -205,25 +222,62 @@ try {
                 
                 $employeeCode = sprintf("EMP-%s-%04d", $currentYear, $newNumber);
 
-                $createStmt = $pdo->prepare("
-                    INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, monthly_salary, hourly_rate_dop, monthly_salary_dop, preferred_currency, department_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ");
-                $createStmt->execute([
-                    $username,
-                    $employeeCode,
-                    $fullName,
-                    $password,
-                    $role,
-                    $hourlyRateUsd,
-                    $monthlySalaryUsd,
-                    $hourlyRateDop,
-                    $monthlySalaryDop,
-                    $preferredCurrency,
-                    $departmentId
-                ]);
-
-                $successMessages[] = "Usuario '{$username}' creado correctamente con código de empleado {$employeeCode}.";
+                $pdo->beginTransaction();
+                
+                try {
+                    // Create user
+                    $createStmt = $pdo->prepare("
+                        INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, monthly_salary, hourly_rate_dop, monthly_salary_dop, preferred_currency, department_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $createStmt->execute([
+                        $username,
+                        $employeeCode,
+                        $fullName,
+                        $password,
+                        $role,
+                        $hourlyRateUsd,
+                        $monthlySalaryUsd,
+                        $hourlyRateDop,
+                        $monthlySalaryDop,
+                        $preferredCurrency,
+                        $departmentId
+                    ]);
+                    
+                    $newUserId = $pdo->lastInsertId();
+                    
+                    // Auto-create employee record
+                    // Split full_name into first_name and last_name
+                    $nameParts = explode(' ', $fullName, 2);
+                    $firstName = $nameParts[0];
+                    $lastName = isset($nameParts[1]) ? $nameParts[1] : '';
+                    
+                    $createEmployeeStmt = $pdo->prepare("
+                        INSERT INTO employees (
+                            user_id, 
+                            employee_code, 
+                            first_name, 
+                            last_name, 
+                            department_id, 
+                            hire_date, 
+                            employment_status, 
+                            employment_type
+                        ) VALUES (?, ?, ?, ?, ?, CURDATE(), 'TRIAL', 'FULL_TIME')
+                    ");
+                    $createEmployeeStmt->execute([
+                        $newUserId,
+                        $employeeCode,
+                        $firstName,
+                        $lastName,
+                        $departmentId
+                    ]);
+                    
+                    $pdo->commit();
+                    $successMessages[] = "Usuario '{$username}' y empleado creados correctamente con código {$employeeCode}. El empleado está en período de prueba (90 días).";
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    $errorMessages[] = "Error al crear usuario/empleado: " . $e->getMessage();
+                }
                 break;
 
             case 'update_users':
@@ -289,6 +343,10 @@ try {
                     } else {
                         $updateWithoutRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $userId]);
                     }
+                    
+                    // Sync department_id to employees table if employee record exists
+                    $syncEmployeeStmt = $pdo->prepare("UPDATE employees SET department_id = ? WHERE user_id = ?");
+                    $syncEmployeeStmt->execute([$departmentId, $userId]);
 
                     if ($newPassword !== '') {
                         $passwordStmt->execute([$newPassword, $userId]);
@@ -1494,46 +1552,207 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         <section id="permissions-section" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
-                    <h2 class="text-primary text-xl font-semibold">Permisos por seccion</h2>
-                    <p class="text-muted text-sm">Activa o desactiva accesos para cada modulo de la plataforma.</p>
+                    <h2 class="text-primary text-xl font-semibold">Permisos por sección</h2>
+                    <p class="text-muted text-sm">Gestiona los accesos de cada rol a los diferentes módulos del sistema de forma organizada.</p>
                 </div>
-            </div>
-            <form method="POST" class="space-y-5">
-                <input type="hidden" name="action" value="update_permissions">
-                <?php foreach ($sections as $sectionKey => $label): ?>
-                    <?php $assignedRoles = $permissionsBySection[$sectionKey] ?? []; ?>
-                    <div class="section-card p-5 space-y-4">
-                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                            <div>
-                                <h3 class="text-primary text-lg font-semibold"><?= htmlspecialchars($label) ?></h3>
-                                <p class="text-muted text-xs uppercase tracking-wide">Slug: <?= htmlspecialchars($sectionKey) ?></p>
-                            </div>
-                            <span class="chip"><i class="fas fa-shield-alt"></i> <?= count($assignedRoles) ?> roles</span>
-                        </div>
-                        <div class="flex flex-wrap gap-3">
-                            <?php foreach ($roleNames as $roleName): ?>
-                                <?php $isActive = in_array($roleName, $assignedRoles, true); ?>
-                                <label class="pill-option <?= $isActive ? 'is-active' : '' ?>">
-                                    <input type="checkbox" name="permissions[<?= htmlspecialchars($sectionKey) ?>][]" value="<?= htmlspecialchars($roleName) ?>" <?= $isActive ? 'checked' : '' ?> class="accent-cyan-500">
-                                    <span><?= htmlspecialchars($roleLabels[$roleName] ?? $roleName) ?></span>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                        <div>
-                            <label class="form-label">Roles adicionales (separados por coma)</label>
-                            <input type="text" name="extra_permissions[<?= htmlspecialchars($sectionKey) ?>]" class="input-control" placeholder="Ej. SupportLead, Auditor">
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-                <div class="flex justify-end">
-                    <button type="submit" class="btn-primary">
-                        <i class="fas fa-save"></i>
-                        Guardar permisos
+                <div class="flex gap-2">
+                    <button type="button" onclick="selectAllPermissions()" class="btn-secondary text-sm">
+                        <i class="fas fa-check-double"></i> Seleccionar Todo
+                    </button>
+                    <button type="button" onclick="clearAllPermissions()" class="btn-secondary text-sm">
+                        <i class="fas fa-times"></i> Limpiar Todo
                     </button>
                 </div>
-            </form>
-        </section>
-    </div>
+            </div>
+
+            <!-- Permission Summary -->
+            <?php
+            $totalSections = count($sections);
+            $totalAssignments = 0;
+            foreach ($permissionsBySection as $roles) {
+                $totalAssignments += count($roles);
+            }
+            $avgPerSection = $totalSections > 0 ? round($totalAssignments / $totalSections, 1) : 0;
+            ?>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="section-card p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <i class="fas fa-layer-group text-blue-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-muted text-xs">Total Secciones</p>
+                            <p class="text-primary text-2xl font-bold"><?= $totalSections ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="section-card p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                            <i class="fas fa-shield-alt text-green-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-muted text-xs">Total Asignaciones</p>
+                            <p class="text-primary text-2xl font-bold"><?= $totalAssignments ?></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="section-card p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <i class="fas fa-chart-bar text-purple-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-muted text-xs">Promedio por Sección</p>
+                            <p class="text-primary text-2xl font-bold"><?= $avgPerSection ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <form method="POST" class="space-y-6" id="permissions-form">
+            <input type="hidden" name="action" value="update_permissions">
+            
+            <?php
+            // Group sections by category
+            $sectionsByCategory = [];
+            foreach ($sections as $sectionKey => $sectionData) {
+                $category = is_array($sectionData) ? $sectionData['category'] : 'General';
+                if (!isset($sectionsByCategory[$category])) {
+                    $sectionsByCategory[$category] = [];
+                }
+                $sectionsByCategory[$category][$sectionKey] = $sectionData;
+            }
+            ?>
+
+            <?php foreach ($sectionsByCategory as $category => $categorySections): ?>
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3 pb-2 border-b border-slate-700">
+                        <i class="fas fa-folder text-cyan-400"></i>
+                        <h3 class="text-primary text-lg font-semibold"><?= htmlspecialchars($category) ?></h3>
+                        <span class="chip text-xs"><?= count($categorySections) ?> secciones</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4">
+                        <?php foreach ($categorySections as $sectionKey => $sectionData): ?>
+                            <?php 
+                            $assignedRoles = $permissionsBySection[$sectionKey] ?? [];
+                            $label = is_array($sectionData) ? $sectionData['label'] : $sectionData;
+                            $icon = is_array($sectionData) ? $sectionData['icon'] : 'fa-circle';
+                            $description = is_array($sectionData) ? $sectionData['description'] : '';
+                            ?>
+                            <div class="section-card p-5 space-y-4 hover:border-cyan-500/30 transition-all">
+                                <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                                    <div class="flex items-start gap-3 flex-1">
+                                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                            <i class="fas <?= htmlspecialchars($icon) ?> text-cyan-400"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="text-primary text-base font-semibold mb-1"><?= htmlspecialchars($label) ?></h4>
+                                            <p class="text-muted text-xs mb-2"><?= htmlspecialchars($description) ?></p>
+                                            <p class="text-muted text-xs font-mono bg-slate-900/50 inline-block px-2 py-1 rounded">
+                                                <i class="fas fa-code text-slate-500"></i> <?= htmlspecialchars($sectionKey) ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="chip <?= count($assignedRoles) > 0 ? 'bg-green-500/20 text-green-300' : 'bg-slate-700/50' ?>">
+                                            <i class="fas fa-users"></i> <?= count($assignedRoles) ?> rol(es)
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <div class="flex items-center justify-between">
+                                        <label class="form-label mb-0">Roles con acceso:</label>
+                                        <div class="flex gap-2">
+                                            <button type="button" onclick="selectAllInSection('<?= htmlspecialchars($sectionKey) ?>')" class="text-xs text-cyan-400 hover:text-cyan-300">
+                                                <i class="fas fa-check-circle"></i> Todos
+                                            </button>
+                                            <button type="button" onclick="clearAllInSection('<?= htmlspecialchars($sectionKey) ?>')" class="text-xs text-slate-400 hover:text-slate-300">
+                                                <i class="fas fa-times-circle"></i> Ninguno
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <?php foreach ($roleNames as $roleName): ?>
+                                            <?php $isActive = in_array($roleName, $assignedRoles, true); ?>
+                                            <label class="pill-option <?= $isActive ? 'is-active' : '' ?>" data-section="<?= htmlspecialchars($sectionKey) ?>">
+                                                <input type="checkbox" 
+                                                       name="permissions[<?= htmlspecialchars($sectionKey) ?>][]" 
+                                                       value="<?= htmlspecialchars($roleName) ?>" 
+                                                       <?= $isActive ? 'checked' : '' ?> 
+                                                       class="accent-cyan-500"
+                                                       onchange="updatePillState(this)">
+                                                <span><?= htmlspecialchars($roleLabels[$roleName] ?? $roleName) ?></span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+
+            <div class="flex justify-between items-center pt-4 border-t border-slate-700">
+                <p class="text-muted text-sm">
+                    <i class="fas fa-info-circle text-cyan-400"></i>
+                    Los cambios se aplicarán inmediatamente y actualizarán los menús de todos los usuarios.
+                </p>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i>
+                    Guardar todos los permisos
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <script>
+    function updatePillState(checkbox) {
+        const label = checkbox.closest('.pill-option');
+        if (checkbox.checked) {
+            label.classList.add('is-active');
+        } else {
+            label.classList.remove('is-active');
+        }
+    }
+
+    function selectAllInSection(sectionKey) {
+        const checkboxes = document.querySelectorAll(`input[name="permissions[${sectionKey}][]"]`);
+        checkboxes.forEach(cb => {
+            cb.checked = true;
+            updatePillState(cb);
+        });
+    }
+
+    function clearAllInSection(sectionKey) {
+        const checkboxes = document.querySelectorAll(`input[name="permissions[${sectionKey}][]"]`);
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            updatePillState(cb);
+        });
+    }
+
+    function selectAllPermissions() {
+        const checkboxes = document.querySelectorAll('#permissions-form input[type="checkbox"]');
+        checkboxes.forEach(cb => {
+            cb.checked = true;
+            updatePillState(cb);
+        });
+    }
+
+    function clearAllPermissions() {
+        if (confirm('¿Estás seguro de que deseas desmarcar todos los permisos?')) {
+            const checkboxes = document.querySelectorAll('#permissions-form input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+                updatePillState(cb);
+            });
+        }
+    }
+    </script>
+</div>
 </section>
 
 <script>

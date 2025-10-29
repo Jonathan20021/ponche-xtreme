@@ -5,14 +5,72 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once __DIR__ . '/db.php';
 
+// Detect if we're in a subdirectory first
+$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false);
+$baseHref = $isInSubdir ? '../' : '';
+
 $navItems = [
-    'dashboard' => ['label' => 'Dashboard', 'href' => 'dashboard.php', 'icon' => 'fa-gauge'],
-    'records' => ['label' => 'Records', 'href' => 'records.php', 'icon' => 'fa-table'],
-    'view_admin_hours' => ['label' => 'Admin Hours', 'href' => 'view_admin_hours.php', 'icon' => 'fa-user-clock'],
-    'hr_report' => ['label' => 'HR Report', 'href' => 'hr_report.php', 'icon' => 'fa-briefcase'],
-    'adherence_report' => ['label' => 'Adherence', 'href' => 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
-    'operations_dashboard' => ['label' => 'Operations', 'href' => 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
-    'register_attendance' => ['label' => 'Register Hours', 'href' => 'register_attendance.php', 'icon' => 'fa-calendar-plus'],
+    'dashboard' => ['label' => 'Dashboard', 'href' => $baseHref . 'dashboard.php', 'icon' => 'fa-gauge'],
+    'records' => ['label' => 'Records', 'href' => $baseHref . 'records.php', 'icon' => 'fa-table'],
+    'view_admin_hours' => ['label' => 'Admin Hours', 'href' => $baseHref . 'view_admin_hours.php', 'icon' => 'fa-user-clock'],
+    'hr_report' => ['label' => 'HR Report', 'href' => $baseHref . 'hr_report.php', 'icon' => 'fa-briefcase'],
+    'adherence_report' => ['label' => 'Adherence', 'href' => $baseHref . 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
+    'operations_dashboard' => ['label' => 'Operations', 'href' => $baseHref . 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
+    'register_attendance' => ['label' => 'Register Hours', 'href' => $baseHref . 'register_attendance.php', 'icon' => 'fa-calendar-plus'],
+    'hr_module' => [
+        'label' => 'Recursos Humanos',
+        'icon' => 'fa-users-cog',
+        'children' => [
+            [
+                'section' => 'hr_dashboard',
+                'label' => 'Dashboard HR',
+                'href' => $baseHref . 'hr/index.php',
+                'icon' => 'fa-chart-pie',
+            ],
+            [
+                'section' => 'hr_employees',
+                'label' => 'Empleados',
+                'href' => $baseHref . 'hr/employees.php',
+                'icon' => 'fa-id-card',
+            ],
+            [
+                'section' => 'hr_trial_period',
+                'label' => 'Período de Prueba',
+                'href' => $baseHref . 'hr/trial_period.php',
+                'icon' => 'fa-hourglass-half',
+            ],
+            [
+                'section' => 'hr_payroll',
+                'label' => 'Nómina',
+                'href' => $baseHref . 'hr/payroll.php',
+                'icon' => 'fa-money-bill-wave',
+            ],
+            [
+                'section' => 'hr_birthdays',
+                'label' => 'Cumpleaños',
+                'href' => $baseHref . 'hr/birthdays.php',
+                'icon' => 'fa-birthday-cake',
+            ],
+            [
+                'section' => 'hr_permissions',
+                'label' => 'Permisos',
+                'href' => $baseHref . 'hr/permissions.php',
+                'icon' => 'fa-clipboard-list',
+            ],
+            [
+                'section' => 'hr_vacations',
+                'label' => 'Vacaciones',
+                'href' => $baseHref . 'hr/vacations.php',
+                'icon' => 'fa-umbrella-beach',
+            ],
+            [
+                'section' => 'hr_calendar',
+                'label' => 'Calendario',
+                'href' => $baseHref . 'hr/calendar.php',
+                'icon' => 'fa-calendar-alt',
+            ],
+        ],
+    ],
     'agents' => [
         'label' => 'Agents',
         'icon' => 'fa-user-friends',
@@ -20,19 +78,25 @@ $navItems = [
             [
                 'section' => 'agent_dashboard',
                 'label' => 'Agent Dashboard',
-                'href' => 'agent_dashboard.php',
+                'href' => $baseHref . 'agent_dashboard.php',
                 'icon' => 'fa-chart-bar',
+            ],
+            [
+                'section' => 'agent_dashboard',
+                'label' => 'Mis Solicitudes',
+                'href' => $baseHref . 'agents/my_requests.php',
+                'icon' => 'fa-file-alt',
             ],
             [
                 'section' => 'register_attendance',
                 'label' => 'Punch',
-                'href' => 'punch.php',
+                'href' => $baseHref . 'punch.php',
                 'icon' => 'fa-fingerprint',
             ],
         ],
     ],
-    'login_logs' => ['label' => 'Login Logs', 'href' => 'login_logs.php', 'icon' => 'fa-shield-alt'],
-    'settings' => ['label' => 'Settings', 'href' => 'settings.php', 'icon' => 'fa-sliders-h'],
+    'login_logs' => ['label' => 'Login Logs', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
+    'settings' => ['label' => 'Settings', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],
 ];
 
 $theme = $_SESSION['theme'] ?? 'dark';
@@ -42,7 +106,10 @@ if (!in_array($theme, ['dark', 'light'], true)) {
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 
-$assetBase = (strpos($_SERVER['PHP_SELF'], '/agents/') === 0) ? '../assets' : 'assets';
+// Detect if we're in a subdirectory
+$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false);
+$assetBase = $isInSubdir ? '../assets' : 'assets';
+$baseHref = $isInSubdir ? '../' : '';
 
 $isAuthenticated = isset($_SESSION['user_id']);
 $currentPath = basename($_SERVER['PHP_SELF']);
@@ -159,17 +226,17 @@ if ($isAuthenticated) {
                             </a>
                         <?php endif; ?>
                     <?php endforeach; ?>
-                    <a href="logout.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
+                    <a href="<?= $baseHref ?>logout.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
                         <i class="fas fa-sign-out-alt text-xs"></i>
                         <span>Logout</span>
                     </a>
                 <?php else: ?>
-                    <a href="index.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
+                    <a href="<?= $baseHref ?>index.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
                         <i class="fas fa-sign-in-alt text-xs"></i>
                         <span>Login</span>
                     </a>
                 <?php endif; ?>
-                <form action="theme_toggle.php" method="post" class="inline-flex">
+                <form action="<?= $baseHref ?>theme_toggle.php" method="post" class="inline-flex">
                     <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-800/70 text-slate-200 hover:bg-slate-700 transition-colors border border-slate-700/70">
                         <i class="fas fa-adjust text-xs"></i>
                         <span><?= htmlspecialchars($themeLabel) ?></span>
