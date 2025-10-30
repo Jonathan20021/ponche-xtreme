@@ -167,6 +167,69 @@ $insightCards[] = [
     'color_end' => '#7C3AED',
 ];
 
+// Get employee data for HR requests
+$employeeStmt = $pdo->prepare("SELECT id FROM employees WHERE user_id = ?");
+$employeeStmt->execute([$user_id]);
+$employeeData = $employeeStmt->fetch(PDO::FETCH_ASSOC);
+$employeeId = $employeeData['id'] ?? null;
+
+// Handle permission request submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permission'])) {
+    if ($employeeId) {
+        $permissionType = $_POST['permission_type'];
+        $startDate = $_POST['permission_start_date'];
+        $endDate = $_POST['permission_end_date'];
+        $reason = trim($_POST['permission_reason']);
+        
+        $insertStmt = $pdo->prepare("
+            INSERT INTO permission_requests (employee_id, permission_type, start_date, end_date, reason, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'PENDING', NOW())
+        ");
+        $insertStmt->execute([$employeeId, $permissionType, $startDate, $endDate, $reason]);
+        $permissionSuccess = "Solicitud de permiso enviada correctamente.";
+    }
+}
+
+// Handle vacation request submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vacation'])) {
+    if ($employeeId) {
+        $startDate = $_POST['vacation_start_date'];
+        $endDate = $_POST['vacation_end_date'];
+        $days = (int)$_POST['vacation_days'];
+        $reason = trim($_POST['vacation_reason']);
+        
+        $insertStmt = $pdo->prepare("
+            INSERT INTO vacation_requests (employee_id, start_date, end_date, days_requested, reason, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'PENDING', NOW())
+        ");
+        $insertStmt->execute([$employeeId, $startDate, $endDate, $days, $reason]);
+        $vacationSuccess = "Solicitud de vacaciones enviada correctamente.";
+    }
+}
+
+// Get pending requests
+$pendingPermissions = [];
+$pendingVacations = [];
+if ($employeeId) {
+    $permStmt = $pdo->prepare("
+        SELECT * FROM permission_requests 
+        WHERE employee_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 5
+    ");
+    $permStmt->execute([$employeeId]);
+    $pendingPermissions = $permStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    $vacStmt = $pdo->prepare("
+        SELECT * FROM vacation_requests 
+        WHERE employee_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 5
+    ");
+    $vacStmt->execute([$employeeId]);
+    $pendingVacations = $vacStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 $chartLabels = [];
 $chartData = [];
 $chartColors = [];
@@ -308,6 +371,137 @@ $chartColorsJson = json_encode($chartColors);
             </table>
         </div>
     </article>
+
+    <?php if ($employeeId): ?>
+    <!-- HR Requests Section -->
+    <div class="insight-grid">
+        <article class="glass-card">
+            <header class="mb-6">
+                <h2 class="text-lg font-semibold text-primary flex items-center gap-2">
+                    <i class="fas fa-calendar-check text-blue-400"></i>
+                    Solicitar Permiso
+                </h2>
+                <p class="text-sm text-muted">Envía una solicitud de permiso a Recursos Humanos</p>
+            </header>
+            
+            <?php if (isset($permissionSuccess)): ?>
+                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4">
+                    <p class="text-green-300 text-sm"><i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($permissionSuccess) ?></p>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Tipo de Permiso</label>
+                    <select name="permission_type" required class="input-control w-full">
+                        <option value="MEDICAL">Médico</option>
+                        <option value="PERSONAL">Personal</option>
+                        <option value="STUDY">Estudio</option>
+                        <option value="FAMILY">Familiar</option>
+                        <option value="OTHER">Otro</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Fecha Inicio</label>
+                        <input type="date" name="permission_start_date" required class="input-control w-full">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Fecha Fin</label>
+                        <input type="date" name="permission_end_date" required class="input-control w-full">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Motivo</label>
+                    <textarea name="permission_reason" rows="3" required class="input-control w-full" placeholder="Describe el motivo de tu solicitud..."></textarea>
+                </div>
+                <button type="submit" name="submit_permission" class="btn-primary w-full">
+                    <i class="fas fa-paper-plane"></i>
+                    Enviar Solicitud de Permiso
+                </button>
+            </form>
+
+            <?php if (!empty($pendingPermissions)): ?>
+                <div class="mt-6 pt-6 border-t border-slate-700">
+                    <h3 class="text-sm font-semibold mb-3">Mis Solicitudes de Permisos</h3>
+                    <div class="space-y-2">
+                        <?php foreach ($pendingPermissions as $perm): ?>
+                            <div class="bg-slate-800/50 rounded-lg p-3">
+                                <div class="flex justify-between items-start mb-1">
+                                    <span class="text-sm font-medium"><?= htmlspecialchars($perm['permission_type']) ?></span>
+                                    <span class="px-2 py-1 rounded text-xs <?= $perm['status'] === 'APPROVED' ? 'bg-green-500/20 text-green-300' : ($perm['status'] === 'REJECTED' ? 'bg-red-500/20 text-red-300' : 'bg-yellow-500/20 text-yellow-300') ?>">
+                                        <?= htmlspecialchars($perm['status']) ?>
+                                    </span>
+                                </div>
+                                <p class="text-xs text-muted"><?= htmlspecialchars($perm['start_date']) ?> - <?= htmlspecialchars($perm['end_date']) ?></p>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </article>
+
+        <article class="glass-card">
+            <header class="mb-6">
+                <h2 class="text-lg font-semibold text-primary flex items-center gap-2">
+                    <i class="fas fa-umbrella-beach text-purple-400"></i>
+                    Solicitar Vacaciones
+                </h2>
+                <p class="text-sm text-muted">Envía una solicitud de vacaciones a Recursos Humanos</p>
+            </header>
+
+            <?php if (isset($vacationSuccess)): ?>
+                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4">
+                    <p class="text-green-300 text-sm"><i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($vacationSuccess) ?></p>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Fecha Inicio</label>
+                        <input type="date" name="vacation_start_date" required class="input-control w-full">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Fecha Fin</label>
+                        <input type="date" name="vacation_end_date" required class="input-control w-full">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Días Solicitados</label>
+                    <input type="number" name="vacation_days" min="1" required class="input-control w-full" placeholder="Número de días">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Motivo (Opcional)</label>
+                    <textarea name="vacation_reason" rows="3" class="input-control w-full" placeholder="Describe el motivo de tus vacaciones..."></textarea>
+                </div>
+                <button type="submit" name="submit_vacation" class="btn-primary w-full">
+                    <i class="fas fa-paper-plane"></i>
+                    Enviar Solicitud de Vacaciones
+                </button>
+            </form>
+
+            <?php if (!empty($pendingVacations)): ?>
+                <div class="mt-6 pt-6 border-t border-slate-700">
+                    <h3 class="text-sm font-semibold mb-3">Mis Solicitudes de Vacaciones</h3>
+                    <div class="space-y-2">
+                        <?php foreach ($pendingVacations as $vac): ?>
+                            <div class="bg-slate-800/50 rounded-lg p-3">
+                                <div class="flex justify-between items-start mb-1">
+                                    <span class="text-sm font-medium"><?= htmlspecialchars($vac['days_requested']) ?> días</span>
+                                    <span class="px-2 py-1 rounded text-xs <?= $vac['status'] === 'APPROVED' ? 'bg-green-500/20 text-green-300' : ($vac['status'] === 'REJECTED' ? 'bg-red-500/20 text-red-300' : 'bg-yellow-500/20 text-yellow-300') ?>">
+                                        <?= htmlspecialchars($vac['status']) ?>
+                                    </span>
+                                </div>
+                                <p class="text-xs text-muted"><?= htmlspecialchars($vac['start_date']) ?> - <?= htmlspecialchars($vac['end_date']) ?></p>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </article>
+    </div>
+    <?php endif; ?>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

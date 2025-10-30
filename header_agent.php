@@ -22,6 +22,8 @@ $assetBase = (strpos($_SERVER['PHP_SELF'], '/agents/') === 0) ? '../assets' : 'a
 $agentNavItems = [
     'agent_dashboard' => ['label' => 'Dashboard', 'href' => 'agent_dashboard.php', 'icon' => 'fa-house-user'],
     'agent_records' => ['label' => 'Records', 'href' => 'agent.php', 'icon' => 'fa-clock'],
+    'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
+    'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
 ];
 
 $currentPath = basename($_SERVER['PHP_SELF']);
@@ -66,13 +68,15 @@ $currentPath = basename($_SERVER['PHP_SELF']);
 
             <nav id="agent-nav" class="main-nav flex flex-wrap items-center gap-2" data-open="false" data-nav>
                 <?php foreach ($agentNavItems as $sectionKey => $item): ?>
-                    <?php if (userHasPermission($sectionKey)): ?>
-                        <?php
+                    <?php
+                        // Show HR request links to all agents without permission check
+                        $showLink = in_array($sectionKey, ['agent_permissions', 'agent_vacations']) || userHasPermission($sectionKey);
+                        if ($showLink):
                             $isActive = $currentPath === basename($item['href']);
                             $classes = $isActive
                                 ? 'inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30 transition-colors'
                                 : 'inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors';
-                        ?>
+                    ?>
                         <a href="<?= htmlspecialchars($item['href']) ?>" class="<?= $classes ?>">
                             <i class="fas <?= htmlspecialchars($item['icon']) ?> text-xs"></i>
                             <span><?= htmlspecialchars($item['label']) ?></span>
