@@ -215,9 +215,9 @@ $recentVacations = $pdo->query("
                     <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-money-bill-wave text-white"></i>
                     </div>
-                    <h3 class="text-xl font-semibold text-white">Nómina</h3>
+                    <h3 class="text-xl font-semibold text-white">Nómina RD</h3>
                 </div>
-                <p class="text-slate-400 text-sm">Control de nómina conectado con ponche</p>
+                <p class="text-slate-400 text-sm">Sistema completo con AFP, SFS, ISR, TSS y DGII</p>
             </div>
 
             <div class="module-card" onclick="window.location.href='birthdays.php'">
