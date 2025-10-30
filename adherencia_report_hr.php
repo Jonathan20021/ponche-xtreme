@@ -76,54 +76,74 @@ if ($currentPage > $totalPages) {
 }
 
 $dailySql = "
-    WITH raw AS (
-        SELECT
-            DATE(a.timestamp) AS work_date,
-            a.user_id,
-            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) AS first_entry,
-            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) AS last_exit,
-            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) AS lunch_count,
-            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) AS break_count,
-            SUM(CASE WHEN a.type IN ('Meeting', 'Coaching') THEN 1 ELSE 0 END) AS meeting_count
-        FROM attendance a
-        WHERE a.timestamp BETWEEN :start AND :end
-        GROUP BY DATE(a.timestamp), a.user_id
-    ),
-    prepared AS (
-        SELECT
-            r.work_date,
-            r.user_id,
-            r.first_entry,
-            IFNULL(r.last_exit, CONCAT(r.work_date, ' ', :exit_time)) AS last_exit,
-            r.lunch_count * :lunch_seconds AS lunch_seconds,
-            r.break_count * :break_seconds AS break_seconds,
-            r.meeting_count * :meeting_seconds AS meeting_seconds,
-            GREATEST(
-                IF(r.first_entry IS NULL, 0,
-                    IFNULL(
-                        TIMESTAMPDIFF(SECOND, r.first_entry, IFNULL(r.last_exit, CONCAT(r.work_date, ' ', :exit_time))),
-                        0
-                    )
-                ) - (r.lunch_count * :lunch_seconds) - (r.break_count * :break_seconds),
-                0
-            ) AS productive_seconds
-        FROM raw r
-    )
     SELECT
         u.full_name AS employee,
         u.username,
         d.name AS department_name,
-        p.work_date,
-        p.first_entry,
-        p.last_exit,
-        p.lunch_seconds,
-        p.break_seconds,
-        p.meeting_seconds,
-        p.productive_seconds
-    FROM prepared p
-    JOIN users u ON u.id = p.user_id
+        DATE(a.timestamp) AS work_date,
+        (SELECT MIN(a2.timestamp) FROM attendance a2 
+         WHERE a2.user_id = a.user_id 
+         AND DATE(a2.timestamp) = DATE(a.timestamp) 
+         AND a2.type = 'Entry') AS first_entry,
+        IFNULL(
+            (SELECT MAX(a3.timestamp) FROM attendance a3 
+             WHERE a3.user_id = a.user_id 
+             AND DATE(a3.timestamp) = DATE(a.timestamp) 
+             AND a3.type = 'Exit'),
+            CONCAT(DATE(a.timestamp), ' ', :exit_time)
+        ) AS last_exit,
+        ((SELECT COUNT(*) FROM attendance a4 
+          WHERE a4.user_id = a.user_id 
+          AND DATE(a4.timestamp) = DATE(a.timestamp) 
+          AND a4.type = 'Lunch') * :lunch_seconds) AS lunch_seconds,
+        ((SELECT COUNT(*) FROM attendance a5 
+          WHERE a5.user_id = a.user_id 
+          AND DATE(a5.timestamp) = DATE(a.timestamp) 
+          AND a5.type = 'Break') * :break_seconds) AS break_seconds,
+        ((SELECT COUNT(*) FROM attendance a6 
+          WHERE a6.user_id = a.user_id 
+          AND DATE(a6.timestamp) = DATE(a.timestamp) 
+          AND a6.type IN ('Meeting', 'Coaching')) * :meeting_seconds) AS meeting_seconds,
+        GREATEST(
+            IF(
+                (SELECT MIN(a7.timestamp) FROM attendance a7 
+                 WHERE a7.user_id = a.user_id 
+                 AND DATE(a7.timestamp) = DATE(a.timestamp) 
+                 AND a7.type = 'Entry') IS NULL,
+                0,
+                IFNULL(
+                    TIMESTAMPDIFF(
+                        SECOND,
+                        (SELECT MIN(a8.timestamp) FROM attendance a8 
+                         WHERE a8.user_id = a.user_id 
+                         AND DATE(a8.timestamp) = DATE(a.timestamp) 
+                         AND a8.type = 'Entry'),
+                        IFNULL(
+                            (SELECT MAX(a9.timestamp) FROM attendance a9 
+                             WHERE a9.user_id = a.user_id 
+                             AND DATE(a9.timestamp) = DATE(a.timestamp) 
+                             AND a9.type = 'Exit'),
+                            CONCAT(DATE(a.timestamp), ' ', :exit_time)
+                        )
+                    ),
+                    0
+                )
+            ) - ((SELECT COUNT(*) FROM attendance a10 
+                  WHERE a10.user_id = a.user_id 
+                  AND DATE(a10.timestamp) = DATE(a.timestamp) 
+                  AND a10.type = 'Lunch') * :lunch_seconds)
+              - ((SELECT COUNT(*) FROM attendance a11 
+                  WHERE a11.user_id = a.user_id 
+                  AND DATE(a11.timestamp) = DATE(a.timestamp) 
+                  AND a11.type = 'Break') * :break_seconds),
+            0
+        ) AS productive_seconds
+    FROM attendance a
+    JOIN users u ON u.id = a.user_id
     LEFT JOIN departments d ON d.id = u.department_id
-    ORDER BY u.full_name, p.work_date
+    WHERE a.timestamp BETWEEN :start AND :end
+    GROUP BY u.id, u.full_name, u.username, d.name, DATE(a.timestamp)
+    ORDER BY u.full_name, DATE(a.timestamp)
     LIMIT :offset, :limit
 ";
 
@@ -315,36 +335,50 @@ $trendStart = date('Y-m-01', strtotime('-5 months'));
 $trendEnd = date('Y-m-t');
 
 $trendSql = "
-    WITH work_log AS (
-        SELECT
-            DATE(a.timestamp) AS work_date,
-            a.user_id,
-            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) AS first_entry,
-            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) AS last_exit
-        FROM attendance a
-        WHERE a.timestamp BETWEEN :trend_start AND :trend_end
-        GROUP BY DATE(a.timestamp), a.user_id
-    )
     SELECT
-        DATE_FORMAT(work_date, '%Y-%m') AS month,
-        COUNT(DISTINCT user_id) AS total_employees,
+        DATE_FORMAT(DATE(a.timestamp), '%Y-%m') AS month,
+        COUNT(DISTINCT a.user_id) AS total_employees,
         AVG(
             CASE
-                WHEN first_entry IS NULL THEN 0
+                WHEN (SELECT MIN(a2.timestamp) FROM attendance a2 
+                      WHERE a2.user_id = a.user_id 
+                      AND DATE(a2.timestamp) = DATE(a.timestamp) 
+                      AND a2.type = 'Entry') IS NULL THEN 0
                 ELSE IFNULL(
-                    TIMESTAMPDIFF(SECOND, first_entry, IFNULL(last_exit, CONCAT(work_date, ' ', :exit_time))),
+                    TIMESTAMPDIFF(
+                        SECOND,
+                        (SELECT MIN(a3.timestamp) FROM attendance a3 
+                         WHERE a3.user_id = a.user_id 
+                         AND DATE(a3.timestamp) = DATE(a.timestamp) 
+                         AND a3.type = 'Entry'),
+                        IFNULL(
+                            (SELECT MAX(a4.timestamp) FROM attendance a4 
+                             WHERE a4.user_id = a.user_id 
+                             AND DATE(a4.timestamp) = DATE(a.timestamp) 
+                             AND a4.type = 'Exit'),
+                            CONCAT(DATE(a.timestamp), ' ', :exit_time)
+                        )
+                    ),
                     0
                 )
             END
         ) AS avg_work_seconds,
         SUM(
             CASE
-                WHEN first_entry IS NOT NULL AND TIME(first_entry) > :entry_time THEN 1
+                WHEN (SELECT MIN(a5.timestamp) FROM attendance a5 
+                      WHERE a5.user_id = a.user_id 
+                      AND DATE(a5.timestamp) = DATE(a.timestamp) 
+                      AND a5.type = 'Entry') IS NOT NULL 
+                     AND TIME((SELECT MIN(a6.timestamp) FROM attendance a6 
+                               WHERE a6.user_id = a.user_id 
+                               AND DATE(a6.timestamp) = DATE(a.timestamp) 
+                               AND a6.type = 'Entry')) > :entry_time THEN 1
                 ELSE 0
             END
         ) AS late_count
-    FROM work_log
-    GROUP BY DATE_FORMAT(work_date, '%Y-%m')
+    FROM attendance a
+    WHERE a.timestamp BETWEEN :trend_start AND :trend_end
+    GROUP BY DATE_FORMAT(DATE(a.timestamp), '%Y-%m'), a.user_id, DATE(a.timestamp)
     ORDER BY month ASC
 ";
 

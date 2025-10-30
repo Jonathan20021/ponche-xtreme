@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 require_once __DIR__ . '/db.php';
 
@@ -66,44 +66,48 @@ $employees = $employeeStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 $departmentsList = getAllDepartments($pdo);
 
 $payrollSql = "
-    WITH daily_attendance AS (
-        SELECT
-            DATE(a.timestamp) AS work_date,
-            a.user_id,
-            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) AS first_entry,
-            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) AS last_exit,
-            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) AS lunch_count,
-            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) AS break_count
-        FROM attendance a
-        WHERE a.timestamp BETWEEN :start AND :end
-        " . ($employeeFilter !== 'all' ? "AND a.user_id = :employee_filter" : "") . "
-        GROUP BY DATE(a.timestamp), a.user_id
-    )
     SELECT
         u.id,
         u.full_name,
         u.username,
         u.department_id,
         d.name AS department_name,
-        COUNT(daily_attendance.work_date) AS days_worked,
+        COUNT(DISTINCT DATE(a.timestamp)) AS days_worked,
         SUM(
             GREATEST(
                 IFNULL(
                     TIMESTAMPDIFF(
                         SECOND,
-                        daily_attendance.first_entry,
-                        COALESCE(daily_attendance.last_exit, CONCAT(daily_attendance.work_date, ' ', :exit_time))
+                        (SELECT MIN(a2.timestamp) FROM attendance a2 
+                         WHERE a2.user_id = a.user_id 
+                         AND DATE(a2.timestamp) = DATE(a.timestamp) 
+                         AND a2.type = 'Entry'),
+                        COALESCE(
+                            (SELECT MAX(a3.timestamp) FROM attendance a3 
+                             WHERE a3.user_id = a.user_id 
+                             AND DATE(a3.timestamp) = DATE(a.timestamp) 
+                             AND a3.type = 'Exit'),
+                            CONCAT(DATE(a.timestamp), ' ', :exit_time)
+                        )
                     ),
                     0
                 )
-                - (daily_attendance.lunch_count * :lunch_seconds)
-                - (daily_attendance.break_count * :break_seconds),
+                - ((SELECT COUNT(*) FROM attendance a4 
+                    WHERE a4.user_id = a.user_id 
+                    AND DATE(a4.timestamp) = DATE(a.timestamp) 
+                    AND a4.type = 'Lunch') * :lunch_seconds)
+                - ((SELECT COUNT(*) FROM attendance a5 
+                    WHERE a5.user_id = a.user_id 
+                    AND DATE(a5.timestamp) = DATE(a.timestamp) 
+                    AND a5.type = 'Break') * :break_seconds),
                 0
             )
         ) AS productive_seconds
-    FROM daily_attendance
-    JOIN users u ON u.id = daily_attendance.user_id
+    FROM attendance a
+    JOIN users u ON u.id = a.user_id
     LEFT JOIN departments d ON d.id = u.department_id
+    WHERE a.timestamp BETWEEN :start AND :end
+    " . ($employeeFilter !== 'all' ? "AND a.user_id = :employee_filter" : "") . "
     GROUP BY u.id, u.full_name, u.username, u.department_id, d.name
     ORDER BY u.full_name
 ";
@@ -256,45 +260,65 @@ $employeeChartData = [
 ];
 
 $dailySql = "
-    WITH daily_attendance AS (
-        SELECT
-            DATE(a.timestamp) AS work_date,
-            a.user_id,
-            MIN(CASE WHEN a.type = 'Entry' THEN a.timestamp END) AS first_entry,
-            MAX(CASE WHEN a.type = 'Exit' THEN a.timestamp END) AS last_exit,
-            SUM(CASE WHEN a.type = 'Lunch' THEN 1 ELSE 0 END) AS lunch_count,
-            SUM(CASE WHEN a.type = 'Break' THEN 1 ELSE 0 END) AS break_count
-        FROM attendance a
-        WHERE a.timestamp BETWEEN :start AND :end
-        " . ($employeeFilter !== 'all' ? "AND a.user_id = :employee_filter" : "") . "
-        GROUP BY DATE(a.timestamp), a.user_id
-    )
     SELECT
         u.full_name,
         u.username,
         d.name AS department_name,
-        daily_attendance.work_date,
-        daily_attendance.first_entry,
-        COALESCE(daily_attendance.last_exit, CONCAT(daily_attendance.work_date, ' ', :exit_time)) AS last_exit,
-        (daily_attendance.lunch_count * :lunch_seconds) AS lunch_seconds,
-        (daily_attendance.break_count * :break_seconds) AS break_seconds,
+        DATE(a.timestamp) AS work_date,
+        (SELECT MIN(a2.timestamp) FROM attendance a2 
+         WHERE a2.user_id = a.user_id 
+         AND DATE(a2.timestamp) = DATE(a.timestamp) 
+         AND a2.type = 'Entry') AS first_entry,
+        COALESCE(
+            (SELECT MAX(a3.timestamp) FROM attendance a3 
+             WHERE a3.user_id = a.user_id 
+             AND DATE(a3.timestamp) = DATE(a.timestamp) 
+             AND a3.type = 'Exit'),
+            CONCAT(DATE(a.timestamp), ' ', :exit_time)
+        ) AS last_exit,
+        ((SELECT COUNT(*) FROM attendance a4 
+          WHERE a4.user_id = a.user_id 
+          AND DATE(a4.timestamp) = DATE(a.timestamp) 
+          AND a4.type = 'Lunch') * :lunch_seconds) AS lunch_seconds,
+        ((SELECT COUNT(*) FROM attendance a5 
+          WHERE a5.user_id = a.user_id 
+          AND DATE(a5.timestamp) = DATE(a.timestamp) 
+          AND a5.type = 'Break') * :break_seconds) AS break_seconds,
         GREATEST(
             IFNULL(
                 TIMESTAMPDIFF(
                     SECOND,
-                    daily_attendance.first_entry,
-                    COALESCE(daily_attendance.last_exit, CONCAT(daily_attendance.work_date, ' ', :exit_time))
+                    (SELECT MIN(a6.timestamp) FROM attendance a6 
+                     WHERE a6.user_id = a.user_id 
+                     AND DATE(a6.timestamp) = DATE(a.timestamp) 
+                     AND a6.type = 'Entry'),
+                    COALESCE(
+                        (SELECT MAX(a7.timestamp) FROM attendance a7 
+                         WHERE a7.user_id = a.user_id 
+                         AND DATE(a7.timestamp) = DATE(a.timestamp) 
+                         AND a7.type = 'Exit'),
+                        CONCAT(DATE(a.timestamp), ' ', :exit_time)
+                    )
                 ),
                 0
             )
-            - (daily_attendance.lunch_count * :lunch_seconds)
-            - (daily_attendance.break_count * :break_seconds),
+            - ((SELECT COUNT(*) FROM attendance a8 
+                WHERE a8.user_id = a.user_id 
+                AND DATE(a8.timestamp) = DATE(a.timestamp) 
+                AND a8.type = 'Lunch') * :lunch_seconds)
+            - ((SELECT COUNT(*) FROM attendance a9 
+                WHERE a9.user_id = a.user_id 
+                AND DATE(a9.timestamp) = DATE(a.timestamp) 
+                AND a9.type = 'Break') * :break_seconds),
             0
         ) AS productive_seconds
-    FROM daily_attendance
-    JOIN users u ON u.id = daily_attendance.user_id
+    FROM attendance a
+    JOIN users u ON u.id = a.user_id
     LEFT JOIN departments d ON d.id = u.department_id
-    ORDER BY daily_attendance.work_date DESC, u.full_name
+    WHERE a.timestamp BETWEEN :start AND :end
+    " . ($employeeFilter !== 'all' ? "AND a.user_id = :employee_filter" : "") . "
+    GROUP BY u.id, u.full_name, u.username, d.name, DATE(a.timestamp)
+    ORDER BY DATE(a.timestamp) DESC, u.full_name
 ";
 $dailyStmt = $pdo->prepare($dailySql);
 $dailyParams = [
