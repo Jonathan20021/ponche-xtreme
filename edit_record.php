@@ -49,26 +49,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $update_stmt = $pdo->prepare($update_query);
         $update_stmt->execute([$type, $timestamp, $ip_address, $record_id]);
 
-        $message = "Record updated successfully.";
+        $message = "Registro actualizado exitosamente.";
         header('Location: records.php'); // Redirigir a la página de lista
         exit;
     } else {
-        $message = "Please fill in all the required fields.";
+        $message = "Por favor completa todos los campos requeridos.";
     }
 }
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <title>Edit Attendance Record</title>
+    <title>Editar Registro de Asistencia</title>
 </head>
 <body class="bg-gray-100 text-gray-800">
     <div class="container mx-auto mt-10">
-        <h2 class="text-2xl font-bold mb-4">Edit Attendance Record</h2>
+        <h2 class="text-2xl font-bold mb-4">Editar Registro de Asistencia</h2>
         <?php if ($message): ?>
             <div class="bg-green-100 text-green-800 p-2 mb-4 rounded">
                 <?= htmlspecialchars($message) ?>
@@ -77,15 +77,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Mostrar Full Name y Username -->
         <div class="bg-white p-6 rounded shadow-md mb-4">
-            <h3 class="text-lg font-semibold">Employee Details</h3>
-            <p><strong>Full Name:</strong> <?= htmlspecialchars($record['full_name']) ?></p>
-            <p><strong>Username:</strong> <?= htmlspecialchars($record['username']) ?></p>
+            <h3 class="text-lg font-semibold">Detalles del Empleado</h3>
+            <p><strong>Nombre Completo:</strong> <?= htmlspecialchars($record['full_name']) ?></p>
+            <p><strong>Usuario:</strong> <?= htmlspecialchars($record['username']) ?></p>
         </div>
 
         <!-- Formulario de edición -->
         <form method="POST" class="bg-white p-6 rounded shadow-md">
             <div class="mb-4">
-                <label for="type" class="block text-sm font-bold mb-2">Type</label>
+                <label for="type" class="block text-sm font-bold mb-2">Tipo</label>
                 <select name="type" id="type" class="p-2 border rounded w-full">
                     <option value="Entry" <?= $record['type'] === 'Entry' ? 'selected' : '' ?>>Entry</option>
                     <option value="Lunch" <?= $record['type'] === 'Lunch' ? 'selected' : '' ?>>Lunch</option>
@@ -94,15 +94,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </select>
             </div>
             <div class="mb-4">
-                <label for="timestamp" class="block text-sm font-bold mb-2">Timestamp</label>
+                <label for="timestamp" class="block text-sm font-bold mb-2">Fecha y Hora</label>
                 <input type="datetime-local" name="timestamp" id="timestamp" value="<?= date('Y-m-d\TH:i', strtotime($record['timestamp'])) ?>" class="p-2 border rounded w-full" required>
             </div>
             <div class="mb-4">
-                <label for="ip_address" class="block text-sm font-bold mb-2">IP Address</label>
+                <label for="ip_address" class="block text-sm font-bold mb-2">Dirección IP</label>
                 <input type="text" name="ip_address" id="ip_address" value="<?= htmlspecialchars($record['ip_address']) ?>" class="p-2 border rounded w-full" required>
             </div>
-            <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700">Save Changes</button>
-            <a href="records.php" class="ml-4 text-blue-500 hover:underline">Cancel</a>
+            <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700">Guardar Cambios</button>
+            <a href="records.php" class="ml-4 text-blue-500 hover:underline">Cancelar</a>
         </form>
     </div>
 </body>

@@ -57,7 +57,7 @@ if (isset($_POST['login'])) {
         if ($accessiblePage === null) {
             // User has no access to any page
             session_destroy();
-            $error = "Tu cuenta no tiene permisos para acceder a ninguna seccion del sistema.";
+            $error = "Tu cuenta no tiene permisos para acceder a ninguna sección del sistema.";
         } else {
             header('Location: ' . $accessiblePage);
             exit;

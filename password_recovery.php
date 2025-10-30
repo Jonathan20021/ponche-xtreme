@@ -29,26 +29,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Crear enlace de recuperación
             $resetLink = "http://{$_SERVER['HTTP_HOST']}/ponche/reset_password.php?token=$token&user=$username";
 
-            $success = "A recovery link has been generated.";
+            $success = "Se ha generado un enlace de recuperación.";
         } else {
-            $error = 'Username not found.';
+            $error = 'Usuario no encontrado.';
         }
     } else {
-        $error = 'Please enter your username.';
+        $error = 'Por favor ingresa tu usuario.';
     }
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <title>Password Recovery</title>
+    <title>Recuperación de Contraseña</title>
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center h-screen">
     <div class="bg-white p-8 rounded shadow-md w-96">
-        <h2 class="text-2xl font-bold mb-4 text-center">Password Recovery</h2>
+        <h2 class="text-2xl font-bold mb-4 text-center">Recuperación de Contraseña</h2>
         <?php if ($error): ?>
             <div class="bg-red-100 text-red-800 p-2 mb-4 rounded">
                 <?= htmlspecialchars($error) ?>
@@ -60,22 +60,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div class="text-center mt-4">
                 <a href="<?= htmlspecialchars($resetLink) ?>" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700 inline-block">
-                    Reset Password
+                    Restablecer Contraseña
                 </a>
             </div>
         <?php else: ?>
             <form method="POST" action="password_recovery.php">
                 <div class="mb-4">
-                    <label for="username" class="block text-sm font-bold mb-2">Username</label>
+                    <label for="username" class="block text-sm font-bold mb-2">Usuario</label>
                     <input type="text" name="username" id="username" class="p-2 border rounded w-full" required>
                 </div>
                 <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700">
-                    Recover Password
+                    Recuperar Contraseña
                 </button>
             </form>
         <?php endif; ?>
         <p class="mt-4 text-center text-sm text-gray-500">
-            Remembered it? <a href="login_agent.php" class="text-blue-600 hover:underline">Go back to login</a>
+            ¿La recordaste? <a href="login_agent.php" class="text-blue-600 hover:underline">Volver al inicio de sesión</a>
         </p>
     </div>
 </body>

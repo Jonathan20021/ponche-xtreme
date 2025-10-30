@@ -4,7 +4,7 @@ include 'db.php'; // Archivo de conexión a la base de datos
 
 // Validar token y usuario
 if (!isset($_GET['token']) || !isset($_GET['user'])) {
-    die('Invalid request.');
+    die('Solicitud inválida.');
 }
 
 $token = $_GET['token'];
@@ -19,7 +19,7 @@ $stmt->execute([$username, $token]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
-    die('Invalid or expired token.');
+    die('Token inválido o expirado.');
 }
 
 // Procesar formulario de cambio de contraseña
@@ -34,26 +34,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $updateStmt = $pdo->prepare($updateQuery);
             $updateStmt->execute([$new_password, $username]);
 
-            $success = 'Your password has been updated successfully. <a href="login_agent.php" class="text-blue-600 hover:underline">Login here</a>';
+            $success = 'Tu contraseña ha sido actualizada exitosamente. <a href="login_agent.php" class="text-blue-600 hover:underline">Iniciar sesión aquí</a>';
         } else {
-            $error = 'Passwords do not match.';
+            $error = 'Las contraseñas no coinciden.';
         }
     } else {
-        $error = 'Please fill in all fields.';
+        $error = 'Por favor completa todos los campos.';
     }
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <title>Reset Password</title>
+    <title>Restablecer Contraseña</title>
 </head>
 <body class="bg-gray-100 text-gray-800 flex items-center justify-center h-screen">
     <div class="bg-white p-8 rounded shadow-md w-96">
-        <h2 class="text-2xl font-bold mb-4 text-center">Reset Password</h2>
+        <h2 class="text-2xl font-bold mb-4 text-center">Restablecer Contraseña</h2>
         <?php if ($error): ?>
             <div class="bg-red-100 text-red-800 p-2 mb-4 rounded">
                 <?= htmlspecialchars($error) ?>
@@ -66,15 +66,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php else: ?>
             <form method="POST" action="">
                 <div class="mb-4">
-                    <label for="password" class="block text-sm font-bold mb-2">New Password</label>
+                    <label for="password" class="block text-sm font-bold mb-2">Nueva Contraseña</label>
                     <input type="password" name="password" id="password" class="p-2 border rounded w-full" required>
                 </div>
                 <div class="mb-4">
-                    <label for="confirm_password" class="block text-sm font-bold mb-2">Confirm Password</label>
+                    <label for="confirm_password" class="block text-sm font-bold mb-2">Confirmar Contraseña</label>
                     <input type="password" name="confirm_password" id="confirm_password" class="p-2 border rounded w-full" required>
                 </div>
                 <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700">
-                    Reset Password
+                    Restablecer Contraseña
                 </button>
             </form>
         <?php endif; ?>

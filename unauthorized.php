@@ -16,7 +16,7 @@ if ($accessiblePage === null) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -28,7 +28,7 @@ if ($accessiblePage === null) {
         <div class="unauthorized-card">
             <h1>Acceso no autorizado</h1>
             <p>No tienes permisos para acceder a <strong><?= $section ?></strong>.</p>
-            <a class="btn-primary" href="<?= htmlspecialchars($accessiblePage) ?>">Ir a una pagina permitida</a>
+            <a class="btn-primary" href="<?= htmlspecialchars($accessiblePage) ?>">Ir a una página permitida</a>
         </div>
     </main>
 </body>

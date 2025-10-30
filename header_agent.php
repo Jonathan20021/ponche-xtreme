@@ -20,8 +20,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 $assetBase = (strpos($_SERVER['PHP_SELF'], '/agents/') === 0) ? '../assets' : 'assets';
 
 $agentNavItems = [
-    'agent_dashboard' => ['label' => 'Dashboard', 'href' => 'agent_dashboard.php', 'icon' => 'fa-house-user'],
-    'agent_records' => ['label' => 'Records', 'href' => 'agent.php', 'icon' => 'fa-clock'],
+    'agent_dashboard' => ['label' => 'Panel de Control', 'href' => 'agent_dashboard.php', 'icon' => 'fa-house-user'],
+    'agent_records' => ['label' => 'Registros', 'href' => 'agent.php', 'icon' => 'fa-clock'],
     'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
     'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
 ];
@@ -29,7 +29,7 @@ $agentNavItems = [
 $currentPath = basename($_SERVER['PHP_SELF']);
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -40,7 +40,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <link href="<?= htmlspecialchars($assetBase) ?>/css/theme.css" rel="stylesheet">
     <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
-    <title>Agent Area</title>
+    <title>Área de Agentes</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <header class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
@@ -51,7 +51,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                         <i class="fas fa-user"></i>
                     </div>
                     <div>
-                        <h1 class="brand-title text-lg font-semibold">Evallish BPO Agents</h1>
+                        <h1 class="brand-title text-lg font-semibold">Evallish BPO Agentes</h1>
                         <p class="brand-subtitle text-xs"><?= htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username'] ?? '') ?></p>
                     </div>
                 </div>
@@ -62,7 +62,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                         aria-controls="agent-nav"
                         aria-expanded="false">
                     <i class="fas fa-bars"></i>
-                    Menu
+                    Menú
                 </button>
             </div>
 
@@ -85,7 +85,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                 <?php endforeach; ?>
                 <a href="logout_agent.php" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
                     <i class="fas fa-sign-out-alt text-xs"></i>
-                    <span>Logout</span>
+                    <span>Cerrar Sesión</span>
                 </a>
                 <form action="<?= strpos($_SERVER['PHP_SELF'], '/agents/') === 0 ? '../theme_toggle.php' : 'theme_toggle.php' ?>" method="post" class="inline-flex">
                     <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-800/70 text-slate-200 hover:bg-slate-700 transition-colors border border-slate-700/70">

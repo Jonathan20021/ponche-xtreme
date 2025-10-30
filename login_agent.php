@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/theme.css" rel="stylesheet">
-    <title>Ingreso de agentes</title>
+    <title>Acceso de Agentes</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <div class="login-wrapper">
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="text-center mb-5">
                 <span class="tag-pill">Acceso agente</span>
                 <h2 class="mt-3 font-semibold text-white">Bienvenido de nuevo</h2>
-                <p class="text-sm text-slate-400">Ingresa tu usuario y contrasena para registrar tus actividades.</p>
+                <p class="text-sm text-slate-400">Ingresa tu usuario y contraseña para registrar tus actividades.</p>
             </div>
             <?php if ($error): ?>
                 <div class="status-banner error"><?= htmlspecialchars($error) ?></div>
@@ -74,8 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="text" name="username" id="username" autocomplete="username" required placeholder="ej. agente01">
                 </div>
                 <div class="form-group">
-                    <label for="password">Contrasena</label>
-                    <input type="password" name="password" id="password" autocomplete="current-password" required placeholder="Tu contrasena">
+                    <label for="password">Contraseña</label>
+                    <input type="password" name="password" id="password" autocomplete="current-password" required placeholder="Tu contraseña">
                 </div>
                 <button type="submit" class="w-full btn-primary justify-center">
                     <i class="fas fa-sign-in-alt"></i>

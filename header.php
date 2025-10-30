@@ -10,20 +10,20 @@ $isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || strpos($_SE
 $baseHref = $isInSubdir ? '../' : '';
 
 $navItems = [
-    'dashboard' => ['label' => 'Dashboard', 'href' => $baseHref . 'dashboard.php', 'icon' => 'fa-gauge'],
-    'records' => ['label' => 'Records', 'href' => $baseHref . 'records.php', 'icon' => 'fa-table'],
-    'view_admin_hours' => ['label' => 'Admin Hours', 'href' => $baseHref . 'view_admin_hours.php', 'icon' => 'fa-user-clock'],
-    'hr_report' => ['label' => 'HR Report', 'href' => $baseHref . 'hr_report.php', 'icon' => 'fa-briefcase'],
-    'adherence_report' => ['label' => 'Adherence', 'href' => $baseHref . 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
-    'operations_dashboard' => ['label' => 'Operations', 'href' => $baseHref . 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
-    'register_attendance' => ['label' => 'Register Hours', 'href' => $baseHref . 'register_attendance.php', 'icon' => 'fa-calendar-plus'],
+    'dashboard' => ['label' => 'Panel de Control', 'href' => $baseHref . 'dashboard.php', 'icon' => 'fa-gauge'],
+    'records' => ['label' => 'Registros', 'href' => $baseHref . 'records.php', 'icon' => 'fa-table'],
+    'view_admin_hours' => ['label' => 'Horas Admin', 'href' => $baseHref . 'view_admin_hours.php', 'icon' => 'fa-user-clock'],
+    'hr_report' => ['label' => 'Reporte RH', 'href' => $baseHref . 'hr_report.php', 'icon' => 'fa-briefcase'],
+    'adherence_report' => ['label' => 'Adherencia', 'href' => $baseHref . 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
+    'operations_dashboard' => ['label' => 'Operaciones', 'href' => $baseHref . 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
+    'register_attendance' => ['label' => 'Registrar Horas', 'href' => $baseHref . 'register_attendance.php', 'icon' => 'fa-calendar-plus'],
     'hr_module' => [
         'label' => 'Recursos Humanos',
         'icon' => 'fa-users-cog',
         'children' => [
             [
                 'section' => 'hr_dashboard',
-                'label' => 'Dashboard HR',
+                'label' => 'Panel RH',
                 'href' => $baseHref . 'hr/index.php',
                 'icon' => 'fa-chart-pie',
             ],
@@ -72,12 +72,12 @@ $navItems = [
         ],
     ],
     'agents' => [
-        'label' => 'Agents',
+        'label' => 'Agentes',
         'icon' => 'fa-user-friends',
         'children' => [
             [
                 'section' => 'agent_dashboard',
-                'label' => 'Agent Dashboard',
+                'label' => 'Panel de Agente',
                 'href' => $baseHref . 'agent_dashboard.php',
                 'icon' => 'fa-chart-bar',
             ],
@@ -89,14 +89,14 @@ $navItems = [
             ],
             [
                 'section' => 'register_attendance',
-                'label' => 'Punch',
+                'label' => 'Marcar Asistencia',
                 'href' => $baseHref . 'punch.php',
                 'icon' => 'fa-fingerprint',
             ],
         ],
     ],
-    'login_logs' => ['label' => 'Login Logs', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
-    'settings' => ['label' => 'Settings', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],
+    'login_logs' => ['label' => 'Registros de Acceso', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
+    'settings' => ['label' => 'Configuración', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],
 ];
 
 $theme = $_SESSION['theme'] ?? 'dark';
@@ -119,7 +119,7 @@ if ($isAuthenticated) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -158,7 +158,7 @@ if ($isAuthenticated) {
                         aria-controls="primary-nav"
                         aria-expanded="false">
                     <i class="fas fa-bars"></i>
-                    Menu
+                    Menú
                 </button>
             </div>
 
@@ -228,12 +228,12 @@ if ($isAuthenticated) {
                     <?php endforeach; ?>
                     <a href="<?= $baseHref ?>logout.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
                         <i class="fas fa-sign-out-alt text-xs"></i>
-                        <span>Logout</span>
+                        <span>Cerrar Sesión</span>
                     </a>
                 <?php else: ?>
                     <a href="<?= $baseHref ?>index.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
                         <i class="fas fa-sign-in-alt text-xs"></i>
-                        <span>Login</span>
+                        <span>Iniciar Sesión</span>
                     </a>
                 <?php endif; ?>
                 <form action="<?= $baseHref ?>theme_toggle.php" method="post" class="inline-flex">

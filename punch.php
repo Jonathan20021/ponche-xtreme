@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 include 'db.php';
 date_default_timezone_set('America/Santo_Domingo');
 
@@ -250,9 +250,8 @@ if (isset($_COOKIE['savedUsername'])) {
     }
 }
 ?>
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

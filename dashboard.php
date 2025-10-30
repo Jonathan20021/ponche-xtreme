@@ -79,11 +79,11 @@ if ($tardiness_entry_data['total_entries'] > 0) {
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evallish BPO Dashboard</title>
+    <title>Panel de Control Evallish BPO</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -97,11 +97,11 @@ if ($tardiness_entry_data['total_entries'] > 0) {
         <!-- Dashboard Header -->
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
             <div>
-                <h1 class="text-3xl font-bold text-gray-800">Evallish BPO Dashboard</h1>
-                <p class="text-gray-600">Last updated: <span id="lastUpdate"></span></p>
+                <h1 class="text-3xl font-bold text-gray-800">Panel de Control Evallish BPO</h1>
+                <p class="text-gray-600">Última actualización: <span id="lastUpdate"></span></p>
             </div>
             <button id="refreshData" class="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2">
-                <i class="fas fa-sync-alt mr-2"></i> Refresh Data
+                <i class="fas fa-sync-alt mr-2"></i> Actualizar Datos
             </button>
         </div>
 
@@ -110,7 +110,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">Total Users</p>
+                        <p class="text-gray-500 text-sm">Total de Usuarios</p>
                         <h3 class="text-4xl font-bold text-gray-800"><?= $total_users ?></h3>
                     </div>
                     <div class="bg-blue-100 rounded-full p-3">
@@ -120,7 +120,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
                 <div class="mt-4">
                     <div class="flex items-center">
                         <span class="text-green-500"><i class="fas fa-arrow-up"></i> 12%</span>
-                        <span class="text-gray-400 text-sm ml-2">vs last month</span>
+                        <span class="text-gray-400 text-sm ml-2">vs mes anterior</span>
                     </div>
                 </div>
             </div>
@@ -128,7 +128,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">Entries Today</p>
+                        <p class="text-gray-500 text-sm">Entradas Hoy</p>
                         <h3 class="text-4xl font-bold text-gray-800"><?= $entries_today ?></h3>
                     </div>
                     <div class="bg-green-100 rounded-full p-3">
@@ -143,7 +143,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">Active Users</p>
+                        <p class="text-gray-500 text-sm">Usuarios Activos</p>
                         <h3 class="text-4xl font-bold text-gray-800"><?= $active_users ?></h3>
                     </div>
                     <div class="bg-purple-100 rounded-full p-3">
@@ -154,14 +154,14 @@ if ($tardiness_entry_data['total_entries'] > 0) {
                     <div class="w-full bg-gray-200 rounded-full h-2">
                         <div class="bg-purple-500 rounded-full h-2" style="width: <?= ($active_users/$total_users)*100 ?>%"></div>
                     </div>
-                    <p class="text-sm text-gray-500 mt-2"><?= round(($active_users/$total_users)*100) ?>% of total users</p>
+                    <p class="text-sm text-gray-500 mt-2"><?= round(($active_users/$total_users)*100) ?>% del total de usuarios</p>
                 </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">Tardiness Rate</p>
+                        <p class="text-gray-500 text-sm">Tasa de Tardanza</p>
                         <h3 class="text-4xl font-bold <?= $overall_tardiness_entry > 50 ? 'text-red-500' : ($overall_tardiness_entry > 25 ? 'text-yellow-500' : 'text-green-500') ?>">
                             <?= $overall_tardiness_entry ?>%
                         </h3>
@@ -180,7 +180,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <!-- Attendance Distribution -->
             <div class="bg-white rounded-xl shadow-lg p-6">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Attendance Distribution</h3>
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Distribución de Asistencia</h3>
                 <div style="height: 400px; position: relative;">
                     <canvas id="categoryChart"></canvas>
                 </div>
@@ -188,7 +188,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
 
             <!-- Work Time Analysis -->
             <div class="bg-white rounded-xl shadow-lg p-6">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Work Time Analysis</h3>
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Análisis de Tiempo de Trabajo</h3>
                 <div style="height: 400px; position: relative;">
                     <canvas id="workTimeChart"></canvas>
                 </div>
@@ -198,11 +198,11 @@ if ($tardiness_entry_data['total_entries'] > 0) {
         <!-- Tardiness Breakdown -->
         <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
             <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-                <h3 class="text-xl font-semibold text-gray-800">Tardiness Breakdown</h3>
+                <h3 class="text-xl font-semibold text-gray-800">Desglose de Tardanzas</h3>
                 <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Daily</button>
-                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Weekly</button>
-                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Monthly</button>
+                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Diario</button>
+                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Semanal</button>
+                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Mensual</button>
                 </div>
             </div>
             <div style="height: 300px; position: relative;">
@@ -251,7 +251,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
         const categoryCounts = <?= json_encode(array_column($category_data, 'count')) ?>;
         const workTimeLabels = <?= json_encode(array_column($work_time_data, 'username')) ?>;
         const workTimeData = <?= json_encode(array_map(fn($row) => round($row['total_time'] / 3600, 2), $work_time_data)) ?>;
-        const tardinessLabels = ['Late Entries', 'Late Lunches', 'Late Breaks'];
+        const tardinessLabels = ['Entradas Tardías', 'Almuerzos Tardíos', 'Descansos Tardíos'];
         const tardinessData = [<?= $late_entries_percent ?>, <?= $late_lunches_percent ?>, <?= $late_breaks_percent ?>];
 
         // ConfiguraciÃƒÆ’Ã†a€™Ãƒa€šÃ‚a³n comÃƒÆ’Ã†a€™Ãƒa€šÃ‚aºn para todos los grÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡ficos
@@ -303,7 +303,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             data: {
                 labels: workTimeLabels,
                 datasets: [{
-                    label: 'Work Hours',
+                    label: 'Horas de Trabajo',
                     data: workTimeData,
                     backgroundColor: '#4CAF50',
                     borderRadius: 6,
@@ -348,7 +348,7 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             data: {
                 labels: tardinessLabels,
                 datasets: [{
-                    label: 'Tardiness %',
+                    label: 'Tardanza %',
                     data: tardinessData,
                     borderColor: '#FF5722',
                     backgroundColor: 'rgba(255, 87, 34, 0.1)',

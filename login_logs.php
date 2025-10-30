@@ -16,23 +16,23 @@ $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <?php include 'header.php'; ?>
 <body class="bg-gray-100">
     <div class="container mx-auto mt-6">
-        <h2 class="text-2xl font-bold mb-4">Administrative Login Logs</h2>
+        <h2 class="text-2xl font-bold mb-4">Registros de Acceso Administrativo</h2>
         <div class="bg-white p-6 rounded shadow-md">
             <table class="w-full mt-4 border-collapse">
                 <thead>
                     <tr class="bg-gray-200">
                         <th class="p-2 border">ID</th>
-                        <th class="p-2 border">Full Name</th>
-                        <th class="p-2 border">Username</th>
-                        <th class="p-2 border">Role</th>
-                        <th class="p-2 border">IP Address Local</th>
-                        <th class="p-2 border">IP Address Public</th>
-                        <th class="p-2 border">Location</th>
-                        <th class="p-2 border">Login Time</th>
+                        <th class="p-2 border">Nombre Completo</th>
+                        <th class="p-2 border">Usuario</th>
+                        <th class="p-2 border">Rol</th>
+                        <th class="p-2 border">IP Local</th>
+                        <th class="p-2 border">IP Pública</th>
+                        <th class="p-2 border">Ubicación</th>
+                        <th class="p-2 border">Hora de Acceso</th>
                     </tr>
                 </thead>
                 <tbody>
