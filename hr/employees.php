@@ -42,10 +42,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             'emergency_contact_phone' => trim($_POST['emergency_contact_phone']) ?: null,
             'emergency_contact_relationship' => trim($_POST['emergency_contact_relationship']) ?: null,
             'notes' => trim($_POST['notes']) ?: null,
+            'id_card_number' => trim($_POST['id_card_number']) ?: null,
+            'bank_id' => !empty($_POST['bank_id']) ? (int)$_POST['bank_id'] : null,
+            'bank_account_number' => trim($_POST['bank_account_number']) ?: null,
         ];
         
+        // Handle photo upload
+        $photoPath = null;
+        if (isset($_FILES['employee_photo']) && $_FILES['employee_photo']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = '../uploads/employee_photos/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            
+            // Get current employee code
+            $empStmt = $pdo->prepare("SELECT employee_code FROM employees WHERE id = ?");
+            $empStmt->execute([$employeeId]);
+            $empCode = $empStmt->fetchColumn();
+            
+            $fileExtension = strtolower(pathinfo($_FILES['employee_photo']['name'], PATHINFO_EXTENSION));
+            $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+            
+            if (in_array($fileExtension, $allowedExtensions)) {
+                $fileName = $empCode . '_' . time() . '.' . $fileExtension;
+                $targetPath = $uploadDir . $fileName;
+                
+                if (move_uploaded_file($_FILES['employee_photo']['tmp_name'], $targetPath)) {
+                    $photoPath = 'uploads/employee_photos/' . $fileName;
+                    $data['photo_path'] = $photoPath;
+                }
+            }
+        }
+        
         // Update employees table with ALL fields
-        $stmt = $pdo->prepare("
+        $updateSql = "
             UPDATE employees SET
                 first_name = ?, last_name = ?, email = ?, phone = ?, mobile = ?,
                 birth_date = ?, position = ?, department_id = ?, hire_date = ?, termination_date = ?,
@@ -54,10 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                 identification_type = ?, identification_number = ?,
                 blood_type = ?, marital_status = ?, gender = ?,
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?,
-                notes = ?, updated_at = NOW()
-            WHERE id = ?
-        ");
-        $stmt->execute([
+                notes = ?, id_card_number = ?, bank_id = ?, bank_account_number = ?";
+        
+        $updateParams = [
             $data['first_name'], $data['last_name'], $data['email'], $data['phone'], $data['mobile'],
             $data['birth_date'], $data['position'], $data['department_id'], $data['hire_date'], $data['termination_date'],
             $data['employment_status'], $data['employment_type'],
@@ -65,9 +94,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             $data['identification_type'], $data['identification_number'],
             $data['blood_type'], $data['marital_status'], $data['gender'],
             $data['emergency_contact_name'], $data['emergency_contact_phone'], $data['emergency_contact_relationship'],
-            $data['notes'],
-            $employeeId
-        ]);
+            $data['notes'], $data['id_card_number'], $data['bank_id'], $data['bank_account_number']
+        ];
+        
+        if (isset($data['photo_path'])) {
+            $updateSql .= ", photo_path = ?";
+            $updateParams[] = $data['photo_path'];
+        }
+        
+        $updateSql .= ", updated_at = NOW() WHERE id = ?";
+        $updateParams[] = $employeeId;
+        
+        $stmt = $pdo->prepare($updateSql);
+        $stmt->execute($updateParams);
         
         // Sync to users table
         $fullName = $data['first_name'] . ' ' . $data['last_name'];
@@ -95,11 +134,13 @@ $searchQuery = $_GET['search'] ?? '';
 // Build query
 $query = "
     SELECT e.*, u.username, u.hourly_rate, u.role, d.name as department_name,
+           b.name as bank_name,
            DATEDIFF(CURDATE(), e.hire_date) as days_employed,
            YEAR(CURDATE()) - YEAR(e.birth_date) as age
     FROM employees e
     JOIN users u ON u.id = e.user_id
     LEFT JOIN departments d ON d.id = e.department_id
+    LEFT JOIN banks b ON b.id = e.bank_id
     WHERE 1=1
 ";
 
@@ -132,6 +173,9 @@ $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get departments for filters
 $departments = getAllDepartments($pdo);
+
+// Get banks for form
+$banks = getAllBanks($pdo);
 
 // Get statistics
 $stats = [
@@ -296,10 +340,16 @@ $stats = [
                         ?>
                         <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-blue-500 transition-all">
                             <div class="flex items-start gap-3 mb-3">
-                                <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0" 
-                                     style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
-                                    <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
-                                </div>
+                                <?php if (!empty($employee['photo_path']) && file_exists('../' . $employee['photo_path'])): ?>
+                                    <img src="../<?= htmlspecialchars($employee['photo_path']) ?>" 
+                                         alt="<?= htmlspecialchars($employee['first_name']) ?>" 
+                                         class="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-blue-500">
+                                <?php else: ?>
+                                    <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0" 
+                                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                                        <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
+                                    </div>
+                                <?php endif; ?>
                                 <div class="flex-1 min-w-0">
                                     <h3 class="text-lg font-semibold text-white truncate">
                                         <?= htmlspecialchars($employee['first_name'] . ' ' . $employee['last_name']) ?>
@@ -367,7 +417,7 @@ $stats = [
     <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
         <div class="glass-card m-4" style="width: min(800px, 95%); max-height: 90vh; overflow-y: auto;">
             <h3 class="text-xl font-semibold text-white mb-4">Editar Empleado</h3>
-            <form method="POST" id="editForm">
+            <form method="POST" enctype="multipart/form-data" id="editForm">
                 <input type="hidden" name="update_employee" value="1">
                 <input type="hidden" name="employee_id" id="edit_employee_id">
                 
@@ -551,6 +601,43 @@ $stats = [
                     <textarea id="edit_notes" name="notes" rows="3" placeholder="Notas adicionales sobre el empleado..."></textarea>
                 </div>
 
+                <h4 class="text-lg font-semibold text-white mb-3 mt-6">
+                    <i class="fas fa-university text-blue-400 mr-2"></i>
+                    Información Bancaria
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="edit_id_card_number">Número de Cédula</label>
+                        <input type="text" id="edit_id_card_number" name="id_card_number" placeholder="000-0000000-0">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_bank_id">Banco</label>
+                        <select id="edit_bank_id" name="bank_id">
+                            <option value="">Sin banco</option>
+                            <?php foreach ($banks as $bank): ?>
+                                <option value="<?= $bank['id'] ?>"><?= htmlspecialchars($bank['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group mb-4">
+                    <label for="edit_bank_account_number">Número de Cuenta Bancaria</label>
+                    <input type="text" id="edit_bank_account_number" name="bank_account_number" placeholder="Número de cuenta">
+                </div>
+
+                <div class="form-group mb-6">
+                    <label for="edit_employee_photo">Foto del Empleado</label>
+                    <div id="current_photo_preview" class="mb-2"></div>
+                    <input type="file" id="edit_employee_photo" name="employee_photo" accept="image/jpeg,image/png,image/gif,image/jpg" class="block w-full text-sm text-slate-400
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-lg file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-blue-500 file:text-white
+                        hover:file:bg-blue-600
+                        file:cursor-pointer">
+                    <p class="text-xs text-slate-400 mt-1">Formatos permitidos: JPG, PNG, GIF (Máx. 5MB)</p>
+                </div>
+
                 <div class="flex gap-3">
                     <button type="submit" class="btn-primary flex-1">
                         <i class="fas fa-save"></i>
@@ -607,6 +694,19 @@ $stats = [
             
             // Notes
             document.getElementById('edit_notes').value = employee.notes || '';
+            
+            // Banking Info
+            document.getElementById('edit_id_card_number').value = employee.id_card_number || '';
+            document.getElementById('edit_bank_id').value = employee.bank_id || '';
+            document.getElementById('edit_bank_account_number').value = employee.bank_account_number || '';
+            
+            // Photo Preview
+            const photoPreview = document.getElementById('current_photo_preview');
+            if (employee.photo_path) {
+                photoPreview.innerHTML = '<img src="../' + employee.photo_path + '" alt="Foto actual" class="w-24 h-24 rounded-lg object-cover border-2 border-blue-500">';
+            } else {
+                photoPreview.innerHTML = '<p class="text-slate-400 text-sm">Sin foto actual</p>';
+            }
             
             document.getElementById('editModal').classList.remove('hidden');
         }

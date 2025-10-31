@@ -21,12 +21,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = trim($_POST['password'] ?? '');
 
     if ($username !== '' && $password !== '') {
-        $stmt = $pdo->prepare("SELECT id, username, full_name, role, password FROM users WHERE username = ?");
+        $stmt = $pdo->prepare("SELECT id, username, full_name, role, password, is_active FROM users WHERE username = ?");
         $stmt->execute([$username]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && $user['password'] === $password) {
-            if (in_array($user['role'], ['AGENT', 'IT', 'Supervisor'], true)) {
+            // Check if user is active
+            $isActive = isset($user['is_active']) ? (int)$user['is_active'] : 1;
+            if ($isActive === 0) {
+                $error = 'Tu cuenta ha sido desactivada. Contacta al administrador.';
+            } elseif (in_array($user['role'], ['AGENT', 'IT', 'Supervisor'], true)) {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['full_name'] = $user['full_name'];
@@ -34,8 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 header('Location: agent_dashboard.php');
                 exit;
+            } else {
+                $error = 'No tienes permisos para acceder.';
             }
-            $error = 'No tienes permisos para acceder.';
         } else {
             $error = 'Credenciales invalidas.';
         }

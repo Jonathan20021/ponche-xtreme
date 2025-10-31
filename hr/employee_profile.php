@@ -16,11 +16,13 @@ if (!$employeeId) {
 $stmt = $pdo->prepare("
     SELECT e.*, u.username, u.hourly_rate, u.role, u.overtime_multiplier,
            d.name as department_name,
+           b.name as bank_name,
            YEAR(CURDATE()) - YEAR(e.birth_date) as age,
            DATEDIFF(CURDATE(), e.hire_date) as days_employed
     FROM employees e
     JOIN users u ON u.id = e.user_id
     LEFT JOIN departments d ON d.id = e.department_id
+    LEFT JOIN banks b ON b.id = e.bank_id
     WHERE e.id = ?
 ");
 $stmt->execute([$employeeId]);
@@ -73,10 +75,16 @@ $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
         <!-- Employee Card -->
         <div class="glass-card mb-8">
             <div class="flex flex-col md:flex-row gap-6">
-                <div class="w-32 h-32 rounded-full flex items-center justify-center text-4xl font-bold text-white" 
-                     style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
-                    <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
-                </div>
+                <?php if (!empty($employee['photo_path']) && file_exists('../' . $employee['photo_path'])): ?>
+                    <img src="../<?= htmlspecialchars($employee['photo_path']) ?>" 
+                         alt="<?= htmlspecialchars($employee['first_name']) ?>" 
+                         class="w-32 h-32 rounded-full object-cover border-4 border-blue-500 shadow-lg">
+                <?php else: ?>
+                    <div class="w-32 h-32 rounded-full flex items-center justify-center text-4xl font-bold text-white" 
+                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                        <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
+                    </div>
+                <?php endif; ?>
                 <div class="flex-1">
                     <h2 class="text-3xl font-bold text-white mb-2">
                         <?= htmlspecialchars($employee['first_name'] . ' ' . $employee['last_name']) ?>
@@ -103,7 +111,7 @@ $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
         </div>
 
         <!-- Info Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div class="glass-card">
                 <h3 class="text-lg font-semibold text-white mb-4">Información Personal</h3>
                 <div class="space-y-3">
@@ -125,6 +133,18 @@ $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
                             <div><p class="text-slate-400 text-sm">Nacimiento</p><p class="text-white"><?= date('d/m/Y', strtotime($employee['birth_date'])) ?> (<?= $employee['age'] ?> años)</p></div>
                         </div>
                     <?php endif; ?>
+                    <?php if ($employee['id_card_number']): ?>
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-id-card text-yellow-400 w-5"></i>
+                            <div><p class="text-slate-400 text-sm">Cédula</p><p class="text-white"><?= htmlspecialchars($employee['id_card_number']) ?></p></div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($employee['gender']): ?>
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-user text-purple-400 w-5"></i>
+                            <div><p class="text-slate-400 text-sm">Género</p><p class="text-white"><?= htmlspecialchars($employee['gender']) ?></p></div>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -144,6 +164,30 @@ $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
                             <i class="fas fa-umbrella-beach text-cyan-400 w-5"></i>
                             <div><p class="text-slate-400 text-sm">Vacaciones Disponibles</p><p class="text-white"><?= number_format($vacationBalance['remaining_days'], 1) ?> días</p></div>
                         </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <h3 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-university text-blue-400 mr-2"></i>
+                    Información Bancaria
+                </h3>
+                <div class="space-y-3">
+                    <?php if ($employee['bank_name']): ?>
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-building text-blue-400 w-5"></i>
+                            <div><p class="text-slate-400 text-sm">Banco</p><p class="text-white"><?= htmlspecialchars($employee['bank_name']) ?></p></div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($employee['bank_account_number']): ?>
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-credit-card text-green-400 w-5"></i>
+                            <div><p class="text-slate-400 text-sm">Número de Cuenta</p><p class="text-white"><?= htmlspecialchars($employee['bank_account_number']) ?></p></div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!$employee['bank_name'] && !$employee['bank_account_number']): ?>
+                        <p class="text-slate-400 text-center py-4">Sin información bancaria</p>
                     <?php endif; ?>
                 </div>
             </div>

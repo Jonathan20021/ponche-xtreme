@@ -671,6 +671,62 @@ try {
                     $errorMessages[] = 'No se pudo eliminar la entrada de historial.';
                 }
                 break;
+
+            case 'toggle_user_status':
+                $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
+                $newStatus = isset($_POST['new_status']) ? (int) $_POST['new_status'] : 0;
+                
+                if ($userId <= 0) {
+                    $errorMessages[] = 'Usuario invalido.';
+                    break;
+                }
+
+                // Prevent deactivating yourself
+                if ($userId === $_SESSION['user_id'] && $newStatus === 0) {
+                    $errorMessages[] = 'No puedes desactivar tu propia cuenta.';
+                    break;
+                }
+
+                $statusStmt = $pdo->prepare("UPDATE users SET is_active = ? WHERE id = ?");
+                if ($statusStmt->execute([$newStatus, $userId])) {
+                    $statusText = $newStatus === 1 ? 'activado' : 'desactivado';
+                    $successMessages[] = "Usuario {$statusText} correctamente.";
+                } else {
+                    $errorMessages[] = 'No se pudo cambiar el estado del usuario.';
+                }
+                break;
+
+            case 'delete_user':
+                $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
+                
+                if ($userId <= 0) {
+                    $errorMessages[] = 'Usuario invalido.';
+                    break;
+                }
+
+                // Prevent deleting yourself
+                if ($userId === $_SESSION['user_id']) {
+                    $errorMessages[] = 'No puedes eliminar tu propia cuenta.';
+                    break;
+                }
+
+                $pdo->beginTransaction();
+                try {
+                    // Delete related employee record if exists
+                    $deleteEmployeeStmt = $pdo->prepare("DELETE FROM employees WHERE user_id = ?");
+                    $deleteEmployeeStmt->execute([$userId]);
+                    
+                    // Delete user
+                    $deleteUserStmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+                    $deleteUserStmt->execute([$userId]);
+                    
+                    $pdo->commit();
+                    $successMessages[] = 'Usuario eliminado correctamente.';
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    $errorMessages[] = 'No se pudo eliminar el usuario: ' . $e->getMessage();
+                }
+                break;
         }
     }
 } catch (Throwable $e) {
@@ -702,13 +758,14 @@ $userStmt = $pdo->query("
         u.department_id,
         u.exit_time,
         u.overtime_multiplier,
+        u.is_active,
         u.created_at,
         r.label AS role_label,
         d.name AS department_name
     FROM users u
     LEFT JOIN roles r ON r.name = u.role
     LEFT JOIN departments d ON d.id = u.department_id
-    ORDER BY u.username
+    ORDER BY u.is_active DESC, u.username
 ");
 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
 $departmentUsage = [];
@@ -1187,6 +1244,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <table class="data-table manage-users-table">
                         <thead>
                             <tr>
+                                <th>Estado</th>
                                 <th>Usuario</th>
                                 <th>Nombre</th>
                                 <th>Rol</th>
@@ -1206,15 +1264,39 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 </th>
                                 <th>Nueva contrasena</th>
                                 <th>Creado</th>
+                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($users as $user): ?>
-                                <tr>
+                                <?php 
+                                    $isActive = isset($user['is_active']) ? (int)$user['is_active'] : 1;
+                                    $isCurrentUser = (int)$user['id'] === (int)$_SESSION['user_id'];
+                                ?>
+                                <tr class="<?= $isActive === 0 ? 'opacity-60' : '' ?>">
+                                    <td>
+                                        <?php if ($isActive === 1): ?>
+                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                                <i class="fas fa-check-circle"></i>
+                                                Activo
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20">
+                                                <i class="fas fa-times-circle"></i>
+                                                Inactivo
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <div class="font-semibold text-primary"><?= htmlspecialchars($user['username']) ?></div>
                                         <?php if (!empty($user['role_label'])): ?>
                                             <div class="text-muted text-xs"><?= htmlspecialchars($user['role_label']) ?></div>
+                                        <?php endif; ?>
+                                        <?php if ($isCurrentUser): ?>
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 mt-1">
+                                                <i class="fas fa-user"></i>
+                                                Tú
+                                            </span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -1263,11 +1345,46 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                     <p class="text-muted text-xs mt-1">Se mantiene si se deja vacio.</p>
                                 </td>
                                 <td class="text-muted text-xs"><?= htmlspecialchars(date('d/m/Y', strtotime($user['created_at']))) ?></td>
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <?php if (!$isCurrentUser): ?>
+                                            <!-- Toggle Active/Inactive -->
+                                            <form method="POST" class="inline" onsubmit="return confirm('¿Estás seguro de <?= $isActive === 1 ? 'desactivar' : 'activar' ?> este usuario?');">
+                                                <input type="hidden" name="action" value="toggle_user_status">
+                                                <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
+                                                <input type="hidden" name="new_status" value="<?= $isActive === 1 ? 0 : 1 ?>">
+                                                <?php if ($isActive === 1): ?>
+                                                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors" title="Desactivar usuario">
+                                                        <i class="fas fa-ban"></i>
+                                                        Desactivar
+                                                    </button>
+                                                <?php else: ?>
+                                                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors" title="Activar usuario">
+                                                        <i class="fas fa-check"></i>
+                                                        Activar
+                                                    </button>
+                                                <?php endif; ?>
+                                            </form>
+                                            
+                                            <!-- Delete User -->
+                                            <form method="POST" class="inline" onsubmit="return confirm('¿ADVERTENCIA! ¿Estás seguro de eliminar permanentemente al usuario <?= htmlspecialchars($user['username']) ?>? Esta acción no se puede deshacer.');">
+                                                <input type="hidden" name="action" value="delete_user">
+                                                <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
+                                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors" title="Eliminar usuario">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                    Eliminar
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="text-muted text-xs italic">Tu cuenta</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
                             </tr>
                             <?php endforeach; ?>
                             <?php if (empty($users)): ?>
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-6">No hay usuarios registrados.</td>
+                                    <td colspan="15" class="text-center text-muted py-6">No hay usuarios registrados.</td>
                                 </tr>
                             <?php endif; ?>
                         </tbody>

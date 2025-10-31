@@ -250,9 +250,19 @@ $recentVacations = $pdo->query("
                 <p class="text-slate-400 text-sm">Solicitudes y balance de vacaciones</p>
             </div>
 
-            <div class="module-card" onclick="window.location.href='calendar.php'">
+            <div class="module-card" onclick="window.location.href='medical_leaves.php'">
                 <div class="flex items-center mb-3">
                     <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <i class="fas fa-notes-medical text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white">Licencias Médicas</h3>
+                </div>
+                <p class="text-slate-400 text-sm">Gestión de licencias médicas, maternidad y más</p>
+            </div>
+
+            <div class="module-card" onclick="window.location.href='calendar.php'">
+                <div class="flex items-center mb-3">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-calendar-alt text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Calendario HR</h3>

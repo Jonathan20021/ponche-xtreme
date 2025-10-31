@@ -16,6 +16,9 @@ if (isset($_POST['register'])) {
     $position = trim($_POST['position'] ?? '');
     $department_id = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null;
     $hourly_rate = !empty($_POST['hourly_rate']) ? (float)$_POST['hourly_rate'] : 0.00;
+    $id_card_number = trim($_POST['id_card_number'] ?? '');
+    $bank_id = !empty($_POST['bank_id']) ? (int)$_POST['bank_id'] : null;
+    $bank_account_number = trim($_POST['bank_account_number'] ?? '');
     $password = 'defaultpassword';
     $role = 'AGENT';
 
@@ -51,21 +54,44 @@ if (isset($_POST['register'])) {
                 
                 $employeeCode = sprintf("EMP-%s-%04d", $currentYear, $newNumber);
                 
+                // Handle photo upload
+                $photoPath = null;
+                if (isset($_FILES['employee_photo']) && $_FILES['employee_photo']['error'] === UPLOAD_ERR_OK) {
+                    $uploadDir = 'uploads/employee_photos/';
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0755, true);
+                    }
+                    
+                    $fileExtension = strtolower(pathinfo($_FILES['employee_photo']['name'], PATHINFO_EXTENSION));
+                    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+                    
+                    if (in_array($fileExtension, $allowedExtensions)) {
+                        $fileName = $employeeCode . '_' . time() . '.' . $fileExtension;
+                        $targetPath = $uploadDir . $fileName;
+                        
+                        if (move_uploaded_file($_FILES['employee_photo']['tmp_name'], $targetPath)) {
+                            $photoPath = $targetPath;
+                        }
+                    }
+                }
+                
                 // Insert user with employee code
                 $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, department_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
                 $insert->execute([$username, $employeeCode, $full_name, $password, $role, $hourly_rate, $department_id]);
                 $userId = $pdo->lastInsertId();
                 
-                // Insert employee record
+                // Insert employee record with new fields
                 $employeeInsert = $pdo->prepare("
                     INSERT INTO employees (
                         user_id, employee_code, first_name, last_name, email, phone, 
-                        birth_date, hire_date, position, department_id, employment_status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TRIAL')
+                        birth_date, hire_date, position, department_id, employment_status,
+                        id_card_number, bank_id, bank_account_number, photo_path
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TRIAL', ?, ?, ?, ?)
                 ");
                 $employeeInsert->execute([
                     $userId, $employeeCode, $first_name, $last_name, $email, $phone,
-                    $birth_date ?: null, $hire_date, $position, $department_id
+                    $birth_date ?: null, $hire_date, $position, $department_id,
+                    $id_card_number ?: null, $bank_id, $bank_account_number ?: null, $photoPath
                 ]);
                 
                 $pdo->commit();
@@ -112,7 +138,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             <?php if ($success): ?>
                 <div class="status-banner success"><?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
-            <form method="POST" class="space-y-4">
+            <form method="POST" enctype="multipart/form-data" class="space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="form-group">
                         <label for="username">Usuario *</label>
@@ -179,6 +205,47 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 <div class="form-group">
                     <label for="hourly_rate">Tarifa por hora (USD)</label>
                     <input type="number" id="hourly_rate" name="hourly_rate" step="0.01" min="0" placeholder="0.00">
+                </div>
+                
+                <h3 class="text-lg font-semibold text-white mt-6 mb-3">
+                    <i class="fas fa-id-card text-blue-400 mr-2"></i>
+                    Información Bancaria e Identificación
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="id_card_number">Número de Cédula</label>
+                        <input type="text" id="id_card_number" name="id_card_number" placeholder="000-0000000-0">
+                    </div>
+                    <div class="form-group">
+                        <label for="bank_id">Banco</label>
+                        <select id="bank_id" name="bank_id">
+                            <option value="">Seleccionar banco</option>
+                            <?php
+                            $banks = getAllBanks($pdo);
+                            foreach ($banks as $bank) {
+                                echo '<option value="' . htmlspecialchars($bank['id']) . '">' . htmlspecialchars($bank['name']) . '</option>';
+                            }
+                            ?>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="bank_account_number">Número de Cuenta Bancaria</label>
+                    <input type="text" id="bank_account_number" name="bank_account_number" placeholder="Número de cuenta">
+                </div>
+                
+                <div class="form-group">
+                    <label for="employee_photo">Foto del Empleado</label>
+                    <input type="file" id="employee_photo" name="employee_photo" accept="image/jpeg,image/png,image/gif,image/jpg" class="block w-full text-sm text-slate-400
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-lg file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-blue-500 file:text-white
+                        hover:file:bg-blue-600
+                        file:cursor-pointer">
+                    <p class="text-xs text-slate-400 mt-1">Formatos permitidos: JPG, PNG, GIF (Máx. 5MB)</p>
                 </div>
                 
                 <button type="submit" name="register" class="w-full btn-primary justify-center">

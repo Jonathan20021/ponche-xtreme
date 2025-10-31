@@ -490,4 +490,41 @@ if (!function_exists('deleteRateHistoryEntry')) {
         }
     }
 }
+
+if (!function_exists('getAllBanks')) {
+    /**
+     * Returns all active banks ordered by name.
+     */
+    function getAllBanks(PDO $pdo, bool $activeOnly = true): array
+    {
+        try {
+            $sql = "SELECT id, name, code, swift_code, country FROM banks";
+            if ($activeOnly) {
+                $sql .= " WHERE is_active = 1";
+            }
+            $sql .= " ORDER BY name";
+            
+            $stmt = $pdo->query($sql);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+}
+
+if (!function_exists('addBank')) {
+    /**
+     * Adds a new bank to the system.
+     */
+    function addBank(PDO $pdo, string $name, ?string $code = null, ?string $swiftCode = null, string $country = 'República Dominicana'): ?int
+    {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO banks (name, code, swift_code, country) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$name, $code, $swiftCode, $country]);
+            return (int) $pdo->lastInsertId();
+        } catch (PDOException $e) {
+            return null;
+        }
+    }
+}
 ?>
