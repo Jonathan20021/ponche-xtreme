@@ -1,12 +1,14 @@
 <?php
 session_start();
 require_once '../db.php';
+require_once '../lib/email_functions.php';
 
 // Check permissions
 ensurePermission('hr_employees');
 
 $success = null;
 $error = null;
+$emailWarning = null;
 
 if (isset($_POST['register'])) {
     $username = trim($_POST['username'] ?? '');
@@ -31,8 +33,10 @@ if (isset($_POST['register'])) {
     $monthly_salary_dop = !empty($_POST['monthly_salary_dop']) ? (float)$_POST['monthly_salary_dop'] : 0.00;
     $preferred_currency = !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD';
 
-    if ($username === '' || $full_name === '' || $first_name === '' || $last_name === '' || $hire_date === '') {
-        $error = 'Los campos Usuario, Nombre completo, Nombre, Apellido y Fecha de ingreso son obligatorios.';
+    if ($username === '' || $full_name === '' || $first_name === '' || $last_name === '' || $hire_date === '' || $email === '') {
+        $error = 'Los campos Usuario, Nombre completo, Nombre, Apellido, Email y Fecha de ingreso son obligatorios.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'El formato del correo electrónico no es válido.';
     } else {
         $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM users WHERE username = ?");
         $stmt->execute([$username]);
@@ -111,7 +115,42 @@ if (isset($_POST['register'])) {
                 }
                 
                 $pdo->commit();
-                $success = "Usuario {$username} creado correctamente con código de empleado {$employeeCode}. El empleado está en período de prueba.";
+                
+                // Send welcome email to the new employee
+                if (!empty($email)) {
+                    // Get department name
+                    $departmentName = 'N/A';
+                    if ($department_id) {
+                        $deptStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
+                        $deptStmt->execute([$department_id]);
+                        $deptResult = $deptStmt->fetch();
+                        if ($deptResult) {
+                            $departmentName = $deptResult['name'];
+                        }
+                    }
+                    
+                    $emailData = [
+                        'email' => $email,
+                        'employee_name' => $full_name,
+                        'username' => $username,
+                        'password' => $password,
+                        'employee_code' => $employeeCode,
+                        'position' => $position ?: 'Agente',
+                        'department' => $departmentName,
+                        'hire_date' => $hire_date
+                    ];
+                    
+                    $emailResult = sendWelcomeEmail($emailData);
+                    
+                    if ($emailResult['success']) {
+                        $success = "Usuario {$username} creado correctamente con código de empleado {$employeeCode}. El empleado está en período de prueba. Se ha enviado un correo de bienvenida a {$email}.";
+                    } else {
+                        $success = "Usuario {$username} creado correctamente con código de empleado {$employeeCode}. El empleado está en período de prueba.";
+                        $emailWarning = "Advertencia: No se pudo enviar el correo de bienvenida. " . $emailResult['message'];
+                    }
+                } else {
+                    $success = "Usuario {$username} creado correctamente con código de empleado {$employeeCode}. El empleado está en período de prueba.";
+                }
             } catch (Exception $e) {
                 $pdo->rollBack();
                 $error = "Error al crear el usuario: " . $e->getMessage();
@@ -165,6 +204,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             <?php endif; ?>
             <?php if ($success): ?>
                 <div class="status-banner success"><?= htmlspecialchars($success) ?></div>
+            <?php endif; ?>
+            <?php if ($emailWarning): ?>
+                <div class="status-banner" style="background: linear-gradient(135deg, #f59e0b15 0%, #d9770615 100%); border-left: 4px solid #f59e0b; color: #d97706;">
+                    <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($emailWarning) ?>
+                </div>
             <?php endif; ?>
             <form method="POST" enctype="multipart/form-data" class="space-y-4">
                 <h3 class="text-lg font-semibold text-white mb-3 border-b border-slate-700 pb-2">
@@ -225,8 +269,9 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="form-group">
-                        <label for="email">Email</label>
-                        <input type="email" id="email" name="email" placeholder="correo@ejemplo.com">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" name="email" required placeholder="correo@ejemplo.com">
+                        <p class="text-xs text-slate-400 mt-1">Se enviará un correo con las credenciales de acceso</p>
                     </div>
                     <div class="form-group">
                         <label for="phone">Teléfono</label>
