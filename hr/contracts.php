@@ -91,6 +91,15 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
 
                     <div>
                         <label class="block text-slate-300 font-semibold mb-2">
+                            <i class="fas fa-briefcase mr-2"></i>Cargo/Posición
+                        </label>
+                        <input type="text" name="position" required
+                               class="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                               placeholder="Ej: Representante de Servicios">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-2">
                             <i class="fas fa-money-bill-wave mr-2"></i>Salario (RD$)
                         </label>
                         <input type="number" name="salary" step="0.01" required
@@ -125,9 +134,17 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                 </div>
 
                 <div class="mt-6 flex gap-4">
-                    <button type="submit" class="btn-primary">
+                    <button type="submit" name="action" value="employment" class="btn-primary">
+                        <i class="fas fa-file-contract mr-2"></i>
+                        Generar Contrato de Trabajo
+                    </button>
+                    <button type="submit" name="action" value="confidentiality" formtarget="_blank" class="btn-secondary">
+                        <i class="fas fa-shield-alt mr-2"></i>
+                        Generar Contrato de Confidencialidad
+                    </button>
+                    <button type="submit" name="action" value="both" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 shadow-lg hover:shadow-xl">
                         <i class="fas fa-file-pdf mr-2"></i>
-                        Generar Contrato PDF
+                        Generar Ambos Contratos
                     </button>
                 </div>
             </form>
@@ -149,6 +166,7 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                             <tr class="border-b border-slate-700">
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Empleado</th>
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Cédula</th>
+                                <th class="text-left py-3 px-4 text-slate-300 font-semibold">Tipo</th>
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Fecha Contrato</th>
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Salario</th>
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Generado</th>
@@ -157,6 +175,13 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                         </thead>
                         <tbody>
                             <?php foreach ($contracts as $contract): ?>
+                                <?php
+                                    $contractType = $contract['contract_type'] ?? 'TRABAJO';
+                                    $badgeClass = $contractType === 'CONFIDENCIALIDAD' 
+                                        ? 'bg-purple-500/20 text-purple-300' 
+                                        : 'bg-blue-500/20 text-blue-300';
+                                    $typeLabel = $contractType === 'CONFIDENCIALIDAD' ? 'Confidencialidad' : 'Trabajo';
+                                ?>
                                 <tr class="border-b border-slate-800 hover:bg-slate-800/30">
                                     <td class="py-3 px-4 text-white">
                                         <?= htmlspecialchars($contract['employee_name']) ?>
@@ -164,11 +189,20 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                                     <td class="py-3 px-4 text-slate-300">
                                         <?= htmlspecialchars($contract['id_card']) ?>
                                     </td>
+                                    <td class="py-3 px-4">
+                                        <span class="px-2 py-1 rounded text-xs font-semibold <?= $badgeClass ?>">
+                                            <?= $typeLabel ?>
+                                        </span>
+                                    </td>
                                     <td class="py-3 px-4 text-slate-300">
                                         <?= date('d/m/Y', strtotime($contract['contract_date'])) ?>
                                     </td>
                                     <td class="py-3 px-4 text-green-400 font-semibold">
-                                        RD$ <?= number_format($contract['salary'], 2) ?>
+                                        <?php if ($contractType === 'TRABAJO'): ?>
+                                            RD$ <?= number_format($contract['salary'], 2) ?>
+                                        <?php else: ?>
+                                            <span class="text-slate-500">N/A</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="py-3 px-4 text-slate-400 text-sm">
                                         <?= date('d/m/Y H:i', strtotime($contract['created_at'])) ?>

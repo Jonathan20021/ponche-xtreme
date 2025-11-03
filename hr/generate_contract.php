@@ -17,16 +17,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $employeeName = trim($_POST['employee_name']);
 $idCard = trim($_POST['id_card']);
 $province = trim($_POST['province']);
+$position = trim($_POST['position']);
 $salary = (float)$_POST['salary'];
 $workSchedule = trim($_POST['work_schedule']);
 $contractDate = $_POST['contract_date'];
 $city = trim($_POST['city']);
+$action = $_POST['action'] ?? 'employment';
 
 // Save contract to database (employee_id is NULL for manual contracts)
+$contractType = ($action === 'confidentiality') ? 'CONFIDENCIALIDAD' : 'TRABAJO';
+
 $insertStmt = $pdo->prepare("
     INSERT INTO employment_contracts 
-    (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, created_by, created_at)
-    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
+    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
 ");
 $insertStmt->execute([
     $employeeName,
@@ -36,6 +40,7 @@ $insertStmt->execute([
     $salary,
     $workSchedule,
     $city,
+    $contractType,
     $_SESSION['user_id']
 ]);
 
@@ -129,9 +134,9 @@ $html = <<<HTML
 
     <p class="section-title">SE HA PACTADO LO SIGUIENTE:</p>
 
-    <p><strong>PRIMERO: EL EMPLEADO</strong> se compromete formalmente a prestar sus servicios a <strong>EL EMPLEADOR</strong>, en el desempeño del cargo de <strong>Representante de Servicios</strong>, y en tal calidad, se compromete asimismo a representar a <strong>EL EMPLEADOR</strong> dentro del marco del ejercicio de sus funciones.</p>
+    <p><strong>PRIMERO: EL EMPLEADO</strong> se compromete formalmente a prestar sus servicios a <strong>EL EMPLEADOR</strong>, en el desempeño del cargo de <strong>$position</strong>, y en tal calidad, se compromete asimismo a representar a <strong>EL EMPLEADOR</strong> dentro del marco del ejercicio de sus funciones.</p>
 
-    <p><strong>PÁRRAFO I:</strong> Se entiende por Representante de Servicios, la persona con dominio fluido del idioma español, que presta los servicios de asistencia, ventas, encuestas o soporte, vía telefónica o por cualquier otro medio físico o electrónico, a los usuarios o consumidores finales de los clientes que contratan los servicios de <strong>EL EMPLEADOR</strong> de conformidad a los procedimientos y normas dictadas de tiempo en tiempo por la empresa.</p>
+    <p><strong>PÁRRAFO I:</strong> El empleado prestará los servicios de asistencia, ventas, encuestas o soporte, vía telefónica o por cualquier otro medio físico o electrónico, a los usuarios o consumidores finales de los clientes que contratan los servicios de <strong>EL EMPLEADOR</strong> de conformidad a los procedimientos y normas dictadas de tiempo en tiempo por la empresa.</p>
 
     <p><strong>PÁRRAFO II:</strong> Es entendido y acordado entre las partes que <strong>EL EMPLEADO</strong> deberá dar asistencia al Centro Central en cualquier de las líneas de negocios que requiera <strong>EL EMPLEADOR</strong>, siempre y cuando no se vean afectadas negativamente las condiciones salariales vigentes al momento de solicitar el cambio o trato de negocios o proyectos <strong>EL EMPLEADO</strong> reconoce y acepta que negarse a ejecutar dicho cambio se considerará un acto de desobediencia a <strong>EL EMPLEADOR</strong>, sus gerentes, supervisores o representantes respecto del servicio contratado, lo que constituirá una causal de terminación del contrato de trabajo por la vía del despido, según lo establecido la legislación laboral vigente.</p>
 
@@ -232,7 +237,60 @@ $html = <<<HTML
 </html>
 HTML;
 
-// Generate PDF
+// Handle different actions
+if ($action === 'confidentiality') {
+    // Save confidentiality contract to database
+    $confInsertStmt = $pdo->prepare("
+        INSERT INTO employment_contracts 
+        (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, 0, '', '', 'CONFIDENCIALIDAD', ?, NOW())
+    ");
+    $confInsertStmt->execute([
+        $employeeName,
+        $idCard,
+        $province,
+        $contractDate,
+        $_SESSION['user_id']
+    ]);
+    
+    // Redirect to confidentiality contract generator
+    $_SESSION['contract_data'] = [
+        'employee_name' => $employeeName,
+        'id_card' => $idCard,
+        'contract_date' => $contractDate
+    ];
+    header('Location: generate_confidentiality_contract.php');
+    exit;
+} elseif ($action === 'both') {
+    // Save both contract types
+    $bothInsertStmt = $pdo->prepare("
+        INSERT INTO employment_contracts 
+        (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, 0, '', '', 'CONFIDENCIALIDAD', ?, NOW())
+    ");
+    $bothInsertStmt->execute([
+        $employeeName,
+        $idCard,
+        $province,
+        $contractDate,
+        $_SESSION['user_id']
+    ]);
+    // Generate both contracts - show selection page
+    $_SESSION['contract_data'] = [
+        'employee_name' => $employeeName,
+        'id_card' => $idCard,
+        'province' => $province,
+        'position' => $position,
+        'salary' => $salary,
+        'work_schedule' => $workSchedule,
+        'contract_date' => $contractDate,
+        'city' => $city
+    ];
+    header('Location: download_both_contracts.php');
+    exit;
+}
+
+// Generate Employment Contract PDF (default action)
 $options = new Options();
 $options->set('isHtml5ParserEnabled', true);
 $options->set('isRemoteEnabled', true);
@@ -244,5 +302,5 @@ $dompdf->setPaper('Letter', 'portrait');
 $dompdf->render();
 
 // Output PDF
-$filename = 'Contrato_' . str_replace(' ', '_', $employeeName) . '_' . date('Y-m-d') . '.pdf';
+$filename = 'Contrato_Trabajo_' . str_replace(' ', '_', $employeeName) . '_' . date('Y-m-d') . '.pdf';
 $dompdf->stream($filename, ['Attachment' => false]);
