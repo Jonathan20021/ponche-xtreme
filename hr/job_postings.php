@@ -47,7 +47,7 @@ require_once '../header.php';
             <a href="recruitment.php" class="btn-secondary">
                 <i class="fas fa-users"></i> Ver Solicitudes
             </a>
-            <button class="btn-primary" data-bs-toggle="modal" data-bs-target="#addJobModal">
+            <button class="btn-primary" onclick="openJobModal()">
                 <i class="fas fa-plus-circle"></i> Nueva Vacante
             </button>
         </div>
@@ -88,7 +88,7 @@ require_once '../header.php';
             <i class="fas fa-briefcase text-slate-600 text-6xl mb-4"></i>
             <h4 class="text-xl font-semibold text-white mb-2">No hay vacantes publicadas</h4>
             <p class="text-slate-400 mb-4">Crea una nueva vacante para comenzar a recibir solicitudes</p>
-            <button class="btn-primary" data-bs-toggle="modal" data-bs-target="#addJobModal">
+            <button class="btn-primary" onclick="openJobModal()">
                 <i class="fas fa-plus-circle"></i> Crear Primera Vacante
             </button>
         </div>
@@ -182,73 +182,97 @@ require_once '../header.php';
 </div>
 
 <!-- Add Job Modal -->
-<div class="modal fade" id="addJobModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form action="save_job_posting.php" method="POST">
-                <div class="modal-header">
-                    <h5 class="modal-title">Nueva Vacante</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Título del Puesto *</label>
-                            <input type="text" class="form-control" name="title" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Departamento *</label>
-                            <input type="text" class="form-control" name="department" required>
-                        </div>
+<div id="addJobModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4" style="display: none;">
+    <div class="glass-card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <form action="save_job_posting.php" method="POST">
+            <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
+                <h5 class="text-2xl font-bold text-white">Nueva Vacante</h5>
+                <button type="button" class="text-slate-400 hover:text-white transition-colors" onclick="closeJobModal()">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Título del Puesto *</label>
+                        <input type="text" class="form-input" name="title" required>
                     </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Ubicación *</label>
-                            <input type="text" class="form-control" name="location" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Tipo de Empleo *</label>
-                            <select class="form-select" name="employment_type" required>
-                                <option value="full_time">Tiempo Completo</option>
-                                <option value="part_time">Medio Tiempo</option>
-                                <option value="contract">Contrato</option>
-                                <option value="internship">Pasantía</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Descripción *</label>
-                        <textarea class="form-control" name="description" rows="4" required></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Requisitos</label>
-                        <textarea class="form-control" name="requirements" rows="4"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Responsabilidades</label>
-                        <textarea class="form-control" name="responsibilities" rows="4"></textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Rango Salarial</label>
-                            <input type="text" class="form-control" name="salary_range" placeholder="$25,000 - $35,000 MXN">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Fecha de Cierre</label>
-                            <input type="date" class="form-control" name="closing_date">
-                        </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Departamento *</label>
+                        <input type="text" class="form-input" name="department" required>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Publicar Vacante</button>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Ubicación *</label>
+                        <input type="text" class="form-input" name="location" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Tipo de Empleo *</label>
+                        <select class="form-input" name="employment_type" required>
+                            <option value="full_time">Tiempo Completo</option>
+                            <option value="part_time">Medio Tiempo</option>
+                            <option value="contract">Contrato</option>
+                            <option value="internship">Pasantía</option>
+                        </select>
+                    </div>
                 </div>
-            </form>
-        </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Descripción *</label>
+                    <textarea class="form-input" name="description" rows="4" required></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Requisitos</label>
+                    <textarea class="form-input" name="requirements" rows="4"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Responsabilidades</label>
+                    <textarea class="form-input" name="responsibilities" rows="4"></textarea>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Rango Salarial</label>
+                        <input type="text" class="form-input" name="salary_range" placeholder="$25,000 - $35,000 MXN">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Fecha de Cierre</label>
+                        <input type="date" class="form-input" name="closing_date">
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-700">
+                <button type="button" class="btn-secondary" onclick="closeJobModal()">Cancelar</button>
+                <button type="submit" class="btn-primary">Publicar Vacante</button>
+            </div>
+        </form>
     </div>
 </div>
 
 <script>
+function openJobModal() {
+    document.getElementById('addJobModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeJobModal() {
+    document.getElementById('addJobModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+// Close modal when clicking outside
+document.getElementById('addJobModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeJobModal();
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeJobModal();
+    }
+});
+
 function copyToClipboard(elementId, event) {
     const input = document.getElementById(elementId);
     input.select();
