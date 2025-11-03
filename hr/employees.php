@@ -245,7 +245,7 @@ $stats = [
                 <p class="text-slate-400">Directorio completo de empleados</p>
             </div>
             <div class="flex gap-3">
-                <a href="../register.php" class="btn-primary">
+                <a href="new_employee.php" class="btn-primary">
                     <i class="fas fa-user-plus"></i>
                     Nuevo Empleado
                 </a>

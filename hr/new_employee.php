@@ -1,13 +1,10 @@
 <?php
 session_start();
-include 'db.php';
+require_once '../db.php';
 
-// Redirect to HR module for employee registration
-// All employee/user creation should go through HR
-header('Location: hr/new_employee.php');
-exit;
+// Check permissions
+ensurePermission('hr_employees');
 
-// Legacy code below - kept for reference but not executed
 $success = null;
 $error = null;
 
@@ -27,8 +24,12 @@ if (isset($_POST['register'])) {
     $bank_id = !empty($_POST['bank_id']) ? (int)$_POST['bank_id'] : null;
     $bank_account_number = trim($_POST['bank_account_number'] ?? '');
     $schedule_template_id = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
-    $password = 'defaultpassword';
-    $role = 'AGENT';
+    $password = !empty($_POST['password']) ? trim($_POST['password']) : 'defaultpassword';
+    $role = !empty($_POST['role']) ? trim($_POST['role']) : 'AGENT';
+    $hourly_rate_dop = !empty($_POST['hourly_rate_dop']) ? (float)$_POST['hourly_rate_dop'] : 0.00;
+    $monthly_salary_usd = !empty($_POST['monthly_salary_usd']) ? (float)$_POST['monthly_salary_usd'] : 0.00;
+    $monthly_salary_dop = !empty($_POST['monthly_salary_dop']) ? (float)$_POST['monthly_salary_dop'] : 0.00;
+    $preferred_currency = !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD';
 
     if ($username === '' || $full_name === '' || $first_name === '' || $last_name === '' || $hire_date === '') {
         $error = 'Los campos Usuario, Nombre completo, Nombre, Apellido y Fecha de ingreso son obligatorios.';
@@ -65,7 +66,7 @@ if (isset($_POST['register'])) {
                 // Handle photo upload
                 $photoPath = null;
                 if (isset($_FILES['employee_photo']) && $_FILES['employee_photo']['error'] === UPLOAD_ERR_OK) {
-                    $uploadDir = 'uploads/employee_photos/';
+                    $uploadDir = '../uploads/employee_photos/';
                     if (!is_dir($uploadDir)) {
                         mkdir($uploadDir, 0755, true);
                     }
@@ -78,14 +79,14 @@ if (isset($_POST['register'])) {
                         $targetPath = $uploadDir . $fileName;
                         
                         if (move_uploaded_file($_FILES['employee_photo']['tmp_name'], $targetPath)) {
-                            $photoPath = $targetPath;
+                            $photoPath = 'uploads/employee_photos/' . $fileName;
                         }
                     }
                 }
                 
-                // Insert user with employee code
-                $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, department_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                $insert->execute([$username, $employeeCode, $full_name, $password, $role, $hourly_rate, $department_id]);
+                // Insert user with employee code and all compensation fields
+                $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, hourly_rate_dop, monthly_salary, monthly_salary_dop, preferred_currency, department_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $insert->execute([$username, $employeeCode, $full_name, $password, $role, $hourly_rate, $hourly_rate_dop, $monthly_salary_usd, $monthly_salary_dop, $preferred_currency, $department_id]);
                 $userId = $pdo->lastInsertId();
                 
                 // Insert employee record with new fields
@@ -136,17 +137,29 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="assets/css/theme.css" rel="stylesheet">
-    <title>Registro de agentes</title>
+    <link href="../assets/css/theme.css" rel="stylesheet">
+    <title>Nuevo Empleado - HR</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
-    <div class="login-wrapper">
-        <div class="login-card glass-card" style="width: min(900px, 95%); max-height: 90vh; overflow-y: auto;">
-            <div class="text-center mb-5">
-                <span class="tag-pill">Alta de nuevo empleado</span>
-                <h2 class="mt-3 font-semibold text-white">Registro completo de empleado</h2>
-                <p class="text-sm text-slate-400">Se asignara una contrasena por defecto. El empleado podra actualizarla luego.</p>
+    <?php include '../header.php'; ?>
+    
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-5xl mx-auto">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-white mb-2">
+                        <i class="fas fa-user-plus text-blue-400 mr-3"></i>
+                        Nuevo Empleado
+                    </h1>
+                    <p class="text-slate-400">Registro completo de empleado y usuario del sistema</p>
+                </div>
+                <a href="employees.php" class="btn-secondary">
+                    <i class="fas fa-arrow-left"></i>
+                    Volver a Empleados
+                </a>
             </div>
+            
+            <div class="glass-card">
             <?php if ($error): ?>
                 <div class="status-banner error"><?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
@@ -154,16 +167,50 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 <div class="status-banner success"><?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
             <form method="POST" enctype="multipart/form-data" class="space-y-4">
+                <h3 class="text-lg font-semibold text-white mb-3 border-b border-slate-700 pb-2">
+                    <i class="fas fa-user-circle text-blue-400 mr-2"></i>
+                    Información de Usuario del Sistema
+                </h3>
+                
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="form-group">
                         <label for="username">Usuario *</label>
                         <input type="text" id="username" name="username" required placeholder="ej. agente02">
+                        <p class="text-xs text-slate-400 mt-1">Usuario para acceder al sistema</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Contraseña *</label>
+                        <input type="text" id="password" name="password" placeholder="defaultpassword" value="defaultpassword">
+                        <p class="text-xs text-slate-400 mt-1">El empleado podrá cambiarla después</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="role">Rol del Sistema *</label>
+                        <select id="role" name="role" required>
+                            <option value="AGENT">Agente</option>
+                            <?php
+                            $roles = getAllRoles($pdo);
+                            foreach ($roles as $r) {
+                                if ($r['name'] !== 'AGENT') {
+                                    echo '<option value="' . htmlspecialchars($r['name']) . '">' . htmlspecialchars($r['label']) . '</option>';
+                                }
+                            }
+                            ?>
+                        </select>
+                        <p class="text-xs text-slate-400 mt-1">Determina los permisos en el sistema</p>
                     </div>
                     <div class="form-group">
                         <label for="full_name">Nombre completo *</label>
                         <input type="text" id="full_name" name="full_name" required placeholder="Nombre y apellido">
                     </div>
                 </div>
+                
+                <h3 class="text-lg font-semibold text-white mt-6 mb-3 border-b border-slate-700 pb-2">
+                    <i class="fas fa-id-badge text-blue-400 mr-2"></i>
+                    Información Personal del Empleado
+                </h3>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="form-group">
@@ -217,9 +264,40 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     </div>
                 </div>
                 
+                <h3 class="text-lg font-semibold text-white mt-6 mb-3 border-b border-slate-700 pb-2">
+                    <i class="fas fa-dollar-sign text-blue-400 mr-2"></i>
+                    Compensación y Salario
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="hourly_rate">Tarifa por hora (USD)</label>
+                        <input type="number" id="hourly_rate" name="hourly_rate" step="0.01" min="0" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="hourly_rate_dop">Tarifa por hora (DOP)</label>
+                        <input type="number" id="hourly_rate_dop" name="hourly_rate_dop" step="0.01" min="0" placeholder="0.00">
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="monthly_salary_usd">Salario mensual (USD)</label>
+                        <input type="number" id="monthly_salary_usd" name="monthly_salary_usd" step="0.01" min="0" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="monthly_salary_dop">Salario mensual (DOP)</label>
+                        <input type="number" id="monthly_salary_dop" name="monthly_salary_dop" step="0.01" min="0" placeholder="0.00">
+                    </div>
+                </div>
+                
                 <div class="form-group">
-                    <label for="hourly_rate">Tarifa por hora (USD)</label>
-                    <input type="number" id="hourly_rate" name="hourly_rate" step="0.01" min="0" placeholder="0.00">
+                    <label for="preferred_currency">Moneda Preferida</label>
+                    <select id="preferred_currency" name="preferred_currency">
+                        <option value="USD">USD (Dólares)</option>
+                        <option value="DOP">DOP (Pesos Dominicanos)</option>
+                    </select>
+                    <p class="text-xs text-slate-400 mt-1">Moneda principal para reportes y nómina</p>
                 </div>
                 
                 <h3 class="text-lg font-semibold text-white mt-6 mb-3">
@@ -299,22 +377,22 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     <p class="text-xs text-slate-400 mt-1">Formatos permitidos: JPG, PNG, GIF (Máx. 5MB)</p>
                 </div>
                 
-                <button type="submit" name="register" class="w-full btn-primary justify-center">
-                    <i class="fas fa-user-plus"></i>
-                    Registrar empleado
-                </button>
+                <div class="flex gap-3">
+                    <button type="submit" name="register" class="btn-primary flex-1">
+                        <i class="fas fa-user-plus"></i>
+                        Registrar Empleado y Usuario
+                    </button>
+                    <a href="employees.php" class="btn-secondary flex-1 text-center">
+                        <i class="fas fa-times"></i>
+                        Cancelar
+                    </a>
+                </div>
             </form>
-            <div class="text-center mt-4 text-sm">
-                <a href="punch.php" class="text-slate-300 hover:text-white transition-colors">Ir al portal de marcaciones</a>
             </div>
         </div>
-        <form action="theme_toggle.php" method="post" class="mt-6">
-            <button type="submit" class="btn-secondary px-4 py-2 rounded-lg inline-flex items-center gap-2">
-                <i class="fas fa-adjust text-sm"></i>
-                <span><?= htmlspecialchars($themeLabel) ?></span>
-            </button>
-        </form>
     </div>
+    
+    <?php include '../footer.php'; ?>
 
     <!-- Modal para crear nuevo turno -->
     <div id="newScheduleModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
@@ -427,7 +505,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             if (!scheduleId) return;
             
             // Load schedule data
-            fetch('get_schedule_template.php?id=' + scheduleId)
+            fetch('../get_schedule_template.php?id=' + scheduleId)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -475,7 +553,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             const formData = new FormData();
             formData.append('id', scheduleId);
             
-            fetch('delete_schedule_template.php', {
+            fetch('../delete_schedule_template.php', {
                 method: 'POST',
                 body: formData
             })
@@ -518,7 +596,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
             messageDiv.classList.remove('hidden');
             
-            const endpoint = isEditMode ? 'update_schedule_template.php' : 'save_schedule_template.php';
+            const endpoint = isEditMode ? '../update_schedule_template.php' : '../save_schedule_template.php';
             
             fetch(endpoint, {
                 method: 'POST',
