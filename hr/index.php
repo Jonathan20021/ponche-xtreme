@@ -269,6 +269,16 @@ $recentVacations = $pdo->query("
                 </div>
                 <p class="text-slate-400 text-sm">Vista unificada de eventos y fechas importantes</p>
             </div>
+
+            <div class="module-card" onclick="window.location.href='contracts.php'">
+                <div class="flex items-center mb-3">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <i class="fas fa-file-contract text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white">Contratos</h3>
+                </div>
+                <p class="text-slate-400 text-sm">Generador automático de contratos laborales</p>
+            </div>
         </div>
 
         <!-- Quick Info Sections -->

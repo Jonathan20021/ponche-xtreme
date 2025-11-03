@@ -69,6 +69,12 @@ $navItems = [
                 'href' => $baseHref . 'hr/calendar.php',
                 'icon' => 'fa-calendar-alt',
             ],
+            [
+                'section' => 'hr_employees',
+                'label' => 'Contratos',
+                'href' => $baseHref . 'hr/contracts.php',
+                'icon' => 'fa-file-contract',
+            ],
         ],
     ],
     'agents' => [
