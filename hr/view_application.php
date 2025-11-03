@@ -54,7 +54,21 @@ $status_labels = [
 require_once '../header.php';
 ?>
 
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/recruitment.css">
+
+<style>
+    /* Ensure modals are hidden by default */
+    .modal {
+        display: none !important;
+    }
+    .modal.show {
+        display: block !important;
+    }
+    .modal-backdrop {
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+</style>
 
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
@@ -151,7 +165,7 @@ require_once '../header.php';
                         <i class="fas fa-comments text-indigo-400"></i>
                         Comentarios (<?php echo count($comments); ?>)
                     </h3>
-                    <button class="btn-primary" data-bs-toggle="modal" data-bs-target="#addCommentModal">
+                    <button type="button" class="btn-primary" data-bs-toggle="modal" data-bs-target="#addCommentModal">
                         <i class="fas fa-plus"></i>
                         Agregar Comentario
                     </button>
@@ -247,15 +261,15 @@ require_once '../header.php';
             <div class="glass-card">
                 <h3 class="text-lg font-semibold text-white mb-4">Acciones Rápidas</h3>
                 <div class="space-y-2">
-                    <button class="btn-primary w-full justify-center" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
+                    <button type="button" class="btn-primary w-full justify-center" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
                         <i class="fas fa-exchange-alt"></i>
                         Cambiar Estado
                     </button>
-                    <button class="btn-secondary w-full justify-center" data-bs-toggle="modal" data-bs-target="#scheduleInterviewModal">
+                    <button type="button" class="btn-secondary w-full justify-center" data-bs-toggle="modal" data-bs-target="#scheduleInterviewModal">
                         <i class="fas fa-calendar-plus"></i>
                         Agendar Entrevista
                     </button>
-                    <button class="btn-secondary w-full justify-center" data-bs-toggle="modal" data-bs-target="#addCommentModal">
+                    <button type="button" class="btn-secondary w-full justify-center" data-bs-toggle="modal" data-bs-target="#addCommentModal">
                         <i class="fas fa-comment"></i>
                         Agregar Comentario
                     </button>
@@ -290,8 +304,12 @@ require_once '../header.php';
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<?php require_once '../footer.php'; ?>
+
 <!-- Modals -->
-<div class="modal fade" id="updateStatusModal" tabindex="-1">
+<div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <form action="update_application_status.php" method="POST">
@@ -321,7 +339,7 @@ require_once '../header.php';
     </div>
 </div>
 
-<div class="modal fade" id="addCommentModal" tabindex="-1">
+<div class="modal fade" id="addCommentModal" tabindex="-1" aria-labelledby="addCommentModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <form action="add_comment.php" method="POST">
@@ -345,7 +363,7 @@ require_once '../header.php';
     </div>
 </div>
 
-<div class="modal fade" id="scheduleInterviewModal" tabindex="-1">
+<div class="modal fade" id="scheduleInterviewModal" tabindex="-1" aria-labelledby="scheduleInterviewModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <form action="schedule_interview.php" method="POST">
@@ -389,5 +407,3 @@ require_once '../header.php';
         </div>
     </div>
 </div>
-
-<?php require_once '../footer.php'; ?>
