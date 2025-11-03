@@ -54,6 +54,17 @@ $vacations = $pdo->prepare("
 $vacations->execute([$startDate, $endDate, $startDate, $endDate, $startDate, $endDate]);
 $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
 
+// Get custom calendar events
+$customEvents = $pdo->prepare("
+    SELECT ce.*, u.username as creator_name
+    FROM calendar_events ce
+    JOIN users u ON u.id = ce.created_by
+    WHERE ce.event_date BETWEEN ? AND ?
+    ORDER BY ce.event_date, ce.start_time
+");
+$customEvents->execute([$startDate, $endDate]);
+$customEventsList = $customEvents->fetchAll(PDO::FETCH_ASSOC);
+
 // Build calendar events by date
 $eventsByDate = [];
 
@@ -118,6 +129,33 @@ foreach ($vacationsList as $vacation) {
     }
 }
 
+// Add custom events
+foreach ($customEventsList as $event) {
+    $dateStr = $event['event_date'];
+    if (!isset($eventsByDate[$dateStr])) {
+        $eventsByDate[$dateStr] = [];
+    }
+    
+    $eventIcons = [
+        'MEETING' => 'fa-users',
+        'REMINDER' => 'fa-bell',
+        'DEADLINE' => 'fa-flag',
+        'HOLIDAY' => 'fa-star',
+        'TRAINING' => 'fa-graduation-cap',
+        'OTHER' => 'fa-calendar-check'
+    ];
+    
+    $eventsByDate[$dateStr][] = [
+        'type' => 'custom',
+        'title' => $event['title'],
+        'subtitle' => $event['start_time'] ? date('H:i', strtotime($event['start_time'])) : 'Todo el día',
+        'icon' => $eventIcons[$event['event_type']] ?? 'fa-calendar-check',
+        'color' => $event['color'],
+        'data' => $event,
+        'id' => $event['id']
+    ];
+}
+
 // Build calendar grid
 $calendar = [];
 $currentDate = clone $firstDay;
@@ -175,6 +213,7 @@ if ($nextMonth > 12) {
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../assets/css/theme.css" rel="stylesheet">
+    <link href="../assets/css/calendar.css" rel="stylesheet">
     <style>
         .calendar-cell {
             min-height: 120px;
@@ -213,6 +252,24 @@ if ($nextMonth > 12) {
             background: rgba(30, 41, 59, 0.5);
             border-radius: 8px;
         }
+        
+        /* Light Theme */
+        .theme-light .calendar-cell {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+        }
+        .theme-light .calendar-cell:hover {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: rgba(99, 102, 241, 0.4);
+        }
+        .theme-light .calendar-cell.today {
+            border: 2px solid #6366f1;
+            background: rgba(99, 102, 241, 0.08);
+        }
+        .theme-light .legend-item {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -228,10 +285,16 @@ if ($nextMonth > 12) {
                 </h1>
                 <p class="text-slate-400">Vista unificada de eventos, cumpleaños, permisos y vacaciones</p>
             </div>
-            <a href="index.php" class="btn-secondary">
-                <i class="fas fa-arrow-left"></i>
-                Volver a HR
-            </a>
+            <div class="flex gap-3">
+                <button onclick="openCreateEventModal()" class="btn-primary">
+                    <i class="fas fa-plus"></i>
+                    Crear Evento
+                </button>
+                <a href="index.php" class="btn-secondary">
+                    <i class="fas fa-arrow-left"></i>
+                    Volver a HR
+                </a>
+            </div>
         </div>
 
         <!-- Month Navigation -->
@@ -268,6 +331,10 @@ if ($nextMonth > 12) {
                     <i class="fas fa-umbrella-beach" style="color: #06b6d4;"></i>
                     <span class="text-white text-sm">Vacaciones</span>
                 </div>
+                <div class="legend-item">
+                    <i class="fas fa-calendar-check" style="color: #6366f1;"></i>
+                    <span class="text-white text-sm">Eventos Personalizados</span>
+                </div>
             </div>
         </div>
 
@@ -289,11 +356,16 @@ if ($nextMonth > 12) {
                     <?php foreach ($calendar as $week): ?>
                         <tr>
                             <?php foreach ($week as $day): ?>
-                                <td class="calendar-cell p-2 align-top <?= $day['isCurrentMonth'] ? '' : 'other-month' ?> <?= $day['isToday'] ? 'today' : '' ?>">
+                                <td class="calendar-cell p-2 align-top <?= $day['isCurrentMonth'] ? '' : 'other-month' ?> <?= $day['isToday'] ? 'today' : '' ?>" data-date="<?= $day['dateStr'] ?>">
                                     <div class="text-right mb-2">
                                         <span class="text-sm font-semibold <?= $day['isToday'] ? 'text-indigo-400' : 'text-slate-300' ?>">
                                             <?= $day['date']->format('d') ?>
                                         </span>
+                                        <?php if ($day['isCurrentMonth']): ?>
+                                        <button class="add-event-btn" onclick="openCreateEventModal('<?= $day['dateStr'] ?>')" title="Agregar evento">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                        <?php endif; ?>
                                     </div>
                                     
                                     <?php if (!empty($day['events'])): ?>
@@ -303,7 +375,10 @@ if ($nextMonth > 12) {
                                             $remainingCount = count($day['events']) - 3;
                                             ?>
                                             <?php foreach ($displayedEvents as $event): ?>
-                                                <div class="event-badge text-white" style="background: <?= $event['color'] ?>;">
+                                                <div class="event-badge text-white" 
+                                                     style="background: <?= $event['color'] ?>;" 
+                                                     onclick="<?= $event['type'] === 'custom' ? 'viewEvent(' . $event['id'] . ')' : '' ?>"
+                                                     title="<?= htmlspecialchars($event['title']) . ($event['subtitle'] ? ' - ' . $event['subtitle'] : '') ?>">
                                                     <i class="fas <?= $event['icon'] ?> text-xs"></i>
                                                     <span class="truncate"><?= htmlspecialchars($event['title']) ?></span>
                                                 </div>
@@ -402,6 +477,122 @@ if ($nextMonth > 12) {
             </div>
         </div>
     </div>
+
+    <!-- Create/Edit Event Modal -->
+    <div id="eventModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="text-xl font-bold text-white" id="modalTitle">Crear Evento</h2>
+                <span class="close" onclick="closeEventModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="eventForm">
+                    <input type="hidden" id="eventId" name="event_id">
+                    
+                    <div class="form-group">
+                        <label for="eventTitle">Título *</label>
+                        <input type="text" id="eventTitle" name="title" required placeholder="Ej: Reunión de equipo">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="eventDescription">Descripción</label>
+                        <textarea id="eventDescription" name="description" placeholder="Detalles del evento..."></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="eventDate">Fecha *</label>
+                            <input type="date" id="eventDate" name="event_date" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="eventType">Tipo</label>
+                            <select id="eventType" name="event_type">
+                                <option value="MEETING">Reunión</option>
+                                <option value="REMINDER">Recordatorio</option>
+                                <option value="DEADLINE">Fecha límite</option>
+                                <option value="HOLIDAY">Feriado</option>
+                                <option value="TRAINING">Capacitación</option>
+                                <option value="OTHER">Otro</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="isAllDay" name="is_all_day" onchange="toggleTimeFields()">
+                            <label for="isAllDay" style="margin: 0;">Todo el día</label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row" id="timeFields">
+                        <div class="form-group">
+                            <label for="startTime">Hora inicio</label>
+                            <input type="time" id="startTime" name="start_time">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="endTime">Hora fin</label>
+                            <input type="time" id="endTime" name="end_time">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="eventLocation">Ubicación</label>
+                        <input type="text" id="eventLocation" name="location" placeholder="Ej: Sala de conferencias">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Color</label>
+                        <div class="color-picker-wrapper">
+                            <div class="color-option selected" style="background: #6366f1;" data-color="#6366f1" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #ec4899;" data-color="#ec4899" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #8b5cf6;" data-color="#8b5cf6" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #06b6d4;" data-color="#06b6d4" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #10b981;" data-color="#10b981" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #f59e0b;" data-color="#f59e0b" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #ef4444;" data-color="#ef4444" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #64748b;" data-color="#64748b" onclick="selectColor(this)"></div>
+                        </div>
+                        <input type="hidden" id="eventColor" name="color" value="#6366f1">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-icon btn-secondary-modal" onclick="closeEventModal()">Cancelar</button>
+                <button type="button" class="btn-icon btn-primary" onclick="saveEvent()">
+                    <i class="fas fa-save"></i>
+                    Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Event Modal -->
+    <div id="viewEventModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="text-xl font-bold text-white" id="viewEventTitle"></h2>
+                <span class="close" onclick="closeViewEventModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="viewEventBody">
+                <!-- Event details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-icon btn-danger" onclick="deleteCurrentEvent()" id="deleteEventBtn">
+                    <i class="fas fa-trash"></i>
+                    Eliminar
+                </button>
+                <button type="button" class="btn-icon btn-secondary-modal" onclick="closeViewEventModal()">Cerrar</button>
+                <button type="button" class="btn-icon btn-primary" onclick="editCurrentEvent()" id="editEventBtn">
+                    <i class="fas fa-edit"></i>
+                    Editar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/js/calendar.js"></script>
 
     <?php include '../footer.php'; ?>
 </body>
