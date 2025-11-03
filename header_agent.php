@@ -19,11 +19,15 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 
 $assetBase = (strpos($_SERVER['PHP_SELF'], '/agents/') === 0) ? '../assets' : 'assets';
 
+// Determine base path for links
+$inAgentsDir = strpos($_SERVER['PHP_SELF'], '/agents/') !== false;
+$basePath = $inAgentsDir ? '../' : '';
+
 $agentNavItems = [
-    'agent_dashboard' => ['label' => 'Panel de Control', 'href' => 'agent_dashboard.php', 'icon' => 'fa-house-user'],
-    'agent_records' => ['label' => 'Registros', 'href' => 'agent.php', 'icon' => 'fa-clock'],
-    'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
-    'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
+    'agent_dashboard' => ['label' => 'Panel de Control', 'href' => $basePath . 'agent_dashboard.php', 'icon' => 'fa-house-user'],
+    'agent_records' => ['label' => 'Registros', 'href' => $basePath . 'agent.php', 'icon' => 'fa-clock'],
+    'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => $basePath . 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
+    'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => $basePath . 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
 ];
 
 $currentPath = basename($_SERVER['PHP_SELF']);
@@ -83,7 +87,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                         </a>
                     <?php endif; ?>
                 <?php endforeach; ?>
-                <a href="logout_agent.php" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
+                <a href="<?= $basePath ?>logout_agent.php" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
                     <i class="fas fa-sign-out-alt text-xs"></i>
                     <span>Cerrar Sesión</span>
                 </a>
