@@ -182,34 +182,34 @@ require_once '../header.php';
 </div>
 
 <!-- Add Job Modal -->
-<div id="addJobModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4" style="display: none;">
-    <div class="glass-card max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+<div id="addJobModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-2 sm:p-4" style="display: none;">
+    <div class="glass-card w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mx-2 sm:mx-4">
         <form action="save_job_posting.php" method="POST">
-            <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
-                <h5 class="text-2xl font-bold text-white">Nueva Vacante</h5>
-                <button type="button" class="text-slate-400 hover:text-white transition-colors" onclick="closeJobModal()">
-                    <i class="fas fa-times text-2xl"></i>
+            <div class="flex justify-between items-center mb-4 sm:mb-6 pb-3 sm:pb-4 border-b border-slate-700">
+                <h5 class="text-xl sm:text-2xl font-bold text-white">Nueva Vacante</h5>
+                <button type="button" class="text-slate-400 hover:text-white transition-colors p-1" onclick="closeJobModal()">
+                    <i class="fas fa-times text-xl sm:text-2xl"></i>
                 </button>
             </div>
-            <div class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-3 sm:space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-2">Título del Puesto *</label>
-                        <input type="text" class="form-input" name="title" required>
+                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Título del Puesto *</label>
+                        <input type="text" class="form-input w-full text-sm sm:text-base" name="title" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-2">Departamento *</label>
-                        <input type="text" class="form-input" name="department" required>
+                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Departamento *</label>
+                        <input type="text" class="form-input w-full text-sm sm:text-base" name="department" required>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-2">Ubicación *</label>
-                        <input type="text" class="form-input" name="location" required>
+                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Ubicación *</label>
+                        <input type="text" class="form-input w-full text-sm sm:text-base" name="location" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-2">Tipo de Empleo *</label>
-                        <select class="form-input" name="employment_type" required>
+                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Tipo de Empleo *</label>
+                        <select class="form-input w-full text-sm sm:text-base" name="employment_type" required>
                             <option value="full_time">Tiempo Completo</option>
                             <option value="part_time">Medio Tiempo</option>
                             <option value="contract">Contrato</option>
@@ -218,31 +218,31 @@ require_once '../header.php';
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-2">Descripción *</label>
-                    <textarea class="form-input" name="description" rows="4" required></textarea>
+                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Descripción *</label>
+                    <textarea class="form-input w-full text-sm sm:text-base" name="description" rows="3" required></textarea>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-2">Requisitos</label>
-                    <textarea class="form-input" name="requirements" rows="4"></textarea>
+                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Requisitos</label>
+                    <textarea class="form-input w-full text-sm sm:text-base" name="requirements" rows="3"></textarea>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-2">Responsabilidades</label>
-                    <textarea class="form-input" name="responsibilities" rows="4"></textarea>
+                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Responsabilidades</label>
+                    <textarea class="form-input w-full text-sm sm:text-base" name="responsibilities" rows="3"></textarea>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-2">Rango Salarial</label>
-                        <input type="text" class="form-input" name="salary_range" placeholder="$25,000 - $35,000 MXN">
+                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Rango Salarial</label>
+                        <input type="text" class="form-input w-full text-sm sm:text-base" name="salary_range" placeholder="$25,000 - $35,000 MXN">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-2">Fecha de Cierre</label>
-                        <input type="date" class="form-input" name="closing_date">
+                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Fecha de Cierre</label>
+                        <input type="date" class="form-input w-full text-sm sm:text-base" name="closing_date">
                     </div>
                 </div>
             </div>
-            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-700">
-                <button type="button" class="btn-secondary" onclick="closeJobModal()">Cancelar</button>
-                <button type="submit" class="btn-primary">Publicar Vacante</button>
+            <div class="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-700">
+                <button type="button" class="btn-secondary w-full sm:w-auto text-sm sm:text-base py-2" onclick="closeJobModal()">Cancelar</button>
+                <button type="submit" class="btn-primary w-full sm:w-auto text-sm sm:text-base py-2">Publicar Vacante</button>
             </div>
         </form>
     </div>
