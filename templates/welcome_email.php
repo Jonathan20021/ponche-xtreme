@@ -15,6 +15,7 @@ function getWelcomeEmailTemplate($data) {
     $department = htmlspecialchars($data['department'] ?? 'N/A');
     $hireDate = htmlspecialchars($data['hire_date']);
     $loginUrl = htmlspecialchars($data['login_url']);
+    $punchUrl = htmlspecialchars($data['punch_url']);
     $dashboardUrl = htmlspecialchars($data['dashboard_url']);
     $supportEmail = htmlspecialchars($data['support_email']);
     $appName = htmlspecialchars($data['app_name']);
@@ -280,9 +281,10 @@ function getWelcomeEmailTemplate($data) {
                 
                 <div class="step">
                     <div class="step-number">1</div>
-                    <div class="step-title">Accede al Sistema</div>
+                    <div class="step-title">Accede al Sistema de Ponche</div>
                     <div class="step-description">
                         Ingresa a <a href="{$loginUrl}">{$loginUrl}</a> y usa tus credenciales para iniciar sesión.
+                        Luego accede al módulo de ponche para registrar tus marcaciones.
                     </div>
                 </div>
                 
@@ -290,8 +292,8 @@ function getWelcomeEmailTemplate($data) {
                     <div class="step-number">2</div>
                     <div class="step-title">Marca tu Entrada</div>
                     <div class="step-description">
-                        Al llegar al trabajo, haz clic en el botón <strong>"Ponchar Entrada"</strong> en tu dashboard. 
-                        El sistema registrará automáticamente la hora exacta.
+                        Al llegar al trabajo, ve al <strong>módulo de ponche</strong> y haz clic en el botón <strong>"Ponchar Entrada"</strong>. 
+                        El sistema registrará automáticamente la hora exacta de tu llegada.
                     </div>
                 </div>
                 
@@ -299,7 +301,7 @@ function getWelcomeEmailTemplate($data) {
                     <div class="step-number">3</div>
                     <div class="step-title">Registra tus Descansos</div>
                     <div class="step-description">
-                        Durante tu jornada, puedes marcar tus descansos (almuerzo, breaks) usando los botones correspondientes. 
+                        Durante tu jornada, usa el <strong>módulo de ponche</strong> para marcar tus descansos (almuerzo, breaks). 
                         Esto ayuda a calcular correctamente tus horas trabajadas.
                     </div>
                 </div>
@@ -308,17 +310,17 @@ function getWelcomeEmailTemplate($data) {
                     <div class="step-number">4</div>
                     <div class="step-title">Marca tu Salida</div>
                     <div class="step-description">
-                        Al finalizar tu jornada, haz clic en <strong>"Ponchar Salida"</strong>. 
+                        Al finalizar tu jornada, regresa al <strong>módulo de ponche</strong> y haz clic en <strong>"Ponchar Salida"</strong>. 
                         El sistema calculará automáticamente tus horas trabajadas del día.
                     </div>
                 </div>
                 
                 <div class="step">
                     <div class="step-number">5</div>
-                    <div class="step-title">Consulta tus Registros</div>
+                    <div class="step-title">Consulta tus Registros en el Dashboard</div>
                     <div class="step-description">
-                        Puedes ver tu historial de marcaciones, horas trabajadas y reportes en la sección 
-                        <strong>"Mis Registros"</strong> de tu dashboard.
+                        Puedes ver tu historial de marcaciones, horas trabajadas y reportes de productividad en tu 
+                        <strong>Dashboard del Agente</strong>. Allí encontrarás estadísticas detalladas de tu desempeño.
                     </div>
                 </div>
             </div>
@@ -340,13 +342,18 @@ function getWelcomeEmailTemplate($data) {
             <div style="text-align: center; margin: 25px 0;">
                 <p style="color: #4a5568; margin-bottom: 15px; font-weight: 600;">Enlaces Rápidos</p>
                 <p style="margin: 8px 0;">
-                    <a href="{$dashboardUrl}" style="color: #667eea; text-decoration: none; font-weight: 500;">
-                        🏠 Dashboard del Agente
+                    <a href="{$loginUrl}" style="color: #667eea; text-decoration: none; font-weight: 500;">
+                        🔑 Portal de Inicio de Sesión
                     </a>
                 </p>
                 <p style="margin: 8px 0;">
-                    <a href="{$loginUrl}" style="color: #667eea; text-decoration: none; font-weight: 500;">
-                        🔑 Portal de Inicio de Sesión
+                    <a href="{$punchUrl}" style="color: #667eea; text-decoration: none; font-weight: 500;">
+                        ⏱️ Módulo de Ponche (Registrar Marcaciones)
+                    </a>
+                </p>
+                <p style="margin: 8px 0;">
+                    <a href="{$dashboardUrl}" style="color: #667eea; text-decoration: none; font-weight: 500;">
+                        📊 Dashboard del Agente (Ver Estadísticas)
                     </a>
                 </p>
                 <p style="margin: 8px 0;">

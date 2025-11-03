@@ -79,6 +79,7 @@ function sendWelcomeEmail($employeeData) {
             'department' => $employeeData['department'] ?? 'N/A',
             'hire_date' => !empty($employeeData['hire_date']) ? date('d/m/Y', strtotime($employeeData['hire_date'])) : date('d/m/Y'),
             'login_url' => $config['app_url'] . '/login_agent.php',
+            'punch_url' => $config['app_url'] . '/punch.php',
             'dashboard_url' => $config['app_url'] . '/agent_dashboard.php',
             'support_email' => $config['support_email'],
             'app_name' => $config['app_name']
@@ -143,22 +144,25 @@ Ingresa al sistema usando el siguiente enlace:
 CÓMO USAR EL SISTEMA DE MARCACIONES
 ====================================
 
-1. ACCEDE AL SISTEMA
+1. ACCEDE AL SISTEMA DE PONCHE
    Ingresa a {$data['login_url']} y usa tus credenciales para iniciar sesión.
+   Luego accede al módulo de ponche para registrar tus marcaciones.
 
 2. MARCA TU ENTRADA
-   Al llegar al trabajo, haz clic en el botón "Ponchar Entrada" en tu dashboard.
-   El sistema registrará automáticamente la hora exacta.
+   Al llegar al trabajo, ve al módulo de ponche y haz clic en el botón "Ponchar Entrada".
+   El sistema registrará automáticamente la hora exacta de tu llegada.
 
 3. REGISTRA TUS DESCANSOS
-   Durante tu jornada, puedes marcar tus descansos (almuerzo, breaks) usando los botones correspondientes.
+   Durante tu jornada, usa el módulo de ponche para marcar tus descansos (almuerzo, breaks).
+   Esto ayuda a calcular correctamente tus horas trabajadas.
 
 4. MARCA TU SALIDA
-   Al finalizar tu jornada, haz clic en "Ponchar Salida".
+   Al finalizar tu jornada, regresa al módulo de ponche y haz clic en "Ponchar Salida".
    El sistema calculará automáticamente tus horas trabajadas del día.
 
-5. CONSULTA TUS REGISTROS
-   Puedes ver tu historial de marcaciones, horas trabajadas y reportes en la sección "Mis Registros".
+5. CONSULTA TUS REGISTROS EN EL DASHBOARD
+   Puedes ver tu historial de marcaciones, horas trabajadas y reportes de productividad en tu
+   Dashboard del Agente. Allí encontrarás estadísticas detalladas de tu desempeño.
 
 CONSEJOS IMPORTANTES
 ====================
@@ -169,8 +173,9 @@ CONSEJOS IMPORTANTES
 
 ENLACES RÁPIDOS
 ===============
-Dashboard del Agente: {$data['dashboard_url']}
 Portal de Inicio de Sesión: {$data['login_url']}
+Módulo de Ponche (Registrar Marcaciones): {$data['punch_url']}
+Dashboard del Agente (Ver Estadísticas): {$data['dashboard_url']}
 Soporte: {$data['support_email']}
 
 Si tienes alguna pregunta o necesitas ayuda, no dudes en contactarnos en {$data['support_email']}
