@@ -35,6 +35,8 @@ $sections = [
     'hr_permissions' => ['label' => 'Permisos', 'category' => 'Recursos Humanos', 'icon' => 'fa-clipboard-list', 'description' => 'Solicitudes de permisos'],
     'hr_vacations' => ['label' => 'Vacaciones', 'category' => 'Recursos Humanos', 'icon' => 'fa-umbrella-beach', 'description' => 'Solicitudes de vacaciones'],
     'hr_calendar' => ['label' => 'Calendario HR', 'category' => 'Recursos Humanos', 'icon' => 'fa-calendar-alt', 'description' => 'Calendario integrado de eventos'],
+    'hr_recruitment' => ['label' => 'Reclutamiento', 'category' => 'Recursos Humanos', 'icon' => 'fa-user-plus', 'description' => 'Gestión de vacantes y solicitudes de empleo'],
+    'hr_job_postings' => ['label' => 'Gestión de Vacantes', 'category' => 'Recursos Humanos', 'icon' => 'fa-briefcase', 'description' => 'Crear y administrar vacantes de empleo'],
     
     // Agents
     'agent_dashboard' => ['label' => 'Dashboard de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-chart-bar', 'description' => 'Panel para agentes'],

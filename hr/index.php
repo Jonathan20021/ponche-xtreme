@@ -279,6 +279,26 @@ $recentVacations = $pdo->query("
                 </div>
                 <p class="text-slate-400 text-sm">Generador automático de contratos laborales</p>
             </div>
+
+            <div class="module-card" onclick="window.location.href='recruitment.php'">
+                <div class="flex items-center mb-3">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <i class="fas fa-user-plus text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white">Reclutamiento</h3>
+                </div>
+                <p class="text-slate-400 text-sm">Gestión de vacantes y solicitudes de empleo</p>
+            </div>
+
+            <div class="module-card" onclick="window.location.href='job_postings.php'">
+                <div class="flex items-center mb-3">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <i class="fas fa-briefcase text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white">Vacantes</h3>
+                </div>
+                <p class="text-slate-400 text-sm">Crear y administrar ofertas de empleo</p>
+            </div>
         </div>
 
         <!-- Quick Info Sections -->
