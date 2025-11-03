@@ -1,7 +1,7 @@
-﻿<?php
+<?php
 session_start();
-if (!isset($_SESSION['employee_id'])) {
-    header('Location: login_agent.php');
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT', 'IT', 'Supervisor'], true)) {
+    header('Location: ../login_agent.php');
     exit;
 }
 
@@ -15,8 +15,9 @@ if (!function_exists('sanitizeHexColorValue')) {
     }
 }
 
-$employee_id = (int) $_SESSION['employee_id'];
+$user_id = (int) $_SESSION['user_id'];
 $username = $_SESSION['username'] ?? '';
+$full_name = $_SESSION['full_name'] ?? 'Agente';
 
 $attendanceTypes = getAttendanceTypes($pdo, false);
 $attendanceTypeMap = [];
@@ -35,7 +36,7 @@ $records_query = 'SELECT id, type, DATE(timestamp) AS record_date, TIME(timestam
     ORDER BY timestamp DESC';
 
 $stmt = $pdo->prepare($records_query);
-$stmt->execute([$employee_id]);
+$stmt->execute([$user_id]);
 $rawRecords = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 $records = [];
@@ -74,7 +75,7 @@ $tardiness_query = 'SELECT
     WHERE user_id = ?';
 
 $tardiness_stmt = $pdo->prepare($tardiness_query);
-$tardiness_stmt->execute([$employee_id]);
+$tardiness_stmt->execute([$user_id]);
 $tardiness_data = $tardiness_stmt->fetch(PDO::FETCH_ASSOC) ?: ['late_entries' => 0, 'late_lunches' => 0, 'late_breaks' => 0, 'total_entries' => 0];
 
 $total_tardiness = 0;
