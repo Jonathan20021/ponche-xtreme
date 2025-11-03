@@ -8,6 +8,36 @@ ensurePermission('hr_employees');
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
+// Handle employee schedule update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
+    $employeeId = (int)$_POST['employee_id'];
+    $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
+    
+    try {
+        // Get user_id from employee
+        $stmt = $pdo->prepare("SELECT user_id FROM employees WHERE id = ?");
+        $stmt->execute([$employeeId]);
+        $userId = $stmt->fetchColumn();
+        
+        if ($userId) {
+            // Deactivate existing schedules
+            deactivateEmployeeSchedules($pdo, $employeeId);
+            
+            // Create new schedule from template if selected
+            if ($scheduleTemplateId) {
+                createEmployeeScheduleFromTemplate($pdo, $employeeId, $userId, $scheduleTemplateId);
+                $successMsg = "Horario actualizado correctamente.";
+            } else {
+                $successMsg = "Horario eliminado. El empleado usará el horario global del sistema.";
+            }
+        } else {
+            $errorMsg = "No se pudo encontrar el usuario asociado al empleado.";
+        }
+    } catch (Exception $e) {
+        $errorMsg = "Error al actualizar horario: " . $e->getMessage();
+    }
+}
+
 // Handle employee update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
     $employeeId = (int)$_POST['employee_id'];
@@ -176,6 +206,9 @@ $departments = getAllDepartments($pdo);
 
 // Get banks for form
 $banks = getAllBanks($pdo);
+
+// Get schedule templates for form
+$scheduleTemplates = getAllScheduleTemplates($pdo);
 
 // Get statistics
 $stats = [
@@ -638,12 +671,118 @@ $stats = [
                     <p class="text-xs text-slate-400 mt-1">Formatos permitidos: JPG, PNG, GIF (Máx. 5MB)</p>
                 </div>
 
+                <h4 class="text-lg font-semibold text-white mb-3 mt-6">
+                    <i class="fas fa-clock text-blue-400 mr-2"></i>
+                    Horario de Trabajo
+                </h4>
+                <div class="form-group mb-4">
+                    <label for="edit_schedule_template_id">Turno / Horario</label>
+                    <div class="flex gap-2">
+                        <select id="edit_schedule_template_id" name="schedule_template_id" class="flex-1" onchange="updateScheduleButtonsEdit()">
+                            <option value="">Usar horario global del sistema</option>
+                            <?php foreach ($scheduleTemplates as $template): ?>
+                                <?php 
+                                $timeInfo = date('g:i A', strtotime($template['entry_time'])) . ' - ' . date('g:i A', strtotime($template['exit_time']));
+                                ?>
+                                <option value="<?= $template['id'] ?>">
+                                    <?= htmlspecialchars($template['name']) ?> (<?= $timeInfo ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="button" onclick="openNewScheduleModalEdit()" class="btn-secondary px-3 whitespace-nowrap" title="Crear nuevo turno">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button type="button" id="editScheduleBtnEdit" onclick="editSelectedScheduleEdit()" class="btn-secondary px-3 whitespace-nowrap hidden" title="Editar turno seleccionado">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" id="deleteScheduleBtnEdit" onclick="deleteSelectedScheduleEdit()" class="btn-secondary px-3 whitespace-nowrap hidden" title="Eliminar turno seleccionado" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1">
+                        <i class="fas fa-info-circle"></i>
+                        El horario se aplicará automáticamente en el sistema de ponche.
+                    </p>
+                    <div id="current_schedule_info" class="mt-2 p-3 bg-slate-700/50 rounded-lg text-sm"></div>
+                </div>
+
                 <div class="flex gap-3">
                     <button type="submit" class="btn-primary flex-1">
                         <i class="fas fa-save"></i>
                         Guardar Cambios
                     </button>
                     <button type="button" onclick="document.getElementById('editModal').classList.add('hidden')" class="btn-secondary flex-1">
+                        <i class="fas fa-times"></i>
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para crear nuevo turno -->
+    <div id="newScheduleModalEdit" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+        <div class="glass-card m-4" style="width: min(600px, 95%); max-height: 90vh; overflow-y: auto;">
+            <h3 class="text-xl font-semibold text-white mb-4">
+                <i class="fas fa-clock text-blue-400 mr-2"></i>
+                Crear Nuevo Turno
+            </h3>
+            <form id="newScheduleFormEdit" onsubmit="saveNewScheduleEdit(event)">
+                <div class="form-group mb-4">
+                    <label for="new_schedule_name_edit">Nombre del Turno *</label>
+                    <input type="text" id="new_schedule_name_edit" name="name" required placeholder="Ej: Turno Especial 8am-5pm">
+                </div>
+
+                <div class="form-group mb-4">
+                    <label for="new_schedule_description_edit">Descripción</label>
+                    <textarea id="new_schedule_description_edit" name="description" rows="2" placeholder="Descripción opcional del turno"></textarea>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="new_entry_time_edit">Hora de Entrada *</label>
+                        <input type="time" id="new_entry_time_edit" name="entry_time" required value="10:00">
+                    </div>
+                    <div class="form-group">
+                        <label for="new_exit_time_edit">Hora de Salida *</label>
+                        <input type="time" id="new_exit_time_edit" name="exit_time" required value="19:00">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="new_lunch_time_edit">Hora de Almuerzo</label>
+                        <input type="time" id="new_lunch_time_edit" name="lunch_time" value="14:00">
+                    </div>
+                    <div class="form-group">
+                        <label for="new_break_time_edit">Hora de Descanso</label>
+                        <input type="time" id="new_break_time_edit" name="break_time" value="17:00">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="new_lunch_minutes_edit">Minutos Almuerzo</label>
+                        <input type="number" id="new_lunch_minutes_edit" name="lunch_minutes" min="0" value="45">
+                    </div>
+                    <div class="form-group">
+                        <label for="new_break_minutes_edit">Minutos Descanso</label>
+                        <input type="number" id="new_break_minutes_edit" name="break_minutes" min="0" value="15">
+                    </div>
+                    <div class="form-group">
+                        <label for="new_scheduled_hours_edit">Horas Programadas</label>
+                        <input type="number" id="new_scheduled_hours_edit" name="scheduled_hours" step="0.25" min="0" value="8.00">
+                    </div>
+                </div>
+
+                <div id="scheduleFormMessageEdit" class="mb-4 hidden"></div>
+
+                <div class="flex gap-3">
+                    <button type="submit" class="btn-primary flex-1">
+                        <i class="fas fa-save"></i>
+                        Guardar Turno
+                    </button>
+                    <button type="button" onclick="closeNewScheduleModalEdit()" class="btn-secondary flex-1">
                         <i class="fas fa-times"></i>
                         Cancelar
                     </button>
@@ -708,8 +847,225 @@ $stats = [
                 photoPreview.innerHTML = '<p class="text-slate-400 text-sm">Sin foto actual</p>';
             }
             
+            // Load current schedule
+            loadEmployeeSchedule(employee.id);
+            
             document.getElementById('editModal').classList.remove('hidden');
         }
+        
+        function loadEmployeeSchedule(employeeId) {
+            fetch(`get_employee_schedule.php?employee_id=${employeeId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const scheduleInfo = document.getElementById('current_schedule_info');
+                    const scheduleSelect = document.getElementById('edit_schedule_template_id');
+                    
+                    if (data.schedule) {
+                        const schedule = data.schedule;
+                        scheduleInfo.innerHTML = `
+                            <div class="text-green-400">
+                                <i class="fas fa-check-circle mr-2"></i>
+                                <strong>Horario Actual:</strong> ${schedule.schedule_name || 'Horario Personalizado'}
+                            </div>
+                            <div class="text-slate-300 mt-1">
+                                <i class="fas fa-clock mr-2"></i>
+                                ${schedule.entry_time} - ${schedule.exit_time} 
+                                (${schedule.scheduled_hours} horas)
+                            </div>
+                        `;
+                        // Try to select the matching template if it exists
+                        scheduleSelect.value = '';
+                    } else {
+                        scheduleInfo.innerHTML = `
+                            <div class="text-slate-400">
+                                <i class="fas fa-info-circle mr-2"></i>
+                                Usando horario global del sistema
+                            </div>
+                        `;
+                        scheduleSelect.value = '';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading schedule:', error);
+                    document.getElementById('current_schedule_info').innerHTML = `
+                        <div class="text-slate-400">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            No se pudo cargar el horario actual
+                        </div>
+                    `;
+                });
+        }
+        
+        let isEditModeEdit = false;
+        let editingScheduleIdEdit = null;
+
+        function updateScheduleButtonsEdit() {
+            const select = document.getElementById('edit_schedule_template_id');
+            const editBtn = document.getElementById('editScheduleBtnEdit');
+            const deleteBtn = document.getElementById('deleteScheduleBtnEdit');
+            
+            if (select.value && select.value !== '') {
+                editBtn.classList.remove('hidden');
+                deleteBtn.classList.remove('hidden');
+            } else {
+                editBtn.classList.add('hidden');
+                deleteBtn.classList.add('hidden');
+            }
+        }
+
+        function openNewScheduleModalEdit() {
+            isEditModeEdit = false;
+            editingScheduleIdEdit = null;
+            document.getElementById('newScheduleModalEdit').classList.remove('hidden');
+            document.getElementById('newScheduleFormEdit').reset();
+            document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
+            document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-clock text-blue-400 mr-2"></i>Crear Nuevo Turno';
+        }
+
+        function editSelectedScheduleEdit() {
+            const select = document.getElementById('edit_schedule_template_id');
+            const scheduleId = select.value;
+            
+            if (!scheduleId) return;
+            
+            fetch('../get_schedule_template.php?id=' + scheduleId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const template = data.template;
+                        isEditModeEdit = true;
+                        editingScheduleIdEdit = template.id;
+                        
+                        document.getElementById('new_schedule_name_edit').value = template.name;
+                        document.getElementById('new_schedule_description_edit').value = template.description || '';
+                        document.getElementById('new_entry_time_edit').value = template.entry_time.substring(0, 5);
+                        document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
+                        document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
+                        document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '17:00';
+                        document.getElementById('new_lunch_minutes_edit').value = template.lunch_minutes;
+                        document.getElementById('new_break_minutes_edit').value = template.break_minutes;
+                        document.getElementById('new_scheduled_hours_edit').value = template.scheduled_hours;
+                        
+                        document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-edit text-blue-400 mr-2"></i>Editar Turno';
+                        document.getElementById('newScheduleModalEdit').classList.remove('hidden');
+                        document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
+                    } else {
+                        alert('Error al cargar el turno: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error al cargar el turno: ' + error.message);
+                });
+        }
+
+        function deleteSelectedScheduleEdit() {
+            const select = document.getElementById('edit_schedule_template_id');
+            const scheduleId = select.value;
+            const scheduleName = select.options[select.selectedIndex].text;
+            
+            if (!scheduleId) return;
+            
+            if (!confirm('¿Estás seguro de que deseas eliminar el turno "' + scheduleName + '"?\n\nEsta acción no se puede deshacer.')) {
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('id', scheduleId);
+            
+            fetch('../delete_schedule_template.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    select.remove(select.selectedIndex);
+                    updateScheduleButtonsEdit();
+                    alert(data.message);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Error al eliminar el turno: ' + error.message);
+            });
+        }
+
+        function closeNewScheduleModalEdit() {
+            document.getElementById('newScheduleModalEdit').classList.add('hidden');
+            isEditModeEdit = false;
+            editingScheduleIdEdit = null;
+        }
+
+        function saveNewScheduleEdit(event) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const formData = new FormData(form);
+            const messageDiv = document.getElementById('scheduleFormMessageEdit');
+            
+            if (isEditModeEdit && editingScheduleIdEdit) {
+                formData.append('id', editingScheduleIdEdit);
+            }
+            
+            messageDiv.className = 'status-banner mb-4';
+            messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
+            messageDiv.classList.remove('hidden');
+            
+            const endpoint = isEditModeEdit ? '../update_schedule_template.php' : '../save_schedule_template.php';
+            
+            fetch(endpoint, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    messageDiv.className = 'status-banner success mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
+                    
+                    const select = document.getElementById('edit_schedule_template_id');
+                    const template = data.template;
+                    const entryTime = new Date('2000-01-01 ' + template.entry_time);
+                    const exitTime = new Date('2000-01-01 ' + template.exit_time);
+                    const timeInfo = entryTime.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'}) + 
+                                   ' - ' + exitTime.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+                    
+                    if (isEditModeEdit) {
+                        const option = select.querySelector('option[value="' + template.id + '"]');
+                        if (option) {
+                            option.textContent = template.name + ' (' + timeInfo + ')';
+                        }
+                    } else {
+                        const option = document.createElement('option');
+                        option.value = template.id;
+                        option.textContent = template.name + ' (' + timeInfo + ')';
+                        option.selected = true;
+                        select.appendChild(option);
+                    }
+                    
+                    updateScheduleButtonsEdit();
+                    
+                    setTimeout(() => {
+                        closeNewScheduleModalEdit();
+                    }, 1000);
+                } else {
+                    messageDiv.className = 'status-banner error mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
+                }
+            })
+            .catch(error => {
+                messageDiv.className = 'status-banner error mb-4';
+                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar: ' + error.message;
+            });
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('newScheduleModalEdit')?.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeNewScheduleModalEdit();
+            }
+        });
     </script>
 
     <?php include '../footer.php'; ?>

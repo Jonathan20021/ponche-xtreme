@@ -527,4 +527,247 @@ if (!function_exists('addBank')) {
         }
     }
 }
+
+if (!function_exists('getAllScheduleTemplates')) {
+    /**
+     * Returns all schedule templates ordered by name.
+     */
+    function getAllScheduleTemplates(PDO $pdo, bool $activeOnly = true): array
+    {
+        try {
+            $sql = "SELECT id, name, description, entry_time, exit_time, lunch_time, break_time, 
+                           lunch_minutes, break_minutes, scheduled_hours, is_active 
+                    FROM schedule_templates";
+            if ($activeOnly) {
+                $sql .= " WHERE is_active = 1";
+            }
+            $sql .= " ORDER BY name";
+            
+            $stmt = $pdo->query($sql);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+}
+
+if (!function_exists('getEmployeeSchedule')) {
+    /**
+     * Returns the active schedule for an employee.
+     * If no active schedule exists, returns null.
+     */
+    function getEmployeeSchedule(PDO $pdo, int $employeeId, ?string $date = null): ?array
+    {
+        try {
+            $date = $date ?? date('Y-m-d');
+            
+            $stmt = $pdo->prepare("
+                SELECT * FROM employee_schedules 
+                WHERE employee_id = ? 
+                AND is_active = 1
+                AND (effective_date IS NULL OR effective_date <= ?)
+                AND (end_date IS NULL OR end_date >= ?)
+                ORDER BY effective_date DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$employeeId, $date, $date]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return $result ?: null;
+        } catch (PDOException $e) {
+            return null;
+        }
+    }
+}
+
+if (!function_exists('getEmployeeScheduleByUserId')) {
+    /**
+     * Returns the active schedule for an employee by user_id.
+     */
+    function getEmployeeScheduleByUserId(PDO $pdo, int $userId, ?string $date = null): ?array
+    {
+        try {
+            $date = $date ?? date('Y-m-d');
+            
+            $stmt = $pdo->prepare("
+                SELECT * FROM employee_schedules 
+                WHERE user_id = ? 
+                AND is_active = 1
+                AND (effective_date IS NULL OR effective_date <= ?)
+                AND (end_date IS NULL OR end_date >= ?)
+                ORDER BY effective_date DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$userId, $date, $date]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return $result ?: null;
+        } catch (PDOException $e) {
+            return null;
+        }
+    }
+}
+
+if (!function_exists('createEmployeeSchedule')) {
+    /**
+     * Creates a new schedule for an employee.
+     */
+    function createEmployeeSchedule(PDO $pdo, int $employeeId, int $userId, array $scheduleData): ?int
+    {
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO employee_schedules (
+                    employee_id, user_id, schedule_name, entry_time, exit_time, 
+                    lunch_time, break_time, lunch_minutes, break_minutes, 
+                    scheduled_hours, is_active, effective_date, end_date, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            
+            $stmt->execute([
+                $employeeId,
+                $userId,
+                $scheduleData['schedule_name'] ?? null,
+                $scheduleData['entry_time'] ?? '10:00:00',
+                $scheduleData['exit_time'] ?? '19:00:00',
+                $scheduleData['lunch_time'] ?? '14:00:00',
+                $scheduleData['break_time'] ?? '17:00:00',
+                $scheduleData['lunch_minutes'] ?? 45,
+                $scheduleData['break_minutes'] ?? 15,
+                $scheduleData['scheduled_hours'] ?? 8.00,
+                $scheduleData['is_active'] ?? 1,
+                $scheduleData['effective_date'] ?? date('Y-m-d'),
+                $scheduleData['end_date'] ?? null,
+                $scheduleData['notes'] ?? null
+            ]);
+            
+            return (int) $pdo->lastInsertId();
+        } catch (PDOException $e) {
+            return null;
+        }
+    }
+}
+
+if (!function_exists('createEmployeeScheduleFromTemplate')) {
+    /**
+     * Creates an employee schedule from a template.
+     */
+    function createEmployeeScheduleFromTemplate(PDO $pdo, int $employeeId, int $userId, int $templateId, ?string $effectiveDate = null): ?int
+    {
+        try {
+            // Get template data
+            $stmt = $pdo->prepare("SELECT * FROM schedule_templates WHERE id = ?");
+            $stmt->execute([$templateId]);
+            $template = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$template) {
+                return null;
+            }
+            
+            // Create schedule from template
+            $scheduleData = [
+                'schedule_name' => $template['name'],
+                'entry_time' => $template['entry_time'],
+                'exit_time' => $template['exit_time'],
+                'lunch_time' => $template['lunch_time'],
+                'break_time' => $template['break_time'],
+                'lunch_minutes' => $template['lunch_minutes'],
+                'break_minutes' => $template['break_minutes'],
+                'scheduled_hours' => $template['scheduled_hours'],
+                'is_active' => 1,
+                'effective_date' => $effectiveDate ?? date('Y-m-d'),
+                'notes' => 'Creado desde template: ' . $template['name']
+            ];
+            
+            return createEmployeeSchedule($pdo, $employeeId, $userId, $scheduleData);
+        } catch (PDOException $e) {
+            return null;
+        }
+    }
+}
+
+if (!function_exists('updateEmployeeSchedule')) {
+    /**
+     * Updates an existing employee schedule.
+     */
+    function updateEmployeeSchedule(PDO $pdo, int $scheduleId, array $scheduleData): bool
+    {
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE employee_schedules SET
+                    schedule_name = ?, entry_time = ?, exit_time = ?, 
+                    lunch_time = ?, break_time = ?, lunch_minutes = ?, 
+                    break_minutes = ?, scheduled_hours = ?, is_active = ?,
+                    effective_date = ?, end_date = ?, notes = ?,
+                    updated_at = NOW()
+                WHERE id = ?
+            ");
+            
+            return $stmt->execute([
+                $scheduleData['schedule_name'] ?? null,
+                $scheduleData['entry_time'] ?? '10:00:00',
+                $scheduleData['exit_time'] ?? '19:00:00',
+                $scheduleData['lunch_time'] ?? '14:00:00',
+                $scheduleData['break_time'] ?? '17:00:00',
+                $scheduleData['lunch_minutes'] ?? 45,
+                $scheduleData['break_minutes'] ?? 15,
+                $scheduleData['scheduled_hours'] ?? 8.00,
+                $scheduleData['is_active'] ?? 1,
+                $scheduleData['effective_date'] ?? null,
+                $scheduleData['end_date'] ?? null,
+                $scheduleData['notes'] ?? null,
+                $scheduleId
+            ]);
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('deactivateEmployeeSchedules')) {
+    /**
+     * Deactivates all schedules for an employee.
+     */
+    function deactivateEmployeeSchedules(PDO $pdo, int $employeeId): bool
+    {
+        try {
+            $stmt = $pdo->prepare("UPDATE employee_schedules SET is_active = 0 WHERE employee_id = ?");
+            return $stmt->execute([$employeeId]);
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+}
+
+if (!function_exists('getScheduleConfigForUser')) {
+    /**
+     * Returns the schedule configuration for a specific user.
+     * First checks if the user has a custom schedule, otherwise returns global config.
+     */
+    function getScheduleConfigForUser(PDO $pdo, int $userId, ?string $date = null): array
+    {
+        // Try to get employee schedule first
+        $employeeSchedule = getEmployeeScheduleByUserId($pdo, $userId, $date);
+        
+        if ($employeeSchedule) {
+            return [
+                'entry_time' => $employeeSchedule['entry_time'],
+                'exit_time' => $employeeSchedule['exit_time'],
+                'lunch_time' => $employeeSchedule['lunch_time'],
+                'break_time' => $employeeSchedule['break_time'],
+                'lunch_minutes' => (int)$employeeSchedule['lunch_minutes'],
+                'break_minutes' => (int)$employeeSchedule['break_minutes'],
+                'scheduled_hours' => (float)$employeeSchedule['scheduled_hours'],
+                'schedule_name' => $employeeSchedule['schedule_name'] ?? 'Horario Personalizado',
+                'is_custom' => true
+            ];
+        }
+        
+        // Fall back to global schedule config
+        $globalConfig = getScheduleConfig($pdo);
+        $globalConfig['schedule_name'] = 'Horario Global';
+        $globalConfig['is_custom'] = false;
+        
+        return $globalConfig;
+    }
+}
 ?>
