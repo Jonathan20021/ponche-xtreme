@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../db.php';
+require_once '../lib/logging_functions.php';
 
 // Check permissions
 ensurePermission('hr_recruitment');

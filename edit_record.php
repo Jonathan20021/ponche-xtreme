@@ -1,11 +1,10 @@
 <?php
 session_start();
 include 'db.php';
+require_once 'lib/logging_functions.php';
 
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['IT'])) {
-    header('Location: index.php');
-    exit;
-}
+// Check permission
+ensurePermission('records');
 
 // Obtener el ID del registro a editar
 if (!isset($_GET['id'])) {
@@ -38,19 +37,47 @@ if (!$record) {
     exit;
 }
 
+// Get all attendance types
+$attendanceTypes = getAttendanceTypes($pdo, true);
+
 // Procesar la edición del registro
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $type = $_POST['type'];
-    $timestamp = $_POST['timestamp'];
-    $ip_address = $_POST['ip_address'];
+    $type = strtoupper(trim($_POST['type'] ?? ''));
+    $timestamp = $_POST['timestamp'] ?? '';
+    $ip_address = trim($_POST['ip_address'] ?? '');
 
     if ($type && $timestamp) {
+        // Get old values for logging
+        $oldValuesQuery = "SELECT type, timestamp, ip_address FROM attendance WHERE id = ?";
+        $oldStmt = $pdo->prepare($oldValuesQuery);
+        $oldStmt->execute([$record_id]);
+        $oldValues = $oldStmt->fetch(PDO::FETCH_ASSOC);
+        
+        // Update record
         $update_query = "UPDATE attendance SET type = ?, timestamp = ?, ip_address = ? WHERE id = ?";
         $update_stmt = $pdo->prepare($update_query);
         $update_stmt->execute([$type, $timestamp, $ip_address, $record_id]);
 
+        // Log the modification
+        $newValues = [
+            'type' => $type,
+            'timestamp' => $timestamp,
+            'ip_address' => $ip_address
+        ];
+        
+        log_attendance_modified(
+            $pdo,
+            $_SESSION['user_id'],
+            $_SESSION['full_name'],
+            $_SESSION['role'],
+            $record_id,
+            $record['full_name'],
+            $oldValues,
+            $newValues
+        );
+
         $message = "Registro actualizado exitosamente.";
-        header('Location: records.php'); // Redirigir a la página de lista
+        header('Location: records.php');
         exit;
     } else {
         $message = "Por favor completa todos los campos requeridos.";
@@ -85,12 +112,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <!-- Formulario de edición -->
         <form method="POST" class="bg-white p-6 rounded shadow-md">
             <div class="mb-4">
-                <label for="type" class="block text-sm font-bold mb-2">Tipo</label>
-                <select name="type" id="type" class="p-2 border rounded w-full">
-                    <option value="Entry" <?= $record['type'] === 'Entry' ? 'selected' : '' ?>>Entry</option>
-                    <option value="Lunch" <?= $record['type'] === 'Lunch' ? 'selected' : '' ?>>Lunch</option>
-                    <option value="Break" <?= $record['type'] === 'Break' ? 'selected' : '' ?>>Break</option>
-                    <option value="Exit" <?= $record['type'] === 'Exit' ? 'selected' : '' ?>>Exit</option>
+                <label for="type" class="block text-sm font-bold mb-2">Tipo de Asistencia</label>
+                <select name="type" id="type" class="p-2 border rounded w-full" required>
+                    <option value="">Seleccionar tipo...</option>
+                    <?php foreach ($attendanceTypes as $typeRow): ?>
+                        <?php 
+                        $slug = strtoupper($typeRow['slug']);
+                        $label = $typeRow['label'] ?? $slug;
+                        $isSelected = strtoupper($record['type']) === $slug ? 'selected' : '';
+                        ?>
+                        <option value="<?= htmlspecialchars($slug) ?>" <?= $isSelected ?>>
+                            <?= htmlspecialchars($label) ?>
+                        </option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="mb-4">
@@ -99,10 +133,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div class="mb-4">
                 <label for="ip_address" class="block text-sm font-bold mb-2">Dirección IP</label>
-                <input type="text" name="ip_address" id="ip_address" value="<?= htmlspecialchars($record['ip_address']) ?>" class="p-2 border rounded w-full" required>
+                <input type="text" name="ip_address" id="ip_address" value="<?= htmlspecialchars($record['ip_address']) ?>" class="p-2 border rounded w-full">
+                <p class="text-xs text-gray-500 mt-1">Opcional - Dirección IP desde donde se registró</p>
             </div>
-            <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700">Guardar Cambios</button>
-            <a href="records.php" class="ml-4 text-blue-500 hover:underline">Cancelar</a>
+            <div class="flex gap-3">
+                <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700">
+                    <i class="fas fa-save"></i> Guardar Cambios
+                </button>
+                <a href="records.php" class="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-700 inline-block">
+                    <i class="fas fa-times"></i> Cancelar
+                </a>
+            </div>
         </form>
     </div>
 </body>

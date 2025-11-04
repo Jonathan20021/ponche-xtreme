@@ -101,6 +101,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
     ");
     $insert_stmt->execute([$user_id, $typeSlug, $ip_address]);
     
+    // Log attendance registration
+    require_once 'lib/logging_functions.php';
+    $recordId = $pdo->lastInsertId();
+    log_custom_action(
+        $pdo,
+        $user_id,
+        $_SESSION['full_name'],
+        $_SESSION['role'],
+        'attendance',
+        'create',
+        "Registro de asistencia desde dashboard: {$typeSlug}",
+        'attendance_record',
+        $recordId,
+        ['type' => $typeSlug, 'ip_address' => $ip_address]
+    );
+    
     // Send Slack notification
     $slack_webhook_url = 'https://hooks.slack.com/services/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';
     $current_timestamp = date('Y-m-d H:i:s');

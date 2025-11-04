@@ -101,6 +101,7 @@ $navItems = [
             ],
         ],
     ],
+    'activity_logs' => ['label' => 'Logs de Actividad', 'href' => $baseHref . 'hr/activity_logs.php', 'icon' => 'fa-history'],
     'login_logs' => ['label' => 'Registros de Acceso', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
     'settings' => ['label' => 'Configuración', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],
 ];

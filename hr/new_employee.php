@@ -2,6 +2,7 @@
 session_start();
 require_once '../db.php';
 require_once '../lib/email_functions.php';
+require_once '../lib/logging_functions.php';
 
 // Check permissions
 ensurePermission('hr_employees');
@@ -115,6 +116,19 @@ if (isset($_POST['register'])) {
                 }
                 
                 $pdo->commit();
+                
+                // Log employee creation
+                $employee_data = [
+                    'name' => $full_name,
+                    'employee_code' => $employeeCode,
+                    'username' => $username,
+                    'email' => $email,
+                    'position' => $position,
+                    'department_id' => $department_id,
+                    'hire_date' => $hire_date,
+                    'hourly_rate' => $hourly_rate
+                ];
+                log_employee_created($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $employee_data);
                 
                 // Send welcome email to the new employee
                 if (!empty($email)) {

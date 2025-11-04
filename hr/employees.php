@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../db.php';
+require_once '../lib/logging_functions.php';
 
 // Check permissions
 ensurePermission('hr_employees');
@@ -23,6 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
             // Deactivate existing schedules
             deactivateEmployeeSchedules($pdo, $employeeId);
             
+            // Get employee name for logging
+            $empStmt = $pdo->prepare("SELECT first_name, last_name FROM employees WHERE id = ?");
+            $empStmt->execute([$employeeId]);
+            $empData = $empStmt->fetch();
+            $employeeName = $empData['first_name'] . ' ' . $empData['last_name'];
+            
+            // Get old schedule for logging
+            $oldScheduleStmt = $pdo->prepare("SELECT schedule_template_id FROM employee_schedules WHERE employee_id = ? AND is_active = 1 LIMIT 1");
+            $oldScheduleStmt->execute([$employeeId]);
+            $oldSchedule = $oldScheduleStmt->fetchColumn();
+            
             // Create new schedule from template if selected
             if ($scheduleTemplateId) {
                 createEmployeeScheduleFromTemplate($pdo, $employeeId, $userId, $scheduleTemplateId);
@@ -30,6 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
             } else {
                 $successMsg = "Horario eliminado. El empleado usará el horario global del sistema.";
             }
+            
+            // Log schedule change
+            log_schedule_changed($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $employeeName, ['schedule_template_id' => $oldSchedule], ['schedule_template_id' => $scheduleTemplateId]);
         } else {
             $errorMsg = "No se pudo encontrar el usuario asociado al empleado.";
         }
@@ -45,6 +60,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
     $pdo->beginTransaction();
     
     try {
+        // Get old employee data for logging
+        $oldDataStmt = $pdo->prepare("SELECT * FROM employees WHERE id = ?");
+        $oldDataStmt->execute([$employeeId]);
+        $oldData = $oldDataStmt->fetch(PDO::FETCH_ASSOC);
+        
         // Prepare all employee data
         $data = [
             'first_name' => trim($_POST['first_name']),
@@ -147,6 +167,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             WHERE id = (SELECT user_id FROM employees WHERE id = ?)
         ");
         $userStmt->execute([$fullName, $hourlyRate, $data['department_id'], $employeeId]);
+        
+        // Log employee update
+        log_employee_updated($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $oldData, $data);
         
         $pdo->commit();
         $successMsg = "Empleado actualizado correctamente. Los cambios se sincronizaron con el usuario.";

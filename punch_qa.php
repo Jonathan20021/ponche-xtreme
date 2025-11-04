@@ -52,6 +52,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         VALUES (?, ?, ?, NOW())
                     ");
                     $insert_stmt->execute([$user_id, $type, $ip_address]);
+                    
+                    // Log attendance registration
+                    require_once 'lib/logging_functions.php';
+                    $recordId = $pdo->lastInsertId();
+                    log_custom_action(
+                        $pdo,
+                        $user_id,
+                        $_SESSION['full_name'],
+                        $_SESSION['role'],
+                        'attendance',
+                        'create',
+                        "Registro de asistencia QA: {$type}",
+                        'attendance_record',
+                        $recordId,
+                        ['type' => $type, 'ip_address' => $ip_address]
+                    );
                     $success = "Attendance recorded successfully.";
                     $show_last_punch = true;
 

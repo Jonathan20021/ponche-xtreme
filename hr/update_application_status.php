@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../db.php';
+require_once '../lib/logging_functions.php';
 
 // Check permissions
 ensurePermission('hr_recruitment');
@@ -15,8 +16,8 @@ $new_status = $_POST['new_status'];
 $notes = $_POST['notes'] ?? '';
 
 try {
-    // Get current status
-    $stmt = $pdo->prepare("SELECT status FROM job_applications WHERE id = ?");
+    // Get current status and candidate info
+    $stmt = $pdo->prepare("SELECT status, first_name, last_name FROM job_applications WHERE id = ?");
     $stmt->execute([$application_id]);
     $current = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -30,6 +31,11 @@ try {
         VALUES (?, ?, ?, ?, ?)
     ");
     $stmt->execute([$application_id, $current['status'], $new_status, $_SESSION['user_id'], $notes]);
+    
+    // Log recruitment action
+    $candidateName = $current['first_name'] . ' ' . $current['last_name'];
+    $details = ['old_status' => $current['status'], 'new_status' => $new_status, 'notes' => $notes];
+    log_recruitment_action($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], 'status_changed', $application_id, $candidateName, $details);
     
     $_SESSION['success_message'] = "Estado actualizado exitosamente";
 } catch (PDOException $e) {

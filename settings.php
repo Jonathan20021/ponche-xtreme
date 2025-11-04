@@ -11,6 +11,7 @@ $sections = [
     // Core System
     'dashboard' => ['label' => 'Dashboard', 'category' => 'Sistema Principal', 'icon' => 'fa-gauge', 'description' => 'Panel principal del sistema'],
     'settings' => ['label' => 'Configuración', 'category' => 'Sistema Principal', 'icon' => 'fa-sliders-h', 'description' => 'Configuración general del sistema'],
+    'activity_logs' => ['label' => 'Logs de Actividad', 'category' => 'Sistema Principal', 'icon' => 'fa-history', 'description' => 'Registro completo de todas las acciones del sistema'],
     'login_logs' => ['label' => 'Logs de Acceso', 'category' => 'Sistema Principal', 'icon' => 'fa-shield-alt', 'description' => 'Historial de inicios de sesión'],
     
     // Records & Reports

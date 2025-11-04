@@ -2,6 +2,7 @@
 session_start();
 require_once '../db.php';
 require_once 'payroll_functions.php';
+require_once '../lib/logging_functions.php';
 
 // Check permissions
 ensurePermission('hr_payroll');
@@ -207,8 +208,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $totals['total_gross'], $totals['total_deductions'], $totals['total_net'], $periodId
         ]);
         
+        // Log payroll generation
+        log_payroll_generated($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $period['start_date'], $period['end_date'], count($employees));
+        
         $pdo->commit();
-        $successMsg = "Nómina calculada correctamente con descuentos legales (AFP, SFS, ISR).";
+        $successMsg = "Nómina calculada correctamente para " . count($employees) . " empleados.";
     } catch (Exception $e) {
         $pdo->rollBack();
         $errorMsg = "Error al calcular nómina: " . $e->getMessage();

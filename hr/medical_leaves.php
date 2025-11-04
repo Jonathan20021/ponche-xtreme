@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../db.php';
+require_once '../lib/logging_functions.php';
 
 // Check permissions
 ensurePermission('hr_medical_leaves');
@@ -60,6 +61,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_leave'])) {
         ");
         $statsStmt->execute([$employeeId, $year, $totalDays, $startDate, $totalDays, $startDate, $isWorkRelated ? 1 : 0]);
         
+        // Get employee name for logging
+        $empNameStmt = $pdo->prepare("SELECT first_name, last_name FROM employees WHERE id = ?");
+        $empNameStmt->execute([$employeeId]);
+        $empName = $empNameStmt->fetch();
+        $employeeName = $empName['first_name'] . ' ' . $empName['last_name'];
+        
+        // Log medical leave creation
+        $leaveId = $pdo->lastInsertId();
+        $details = [
+            'leave_type' => $leaveType,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'total_days' => $totalDays,
+            'is_paid' => $isPaid
+        ];
+        log_medical_leave_action($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], 'create', $leaveId, $employeeName, $details);
+        
         $successMsg = "Licencia médica creada correctamente.";
     } else {
         $errorMsg = "No se encontró el empleado especificado.";
@@ -72,12 +90,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_leave'])) {
     $newStatus = $_POST['new_status'];
     $reviewNotes = trim($_POST['review_notes'] ?? '');
     
+    // Get leave details for logging
+    $leaveStmt = $pdo->prepare("SELECT ml.*, e.first_name, e.last_name FROM medical_leaves ml JOIN employees e ON ml.employee_id = e.id WHERE ml.id = ?");
+    $leaveStmt->execute([$leaveId]);
+    $leave = $leaveStmt->fetch();
+    
     $stmt = $pdo->prepare("
         UPDATE medical_leaves 
         SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?
         WHERE id = ?
     ");
     $stmt->execute([$newStatus, $_SESSION['user_id'], $reviewNotes, $leaveId]);
+    
+    // Log the review action
+    $employeeName = $leave['first_name'] . ' ' . $leave['last_name'];
+    $action = $newStatus === 'APPROVED' ? 'approve' : 'reject';
+    $details = ['status' => $newStatus, 'review_notes' => $reviewNotes];
+    log_medical_leave_action($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $action, $leaveId, $employeeName, $details);
+    
     $successMsg = "Licencia médica revisada correctamente.";
 }
 
