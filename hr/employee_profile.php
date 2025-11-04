@@ -46,6 +46,11 @@ $permissionsList = $permissions->fetchAll(PDO::FETCH_ASSOC);
 $vacations = $pdo->prepare("SELECT * FROM vacation_requests WHERE employee_id = ? ORDER BY created_at DESC LIMIT 10");
 $vacations->execute([$employeeId]);
 $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
+
+// Get document count
+$docCount = $pdo->prepare("SELECT COUNT(*) FROM employee_documents WHERE employee_id = ?");
+$docCount->execute([$employeeId]);
+$documentCount = $docCount->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -190,6 +195,52 @@ $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
                         <p class="text-slate-400 text-center py-4">Sin información bancaria</p>
                     <?php endif; ?>
                 </div>
+            </div>
+        </div>
+
+        <!-- Documents Section -->
+        <div class="glass-card mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-folder-open text-blue-400 mr-2"></i>
+                    Record Digital de HR
+                </h3>
+                <a href="employee_documents.php?id=<?= $employeeId ?>" class="btn-primary">
+                    <i class="fas fa-folder"></i>
+                    Ver Todos los Documentos
+                </a>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-slate-800/50 rounded-lg p-4 text-center">
+                    <i class="fas fa-file-alt text-4xl text-blue-400 mb-2"></i>
+                    <p class="text-2xl font-bold text-white"><?= $documentCount ?></p>
+                    <p class="text-slate-400 text-sm">Documentos</p>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-4 flex items-center justify-center">
+                    <a href="employee_documents.php?id=<?= $employeeId ?>" class="text-center">
+                        <i class="fas fa-id-card text-3xl text-green-400 mb-2"></i>
+                        <p class="text-white text-sm">Identificación</p>
+                    </a>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-4 flex items-center justify-center">
+                    <a href="employee_documents.php?id=<?= $employeeId ?>" class="text-center">
+                        <i class="fas fa-graduation-cap text-3xl text-purple-400 mb-2"></i>
+                        <p class="text-white text-sm">Educación</p>
+                    </a>
+                </div>
+                <div class="bg-slate-800/50 rounded-lg p-4 flex items-center justify-center">
+                    <a href="employee_documents.php?id=<?= $employeeId ?>" class="text-center">
+                        <i class="fas fa-briefcase text-3xl text-yellow-400 mb-2"></i>
+                        <p class="text-white text-sm">Laboral</p>
+                    </a>
+                </div>
+            </div>
+            <div class="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <p class="text-blue-300 text-sm">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    Sistema completo de gestión documental para mantener el record de HR digitalizado. 
+                    Sube cédulas, títulos, certificados, contratos y cualquier documento del empleado.
+                </p>
             </div>
         </div>
 
