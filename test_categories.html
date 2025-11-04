@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Categorías</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .success { color: green; }
+        .error { color: red; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h2>Test de Carga de Categorías</h2>
+    <button onclick="testAPI()">Probar API</button>
+    <div id="result"></div>
+
+    <script>
+        function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Cargando...</p>';
+            
+            fetch('hr/helpdesk_api.php?action=get_categories')
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    console.log('Response headers:', response.headers);
+                    return response.text();
+                })
+                .then(text => {
+                    console.log('Response text:', text);
+                    resultDiv.innerHTML = '<h3>Respuesta cruda:</h3><pre>' + text + '</pre>';
+                    
+                    try {
+                        const data = JSON.parse(text);
+                        console.log('Parsed data:', data);
+                        
+                        if (data.success) {
+                            resultDiv.innerHTML += '<p class="success">✅ API funcionando correctamente</p>';
+                            resultDiv.innerHTML += '<p>Categorías encontradas: ' + data.categories.length + '</p>';
+                            resultDiv.innerHTML += '<h3>Categorías:</h3>';
+                            resultDiv.innerHTML += '<ul>';
+                            data.categories.forEach(cat => {
+                                resultDiv.innerHTML += '<li>' + cat.name + ' - ' + cat.description + '</li>';
+                            });
+                            resultDiv.innerHTML += '</ul>';
+                        } else {
+                            resultDiv.innerHTML += '<p class="error">❌ Error: ' + (data.error || 'Desconocido') + '</p>';
+                        }
+                    } catch (e) {
+                        resultDiv.innerHTML += '<p class="error">❌ Error al parsear JSON: ' + e.message + '</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    resultDiv.innerHTML = '<p class="error">❌ Error de conexión: ' + error.message + '</p>';
+                });
+        }
+        
+        // Probar automáticamente al cargar
+        window.onload = testAPI;
+    </script>
+</body>
+</html>

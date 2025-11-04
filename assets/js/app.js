@@ -66,7 +66,14 @@
                     menu.setAttribute('hidden', '');
                 };
 
-                ensureClosed();
+                // Solo cerrar si no está marcado como activo inicialmente
+                var isInitiallyExpanded = trigger.getAttribute('aria-expanded') === 'true';
+                if (!isInitiallyExpanded) {
+                    ensureClosed();
+                } else {
+                    dropdown.classList.add('is-open');
+                    menu.removeAttribute('hidden');
+                }
 
                 trigger.addEventListener('click', function (event) {
                     event.preventDefault();

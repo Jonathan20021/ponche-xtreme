@@ -28,6 +28,8 @@ $agentNavItems = [
     'agent_records' => ['label' => 'Registros', 'href' => $basePath . 'agent.php', 'icon' => 'fa-clock'],
     'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => $basePath . 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
     'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => $basePath . 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
+    'helpdesk_tickets' => ['label' => 'Mis Tickets', 'href' => $basePath . 'agents/helpdesk_tickets.php', 'icon' => 'fa-ticket-alt'],
+    'helpdesk_suggestions' => ['label' => 'Buzón de Sugerencias', 'href' => $basePath . 'agents/suggestions.php', 'icon' => 'fa-lightbulb'],
 ];
 
 $currentPath = basename($_SERVER['PHP_SELF']);

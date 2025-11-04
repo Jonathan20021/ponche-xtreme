@@ -6,7 +6,9 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/db.php';
 
 // Detect if we're in a subdirectory first
-$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false);
+$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || 
+               strpos($_SERVER['PHP_SELF'], '/hr/') !== false || 
+               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false);
 $baseHref = $isInSubdir ? '../' : '';
 
 $navItems = [
@@ -75,6 +77,12 @@ $navItems = [
                 'icon' => 'fa-file-contract',
             ],
             [
+                'section' => 'hr_dashboard',
+                'label' => 'Asistente Virtual',
+                'href' => $baseHref . 'hr/hr_assistant.php',
+                'icon' => 'fa-robot',
+            ],
+            [
                 'section' => 'system_settings',
                 'label' => 'Configuración Sistema',
                 'href' => $baseHref . 'hr/system_settings.php',
@@ -106,6 +114,36 @@ $navItems = [
             ],
         ],
     ],
+    'tickets' => [
+        'label' => 'Tickets',
+        'icon' => 'fa-ticket-alt',
+        'children' => [
+            [
+                'section' => 'helpdesk_tickets',
+                'label' => 'Mis Tickets',
+                'href' => $baseHref . 'helpdesk/my_tickets.php',
+                'icon' => 'fa-list',
+            ],
+            [
+                'section' => 'helpdesk_tickets',
+                'label' => 'Crear Ticket',
+                'href' => $baseHref . 'helpdesk/create_ticket.php',
+                'icon' => 'fa-plus-circle',
+            ],
+            [
+                'section' => 'helpdesk',
+                'label' => 'Gestión Tickets',
+                'href' => $baseHref . 'helpdesk/dashboard.php',
+                'icon' => 'fa-tasks',
+            ],
+            [
+                'section' => 'helpdesk_suggestions',
+                'label' => 'Buzón de Sugerencias',
+                'href' => $baseHref . 'helpdesk/suggestions.php',
+                'icon' => 'fa-lightbulb',
+            ],
+        ],
+    ],
     'activity_logs' => ['label' => 'Logs de Actividad', 'href' => $baseHref . 'hr/activity_logs.php', 'icon' => 'fa-history'],
     'login_logs' => ['label' => 'Registros de Acceso', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
     'settings' => ['label' => 'Configuración', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],
@@ -119,7 +157,9 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 
 // Detect if we're in a subdirectory
-$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false);
+$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || 
+               strpos($_SERVER['PHP_SELF'], '/hr/') !== false || 
+               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false);
 $assetBase = $isInSubdir ? '../assets' : 'assets';
 $baseHref = $isInSubdir ? '../' : '';
 
@@ -197,6 +237,10 @@ if ($isAuthenticated) {
                                         break;
                                     }
                                 }
+                                // También marcar como activo si estamos en cualquier página de helpdesk
+                                if (!$isActiveDropdown && strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false) {
+                                    $isActiveDropdown = true;
+                                }
                                 $dropdownButtonClasses = $isActiveDropdown
                                     ? 'nav-dropdown-button group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors'
                                     : 'nav-dropdown-button group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors';
@@ -210,7 +254,7 @@ if ($isAuthenticated) {
                                     <span><?= htmlspecialchars($item['label']) ?></span>
                                     <i class="fas fa-chevron-down text-xs opacity-70 transition-transform" data-nav-dropdown-icon style="font-size: 0.65rem;"></i>
                                 </button>
-                                <div class="nav-dropdown-menu" data-nav-dropdown-menu hidden>
+                                <div class="nav-dropdown-menu" data-nav-dropdown-menu <?= $isActiveDropdown ? '' : 'hidden' ?>>
                                     <?php foreach ($childLinks as $child): ?>
                                         <?php
                                             $childActive = $currentPath === basename($child['href']);
@@ -249,6 +293,7 @@ if ($isAuthenticated) {
                     </a>
                 <?php endif; ?>
                 <form action="<?= $baseHref ?>theme_toggle.php" method="post" class="inline-flex">
+                    <input type="hidden" name="return_url" value="<?= htmlspecialchars($_SERVER['REQUEST_URI']) ?>">
                     <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-800/70 text-slate-200 hover:bg-slate-700 transition-colors border border-slate-700/70">
                         <i class="fas fa-adjust text-xs"></i>
                         <span><?= htmlspecialchars($themeLabel) ?></span>
