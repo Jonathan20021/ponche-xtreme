@@ -770,4 +770,107 @@ if (!function_exists('getScheduleConfigForUser')) {
         return $globalConfig;
     }
 }
+
+if (!function_exists('getSystemSetting')) {
+    /**
+     * Gets a system setting value by key.
+     * Returns the default value if the setting doesn't exist.
+     */
+    function getSystemSetting(PDO $pdo, string $key, $default = null)
+    {
+        try {
+            $stmt = $pdo->prepare("SELECT setting_value, setting_type FROM system_settings WHERE setting_key = ?");
+            $stmt->execute([$key]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$result) {
+                return $default;
+            }
+            
+            $value = $result['setting_value'];
+            $type = $result['setting_type'] ?? 'string';
+            
+            // Cast to appropriate type
+            switch ($type) {
+                case 'number':
+                    return is_numeric($value) ? (float)$value : $default;
+                case 'boolean':
+                    return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+                case 'json':
+                    return json_decode($value, true) ?? $default;
+                default:
+                    return $value;
+            }
+        } catch (PDOException $e) {
+            return $default;
+        }
+    }
+}
+
+if (!function_exists('getExchangeRate')) {
+    /**
+     * Gets the current USD to DOP exchange rate from system settings.
+     * Returns a default rate if not configured.
+     */
+    function getExchangeRate(PDO $pdo): float
+    {
+        return (float)getSystemSetting($pdo, 'exchange_rate_usd_to_dop', 58.50);
+    }
+}
+
+if (!function_exists('convertCurrency')) {
+    /**
+     * Converts an amount from one currency to another using the system exchange rate.
+     * 
+     * @param PDO $pdo Database connection
+     * @param float $amount Amount to convert
+     * @param string $fromCurrency Source currency (USD or DOP)
+     * @param string $toCurrency Target currency (USD or DOP)
+     * @return float Converted amount
+     */
+    function convertCurrency(PDO $pdo, float $amount, string $fromCurrency, string $toCurrency): float
+    {
+        $fromCurrency = strtoupper($fromCurrency);
+        $toCurrency = strtoupper($toCurrency);
+        
+        // No conversion needed if same currency
+        if ($fromCurrency === $toCurrency) {
+            return $amount;
+        }
+        
+        $exchangeRate = getExchangeRate($pdo);
+        
+        // Convert USD to DOP
+        if ($fromCurrency === 'USD' && $toCurrency === 'DOP') {
+            return $amount * $exchangeRate;
+        }
+        
+        // Convert DOP to USD
+        if ($fromCurrency === 'DOP' && $toCurrency === 'USD') {
+            return $amount / $exchangeRate;
+        }
+        
+        // Invalid currency combination
+        return $amount;
+    }
+}
+
+if (!function_exists('updateSystemSetting')) {
+    /**
+     * Updates a system setting value.
+     */
+    function updateSystemSetting(PDO $pdo, string $key, $value, ?int $userId = null): bool
+    {
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE system_settings 
+                SET setting_value = ?, updated_by = ?, updated_at = NOW() 
+                WHERE setting_key = ?
+            ");
+            return $stmt->execute([$value, $userId, $key]);
+        } catch (PDOException $e) {
+            return false;
+        }
+    }
+}
 ?>

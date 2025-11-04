@@ -233,6 +233,22 @@ function log_rate_changed($pdo, $user_id, $user_name, $user_role, $employee_id, 
 }
 
 /**
+ * Log system setting change
+ */
+function log_system_setting_changed($pdo, $user_id, $user_name, $user_role, $setting_key, $change_data) {
+    $description = "Configuración del sistema actualizada: {$setting_key}";
+    
+    if (isset($change_data['old_rate']) && isset($change_data['new_rate'])) {
+        $description .= " - Tasa de cambio: {$change_data['old_rate']} → {$change_data['new_rate']} DOP";
+    }
+    
+    return log_activity($pdo, $user_id, $user_name, $user_role, 'system_settings', 'update', $description, 'system_setting', null, 
+        isset($change_data['old_rate']) ? ['rate' => $change_data['old_rate']] : null, 
+        isset($change_data['new_rate']) ? ['rate' => $change_data['new_rate'], 'updated_at' => $change_data['updated_at']] : $change_data
+    );
+}
+
+/**
  * Generic log function for custom actions
  */
 function log_custom_action($pdo, $user_id, $user_name, $user_role, $module, $action, $description, $entity_type = null, $entity_id = null, $details = []) {

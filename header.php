@@ -75,6 +75,12 @@ $navItems = [
                 'href' => $baseHref . 'hr/contracts.php',
                 'icon' => 'fa-file-contract',
             ],
+            [
+                'section' => 'system_settings',
+                'label' => 'Configuración Sistema',
+                'href' => $baseHref . 'hr/system_settings.php',
+                'icon' => 'fa-cog',
+            ],
         ],
     ],
     'agents' => [

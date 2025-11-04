@@ -22,6 +22,7 @@ if (isset($_POST['register'])) {
     $hire_date = trim($_POST['hire_date'] ?? date('Y-m-d'));
     $position = trim($_POST['position'] ?? '');
     $department_id = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null;
+    $compensation_type = !empty($_POST['compensation_type']) ? trim($_POST['compensation_type']) : 'hourly';
     $hourly_rate = !empty($_POST['hourly_rate']) ? (float)$_POST['hourly_rate'] : 0.00;
     $id_card_number = trim($_POST['id_card_number'] ?? '');
     $bank_id = !empty($_POST['bank_id']) ? (int)$_POST['bank_id'] : null;
@@ -32,6 +33,8 @@ if (isset($_POST['register'])) {
     $hourly_rate_dop = !empty($_POST['hourly_rate_dop']) ? (float)$_POST['hourly_rate_dop'] : 0.00;
     $monthly_salary_usd = !empty($_POST['monthly_salary_usd']) ? (float)$_POST['monthly_salary_usd'] : 0.00;
     $monthly_salary_dop = !empty($_POST['monthly_salary_dop']) ? (float)$_POST['monthly_salary_dop'] : 0.00;
+    $daily_salary_usd = !empty($_POST['daily_salary_usd']) ? (float)$_POST['daily_salary_usd'] : 0.00;
+    $daily_salary_dop = !empty($_POST['daily_salary_dop']) ? (float)$_POST['daily_salary_dop'] : 0.00;
     $preferred_currency = !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD';
 
     if ($username === '' || $full_name === '' || $first_name === '' || $last_name === '' || $hire_date === '' || $email === '') {
@@ -328,25 +331,55 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     Compensación y Salario
                 </h3>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="form-group">
-                        <label for="hourly_rate">Tarifa por hora (USD)</label>
-                        <input type="number" id="hourly_rate" name="hourly_rate" step="0.01" min="0" placeholder="0.00">
-                    </div>
-                    <div class="form-group">
-                        <label for="hourly_rate_dop">Tarifa por hora (DOP)</label>
-                        <input type="number" id="hourly_rate_dop" name="hourly_rate_dop" step="0.01" min="0" placeholder="0.00">
+                <div class="form-group">
+                    <label for="compensation_type">Tipo de Compensación *</label>
+                    <select id="compensation_type" name="compensation_type" onchange="toggleCompensationFields()" required>
+                        <option value="hourly">Salario por Hora</option>
+                        <option value="fixed">Salario Fijo (Mensual)</option>
+                        <option value="daily">Salario Diario</option>
+                    </select>
+                    <p class="text-xs text-slate-400 mt-1">Selecciona el tipo de compensación del empleado</p>
+                </div>
+                
+                <!-- Campos para Salario por Hora -->
+                <div id="hourly_fields" class="compensation-fields">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="hourly_rate">Tarifa por hora (USD)</label>
+                            <input type="number" id="hourly_rate" name="hourly_rate" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="hourly_rate_dop">Tarifa por hora (DOP)</label>
+                            <input type="number" id="hourly_rate_dop" name="hourly_rate_dop" step="0.01" min="0" placeholder="0.00">
+                        </div>
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="form-group">
-                        <label for="monthly_salary_usd">Salario mensual (USD)</label>
-                        <input type="number" id="monthly_salary_usd" name="monthly_salary_usd" step="0.01" min="0" placeholder="0.00">
+                <!-- Campos para Salario Fijo -->
+                <div id="fixed_fields" class="compensation-fields hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="monthly_salary_usd">Salario mensual (USD)</label>
+                            <input type="number" id="monthly_salary_usd" name="monthly_salary_usd" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="monthly_salary_dop">Salario mensual (DOP)</label>
+                            <input type="number" id="monthly_salary_dop" name="monthly_salary_dop" step="0.01" min="0" placeholder="0.00">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="monthly_salary_dop">Salario mensual (DOP)</label>
-                        <input type="number" id="monthly_salary_dop" name="monthly_salary_dop" step="0.01" min="0" placeholder="0.00">
+                </div>
+                
+                <!-- Campos para Salario Diario -->
+                <div id="daily_fields" class="compensation-fields hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="daily_salary_usd">Salario diario (USD)</label>
+                            <input type="number" id="daily_salary_usd" name="daily_salary_usd" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="daily_salary_dop">Salario diario (DOP)</label>
+                            <input type="number" id="daily_salary_dop" name="daily_salary_dop" step="0.01" min="0" placeholder="0.00">
+                        </div>
                     </div>
                 </div>
                 
@@ -527,6 +560,47 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
     <script>
         let isEditMode = false;
         let editingScheduleId = null;
+
+        // Función para mostrar/ocultar campos según el tipo de compensación
+        function toggleCompensationFields() {
+            const compensationType = document.getElementById('compensation_type').value;
+            const hourlyFields = document.getElementById('hourly_fields');
+            const fixedFields = document.getElementById('fixed_fields');
+            const dailyFields = document.getElementById('daily_fields');
+            
+            // Ocultar todos los campos
+            hourlyFields.classList.add('hidden');
+            fixedFields.classList.add('hidden');
+            dailyFields.classList.add('hidden');
+            
+            // Limpiar campos no visibles
+            if (compensationType !== 'hourly') {
+                document.getElementById('hourly_rate').value = '';
+                document.getElementById('hourly_rate_dop').value = '';
+            }
+            if (compensationType !== 'fixed') {
+                document.getElementById('monthly_salary_usd').value = '';
+                document.getElementById('monthly_salary_dop').value = '';
+            }
+            if (compensationType !== 'daily') {
+                document.getElementById('daily_salary_usd').value = '';
+                document.getElementById('daily_salary_dop').value = '';
+            }
+            
+            // Mostrar campos correspondientes
+            if (compensationType === 'hourly') {
+                hourlyFields.classList.remove('hidden');
+            } else if (compensationType === 'fixed') {
+                fixedFields.classList.remove('hidden');
+            } else if (compensationType === 'daily') {
+                dailyFields.classList.remove('hidden');
+            }
+        }
+        
+        // Inicializar al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleCompensationFields();
+        });
 
         function updateScheduleButtons() {
             const select = document.getElementById('schedule_template_id');
