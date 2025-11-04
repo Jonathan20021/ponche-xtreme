@@ -1,6 +1,5 @@
 # Habilitar el motor de reescritura
 RewriteEngine On
-RewriteBase /ponche-xtreme/helpdesk/
 
 # Eliminar .php de las URLs
 RewriteCond %{REQUEST_FILENAME} !-d
