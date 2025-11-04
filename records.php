@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db.php';
+date_default_timezone_set('America/Santo_Domingo');
 
 ensurePermission('records');
 
@@ -28,8 +29,130 @@ $entryThreshold = date('H:i:s', strtotime($scheduleConfig['entry_time'] . ' +5 m
 $lunchThreshold = $scheduleConfig['lunch_time'];
 $breakThreshold = $scheduleConfig['break_time'];
 
+// Handle punch submission
+$punch_error = null;
+$punch_success = null;
+
+// Check for flash messages from session
+if (isset($_SESSION['punch_success'])) {
+    $punch_success = $_SESSION['punch_success'];
+    unset($_SESSION['punch_success']);
+}
+if (isset($_SESSION['punch_error'])) {
+    $punch_error = $_SESSION['punch_error'];
+    unset($_SESSION['punch_error']);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
+    $typeSlug = sanitizeAttendanceTypeSlug($_POST['punch_type'] ?? '');
+    $user_id = (int) $_SESSION['user_id'];
+    $username = $_SESSION['username'] ?? '';
+    $full_name = $_SESSION['full_name'] ?? '';
+    
+    if ($typeSlug === '') {
+        $_SESSION['punch_error'] = "Tipo de asistencia no válido.";
+        header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        exit;
+    }
+    
+    $attendanceTypesForPunch = getAttendanceTypes($pdo, false);
+    $attendanceTypeMapForPunch = [];
+    foreach ($attendanceTypesForPunch as $row) {
+        $slug = sanitizeAttendanceTypeSlug($row['slug'] ?? '');
+        if ($slug !== '') {
+            $attendanceTypeMapForPunch[$slug] = $row;
+        }
+    }
+    
+    if (!isset($attendanceTypeMapForPunch[$typeSlug])) {
+        $_SESSION['punch_error'] = "Tipo de asistencia no válido.";
+        header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        exit;
+    }
+    
+    $selectedTypeMeta = $attendanceTypeMapForPunch[$typeSlug];
+    $typeLabel = $selectedTypeMeta['label'] ?? $selectedTypeMeta['slug'];
+    
+    // Validate unique per day constraint
+    if ((int) ($selectedTypeMeta['is_unique_daily'] ?? 0) === 1) {
+        $check_stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM attendance 
+            WHERE user_id = ? AND type = ? AND DATE(timestamp) = CURDATE()
+        ");
+        $check_stmt->execute([$user_id, $typeSlug]);
+        $exists = (int) $check_stmt->fetchColumn();
+        
+        if ($exists > 0) {
+            $_SESSION['punch_error'] = "Solo puedes registrar '{$typeLabel}' una vez por día.";
+            header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+            exit;
+        }
+    }
+    
+    // Register the punch
+    $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
+    $insert_stmt = $pdo->prepare("
+        INSERT INTO attendance (user_id, type, ip_address, timestamp) 
+        VALUES (?, ?, ?, NOW())
+    ");
+    $insert_stmt->execute([$user_id, $typeSlug, $ip_address]);
+    
+    // Log attendance registration
+    require_once 'lib/logging_functions.php';
+    $recordId = $pdo->lastInsertId();
+    log_custom_action(
+        $pdo,
+        $user_id,
+        $full_name,
+        $_SESSION['role'],
+        'attendance',
+        'create',
+        "Registro de asistencia desde records: {$typeSlug}",
+        'attendance_record',
+        $recordId,
+        ['type' => $typeSlug, 'ip_address' => $ip_address]
+    );
+    
+    // Send Slack notification
+    $slack_webhook_url = 'https://hooks.slack.com/services/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';
+    $current_timestamp = date('Y-m-d H:i:s');
+    $color = sanitizeHexColorValue($selectedTypeMeta['color_start'] ?? null, '#6366F1');
+    
+    $message = [
+        "text" => "New Punch Recorded",
+        "attachments" => [
+            [
+                "color" => $color,
+                "fields" => [
+                    ["title" => "Full Name", "value" => $full_name, "short" => true],
+                    ["title" => "Username", "value" => $username, "short" => true],
+                    ["title" => "Type", "value" => "{$typeLabel} ({$typeSlug})", "short" => true],
+                    ["title" => "IP Address", "value" => $ip_address, "short" => true],
+                    ["title" => "Timestamp", "value" => $current_timestamp, "short" => true],
+                ]
+            ]
+        ]
+    ];
+    
+    $ch = curl_init($slack_webhook_url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($message));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_exec($ch);
+    curl_close($ch);
+    
+    // Set success message and redirect
+    $_SESSION['punch_success'] = "¡Asistencia registrada exitosamente como {$typeLabel}!";
+    header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    exit;
+}
+
 $attendanceTypes = getAttendanceTypes($pdo, false);
 $attendanceTypeMap = [];
+$activeAttendanceTypes = [];
 foreach ($attendanceTypes as $typeRow) {
     $slug = sanitizeAttendanceTypeSlug($typeRow['slug'] ?? '');
     if ($slug === '') {
@@ -37,6 +160,10 @@ foreach ($attendanceTypes as $typeRow) {
     }
     $typeRow['slug'] = $slug;
     $attendanceTypeMap[$slug] = $typeRow;
+    // Build active attendance types for punch buttons
+    if ((int) ($typeRow['is_active'] ?? 0) === 1) {
+        $activeAttendanceTypes[] = $typeRow;
+    }
 }
 
 $durationTypes = array_values(array_filter($attendanceTypes, function (array $typeRow): bool {
@@ -452,6 +579,58 @@ $tardinessTotal = count($tardiness_data);
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
 
 <section class="space-y-12 fade-in">
+    <div class="glass-card">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-xl font-semibold text-primary flex items-center gap-2">
+                    <i class="fas fa-fingerprint text-emerald-400"></i>
+                    Registro Rápido de Asistencia
+                </h2>
+                <p class="text-sm text-muted mt-1">Marca tu asistencia directamente desde aquí</p>
+            </div>
+        </div>
+        
+        <?php if ($punch_success): ?>
+            <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-check-circle text-green-400"></i>
+                    <p class="text-green-300 text-sm"><?= htmlspecialchars($punch_success) ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
+        
+        <?php if ($punch_error): ?>
+            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                    <p class="text-red-300 text-sm"><?= htmlspecialchars($punch_error) ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
+        
+        <form method="POST" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <?php foreach ($activeAttendanceTypes as $type): ?>
+                <?php
+                    $buttonSlug = htmlspecialchars($type['slug'], ENT_QUOTES, 'UTF-8');
+                    $buttonLabel = htmlspecialchars($type['label'], ENT_QUOTES, 'UTF-8');
+                    $iconClass = htmlspecialchars($type['icon_class'] ?? 'fas fa-circle', ENT_QUOTES, 'UTF-8');
+                    $colorStart = htmlspecialchars($type['color_start'] ?? '#6366F1', ENT_QUOTES, 'UTF-8');
+                    $colorEnd = htmlspecialchars($type['color_end'] ?? $colorStart, ENT_QUOTES, 'UTF-8');
+                ?>
+                <button type="submit" 
+                        name="punch_type" 
+                        value="<?= $buttonSlug ?>" 
+                        class="punch-btn group relative overflow-hidden rounded-xl p-4 transition-all duration-300 hover:scale-105 hover:shadow-lg"
+                        style="background: linear-gradient(135deg, <?= $colorStart ?> 0%, <?= $colorEnd ?> 100%);">
+                    <div class="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300"></div>
+                    <div class="relative flex flex-col items-center gap-2">
+                        <i class="<?= $iconClass ?> text-2xl text-white"></i>
+                        <span class="text-xs font-semibold text-white text-center"><?= $buttonLabel ?></span>
+                    </div>
+                </button>
+            <?php endforeach; ?>
+        </form>
+    </div>
     <div class="page-hero">
         <div class="page-hero-content">
             <div>
@@ -885,5 +1064,49 @@ $(document).ready(function() {
 });
 </script>
 
-<?php include 'footer.php'; ?>
+<style>
+.punch-btn {
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
 
+.punch-btn:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.punch-btn:active {
+    transform: scale(0.95) !important;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+}
+
+@media (max-width: 640px) {
+    .punch-btn {
+        padding: 0.75rem;
+    }
+    
+    .punch-btn i {
+        font-size: 1.25rem;
+    }
+    
+    .punch-btn span {
+        font-size: 0.625rem;
+    }
+}
+</style>
+
+<?php include 'footer.php'; ?>

@@ -16,7 +16,6 @@ $navItems = [
     'hr_report' => ['label' => 'Reporte RH', 'href' => $baseHref . 'hr_report.php', 'icon' => 'fa-briefcase'],
     'adherence_report' => ['label' => 'Adherencia', 'href' => $baseHref . 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
     'operations_dashboard' => ['label' => 'Operaciones', 'href' => $baseHref . 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
-    'register_attendance' => ['label' => 'Registrar Horas', 'href' => $baseHref . 'register_attendance.php', 'icon' => 'fa-calendar-plus'],
     'hr_module' => [
         'label' => 'Recursos Humanos',
         'icon' => 'fa-users-cog',
