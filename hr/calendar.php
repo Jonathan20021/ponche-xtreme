@@ -54,6 +54,17 @@ $vacations = $pdo->prepare("
 $vacations->execute([$startDate, $endDate, $startDate, $endDate, $startDate, $endDate]);
 $vacationsList = $vacations->fetchAll(PDO::FETCH_ASSOC);
 
+// Get approved medical leaves
+$medicalLeaves = $pdo->prepare("
+    SELECT ml.*, e.first_name, e.last_name, e.employee_code
+    FROM medical_leaves ml
+    JOIN employees e ON e.id = ml.employee_id
+    WHERE ml.status IN ('APPROVED', 'EXTENDED')
+    AND ((ml.start_date BETWEEN ? AND ?) OR (ml.end_date BETWEEN ? AND ?) OR (ml.start_date <= ? AND ml.end_date >= ?))
+");
+$medicalLeaves->execute([$startDate, $endDate, $startDate, $endDate, $startDate, $endDate]);
+$medicalLeavesList = $medicalLeaves->fetchAll(PDO::FETCH_ASSOC);
+
 // Get custom calendar events
 $customEvents = $pdo->prepare("
     SELECT ce.*, u.username as creator_name
@@ -124,6 +135,41 @@ foreach ($vacationsList as $vacation) {
                 'icon' => 'fa-umbrella-beach',
                 'color' => '#06b6d4',
                 'data' => $vacation
+            ];
+        }
+    }
+}
+
+// Add medical leaves
+foreach ($medicalLeavesList as $medicalLeave) {
+    $start = new DateTime($medicalLeave['start_date']);
+    $end = new DateTime($medicalLeave['end_date']);
+    
+    // Define colors and labels by leave type
+    $leaveTypeInfo = [
+        'MEDICAL' => ['label' => 'Licencia Médica', 'color' => '#ef4444', 'icon' => 'fa-notes-medical'],
+        'MATERNITY' => ['label' => 'Maternidad', 'color' => '#ec4899', 'icon' => 'fa-baby'],
+        'PATERNITY' => ['label' => 'Paternidad', 'color' => '#3b82f6', 'icon' => 'fa-baby-carriage'],
+        'ACCIDENT' => ['label' => 'Accidente', 'color' => '#f97316', 'icon' => 'fa-ambulance'],
+        'SURGERY' => ['label' => 'Cirugía', 'color' => '#a855f7', 'icon' => 'fa-user-injured'],
+        'CHRONIC' => ['label' => 'Crónica', 'color' => '#eab308', 'icon' => 'fa-heartbeat']
+    ];
+    
+    $typeInfo = $leaveTypeInfo[$medicalLeave['leave_type']] ?? ['label' => 'Licencia', 'color' => '#ef4444', 'icon' => 'fa-notes-medical'];
+    
+    for ($date = clone $start; $date <= $end; $date->modify('+1 day')) {
+        $dateStr = $date->format('Y-m-d');
+        if ($date >= $firstDay && $date <= $lastDay) {
+            if (!isset($eventsByDate[$dateStr])) {
+                $eventsByDate[$dateStr] = [];
+            }
+            $eventsByDate[$dateStr][] = [
+                'type' => 'medical_leave',
+                'title' => $medicalLeave['first_name'] . ' ' . $medicalLeave['last_name'],
+                'subtitle' => $typeInfo['label'],
+                'icon' => $typeInfo['icon'],
+                'color' => $typeInfo['color'],
+                'data' => $medicalLeave
             ];
         }
     }
@@ -332,6 +378,10 @@ if ($nextMonth > 12) {
                     <span class="text-white text-sm">Vacaciones</span>
                 </div>
                 <div class="legend-item">
+                    <i class="fas fa-notes-medical" style="color: #ef4444;"></i>
+                    <span class="text-white text-sm">Licencias Médicas</span>
+                </div>
+                <div class="legend-item">
                     <i class="fas fa-calendar-check" style="color: #6366f1;"></i>
                     <span class="text-white text-sm">Eventos Personalizados</span>
                 </div>
@@ -399,7 +449,7 @@ if ($nextMonth > 12) {
         </div>
 
         <!-- Events List -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
             <!-- Birthdays -->
             <div class="glass-card">
                 <h3 class="text-lg font-semibold text-white mb-4">
@@ -468,6 +518,53 @@ if ($nextMonth > 12) {
                                         <?= date('d/m', strtotime($vacation['start_date'])) ?> - 
                                         <?= date('d/m', strtotime($vacation['end_date'])) ?>
                                         (<?= $vacation['total_days'] ?> días)
+                                    </p>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+            <!-- Medical Leaves -->
+            <div class="glass-card">
+                <h3 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-notes-medical text-red-400 mr-2"></i>
+                    Licencias Médicas (<?= count($medicalLeavesList) ?>)
+                </h3>
+                <?php if (empty($medicalLeavesList)): ?>
+                    <p class="text-slate-400 text-sm">No hay licencias médicas este mes.</p>
+                <?php else: ?>
+                    <div class="space-y-2">
+                        <?php foreach ($medicalLeavesList as $medicalLeave): 
+                            $leaveTypeLabels = [
+                                'MEDICAL' => 'Médica',
+                                'MATERNITY' => 'Maternidad',
+                                'PATERNITY' => 'Paternidad',
+                                'ACCIDENT' => 'Accidente',
+                                'SURGERY' => 'Cirugía',
+                                'CHRONIC' => 'Crónica'
+                            ];
+                            $leaveTypeIcons = [
+                                'MEDICAL' => 'fa-notes-medical',
+                                'MATERNITY' => 'fa-baby',
+                                'PATERNITY' => 'fa-baby-carriage',
+                                'ACCIDENT' => 'fa-ambulance',
+                                'SURGERY' => 'fa-user-injured',
+                                'CHRONIC' => 'fa-heartbeat'
+                            ];
+                            $leaveLabel = $leaveTypeLabels[$medicalLeave['leave_type']] ?? 'Licencia';
+                            $leaveIcon = $leaveTypeIcons[$medicalLeave['leave_type']] ?? 'fa-notes-medical';
+                        ?>
+                            <div class="flex items-center gap-2 p-2 bg-slate-800/50 rounded">
+                                <i class="fas <?= $leaveIcon ?> text-red-400"></i>
+                                <div class="flex-1">
+                                    <p class="text-white text-sm font-medium"><?= htmlspecialchars($medicalLeave['first_name'] . ' ' . $medicalLeave['last_name']) ?></p>
+                                    <p class="text-slate-400 text-xs">
+                                        <?= $leaveLabel ?> - 
+                                        <?= date('d/m', strtotime($medicalLeave['start_date'])) ?> - 
+                                        <?= date('d/m', strtotime($medicalLeave['end_date'])) ?>
+                                        (<?= $medicalLeave['total_days'] ?> días)
                                     </p>
                                 </div>
                             </div>
