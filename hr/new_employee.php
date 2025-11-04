@@ -27,6 +27,7 @@ if (isset($_POST['register'])) {
     $id_card_number = trim($_POST['id_card_number'] ?? '');
     $bank_id = !empty($_POST['bank_id']) ? (int)$_POST['bank_id'] : null;
     $bank_account_number = trim($_POST['bank_account_number'] ?? '');
+    $bank_account_type = !empty($_POST['bank_account_type']) ? trim($_POST['bank_account_type']) : null;
     $schedule_template_id = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
     $password = !empty($_POST['password']) ? trim($_POST['password']) : 'defaultpassword';
     $role = !empty($_POST['role']) ? trim($_POST['role']) : 'AGENT';
@@ -102,13 +103,13 @@ if (isset($_POST['register'])) {
                     INSERT INTO employees (
                         user_id, employee_code, first_name, last_name, email, phone, 
                         birth_date, hire_date, position, department_id, employment_status,
-                        id_card_number, bank_id, bank_account_number, photo_path
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TRIAL', ?, ?, ?, ?)
+                        id_card_number, bank_id, bank_account_number, bank_account_type, photo_path
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TRIAL', ?, ?, ?, ?, ?)
                 ");
                 $employeeInsert->execute([
                     $userId, $employeeCode, $first_name, $last_name, $email, $phone,
                     $birth_date ?: null, $hire_date, $position, $department_id,
-                    $id_card_number ?: null, $bank_id, $bank_account_number ?: null, $photoPath
+                    $id_card_number ?: null, $bank_id, $bank_account_number ?: null, $bank_account_type, $photoPath
                 ]);
                 
                 $employeeId = $pdo->lastInsertId();
@@ -452,9 +453,21 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     </div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="bank_account_number">Número de Cuenta Bancaria</label>
-                    <input type="text" id="bank_account_number" name="bank_account_number" placeholder="Número de cuenta">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="bank_account_number">Número de Cuenta Bancaria</label>
+                        <input type="text" id="bank_account_number" name="bank_account_number" placeholder="Número de cuenta">
+                    </div>
+                    <div class="form-group">
+                        <label for="bank_account_type">Tipo de Cuenta</label>
+                        <select id="bank_account_type" name="bank_account_type">
+                            <option value="">Seleccionar tipo de cuenta</option>
+                            <option value="AHORROS_DOP">Ahorros en Pesos (DOP)</option>
+                            <option value="AHORROS_USD">Ahorros en Dólares (USD)</option>
+                            <option value="CORRIENTE_DOP">Corriente en Pesos (DOP)</option>
+                            <option value="CORRIENTE_USD">Corriente en Dólares (USD)</option>
+                        </select>
+                    </div>
                 </div>
                 
                 <div class="form-group">
