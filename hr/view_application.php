@@ -22,6 +22,17 @@ if (!$application) {
     exit;
 }
 
+// Get all other positions this applicant applied to (same application_code)
+$stmt = $pdo->prepare("
+    SELECT a.id, a.status, j.title as job_title, j.department, j.location, j.employment_type
+    FROM job_applications a
+    LEFT JOIN job_postings j ON a.job_posting_id = j.id
+    WHERE a.application_code = ? AND a.id != ?
+    ORDER BY a.applied_date ASC
+");
+$stmt->execute([$application['application_code'], $application_id]);
+$other_applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 $stmt = $pdo->prepare("SELECT c.*, u.full_name as user_name FROM application_comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.application_id = ? ORDER BY c.created_at DESC");
 $stmt->execute([$application_id]);
 $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -111,6 +122,68 @@ require_once '../header.php';
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Main Content -->
         <div class="lg:col-span-2 space-y-6">
+            <!-- Other Applied Positions -->
+            <?php if (!empty($other_applications)): ?>
+            <div class="glass-card">
+                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-briefcase text-indigo-400"></i>
+                    Otras Vacantes Aplicadas (<?php echo count($other_applications); ?>)
+                </h3>
+                <div class="bg-indigo-50/10 border border-indigo-500/30 rounded-lg p-4 mb-4">
+                    <p class="text-sm text-indigo-300">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Este candidato aplicó a múltiples vacantes con el mismo CV usando el código: <strong><?php echo htmlspecialchars($application['application_code']); ?></strong>
+                    </p>
+                </div>
+                <div class="space-y-3">
+                    <?php 
+                    $employment_types = [
+                        'full_time' => 'Tiempo Completo',
+                        'part_time' => 'Medio Tiempo',
+                        'contract' => 'Contrato',
+                        'internship' => 'Pasantía'
+                    ];
+                    foreach ($other_applications as $other_app): 
+                    ?>
+                        <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-indigo-500/50 transition-colors">
+                            <div class="flex justify-between items-start gap-4">
+                                <div class="flex-1">
+                                    <h4 class="font-semibold text-white mb-2 flex items-center gap-2">
+                                        <i class="fas fa-briefcase text-indigo-400 text-sm"></i>
+                                        <?php echo htmlspecialchars($other_app['job_title']); ?>
+                                    </h4>
+                                    <div class="flex flex-wrap gap-3 text-sm text-slate-400">
+                                        <span class="flex items-center gap-1">
+                                            <i class="fas fa-building text-xs"></i>
+                                            <?php echo htmlspecialchars($other_app['department']); ?>
+                                        </span>
+                                        <span class="flex items-center gap-1">
+                                            <i class="fas fa-map-marker-alt text-xs"></i>
+                                            <?php echo htmlspecialchars($other_app['location']); ?>
+                                        </span>
+                                        <span class="flex items-center gap-1">
+                                            <i class="fas fa-clock text-xs"></i>
+                                            <?php echo $employment_types[$other_app['employment_type']] ?? $other_app['employment_type']; ?>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end gap-2">
+                                    <span class="status-badge-recruitment status-<?php echo $other_app['status']; ?>">
+                                        <?php echo $status_labels[$other_app['status']]; ?>
+                                    </span>
+                                    <a href="view_application.php?id=<?php echo $other_app['id']; ?>" 
+                                       class="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1">
+                                        <span>Ver detalles</span>
+                                        <i class="fas fa-arrow-right text-xs"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- Personal Information -->
             <div class="glass-card">
                 <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">

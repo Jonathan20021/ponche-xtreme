@@ -18,6 +18,16 @@ $location = $_POST['location'] ?? '';
 $notes = $_POST['notes'] ?? '';
 
 try {
+    // Get candidate info
+    $stmt = $pdo->prepare("
+        SELECT a.first_name, a.last_name, a.email, a.application_code, j.title as job_title
+        FROM job_applications a
+        LEFT JOIN job_postings j ON a.job_posting_id = j.id
+        WHERE a.id = ?
+    ");
+    $stmt->execute([$application_id]);
+    $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
+    
     $stmt = $pdo->prepare("
         INSERT INTO recruitment_interviews 
         (application_id, interview_type, interview_date, duration_minutes, location, notes, created_by, status)
@@ -40,6 +50,26 @@ try {
         WHERE id = ? AND status NOT IN ('interviewed', 'offer_extended', 'hired')
     ");
     $stmt->execute([$application_id]);
+    
+    // Send email notification to candidate
+    require_once '../lib/email_functions.php';
+    $emailData = [
+        'email' => $candidate['email'],
+        'first_name' => $candidate['first_name'],
+        'last_name' => $candidate['last_name'],
+        'application_code' => $candidate['application_code'],
+        'job_title' => $candidate['job_title'],
+        'interview_type' => $interview_type,
+        'interview_date' => $interview_date,
+        'duration_minutes' => $duration_minutes,
+        'location' => $location,
+        'notes' => $notes
+    ];
+    
+    $emailResult = sendInterviewNotificationEmail($emailData);
+    if (!$emailResult['success']) {
+        error_log("Failed to send interview notification email: " . $emailResult['message']);
+    }
     
     $_SESSION['success_message'] = "Entrevista agendada exitosamente";
 } catch (PDOException $e) {

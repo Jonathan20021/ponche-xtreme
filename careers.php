@@ -257,6 +257,25 @@ $company_name = "Evallish BPO Control";
                             </div>
                         </div>
 
+                        <hr class="my-6">
+
+                        <!-- Additional Positions -->
+                        <div class="mb-6">
+                            <h6 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                <i class="fas fa-list-check text-indigo-600"></i>
+                                Aplicar a Otras Vacantes Disponibles
+                            </h6>
+                            <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4">
+                                <p class="text-sm text-indigo-800">
+                                    <i class="fas fa-lightbulb mr-2"></i>
+                                    ¿Te interesan otras posiciones? Selecciona las vacantes adicionales a las que deseas aplicar con el mismo CV.
+                                </p>
+                            </div>
+                            <div id="additional-positions-container" class="space-y-3">
+                                <!-- Additional positions will be loaded here dynamically -->
+                            </div>
+                        </div>
+
                         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                             <p class="text-sm text-blue-800">
                                 <i class="fas fa-info-circle mr-2"></i>
@@ -322,7 +341,61 @@ $company_name = "Evallish BPO Control";
             document.getElementById('job_posting_id').value = jobId;
             document.getElementById('applicationForm').reset();
             document.getElementById('file-name').textContent = '';
+            
+            // Load additional positions (exclude the current one)
+            loadAdditionalPositions(jobId);
+            
             new bootstrap.Modal(document.getElementById('applicationModal')).show();
+        }
+
+        function loadAdditionalPositions(currentJobId) {
+            const container = document.getElementById('additional-positions-container');
+            const otherJobs = jobPostings.filter(job => job.id != currentJobId);
+            
+            if (otherJobs.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-500 italic">No hay otras vacantes disponibles en este momento.</p>';
+                return;
+            }
+
+            const employmentTypes = {
+                'full_time': 'Tiempo Completo',
+                'part_time': 'Medio Tiempo',
+                'contract': 'Contrato',
+                'internship': 'Pasantía'
+            };
+
+            let html = '';
+            otherJobs.forEach(job => {
+                html += `
+                    <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="checkbox" name="additional_positions[]" value="${job.id}" 
+                                   class="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                            <div class="flex-1">
+                                <div class="font-semibold text-gray-900">${job.title}</div>
+                                <div class="text-sm text-gray-600 mt-1">
+                                    <span class="inline-flex items-center gap-1">
+                                        <i class="fas fa-building text-xs"></i>
+                                        ${job.department}
+                                    </span>
+                                    <span class="mx-2">•</span>
+                                    <span class="inline-flex items-center gap-1">
+                                        <i class="fas fa-map-marker-alt text-xs"></i>
+                                        ${job.location}
+                                    </span>
+                                    <span class="mx-2">•</span>
+                                    <span class="inline-flex items-center gap-1">
+                                        <i class="fas fa-clock text-xs"></i>
+                                        ${employmentTypes[job.employment_type]}
+                                    </span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
         }
 
         function showJobDetails(jobId) {
@@ -413,7 +486,14 @@ $company_name = "Evallish BPO Control";
                 
                 if (result.success) {
                     bootstrap.Modal.getInstance(document.getElementById('applicationModal')).hide();
-                    alert(`¡Solicitud enviada exitosamente!\n\nTu código de seguimiento es: ${result.application_code}\n\nGuarda este código para rastrear el estado de tu solicitud.`);
+                    
+                    let successMessage = `¡Solicitud enviada exitosamente!\n\n`;
+                    if (result.positions_count > 1) {
+                        successMessage += `Has aplicado a ${result.positions_count} vacantes con el mismo CV.\n\n`;
+                    }
+                    successMessage += `Tu código de seguimiento es: ${result.application_code}\n\nGuarda este código para rastrear el estado de tu solicitud.`;
+                    
+                    alert(successMessage);
                     window.location.href = `track_application.php?code=${result.application_code}`;
                 } else {
                     alert('Error: ' + result.message);

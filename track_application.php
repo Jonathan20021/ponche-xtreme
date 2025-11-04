@@ -12,16 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
     $email = $_POST['email'] ?? '';
     
     try {
-        if (!empty($application_code)) {
-            // Direct access with code from URL
-            $stmt = $pdo->prepare("
-                SELECT a.*, j.title as job_title, j.department, j.location
-                FROM job_applications a
-                LEFT JOIN job_postings j ON a.job_posting_id = j.id
-                WHERE a.application_code = :code
-            ");
-            $stmt->execute(['code' => $code]);
-        } else {
+        // If email is provided, search with both code and email for security
+        // If email is empty (URL access), search with code only
+        if (!empty($email)) {
             // Search with code and email
             $stmt = $pdo->prepare("
                 SELECT a.*, j.title as job_title, j.department, j.location
@@ -30,6 +23,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
                 WHERE a.application_code = :code AND a.email = :email
             ");
             $stmt->execute(['code' => $code, 'email' => $email]);
+        } else {
+            // Direct access with code only (from URL or manual without email)
+            $stmt = $pdo->prepare("
+                SELECT a.*, j.title as job_title, j.department, j.location
+                FROM job_applications a
+                LEFT JOIN job_postings j ON a.job_posting_id = j.id
+                WHERE a.application_code = :code
+            ");
+            $stmt->execute(['code' => $code]);
         }
         
         $application = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -403,8 +405,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
                         <small class="text-muted">El código que recibiste al enviar tu solicitud</small>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label">Correo Electrónico</label>
-                        <input type="email" class="form-control" name="email" placeholder="tu@email.com" required>
+                        <label class="form-label">Correo Electrónico (Opcional)</label>
+                        <input type="email" class="form-control" name="email" placeholder="tu@email.com">
+                        <small class="text-muted">Para mayor seguridad, puedes ingresar tu email</small>
                     </div>
                     <button type="submit" class="btn btn-track">
                         <i class="bi bi-search"></i> Buscar Solicitud

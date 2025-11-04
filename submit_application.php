@@ -64,29 +64,44 @@ try {
         exit;
     }
 
-    // Generate unique application code
-    $application_code = 'APP-' . strtoupper(substr(uniqid(), -8)) . '-' . date('Y');
+    // Generate unique application code with timestamp and random component
+    $application_code = null;
+    $max_attempts = 10;
+    $attempt = 0;
+    
+    while ($attempt < $max_attempts) {
+        // Use microtime for better uniqueness
+        $timestamp = substr(str_replace('.', '', microtime(true)), -6);
+        $random = strtoupper(substr(bin2hex(random_bytes(2)), 0, 4));
+        $application_code = 'APP-' . $random . $timestamp . '-' . date('Y');
+        
+        // Check if code already exists
+        $check_stmt = $pdo->prepare("SELECT COUNT(*) FROM job_applications WHERE application_code = ?");
+        $check_stmt->execute([$application_code]);
+        
+        if ($check_stmt->fetchColumn() == 0) {
+            break; // Code is unique
+        }
+        
+        $attempt++;
+        usleep(100); // Small delay to ensure different microtime
+    }
+    
+    if ($attempt >= $max_attempts) {
+        throw new Exception("No se pudo generar un código único de aplicación");
+    }
 
-    // Insert application into database
-    $stmt = $pdo->prepare("
-        INSERT INTO job_applications (
-            application_code, job_posting_id, first_name, last_name, email, phone,
-            address, city, state, postal_code, date_of_birth,
-            education_level, years_of_experience, current_position, current_company,
-            expected_salary, availability_date, cv_filename, cv_path,
-            cover_letter, linkedin_url, portfolio_url, status
-        ) VALUES (
-            :application_code, :job_posting_id, :first_name, :last_name, :email, :phone,
-            :address, :city, :state, :postal_code, :date_of_birth,
-            :education_level, :years_of_experience, :current_position, :current_company,
-            :expected_salary, :availability_date, :cv_filename, :cv_path,
-            :cover_letter, :linkedin_url, :portfolio_url, 'new'
-        )
-    ");
+    // Collect all job posting IDs (primary + additional positions)
+    $job_posting_ids = [$_POST['job_posting_id']];
+    if (!empty($_POST['additional_positions']) && is_array($_POST['additional_positions'])) {
+        $job_posting_ids = array_merge($job_posting_ids, $_POST['additional_positions']);
+        // Remove duplicates
+        $job_posting_ids = array_unique($job_posting_ids);
+    }
 
-    $stmt->execute([
+    // Prepare application data
+    $application_data = [
         'application_code' => $application_code,
-        'job_posting_id' => $_POST['job_posting_id'],
         'first_name' => $_POST['first_name'],
         'last_name' => $_POST['last_name'],
         'email' => $_POST['email'],
@@ -107,31 +122,88 @@ try {
         'cover_letter' => $_POST['cover_letter'] ?? null,
         'linkedin_url' => $_POST['linkedin_url'] ?? null,
         'portfolio_url' => $_POST['portfolio_url'] ?? null
-    ]);
+    ];
 
-    $application_id = $pdo->lastInsertId();
-
-    // Log status history
+    // Insert application for each selected job posting
     $stmt = $pdo->prepare("
+        INSERT INTO job_applications (
+            application_code, job_posting_id, first_name, last_name, email, phone,
+            address, city, state, postal_code, date_of_birth,
+            education_level, years_of_experience, current_position, current_company,
+            expected_salary, availability_date, cv_filename, cv_path,
+            cover_letter, linkedin_url, portfolio_url, status
+        ) VALUES (
+            :application_code, :job_posting_id, :first_name, :last_name, :email, :phone,
+            :address, :city, :state, :postal_code, :date_of_birth,
+            :education_level, :years_of_experience, :current_position, :current_company,
+            :expected_salary, :availability_date, :cv_filename, :cv_path,
+            :cover_letter, :linkedin_url, :portfolio_url, 'new'
+        )
+    ");
+
+    $application_ids = [];
+    foreach ($job_posting_ids as $job_id) {
+        $application_data['job_posting_id'] = $job_id;
+        $stmt->execute($application_data);
+        $application_ids[] = $pdo->lastInsertId();
+    }
+
+    // Log status history for each application
+    $history_stmt = $pdo->prepare("
         INSERT INTO application_status_history (application_id, old_status, new_status, notes)
         VALUES (:application_id, NULL, 'new', 'Solicitud recibida')
     ");
-    $stmt->execute(['application_id' => $application_id]);
+    
+    foreach ($application_ids as $app_id) {
+        $history_stmt->execute(['application_id' => $app_id]);
+    }
 
-    // Send confirmation email (optional - you can implement this later)
-    // sendApplicationConfirmationEmail($_POST['email'], $application_code);
+    // Get job title for the primary position
+    $stmt = $pdo->prepare("SELECT title FROM job_postings WHERE id = ?");
+    $stmt->execute([$_POST['job_posting_id']]);
+    $job_title = $stmt->fetchColumn();
+
+    // Send confirmation email (non-blocking)
+    try {
+        require_once 'lib/email_functions.php';
+        $emailData = [
+            'email' => $_POST['email'],
+            'first_name' => $_POST['first_name'],
+            'last_name' => $_POST['last_name'],
+            'application_code' => $application_code,
+            'job_title' => $job_title,
+            'applied_date' => date('d/m/Y'),
+            'positions_count' => count($job_posting_ids)
+        ];
+        
+        $emailResult = sendApplicationConfirmationEmail($emailData);
+        if (!$emailResult['success']) {
+            error_log("Failed to send confirmation email: " . $emailResult['message']);
+        }
+    } catch (Exception $emailException) {
+        // Log email error but don't fail the application
+        error_log("Email notification error: " . $emailException->getMessage());
+    }
+
+    $positions_count = count($job_posting_ids);
+    $message = $positions_count > 1 
+        ? "Solicitud enviada exitosamente a {$positions_count} vacantes" 
+        : 'Solicitud enviada exitosamente';
 
     echo json_encode([
         'success' => true,
-        'message' => 'Solicitud enviada exitosamente',
+        'message' => $message,
         'application_code' => $application_code,
-        'application_id' => $application_id
+        'application_ids' => $application_ids,
+        'positions_count' => $positions_count
     ]);
 
 } catch (PDOException $e) {
-    error_log("Application submission error: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Error al procesar la solicitud']);
+    error_log("Application submission PDO error: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
+    echo json_encode(['success' => false, 'message' => 'Error al procesar la solicitud: ' . $e->getMessage()]);
 } catch (Exception $e) {
     error_log("Application submission error: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Error inesperado']);
+    error_log("Stack trace: " . $e->getTraceAsString());
+    echo json_encode(['success' => false, 'message' => 'Error inesperado: ' . $e->getMessage()]);
 }
