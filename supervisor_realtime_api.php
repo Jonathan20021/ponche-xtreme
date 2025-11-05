@@ -21,7 +21,9 @@ try {
     $attendanceTypes = getAttendanceTypes($pdo, true);
     $typesMap = [];
     foreach ($attendanceTypes as $type) {
-        $typesMap[strtoupper($type['slug'])] = [
+        $slug = strtoupper($type['slug']);
+        $typesMap[$slug] = [
+            'slug' => $slug,
             'label' => $type['label'],
             'icon' => $type['icon_class'],
             'color_start' => $type['color_start'],
@@ -72,6 +74,7 @@ try {
     foreach ($agents as $agent) {
         $punchType = strtoupper($agent['current_punch_type'] ?? 'SIN_PUNCH');
         $typeInfo = $typesMap[$punchType] ?? [
+            'slug' => $punchType,
             'label' => 'Sin registro',
             'icon' => 'fas fa-question-circle',
             'color_start' => '#6B7280',
@@ -86,8 +89,18 @@ try {
             $status = 'never_punched';
         } elseif (!$isToday) {
             $status = 'not_today';
+        } elseif ($punchType === 'EXIT') {
+            $status = 'completed';
         } else {
             $status = 'active';
+        }
+
+        $durationSeconds = (int)$agent['seconds_in_current_state'];
+        $durationFormatted = formatDuration($durationSeconds);
+
+        if ($punchType === 'EXIT' && $isToday) {
+            $durationSeconds = 0;
+            $durationFormatted = 'Jornada finalizada';
         }
         
         $result[] = [
@@ -96,6 +109,7 @@ try {
             'full_name' => $agent['full_name'],
             'department' => $agent['department_name'] ?? 'Sin departamento',
             'current_punch' => [
+                'slug' => $typeInfo['slug'],
                 'type' => $punchType,
                 'label' => $typeInfo['label'],
                 'icon' => $typeInfo['icon'],
@@ -103,8 +117,8 @@ try {
                 'color_end' => $typeInfo['color_end'],
                 'is_paid' => $typeInfo['is_paid'],
                 'timestamp' => $agent['last_punch_time'],
-                'duration_seconds' => (int)$agent['seconds_in_current_state'],
-                'duration_formatted' => formatDuration((int)$agent['seconds_in_current_state'])
+                'duration_seconds' => $durationSeconds,
+                'duration_formatted' => $durationFormatted
             ],
             'punches_today' => (int)$agent['punches_today'],
             'status' => $status

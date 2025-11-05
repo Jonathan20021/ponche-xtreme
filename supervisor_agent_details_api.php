@@ -51,6 +51,7 @@ try {
     foreach ($attendanceTypes as $type) {
         $slug = $type['slug'];
         $typesMap[$slug] = [
+            'slug' => $slug,
             'label' => $type['label'],
             'icon' => $type['icon_class'] ?? 'fas fa-circle',
             'color_start' => $type['color_start'] ?? '#6366f1',
@@ -256,7 +257,8 @@ try {
         'user' => $user,
         'punches' => $punchesFormatted,
         'stats' => $stats,
-        'chart_data' => $chartData
+        'chart_data' => $chartData,
+        'attendance_types' => array_values($typesMap)
     ]);
     
 } catch (PDOException $e) {

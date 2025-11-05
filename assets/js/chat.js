@@ -332,14 +332,20 @@ class ChatApp {
     }
     
     async openConversation(conversationId) {
+        console.log('📖 Abriendo conversación:', conversationId);
+        
+        // IMPORTANTE: Limpiar estado anterior
         this.currentConversationId = conversationId;
         this.lastMessageId = 0;
+        
+        // Limpiar contenedor de mensajes INMEDIATAMENTE
+        const messagesContainer = document.getElementById('messagesContainer');
+        messagesContainer.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;">Cargando mensajes...</div>';
         
         // Obtener info de la conversación
         const conversations = await this.fetchConversations();
         const conversation = conversations.find(c => c.id === conversationId);
         
-        console.log('📖 Abriendo conversación:', conversationId);
         console.log('Conversación encontrada:', conversation);
         
         if (conversation) {
@@ -349,13 +355,18 @@ class ChatApp {
             document.getElementById('currentChatAvatar').textContent = this.getInitials(displayName);
         } else {
             console.warn('⚠️ Conversación no encontrada en la lista');
+            document.getElementById('currentChatName').textContent = 'Chat';
+            document.getElementById('currentChatAvatar').textContent = '?';
         }
         
         // Mostrar vista de mensajes
         document.getElementById('conversationsTab').style.display = 'none';
         document.getElementById('messagesView').classList.add('active');
         
-        // Cargar mensajes
+        // Limpiar mensajes antiguos antes de cargar nuevos
+        messagesContainer.innerHTML = '';
+        
+        // Cargar mensajes de esta conversación
         await this.loadMessages();
         
         // Marcar como leído
@@ -363,29 +374,59 @@ class ChatApp {
     }
     
     async loadMessages() {
-        if (!this.currentConversationId) return;
+        if (!this.currentConversationId) {
+            console.warn('⚠️ No hay conversación actual seleccionada');
+            return;
+        }
         
         try {
             const basePath = this.getBasePath();
-            const response = await fetch(`${basePath}api.php?action=get_messages&conversation_id=${this.currentConversationId}&last_message_id=${this.lastMessageId}`);
+            
+            // Si lastMessageId es 0, cargamos TODOS los mensajes (primera carga)
+            // Si lastMessageId > 0, solo cargamos mensajes nuevos (polling)
+            const isInitialLoad = this.lastMessageId === 0;
+            const url = `${basePath}api.php?action=get_messages&conversation_id=${this.currentConversationId}&last_message_id=${this.lastMessageId}`;
+            
+            console.log('📥 Cargando mensajes:', {
+                conversationId: this.currentConversationId,
+                lastMessageId: this.lastMessageId,
+                isInitialLoad: isInitialLoad
+            });
+            
+            const response = await fetch(url);
             const data = await response.json();
             
-            if (data.success && data.messages.length > 0) {
-                // Verificar si hay mensajes nuevos de otros usuarios
-                const currentUserId = this.getCurrentUserId();
-                const hasNewMessagesFromOthers = data.messages.some(msg => msg.user_id != currentUserId);
-                
-                this.renderMessages(data.messages);
-                this.lastMessageId = Math.max(...data.messages.map(m => m.id));
-                this.scrollToBottom();
-                
-                // Reproducir sonido solo si hay mensajes de otros usuarios
-                if (hasNewMessagesFromOthers) {
-                    this.playNotificationSound();
+            if (data.success) {
+                if (data.messages && data.messages.length > 0) {
+                    // Verificar si hay mensajes nuevos de otros usuarios (solo para sonido)
+                    const currentUserId = this.getCurrentUserId();
+                    const hasNewMessagesFromOthers = data.messages.some(msg => msg.user_id != currentUserId);
+                    
+                    // Renderizar mensajes (append solo si no es carga inicial)
+                    this.renderMessages(data.messages, !isInitialLoad);
+                    
+                    // Actualizar último ID
+                    this.lastMessageId = Math.max(...data.messages.map(m => m.id));
+                    
+                    // Scroll al final
+                    this.scrollToBottom();
+                    
+                    // Reproducir sonido solo si hay mensajes de otros usuarios Y no es carga inicial
+                    if (hasNewMessagesFromOthers && !isInitialLoad) {
+                        this.playNotificationSound();
+                    }
+                    
+                    console.log('✅ Mensajes cargados:', data.messages.length, 'último ID:', this.lastMessageId);
+                } else if (isInitialLoad) {
+                    // No hay mensajes en esta conversación
+                    const container = document.getElementById('messagesContainer');
+                    container.innerHTML = '<div style="text-align:center;padding:20px;color:#64748b;">No hay mensajes aún. ¡Inicia la conversación!</div>';
                 }
+            } else {
+                console.error('❌ Error al cargar mensajes:', data.error);
             }
         } catch (error) {
-            console.error('Error loading messages:', error);
+            console.error('❌ Error de red al cargar mensajes:', error);
         }
     }
     
@@ -841,11 +882,18 @@ class ChatApp {
     async fetchConversations() {
         try {
             const basePath = this.getBasePath();
-            const response = await fetch(`api.php?action=get_conversations`);
+            const response = await fetch(`${basePath}api.php?action=get_conversations`);
             const data = await response.json();
-            return data.success ? data.conversations : [];
+            
+            if (data.success) {
+                console.log('📋 Conversaciones obtenidas:', data.conversations.length);
+                return data.conversations;
+            } else {
+                console.error('❌ Error al obtener conversaciones:', data.error);
+                return [];
+            }
         } catch (error) {
-            console.error('Error fetching conversations:', error);
+            console.error('❌ Error de red al obtener conversaciones:', error);
             return [];
         }
     }

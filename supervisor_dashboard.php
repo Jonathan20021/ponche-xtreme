@@ -209,6 +209,14 @@ include 'header.php';
     background: linear-gradient(90deg, #f59e0b, #d97706);
 }
 
+.status-completed .agent-card::before {
+    background: linear-gradient(90deg, #22c55e, #15803d);
+}
+
+.status-completed .agent-card .punch-duration {
+    color: #22c55e;
+}
+
 /* Light theme adjustments for status colors */
 .theme-light .stat-badge.paid {
     background: rgba(34, 197, 94, 0.1);
@@ -220,6 +228,33 @@ include 'header.php';
     background: rgba(239, 68, 68, 0.1);
     border-color: rgba(239, 68, 68, 0.3);
     color: #b91c1c;
+}
+
+.theme-light .ninja-edit-btn {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.35);
+    color: #4338ca;
+}
+
+.theme-light .punch-edit-controls {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.theme-light .punch-edit-row button {
+    background: rgba(16, 185, 129, 0.15);
+    color: #047857;
+    border-color: rgba(16, 185, 129, 0.35);
+}
+
+.theme-light .punch-edit-row button:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.25);
+}
+
+.theme-light .punch-edit-cancel {
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+    border-color: rgba(239, 68, 68, 0.35);
 }
 
 .theme-light .summary-value.text-green-400 {
@@ -503,6 +538,96 @@ include 'header.php';
     color: var(--text-secondary);
 }
 
+.punch-timeline-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.ninja-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    background: rgba(99, 102, 241, 0.15);
+    color: #c7d2fe;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ninja-edit-btn:hover {
+    background: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.5);
+}
+
+.punch-edit-controls {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.punch-edit-controls.is-hidden {
+    display: none;
+}
+
+.punch-edit-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.punch-edit-row select {
+    flex: 1;
+    min-width: 160px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.punch-edit-row button {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 6px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.punch-edit-row button:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.25);
+}
+
+.punch-edit-row button[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.punch-edit-cancel {
+    background: rgba(239, 68, 68, 0.1);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.punch-edit-cancel:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.punch-edit-status {
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -715,9 +840,10 @@ include 'header.php';
 </div>
 
 <script>
-let refreshInterval;
-let currentFilter = 'all';
 let agentsData = [];
+let punchTypesCache = [];
+let currentFilter = 'all';
+let refreshInterval;
 
 // Inicializar al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
@@ -748,6 +874,9 @@ async function refreshData() {
         
         if (data.success) {
             agentsData = data.agents;
+            if (Array.isArray(data.types_available)) {
+                punchTypesCache = data.types_available;
+            }
             updateStats(data);
             
             // Aplicar el filtro actual en lugar de mostrar todos
@@ -915,6 +1044,7 @@ function openAgentModal(userId, fullName) {
 }
 
 function closeAgentModal() {
+    closePunchEditors();
     document.getElementById('agentModal').classList.remove('active');
     document.body.style.overflow = 'auto';
     currentAgentId = null;
@@ -951,6 +1081,9 @@ async function loadAgentDetails(userId) {
         const data = await response.json();
         
         if (data.success) {
+            if (Array.isArray(data.attendance_types) && data.attendance_types.length) {
+                punchTypesCache = data.attendance_types;
+            }
             updateModalStats(data.stats);
             updatePunchTimeline(data.punches);
             updatePunchBreakdown(data.stats.by_type);
@@ -969,6 +1102,146 @@ function updateModalStats(stats) {
     document.getElementById('modalUnpaidTime').textContent = stats.total_unpaid_time_formatted;
 }
 
+function escapeHtml(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function buildPunchOptions(selectedSlug) {
+    const selected = (selectedSlug || '').toUpperCase();
+    if (!Array.isArray(punchTypesCache) || punchTypesCache.length === 0) {
+        return selected ? `<option value="${selected}" selected>${selected}</option>` : '';
+    }
+    return punchTypesCache
+        .map(type => {
+            const slug = (type.slug || '').toUpperCase();
+            if (!slug) {
+                return '';
+            }
+            const label = escapeHtml(type.label || slug);
+            const isSelected = slug === selected ? 'selected' : '';
+            return `<option value="${slug}" ${isSelected}>${label}</option>`;
+        })
+        .join('');
+}
+
+function closePunchEditors(exceptId = null) {
+    document.querySelectorAll('.punch-edit-controls').forEach(ctrl => {
+        if (!exceptId || ctrl.id !== `punch-edit-${exceptId}`) {
+            ctrl.classList.add('is-hidden');
+        }
+    });
+}
+
+function setPunchEditStatus(punchId, message, isError = false) {
+    const statusEl = document.getElementById(`punch-edit-status-${punchId}`);
+    if (!statusEl) {
+        return;
+    }
+    statusEl.textContent = message;
+    statusEl.style.color = isError ? '#f87171' : 'var(--text-secondary)';
+}
+
+function openPunchNinja(event, punchId, currentType) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const controls = document.getElementById(`punch-edit-${punchId}`);
+    const select = document.getElementById(`punch-select-${punchId}`);
+
+    if (!controls || !select) {
+        return;
+    }
+
+    select.innerHTML = buildPunchOptions(currentType);
+    select.value = (currentType || '').toUpperCase();
+
+    const isHidden = controls.classList.contains('is-hidden');
+    closePunchEditors(punchId);
+
+    if (isHidden) {
+        controls.classList.remove('is-hidden');
+        setPunchEditStatus(punchId, '');
+        select.focus();
+    } else {
+        controls.classList.add('is-hidden');
+    }
+}
+
+function cancelPunchEdit(punchId) {
+    const controls = document.getElementById(`punch-edit-${punchId}`);
+    if (controls) {
+        controls.classList.add('is-hidden');
+    }
+    setPunchEditStatus(punchId, '');
+}
+
+async function submitPunchEdit(punchId) {
+    const select = document.getElementById(`punch-select-${punchId}`);
+    if (!select) {
+        return;
+    }
+    const newType = (select.value || '').toUpperCase();
+    if (!newType) {
+        setPunchEditStatus(punchId, 'Selecciona un tipo válido.', true);
+        return;
+    }
+    if (!currentAgentId) {
+        setPunchEditStatus(punchId, 'No hay un agente seleccionado.', true);
+        return;
+    }
+
+    const controls = document.getElementById(`punch-edit-${punchId}`);
+    if (!controls) {
+        return;
+    }
+
+    const buttons = controls.querySelectorAll('button');
+    buttons.forEach(btn => {
+        btn.disabled = true;
+    });
+    setPunchEditStatus(punchId, 'Actualizando...', false);
+
+    try {
+        const response = await fetch('supervisor_update_punch_api.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                punch_id: punchId,
+                user_id: currentAgentId,
+                new_type: newType
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            setPunchEditStatus(punchId, 'Punch actualizado correctamente.', false);
+            await loadAgentDetails(currentAgentId);
+            refreshData();
+            setTimeout(() => {
+                cancelPunchEdit(punchId);
+            }, 800);
+        } else {
+            setPunchEditStatus(punchId, data.error || 'No se pudo actualizar el punch.', true);
+        }
+    } catch (error) {
+        setPunchEditStatus(punchId, 'Error: ' + error.message, true);
+    } finally {
+        buttons.forEach(btn => {
+            btn.disabled = false;
+        });
+    }
+}
+
 function updatePunchTimeline(punches) {
     const timeline = document.getElementById('punchTimeline');
     
@@ -982,20 +1255,45 @@ function updatePunchTimeline(punches) {
         return;
     }
     
-    timeline.innerHTML = punches.map(punch => `
-        <div class="punch-timeline-item" style="--item-color-start: ${punch.color_start}; --item-color-end: ${punch.color_end};">
-            <div class="punch-timeline-icon">
-                <i class="${punch.icon}"></i>
+    timeline.innerHTML = punches.map(punch => {
+        const safeLabel = escapeHtml(punch.type_label);
+        const safeTime = escapeHtml(punch.time);
+        const sanitizedType = (punch.type || '').toUpperCase();
+        const jsCurrentType = sanitizedType.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
+        const ninjaControls = punchTypesCache.length > 0 ? `
+            <div class="punch-timeline-actions">
+                <button type="button" class="ninja-edit-btn" onclick="openPunchNinja(event, ${punch.id}, '${jsCurrentType}')">
+                    <i class="fas fa-user-ninja"></i> Ninja
+                </button>
             </div>
-            <div class="punch-timeline-content">
-                <div class="punch-timeline-type">${punch.type_label}</div>
-                <div class="punch-timeline-time">
-                    <i class="fas fa-clock"></i> ${punch.time}
-                    ${punch.is_paid ? '<span class="ml-2 text-green-400"><i class="fas fa-dollar-sign"></i> Pagado</span>' : '<span class="ml-2 text-orange-400"><i class="fas fa-pause-circle"></i> No pagado</span>'}
+            <div class="punch-edit-controls is-hidden" id="punch-edit-${punch.id}">
+                <div class="punch-edit-row">
+                    <select id="punch-select-${punch.id}">
+                        ${buildPunchOptions(sanitizedType)}
+                    </select>
+                    <button type="button" onclick="submitPunchEdit(${punch.id})">Aplicar</button>
+                    <button type="button" class="punch-edit-cancel" onclick="cancelPunchEdit(${punch.id})">Cancelar</button>
+                </div>
+                <div class="punch-edit-status" id="punch-edit-status-${punch.id}"></div>
+            </div>
+        ` : '';
+        
+        return `
+            <div class="punch-timeline-item" style="--item-color-start: ${punch.color_start}; --item-color-end: ${punch.color_end};">
+                <div class="punch-timeline-icon">
+                    <i class="${punch.icon}"></i>
+                </div>
+                <div class="punch-timeline-content">
+                    <div class="punch-timeline-type">${safeLabel}</div>
+                    <div class="punch-timeline-time">
+                        <i class="fas fa-clock"></i> ${safeTime}
+                        ${punch.is_paid ? '<span class="ml-2 text-green-400"><i class="fas fa-dollar-sign"></i> Pagado</span>' : '<span class="ml-2 text-orange-400"><i class="fas fa-pause-circle"></i> No pagado</span>'}
+                    </div>
+                    ${ninjaControls}
                 </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function updatePunchBreakdown(byType) {
