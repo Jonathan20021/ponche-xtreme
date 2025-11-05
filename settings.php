@@ -466,6 +466,7 @@ try {
                 $colorEnd = normalize_hex_color($_POST['attendance_color_end'] ?? $colorStart, $colorStart);
                 $isUnique = isset($_POST['attendance_unique']) ? 1 : 0;
                 $isActive = isset($_POST['attendance_active']) ? 1 : 0;
+                $isPaid = isset($_POST['attendance_paid']) ? 1 : 0;
 
                 if ($label === '') {
                     $errorMessages[] = 'El nombre del tipo es obligatorio.';
@@ -488,8 +489,8 @@ try {
                 }
 
                 $insertType = $pdo->prepare("
-                    INSERT INTO attendance_types (slug, label, icon_class, shortcut_key, color_start, color_end, sort_order, is_unique_daily, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO attendance_types (slug, label, icon_class, shortcut_key, color_start, color_end, sort_order, is_unique_daily, is_active, is_paid)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $insertType->execute([
                     $slug,
@@ -500,7 +501,8 @@ try {
                     $colorEnd,
                     $sortOrder,
                     $isUnique,
-                    $isActive
+                    $isActive,
+                    $isPaid
                 ]);
 
                 $successMessages[] = "Tipo de asistencia '{$label}' creado correctamente.";
@@ -516,11 +518,12 @@ try {
                 $sortOrders = $_POST['attendance_sort_order'] ?? [];
                 $uniques = $_POST['attendance_unique'] ?? [];
                 $actives = $_POST['attendance_active'] ?? [];
+                $paids = $_POST['attendance_paid'] ?? [];
 
                 $updated = false;
                 $updateStmt = $pdo->prepare("
                     UPDATE attendance_types 
-                    SET slug = ?, label = ?, icon_class = ?, shortcut_key = ?, color_start = ?, color_end = ?, sort_order = ?, is_unique_daily = ?, is_active = ?, updated_at = NOW()
+                    SET slug = ?, label = ?, icon_class = ?, shortcut_key = ?, color_start = ?, color_end = ?, sort_order = ?, is_unique_daily = ?, is_active = ?, is_paid = ?, updated_at = NOW()
                     WHERE id = ?
                 ");
                 $duplicateCheck = $pdo->prepare("SELECT COUNT(*) FROM attendance_types WHERE slug = ? AND id <> ?");
@@ -552,6 +555,7 @@ try {
                     $sortOrderValue = (int) ($sortOrders[$id] ?? 0);
                     $isUniqueValue = isset($uniques[$id]) ? 1 : 0;
                     $isActiveValue = isset($actives[$id]) ? 1 : 0;
+                    $isPaidValue = isset($paids[$id]) ? 1 : 0;
 
                     $updateStmt->execute([
                         $slugValue,
@@ -563,6 +567,7 @@ try {
                         $sortOrderValue,
                         $isUniqueValue,
                         $isActiveValue,
+                        $isPaidValue,
                         $id
                     ]);
                     $updated = true;
@@ -1065,12 +1070,13 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <th>Atajo</th>
                                 <th>Único/día</th>
                                 <th>Activo</th>
+                                <th title="Indica si este tipo de punch cuenta para pago de nómina">Pagado <i class="fas fa-info-circle text-xs text-muted ml-1"></i></th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($attendanceTypesList)): ?>
-                                <tr><td colspan="10" class="data-table-empty">Aún no has configurado tipos de asistencia.</td></tr>
+                                <tr><td colspan="11" class="data-table-empty">Aún no has configurado tipos de asistencia.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($attendanceTypesList as $type): ?>
                                     <?php $typeId = (int) $type['id']; ?>
@@ -1101,6 +1107,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                         </td>
                                         <td class="text-center">
                                             <input type="checkbox" name="attendance_active[<?= $typeId ?>]" value="1" class="accent-cyan-500" <?= ((int) ($type['is_active'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                        </td>
+                                        <td class="text-center">
+                                            <input type="checkbox" name="attendance_paid[<?= $typeId ?>]" value="1" class="accent-green-500" <?= ((int) ($type['is_paid'] ?? 1) === 1) ? 'checked' : '' ?>>
                                         </td>
                                         <td class="text-center">
                                             <button type="submit" name="action" value="delete_attendance_type" class="btn-danger btn-sm w-full justify-center" formnovalidate onclick="this.form.elements['attendance_type_id'].value='<?= $typeId ?>'; return confirm('¿Eliminar el tipo <?= htmlspecialchars($type['label']) ?>?');">

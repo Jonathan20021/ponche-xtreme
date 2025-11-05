@@ -88,45 +88,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         $config = getScheduleConfig($pdo);
         $scheduledHours = (float)$config['scheduled_hours'];
         
+        // Get paid attendance type slugs for payroll calculation
+        $paidTypes = getPaidAttendanceTypeSlugs($pdo);
+        
         foreach ($employees as $emp) {
             $userId = $emp['user_id'];
             $employeeId = $emp['id'];
             
-            // Calculate hours from attendance
+            // Calculate hours from attendance - only count paid punch types
+            // Build the IN clause for paid types
+            $paidTypesPlaceholders = implode(',', array_fill(0, count($paidTypes), '?'));
+            
             $attendanceStmt = $pdo->prepare("
                 SELECT 
                     DATE(timestamp) as work_date,
-                    MIN(CASE WHEN type = 'ENTRY' THEN timestamp END) as entry_time,
-                    MAX(CASE WHEN type = 'EXIT' THEN timestamp END) as exit_time
+                    SUM(TIMESTAMPDIFF(SECOND, timestamp, 
+                        LEAD(timestamp) OVER (PARTITION BY DATE(timestamp) ORDER BY timestamp)
+                    )) as total_seconds
                 FROM attendance
                 WHERE user_id = ?
                 AND DATE(timestamp) BETWEEN ? AND ?
+                AND UPPER(type) IN ($paidTypesPlaceholders)
                 GROUP BY DATE(timestamp)
-                HAVING entry_time IS NOT NULL AND exit_time IS NOT NULL
             ");
-            $attendanceStmt->execute([$userId, $period['start_date'], $period['end_date']]);
+            
+            $params = array_merge([$userId, $period['start_date'], $period['end_date']], array_map('strtoupper', $paidTypes));
+            $attendanceStmt->execute($params);
             $attendanceData = $attendanceStmt->fetchAll(PDO::FETCH_ASSOC);
             
             $totalRegularHours = 0;
             $totalOvertimeHours = 0;
             
             foreach ($attendanceData as $day) {
-                $entry = new DateTime($day['entry_time']);
-                $exit = new DateTime($day['exit_time']);
-                $workedSeconds = $exit->getTimestamp() - $entry->getTimestamp();
-                $workedHours = $workedSeconds / 3600;
+                if (!$day['total_seconds']) continue;
                 
-                // Subtract breaks
-                $lunchMinutes = (int)$config['lunch_minutes'];
-                $breakMinutes = (int)$config['break_minutes'];
-                $totalBreakHours = ($lunchMinutes + $breakMinutes) / 60;
-                $netWorkedHours = max(0, $workedHours - $totalBreakHours);
+                $workedHours = $day['total_seconds'] / 3600;
                 
-                if ($netWorkedHours > $scheduledHours) {
+                if ($workedHours > $scheduledHours) {
                     $totalRegularHours += $scheduledHours;
-                    $totalOvertimeHours += ($netWorkedHours - $scheduledHours);
+                    $totalOvertimeHours += ($workedHours - $scheduledHours);
                 } else {
-                    $totalRegularHours += $netWorkedHours;
+                    $totalRegularHours += $workedHours;
                 }
             }
             

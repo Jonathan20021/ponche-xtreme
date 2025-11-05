@@ -298,7 +298,7 @@ if (!function_exists('getAttendanceTypes')) {
     function getAttendanceTypes(PDO $pdo, bool $activeOnly = false): array
     {
         try {
-            $sql = "SELECT id, slug, label, icon_class, shortcut_key, color_start, color_end, sort_order, is_unique_daily, is_active
+            $sql = "SELECT id, slug, label, icon_class, shortcut_key, color_start, color_end, sort_order, is_unique_daily, is_active, is_paid
                     FROM attendance_types";
             if ($activeOnly) {
                 $sql .= " WHERE is_active = 1";
@@ -310,6 +310,23 @@ if (!function_exists('getAttendanceTypes')) {
         } catch (PDOException $e) {
             // Tabla inexistente u otro error, devolver arreglo vacio para degradacion elegante
             return [];
+        }
+    }
+}
+
+if (!function_exists('getPaidAttendanceTypeSlugs')) {
+    /**
+     * Returns an array of slugs for attendance types that are marked as paid.
+     * Used for payroll calculations to filter only paid punch types.
+     */
+    function getPaidAttendanceTypeSlugs(PDO $pdo): array
+    {
+        try {
+            $stmt = $pdo->query("SELECT slug FROM attendance_types WHERE is_paid = 1 AND is_active = 1");
+            return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        } catch (PDOException $e) {
+            // If column doesn't exist yet (before migration), return default paid types
+            return ['DISPONIBLE', 'WASAPI', 'DIGITACION'];
         }
     }
 }
