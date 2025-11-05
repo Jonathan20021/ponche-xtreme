@@ -1,11 +1,13 @@
 <?php
 session_start();
 include 'db.php';
+require_once 'lib/email_functions.php';
 
 ensurePermission('settings');
 
 $successMessages = [];
 $errorMessages = [];
+$emailWarning = null;
 
 $sections = [
     // Core System
@@ -149,35 +151,14 @@ try {
             case 'create_user':
                 $username = trim($_POST['username'] ?? '');
                 $fullName = trim($_POST['full_name'] ?? '');
+                $email = trim($_POST['email'] ?? '');
                 $password = trim($_POST['password'] ?? '');
                 $roleInput = trim($_POST['role'] ?? '');
                 $role = sanitize_role_name($roleInput);
-                $hourlyRateUsdInput = $_POST['hourly_rate_usd'] ?? '0';
-                $hourlyRateDopInput = $_POST['hourly_rate_dop'] ?? '0';
-                $monthlySalaryUsdInput = $_POST['monthly_salary_usd'] ?? '0';
-                $monthlySalaryDopInput = $_POST['monthly_salary_dop'] ?? '0';
-                $preferredCurrencyInput = strtoupper(trim($_POST['preferred_currency'] ?? 'USD'));
                 $departmentIdRaw = $_POST['department_id'] ?? '';
 
                 if ($username === '' || $fullName === '' || $password === '' || $role === '') {
                     $errorMessages[] = 'Todos los campos son obligatorios para crear un usuario.';
-                    break;
-                }
-
-                $preferredCurrency = in_array($preferredCurrencyInput, ['USD', 'DOP'], true) ? $preferredCurrencyInput : 'USD';
-
-                $hourlyRateUsd = number_format(max(0, (float) $hourlyRateUsdInput), 2, '.', '');
-                $hourlyRateDop = number_format(max(0, (float) $hourlyRateDopInput), 2, '.', '');
-                $monthlySalaryUsd = number_format(max(0, (float) $monthlySalaryUsdInput), 2, '.', '');
-                $monthlySalaryDop = number_format(max(0, (float) $monthlySalaryDopInput), 2, '.', '');
-
-                if ($preferredCurrency === 'USD' && (float) $hourlyRateUsd <= 0) {
-                    $errorMessages[] = 'Debes especificar la tarifa por hora en USD cuando la moneda preferida es USD.';
-                    break;
-                }
-
-                if ($preferredCurrency === 'DOP' && (float) $hourlyRateDop <= 0) {
-                    $errorMessages[] = 'Debes especificar la tarifa por hora en DOP cuando la moneda preferida es DOP.';
                     break;
                 }
 
@@ -231,10 +212,10 @@ try {
                 $pdo->beginTransaction();
                 
                 try {
-                    // Create user
+                    // Create user (sin datos de salario, se configurarán desde HR)
                     $createStmt = $pdo->prepare("
-                        INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, monthly_salary, hourly_rate_dop, monthly_salary_dop, preferred_currency, department_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO users (username, employee_code, full_name, password, role, department_id)
+                        VALUES (?, ?, ?, ?, ?, ?)
                     ");
                     $createStmt->execute([
                         $username,
@@ -242,11 +223,6 @@ try {
                         $fullName,
                         $password,
                         $role,
-                        $hourlyRateUsd,
-                        $monthlySalaryUsd,
-                        $hourlyRateDop,
-                        $monthlySalaryDop,
-                        $preferredCurrency,
                         $departmentId
                     ]);
                     
@@ -264,22 +240,64 @@ try {
                             employee_code, 
                             first_name, 
                             last_name, 
+                            email,
                             department_id, 
                             hire_date, 
                             employment_status, 
                             employment_type
-                        ) VALUES (?, ?, ?, ?, ?, CURDATE(), 'TRIAL', 'FULL_TIME')
+                        ) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), 'TRIAL', 'FULL_TIME')
                     ");
                     $createEmployeeStmt->execute([
                         $newUserId,
                         $employeeCode,
                         $firstName,
                         $lastName,
+                        $email ?: null,
                         $departmentId
                     ]);
                     
                     $pdo->commit();
-                    $successMessages[] = "Usuario '{$username}' y empleado creados correctamente con código {$employeeCode}. El empleado está en período de prueba (90 días).";
+                    
+                    // Enviar correo de bienvenida si hay email en el registro de empleado
+                    $emailWarning = null;
+                    $employeeStmt = $pdo->prepare("SELECT email FROM employees WHERE user_id = ?");
+                    $employeeStmt->execute([$newUserId]);
+                    $employeeData = $employeeStmt->fetch();
+                    
+                    if ($employeeData && !empty($employeeData['email'])) {
+                        // Obtener nombre del departamento
+                        $departmentName = 'N/A';
+                        if ($departmentId) {
+                            $deptStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
+                            $deptStmt->execute([$departmentId]);
+                            $deptResult = $deptStmt->fetch();
+                            if ($deptResult) {
+                                $departmentName = $deptResult['name'];
+                            }
+                        }
+                        
+                        $emailData = [
+                            'email' => $employeeData['email'],
+                            'employee_name' => $fullName,
+                            'username' => $username,
+                            'password' => $password,
+                            'employee_code' => $employeeCode,
+                            'position' => 'Agente',
+                            'department' => $departmentName,
+                            'hire_date' => date('Y-m-d')
+                        ];
+                        
+                        $emailResult = sendWelcomeEmail($emailData);
+                        
+                        if ($emailResult['success']) {
+                            $successMessages[] = "Usuario '{$username}' y empleado creados correctamente con código {$employeeCode}. El empleado está en período de prueba (90 días). Se ha enviado un correo de bienvenida a {$employeeData['email']}.";
+                        } else {
+                            $successMessages[] = "Usuario '{$username}' y empleado creados correctamente con código {$employeeCode}. El empleado está en período de prueba (90 días).";
+                            $emailWarning = "Advertencia: No se pudo enviar el correo de bienvenida. " . $emailResult['message'];
+                        }
+                    } else {
+                        $successMessages[] = "Usuario '{$username}' y empleado creados correctamente con código {$employeeCode}. El empleado está en período de prueba (90 días). No se envió correo (email no registrado).";
+                    }
                 } catch (Exception $e) {
                     $pdo->rollBack();
                     $errorMessages[] = "Error al crear usuario/empleado: " . $e->getMessage();
@@ -833,6 +851,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         <?php foreach ($successMessages as $message): ?>
             <div class="status-banner success"><?= htmlspecialchars($message) ?></div>
         <?php endforeach; ?>
+        
+        <?php if ($emailWarning): ?>
+            <div class="status-banner" style="background: linear-gradient(135deg, #f59e0b15 0%, #d9770615 100%); border-left: 4px solid #f59e0b; color: #d97706;">
+                <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($emailWarning) ?>
+            </div>
+        <?php endif; ?>
 
         <?php foreach ($errorMessages as $message): ?>
             <div class="status-banner error"><?= htmlspecialchars($message) ?></div>
@@ -860,6 +884,11 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <label class="form-label">Nombre completo</label>
                             <input type="text" name="full_name" required class="input-control" placeholder="Nombre y apellido">
                         </div>
+                        <div>
+                            <label class="form-label">Email</label>
+                            <input type="email" name="email" class="input-control" placeholder="correo@ejemplo.com">
+                            <p class="text-muted text-xs mt-1">Se enviará un correo de bienvenida con las credenciales de acceso.</p>
+                        </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                                 <label class="form-label">Contrasena temporal</label>
@@ -870,43 +899,6 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <input type="text" name="role" list="role-options" required class="input-control" placeholder="Ej. Admin">
                                 <p class="text-muted text-xs mt-1">Puedes crear roles desde la pestana Roles y permisos.</p>
                             </div>
-                        </div>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                            <div class="space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <label class="form-label">Tarifa por hora (USD)</label>
-                                    <span class="chip">USD</span>
-                                </div>
-                                <input type="number" step="0.01" min="0" name="hourly_rate_usd" class="input-control" value="0">
-                            </div>
-                            <div class="space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <label class="form-label">Tarifa por hora (DOP)</label>
-                                    <span class="chip">DOP</span>
-                                </div>
-                                <input type="number" step="0.01" min="0" name="hourly_rate_dop" class="input-control" value="0">
-                            </div>
-                            <div class="space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <label class="form-label">Pago mensual (USD)</label>
-                                    <span class="chip">USD</span>
-                                </div>
-                                <input type="number" step="0.01" min="0" name="monthly_salary_usd" class="input-control" value="0">
-                            </div>
-                            <div class="space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <label class="form-label">Pago mensual (DOP)</label>
-                                    <span class="chip">DOP</span>
-                                </div>
-                                <input type="number" step="0.01" min="0" name="monthly_salary_dop" class="input-control" value="0">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="form-label">Moneda preferida</label>
-                            <select name="preferred_currency" class="select-control">
-                                <option value="USD">USD - Dolares estadounidenses</option>
-                                <option value="DOP">DOP - Peso dominicano</option>
-                            </select>
                         </div>
                         <div>
                             <label class="form-label">Departamento</label>

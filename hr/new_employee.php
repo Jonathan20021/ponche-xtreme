@@ -94,8 +94,8 @@ if (isset($_POST['register'])) {
                 }
                 
                 // Insert user with employee code and all compensation fields
-                $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role, hourly_rate, hourly_rate_dop, monthly_salary, monthly_salary_dop, preferred_currency, department_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $insert->execute([$username, $employeeCode, $full_name, $password, $role, $hourly_rate, $hourly_rate_dop, $monthly_salary_usd, $monthly_salary_dop, $preferred_currency, $department_id]);
+                $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role, compensation_type, hourly_rate, hourly_rate_dop, monthly_salary, monthly_salary_dop, daily_salary_usd, daily_salary_dop, preferred_currency, department_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $insert->execute([$username, $employeeCode, $full_name, $password, $role, $compensation_type, $hourly_rate, $hourly_rate_dop, $monthly_salary_usd, $monthly_salary_dop, $daily_salary_usd, $daily_salary_dop, $preferred_currency, $department_id]);
                 $userId = $pdo->lastInsertId();
                 
                 // Insert employee record with new fields
@@ -130,7 +130,14 @@ if (isset($_POST['register'])) {
                     'position' => $position,
                     'department_id' => $department_id,
                     'hire_date' => $hire_date,
-                    'hourly_rate' => $hourly_rate
+                    'compensation_type' => $compensation_type,
+                    'hourly_rate' => $hourly_rate,
+                    'hourly_rate_dop' => $hourly_rate_dop,
+                    'monthly_salary_usd' => $monthly_salary_usd,
+                    'monthly_salary_dop' => $monthly_salary_dop,
+                    'daily_salary_usd' => $daily_salary_usd,
+                    'daily_salary_dop' => $daily_salary_dop,
+                    'preferred_currency' => $preferred_currency
                 ];
                 log_employee_created($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $employee_data);
                 

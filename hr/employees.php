@@ -158,15 +158,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
         $stmt = $pdo->prepare($updateSql);
         $stmt->execute($updateParams);
         
-        // Sync to users table
+        // Sync to users table with all compensation fields
         $fullName = $data['first_name'] . ' ' . $data['last_name'];
+        $compensationType = !empty($_POST['compensation_type']) ? trim($_POST['compensation_type']) : 'hourly';
         $hourlyRate = !empty($_POST['hourly_rate']) ? (float)$_POST['hourly_rate'] : 0.00;
+        $hourlyRateDop = !empty($_POST['hourly_rate_dop']) ? (float)$_POST['hourly_rate_dop'] : 0.00;
+        $monthlySalaryUsd = !empty($_POST['monthly_salary_usd']) ? (float)$_POST['monthly_salary_usd'] : 0.00;
+        $monthlySalaryDop = !empty($_POST['monthly_salary_dop']) ? (float)$_POST['monthly_salary_dop'] : 0.00;
+        $dailySalaryUsd = !empty($_POST['daily_salary_usd']) ? (float)$_POST['daily_salary_usd'] : 0.00;
+        $dailySalaryDop = !empty($_POST['daily_salary_dop']) ? (float)$_POST['daily_salary_dop'] : 0.00;
+        $preferredCurrency = !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD';
         
         $userStmt = $pdo->prepare("
-            UPDATE users SET full_name = ?, hourly_rate = ?, department_id = ?
+            UPDATE users SET 
+                full_name = ?, 
+                compensation_type = ?,
+                hourly_rate = ?, 
+                hourly_rate_dop = ?,
+                monthly_salary = ?,
+                monthly_salary_dop = ?,
+                daily_salary_usd = ?,
+                daily_salary_dop = ?,
+                preferred_currency = ?,
+                department_id = ?
             WHERE id = (SELECT user_id FROM employees WHERE id = ?)
         ");
-        $userStmt->execute([$fullName, $hourlyRate, $data['department_id'], $employeeId]);
+        $userStmt->execute([$fullName, $compensationType, $hourlyRate, $hourlyRateDop, $monthlySalaryUsd, $monthlySalaryDop, $dailySalaryUsd, $dailySalaryDop, $preferredCurrency, $data['department_id'], $employeeId]);
         
         // Log employee update
         log_employee_updated($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $oldData, $data);
@@ -186,7 +203,9 @@ $searchQuery = $_GET['search'] ?? '';
 
 // Build query
 $query = "
-    SELECT e.*, u.username, u.hourly_rate, u.role, d.name as department_name,
+    SELECT e.*, u.username, u.compensation_type, u.hourly_rate, u.hourly_rate_dop, 
+           u.monthly_salary, u.monthly_salary_dop, u.daily_salary_usd, u.daily_salary_dop,
+           u.preferred_currency, u.role, d.name as department_name,
            b.name as bank_name,
            DATEDIFF(CURDATE(), e.hire_date) as days_employed,
            YEAR(CURDATE()) - YEAR(e.birth_date) as age
@@ -558,9 +577,68 @@ $stats = [
                     </div>
                 </div>
 
+                <h4 class="text-md font-semibold text-white mt-4 mb-3 border-b border-slate-700 pb-2">
+                    <i class="fas fa-dollar-sign text-blue-400 mr-2"></i>
+                    Compensación y Salario
+                </h4>
+                
                 <div class="form-group mb-4">
-                    <label for="edit_hourly_rate">Tarifa por hora (USD)</label>
-                    <input type="number" id="edit_hourly_rate" name="hourly_rate" step="0.01" min="0">
+                    <label for="edit_compensation_type">Tipo de Compensación *</label>
+                    <select id="edit_compensation_type" name="compensation_type" onchange="toggleEditCompensationFields()" required>
+                        <option value="hourly">Salario por Hora</option>
+                        <option value="fixed">Salario Fijo (Mensual)</option>
+                        <option value="daily">Salario Diario</option>
+                    </select>
+                </div>
+                
+                <!-- Campos para Salario por Hora -->
+                <div id="edit_hourly_fields" class="edit-compensation-fields mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="edit_hourly_rate">Tarifa por hora (USD)</label>
+                            <input type="number" id="edit_hourly_rate" name="hourly_rate" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit_hourly_rate_dop">Tarifa por hora (DOP)</label>
+                            <input type="number" id="edit_hourly_rate_dop" name="hourly_rate_dop" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Campos para Salario Fijo -->
+                <div id="edit_fixed_fields" class="edit-compensation-fields hidden mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="edit_monthly_salary_usd">Salario mensual (USD)</label>
+                            <input type="number" id="edit_monthly_salary_usd" name="monthly_salary_usd" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit_monthly_salary_dop">Salario mensual (DOP)</label>
+                            <input type="number" id="edit_monthly_salary_dop" name="monthly_salary_dop" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Campos para Salario Diario -->
+                <div id="edit_daily_fields" class="edit-compensation-fields hidden mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="edit_daily_salary_usd">Salario diario (USD)</label>
+                            <input type="number" id="edit_daily_salary_usd" name="daily_salary_usd" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit_daily_salary_dop">Salario diario (DOP)</label>
+                            <input type="number" id="edit_daily_salary_dop" name="daily_salary_dop" step="0.01" min="0" placeholder="0.00">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group mb-4">
+                    <label for="edit_preferred_currency">Moneda Preferida</label>
+                    <select id="edit_preferred_currency" name="preferred_currency">
+                        <option value="USD">USD (Dólares)</option>
+                        <option value="DOP">DOP (Pesos Dominicanos)</option>
+                    </select>
                 </div>
 
                 <div class="form-group mb-4">
@@ -832,7 +910,19 @@ $stats = [
             document.getElementById('edit_termination_date').value = employee.termination_date || '';
             document.getElementById('edit_employment_status').value = employee.employment_status || 'ACTIVE';
             document.getElementById('edit_employment_type').value = employee.employment_type || 'FULL_TIME';
+            
+            // Compensation Info
+            document.getElementById('edit_compensation_type').value = employee.compensation_type || 'hourly';
             document.getElementById('edit_hourly_rate').value = employee.hourly_rate || '';
+            document.getElementById('edit_hourly_rate_dop').value = employee.hourly_rate_dop || '';
+            document.getElementById('edit_monthly_salary_usd').value = employee.monthly_salary || '';
+            document.getElementById('edit_monthly_salary_dop').value = employee.monthly_salary_dop || '';
+            document.getElementById('edit_daily_salary_usd').value = employee.daily_salary_usd || '';
+            document.getElementById('edit_daily_salary_dop').value = employee.daily_salary_dop || '';
+            document.getElementById('edit_preferred_currency').value = employee.preferred_currency || 'USD';
+            
+            // Toggle compensation fields based on type
+            toggleEditCompensationFields();
             
             // Address Info
             document.getElementById('edit_address').value = employee.address || '';
@@ -1089,6 +1179,28 @@ $stats = [
                 closeNewScheduleModalEdit();
             }
         });
+        
+        // Función para mostrar/ocultar campos según el tipo de compensación en el formulario de edición
+        function toggleEditCompensationFields() {
+            const compensationType = document.getElementById('edit_compensation_type').value;
+            const hourlyFields = document.getElementById('edit_hourly_fields');
+            const fixedFields = document.getElementById('edit_fixed_fields');
+            const dailyFields = document.getElementById('edit_daily_fields');
+            
+            // Ocultar todos los campos
+            hourlyFields.classList.add('hidden');
+            fixedFields.classList.add('hidden');
+            dailyFields.classList.add('hidden');
+            
+            // Mostrar campos correspondientes
+            if (compensationType === 'hourly') {
+                hourlyFields.classList.remove('hidden');
+            } else if (compensationType === 'fixed') {
+                fixedFields.classList.remove('hidden');
+            } else if (compensationType === 'daily') {
+                dailyFields.classList.remove('hidden');
+            }
+        }
     </script>
 
     <?php include '../footer.php'; ?>
