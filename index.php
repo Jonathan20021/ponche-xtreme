@@ -97,6 +97,12 @@ include 'header.php';
                     <i class="fas fa-unlock-alt"></i>
                     Ingresar
                 </button>
+                <div class="text-center mt-3">
+                    <a href="password_recovery.php" class="text-sm text-blue-400 hover:text-blue-300">
+                        <i class="fas fa-key"></i>
+                        ¿Olvidaste tu contraseña?
+                    </a>
+                </div>
             </form>
         </div>
     </section>
