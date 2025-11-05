@@ -86,6 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <i class="fas fa-sign-in-alt"></i>
                     Entrar
                 </button>
+                <div class="text-center mt-3">
+                    <a href="password_recovery_agent.php" class="text-sm text-blue-400 hover:text-blue-300">
+                        <i class="fas fa-key"></i>
+                        ¿Olvidaste tu contraseña?
+                    </a>
+                </div>
             </form>
         </div>
         <form action="theme_toggle.php" method="post" class="mt-6">
