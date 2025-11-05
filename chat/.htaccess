@@ -1,0 +1,23 @@
+# .htaccess para la carpeta /chat/
+# Este archivo evita que las reglas del .htaccess padre interfieran con la API
+
+# Deshabilitar la redirección de .php a sin .php en esta carpeta
+RewriteEngine Off
+
+# Permitir acceso directo a todos los archivos PHP
+<Files "*.php">
+    Order allow,deny
+    Allow from all
+</Files>
+
+# Headers para JSON
+<FilesMatch "\.(php)$">
+    Header set Content-Type "application/json; charset=UTF-8"
+</FilesMatch>
+
+# No cachear las respuestas de la API
+<IfModule mod_headers.c>
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+</IfModule>
