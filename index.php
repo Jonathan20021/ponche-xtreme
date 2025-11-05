@@ -6,70 +6,76 @@ if (isset($_POST['login'])) {
     $username = $_POST['username'];
     $password = $_POST['password'];
 
-    $query = "SELECT * FROM users WHERE username = ? AND role IN ('Admin', 'OperationsManager', 'IT', 'HR', 'GeneralManager', 'Supervisor')";
+    $query = "SELECT * FROM users WHERE username = ?";
     $stmt = $pdo->prepare($query);
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 
     if ($user && $password === $user['password']) {
-        // Check if user is active
-        $isActive = isset($user['is_active']) ? (int)$user['is_active'] : 1;
-        if ($isActive === 0) {
-            $error = "Tu cuenta ha sido desactivada. Contacta al administrador.";
+        // Check if user has appropriate role for admin portal
+        $allowedRoles = ['Admin', 'OperationsManager', 'IT', 'HR', 'GeneralManager', 'Supervisor'];
+        if (!in_array($user['role'], $allowedRoles)) {
+            $error = "No tienes permisos para acceder al portal administrativo.";
         } else {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['role'] = $user['role'];
-
-            $local_ip = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
-
-            $public_ip = "Unknown";
-            try {
-                $public_ip_response = file_get_contents("https://api64.ipify.org?format=json");
-                $public_ip = json_decode($public_ip_response, true)['ip'];
-            } catch (Exception $e) {
-                error_log("Failed to fetch public IP: " . $e->getMessage());
-            }
-
-            $location = "Unknown";
-            $api_token = "df9ab1b87c9150";
-            $geo_url = "https://ipinfo.io/{$public_ip}/json?token={$api_token}";
-
-            try {
-                $response = file_get_contents($geo_url);
-                $data = json_decode($response, true);
-
-                if (!empty($data['city']) && !empty($data['region']) && !empty($data['country'])) {
-                    $location = "{$data['city']}, {$data['region']}, {$data['country']}";
-                }
-            } catch (Exception $e) {
-                error_log("Failed to fetch location data: " . $e->getMessage());
-            }
-
-            $log_stmt = $pdo->prepare("
-                INSERT INTO admin_login_logs (user_id, username, role, ip_address, location, login_time, public_ip)
-                VALUES (?, ?, ?, ?, ?, NOW(), ?)
-            ");
-            $log_stmt->execute([$user['id'], $username, $user['role'], $local_ip, $location, $public_ip]);
-
-            // Store additional session data
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['full_name'] = $user['full_name'];
-
-            // Find the first accessible page and redirect there
-            include 'find_accessible_page.php';
-            $accessiblePage = findAccessiblePage();
-            
-            if ($accessiblePage === null) {
-                // User has no access to any page
-                session_destroy();
-                $error = "Tu cuenta no tiene permisos para acceder a ninguna sección del sistema.";
+            // Check if user is active
+            $isActive = isset($user['is_active']) ? (int)$user['is_active'] : 1;
+            if ($isActive === 0) {
+                $error = "Tu cuenta ha sido desactivada. Contacta al administrador.";
             } else {
-                header('Location: ' . $accessiblePage);
-                exit;
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['role'] = $user['role'];
+
+                $local_ip = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
+
+                $public_ip = "Unknown";
+                try {
+                    $public_ip_response = file_get_contents("https://api64.ipify.org?format=json");
+                    $public_ip = json_decode($public_ip_response, true)['ip'];
+                } catch (Exception $e) {
+                    error_log("Failed to fetch public IP: " . $e->getMessage());
+                }
+
+                $location = "Unknown";
+                $api_token = "df9ab1b87c9150";
+                $geo_url = "https://ipinfo.io/{$public_ip}/json?token={$api_token}";
+
+                try {
+                    $response = file_get_contents($geo_url);
+                    $data = json_decode($response, true);
+
+                    if (!empty($data['city']) && !empty($data['region']) && !empty($data['country'])) {
+                        $location = "{$data['city']}, {$data['region']}, {$data['country']}";
+                    }
+                } catch (Exception $e) {
+                    error_log("Failed to fetch location data: " . $e->getMessage());
+                }
+
+                $log_stmt = $pdo->prepare("
+                    INSERT INTO admin_login_logs (user_id, username, role, ip_address, location, login_time, public_ip)
+                    VALUES (?, ?, ?, ?, ?, NOW(), ?)
+                ");
+                $log_stmt->execute([$user['id'], $username, $user['role'], $local_ip, $location, $public_ip]);
+
+                // Store additional session data
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['full_name'] = $user['full_name'];
+
+                // Find the first accessible page and redirect there
+                include 'find_accessible_page.php';
+                $accessiblePage = findAccessiblePage();
+                
+                if ($accessiblePage === null) {
+                    // User has no access to any page
+                    session_destroy();
+                    $error = "Tu cuenta no tiene permisos para acceder a ninguna sección del sistema.";
+                } else {
+                    header('Location: ' . $accessiblePage);
+                    exit;
+                }
             }
         }
     } else {
-        $error = "Credenciales invalidas o permisos insuficientes.";
+        $error = "Credenciales invalidas.";
     }
 }
 
