@@ -15,18 +15,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($username === '' || $idCard === '') {
             $error = 'Por favor completa todos los campos.';
         } else {
-            // Step 1: Verify user exists and has admin role
+            // Step 1: Verify user exists
             $userStmt = $pdo->prepare("
                 SELECT id, username, full_name, role
                 FROM users
                 WHERE username = ?
-                AND role IN ('Admin', 'OperationsManager', 'IT', 'HR', 'GeneralManager', 'Supervisor')
             ");
             $userStmt->execute([$username]);
             $user = $userStmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$user) {
-                $error = 'Usuario no encontrado o no tiene permisos administrativos.';
+                $error = 'Usuario no encontrado.';
             } else {
                 // Step 2: Check if employee record exists and verify ID card
                 $empStmt = $pdo->prepare("SELECT identification_number FROM employees WHERE user_id = ?");
