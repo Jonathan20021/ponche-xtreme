@@ -339,6 +339,216 @@ include 'header.php';
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
 }
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 1rem;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-container {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    max-width: 1200px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.modal-close {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--filter-btn-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .modal-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.modal-section {
+    background: var(--punch-status-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem;
+}
+
+.modal-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.punch-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.punch-timeline-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.punch-timeline-item:hover {
+    border-color: var(--border-hover);
+}
+
+.punch-timeline-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--item-color-start), var(--item-color-end));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+}
+
+.punch-timeline-content {
+    flex: 1;
+}
+
+.punch-timeline-type {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.punch-timeline-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stat-box {
+    background: var(--punch-status-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.stat-box-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.stat-box-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+    margin-top: 1rem;
+}
+
+.agent-card {
+    cursor: pointer;
+}
+
+.agent-card:active {
+    transform: scale(0.98);
+}
 </style>
 
 <div class="container-fluid py-4">
@@ -421,6 +631,86 @@ include 'header.php';
 
     <div class="last-update" id="lastUpdate">
         Última actualización: Cargando...
+    </div>
+</div>
+
+<!-- Modal de Detalles del Agente -->
+<div class="modal-overlay" id="agentModal" onclick="closeModalOnOverlay(event)">
+    <div class="modal-container">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="fas fa-user-circle"></i>
+                <span id="modalAgentName">Cargando...</span>
+            </div>
+            <button class="modal-close" onclick="closeAgentModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <!-- Estadísticas Rápidas -->
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-box-value" id="modalTotalPunches">-</div>
+                    <div class="stat-box-label">
+                        <i class="fas fa-fingerprint"></i> Total Punches
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-value text-green-400" id="modalPaidTime">-</div>
+                    <div class="stat-box-label">
+                        <i class="fas fa-dollar-sign"></i> Tiempo Pagado
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-box-value text-orange-400" id="modalUnpaidTime">-</div>
+                    <div class="stat-box-label">
+                        <i class="fas fa-pause-circle"></i> Tiempo No Pagado
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grid de Secciones -->
+            <div class="modal-grid">
+                <!-- Historial de Punches -->
+                <div class="modal-section">
+                    <div class="modal-section-title">
+                        <i class="fas fa-history"></i>
+                        Historial del Día
+                        <span class="pulse-dot" style="margin-left: auto;"></span>
+                    </div>
+                    <div class="punch-timeline" id="punchTimeline">
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p class="text-sm mt-2">Cargando historial...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráfica de Distribución -->
+                <div class="modal-section">
+                    <div class="modal-section-title">
+                        <i class="fas fa-chart-pie"></i>
+                        Distribución de Tiempo
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="timeDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detalles por Tipo de Punch -->
+            <div class="modal-section">
+                <div class="modal-section-title">
+                    <i class="fas fa-list-ul"></i>
+                    Desglose por Tipo de Punch
+                </div>
+                <div id="punchBreakdown">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -508,6 +798,8 @@ function createAgentCard(agent) {
         <div class="agent-card ${statusClass}" 
              data-status="${agent.status}" 
              data-paid="${agent.current_punch.is_paid}"
+             data-user-id="${agent.user_id}"
+             onclick="openAgentModal(${agent.user_id}, '${agent.full_name}')"
              style="--punch-gradient: linear-gradient(90deg, ${agent.current_punch.color_start}, ${agent.current_punch.color_end}); --punch-color-start: ${agent.current_punch.color_start}; --punch-color-end: ${agent.current_punch.color_end};">
             
             <div class="agent-header">
@@ -592,6 +884,212 @@ function updateLastUpdateTime(timestamp) {
 // Limpiar intervalo al salir de la página
 window.addEventListener('beforeunload', function() {
     stopAutoRefresh();
+});
+
+// ===== MODAL FUNCTIONALITY =====
+let currentAgentId = null;
+let modalRefreshInterval = null;
+let agentChart = null;
+
+function openAgentModal(userId, fullName) {
+    currentAgentId = userId;
+    document.getElementById('modalAgentName').textContent = fullName;
+    document.getElementById('agentModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // Cargar datos del agente
+    loadAgentDetails(userId);
+    
+    // Iniciar actualización automática del modal cada 3 segundos
+    if (modalRefreshInterval) {
+        clearInterval(modalRefreshInterval);
+    }
+    modalRefreshInterval = setInterval(() => {
+        if (currentAgentId) {
+            loadAgentDetails(currentAgentId);
+        }
+    }, 3000);
+}
+
+function closeAgentModal() {
+    document.getElementById('agentModal').classList.remove('active');
+    document.body.style.overflow = 'auto';
+    currentAgentId = null;
+    
+    // Detener actualización del modal
+    if (modalRefreshInterval) {
+        clearInterval(modalRefreshInterval);
+        modalRefreshInterval = null;
+    }
+    
+    // Destruir gráfica
+    if (agentChart) {
+        agentChart.destroy();
+        agentChart = null;
+    }
+}
+
+function closeModalOnOverlay(event) {
+    if (event.target.id === 'agentModal') {
+        closeAgentModal();
+    }
+}
+
+async function loadAgentDetails(userId) {
+    try {
+        const timestamp = new Date().getTime();
+        const response = await fetch(`supervisor_agent_details_api.php?user_id=${userId}&_=${timestamp}`, {
+            cache: 'no-cache',
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            updateModalStats(data.stats);
+            updatePunchTimeline(data.punches);
+            updatePunchBreakdown(data.stats.by_type);
+            updateChart(data.chart_data);
+        } else {
+            console.error('Error:', data.error);
+        }
+    } catch (error) {
+        console.error('Error al cargar detalles:', error);
+    }
+}
+
+function updateModalStats(stats) {
+    document.getElementById('modalTotalPunches').textContent = stats.total_punches;
+    document.getElementById('modalPaidTime').textContent = stats.total_paid_time_formatted;
+    document.getElementById('modalUnpaidTime').textContent = stats.total_unpaid_time_formatted;
+}
+
+function updatePunchTimeline(punches) {
+    const timeline = document.getElementById('punchTimeline');
+    
+    if (punches.length === 0) {
+        timeline.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-inbox text-2xl mb-2"></i>
+                <p class="text-sm">No hay punches registrados hoy</p>
+            </div>
+        `;
+        return;
+    }
+    
+    timeline.innerHTML = punches.map(punch => `
+        <div class="punch-timeline-item" style="--item-color-start: ${punch.color_start}; --item-color-end: ${punch.color_end};">
+            <div class="punch-timeline-icon">
+                <i class="${punch.icon}"></i>
+            </div>
+            <div class="punch-timeline-content">
+                <div class="punch-timeline-type">${punch.type_label}</div>
+                <div class="punch-timeline-time">
+                    <i class="fas fa-clock"></i> ${punch.time}
+                    ${punch.is_paid ? '<span class="ml-2 text-green-400"><i class="fas fa-dollar-sign"></i> Pagado</span>' : '<span class="ml-2 text-orange-400"><i class="fas fa-pause-circle"></i> No pagado</span>'}
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updatePunchBreakdown(byType) {
+    const breakdown = document.getElementById('punchBreakdown');
+    
+    if (Object.keys(byType).length === 0) {
+        breakdown.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <p class="text-sm">No hay datos disponibles</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const items = Object.entries(byType).map(([type, data]) => {
+        const paidBadge = data.is_paid ? 'paid' : 'unpaid';
+        const paidLabel = data.is_paid ? 'Pagado' : 'No Pagado';
+        
+        return `
+            <div class="flex items-center justify-between p-3 bg-opacity-50 rounded-lg mb-2" style="background: var(--punch-status-bg);">
+                <div class="flex-1">
+                    <div class="font-semibold text-sm" style="color: var(--text-primary);">${data.label}</div>
+                    <div class="text-xs" style="color: var(--text-secondary);">
+                        ${data.count} ${data.count === 1 ? 'vez' : 'veces'} • ${data.total_time_formatted}
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="stat-badge ${paidBadge} text-xs">
+                        ${paidLabel}
+                    </div>
+                    <div class="text-lg font-bold" style="color: var(--text-primary);">
+                        ${data.percentage}%
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    breakdown.innerHTML = items;
+}
+
+function updateChart(chartData) {
+    const canvas = document.getElementById('timeDistributionChart');
+    const ctx = canvas.getContext('2d');
+    
+    // Destruir gráfica anterior si existe
+    if (agentChart) {
+        agentChart.destroy();
+    }
+    
+    // Crear nueva gráfica
+    agentChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                data: chartData.data,
+                backgroundColor: chartData.colors,
+                borderWidth: 2,
+                borderColor: getComputedStyle(document.body).getPropertyValue('--border-color') || '#1e293b'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: getComputedStyle(document.body).getPropertyValue('--text-primary') || '#f1f5f9',
+                        padding: 15,
+                        font: {
+                            size: 12
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const isPaid = chartData.isPaid[context.dataIndex];
+                            const paidLabel = isPaid ? '💰 Pagado' : '⏸️ No Pagado';
+                            return `${label}: ${value.toFixed(1)} min (${paidLabel})`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Cerrar modal con tecla ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && currentAgentId) {
+        closeAgentModal();
+    }
 });
 </script>
 
