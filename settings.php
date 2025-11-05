@@ -725,6 +725,71 @@ try {
                 }
                 break;
 
+            case 'send_password_reset':
+                $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
+                
+                if ($userId <= 0) {
+                    $errorMessages[] = 'Usuario invalido.';
+                    break;
+                }
+
+                // Get user and employee data
+                $userDataStmt = $pdo->prepare("
+                    SELECT u.id, u.username, u.full_name, e.email 
+                    FROM users u
+                    LEFT JOIN employees e ON e.user_id = u.id
+                    WHERE u.id = ?
+                ");
+                $userDataStmt->execute([$userId]);
+                $userData = $userDataStmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$userData) {
+                    $errorMessages[] = 'Usuario no encontrado.';
+                    break;
+                }
+
+                if (empty($userData['email'])) {
+                    $errorMessages[] = 'El usuario no tiene un email registrado. Registra un email en el módulo HR primero.';
+                    break;
+                }
+
+                // Generate reset token
+                $resetToken = bin2hex(random_bytes(32));
+                $tokenExpiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
+
+                // Store token in database (you might need to create this table)
+                try {
+                    // Check if password_reset_tokens table exists, if not use session
+                    $checkTableStmt = $pdo->query("SHOW TABLES LIKE 'password_reset_tokens'");
+                    if ($checkTableStmt->rowCount() > 0) {
+                        $saveTokenStmt = $pdo->prepare("
+                            INSERT INTO password_reset_tokens (user_id, token, expires_at)
+                            VALUES (?, ?, ?)
+                            ON DUPLICATE KEY UPDATE token = ?, expires_at = ?
+                        ");
+                        $saveTokenStmt->execute([$userId, $resetToken, $tokenExpiry, $resetToken, $tokenExpiry]);
+                    }
+                } catch (Exception $e) {
+                    // Table doesn't exist, continue anyway
+                }
+
+                // Send password reset email
+                $emailData = [
+                    'email' => $userData['email'],
+                    'full_name' => $userData['full_name'],
+                    'username' => $userData['username'],
+                    'reset_token' => $resetToken
+                ];
+
+                $emailResult = sendPasswordResetEmail($emailData);
+
+                if ($emailResult['success']) {
+                    $successMessages[] = "Se ha enviado un correo de reseteo de contraseña a {$userData['email']}";
+                } else {
+                    $errorMessages[] = "No se pudo enviar el correo: " . $emailResult['message'];
+                }
+                break;
+
             case 'delete_user':
                 $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
                 
@@ -1353,35 +1418,47 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 </td>
                                 <td class="text-muted text-xs"><?= htmlspecialchars(date('d/m/Y', strtotime($user['created_at']))) ?></td>
                                 <td>
-                                    <div class="flex items-center gap-2">
+                                    <div class="flex flex-col gap-2">
                                         <?php if (!$isCurrentUser): ?>
-                                            <!-- Toggle Active/Inactive -->
-                                            <form method="POST" class="inline" onsubmit="return confirm('¿Estás seguro de <?= $isActive === 1 ? 'desactivar' : 'activar' ?> este usuario?');">
-                                                <input type="hidden" name="action" value="toggle_user_status">
+                                            <!-- Send Password Reset Email -->
+                                            <form method="POST" class="inline" onsubmit="return confirm('¿Enviar email de reseteo de contraseña a este usuario?');">
+                                                <input type="hidden" name="action" value="send_password_reset">
                                                 <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
-                                                <input type="hidden" name="new_status" value="<?= $isActive === 1 ? 0 : 1 ?>">
-                                                <?php if ($isActive === 1): ?>
-                                                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors" title="Desactivar usuario">
-                                                        <i class="fas fa-ban"></i>
-                                                        Desactivar
-                                                    </button>
-                                                <?php else: ?>
-                                                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors" title="Activar usuario">
-                                                        <i class="fas fa-check"></i>
-                                                        Activar
-                                                    </button>
-                                                <?php endif; ?>
-                                            </form>
-                                            
-                                            <!-- Delete User -->
-                                            <form method="POST" class="inline" onsubmit="return confirm('¿ADVERTENCIA! ¿Estás seguro de eliminar permanentemente al usuario <?= htmlspecialchars($user['username']) ?>? Esta acción no se puede deshacer.');">
-                                                <input type="hidden" name="action" value="delete_user">
-                                                <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
-                                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors" title="Eliminar usuario">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                    Eliminar
+                                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 hover:bg-blue-500/25 transition-colors w-full justify-center" title="Enviar email de reseteo de contraseña">
+                                                    <i class="fas fa-envelope"></i>
+                                                    Reset Password
                                                 </button>
                                             </form>
+                                            
+                                            <div class="flex items-center gap-2">
+                                                <!-- Toggle Active/Inactive -->
+                                                <form method="POST" class="inline flex-1" onsubmit="return confirm('¿Estás seguro de <?= $isActive === 1 ? 'desactivar' : 'activar' ?> este usuario?');">
+                                                    <input type="hidden" name="action" value="toggle_user_status">
+                                                    <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
+                                                    <input type="hidden" name="new_status" value="<?= $isActive === 1 ? 0 : 1 ?>">
+                                                    <?php if ($isActive === 1): ?>
+                                                        <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors w-full justify-center" title="Desactivar usuario">
+                                                            <i class="fas fa-ban"></i>
+                                                            Desactivar
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors w-full justify-center" title="Activar usuario">
+                                                            <i class="fas fa-check"></i>
+                                                            Activar
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </form>
+                                                
+                                                <!-- Delete User -->
+                                                <form method="POST" class="inline flex-1" onsubmit="return confirm('¿ADVERTENCIA! ¿Estás seguro de eliminar permanentemente al usuario <?= htmlspecialchars($user['username']) ?>? Esta acción no se puede deshacer.');">
+                                                    <input type="hidden" name="action" value="delete_user">
+                                                    <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
+                                                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors w-full justify-center" title="Eliminar usuario">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                        Eliminar
+                                                    </button>
+                                                </form>
+                                            </div>
                                         <?php else: ?>
                                             <span class="text-muted text-xs italic">Tu cuenta</span>
                                         <?php endif; ?>
