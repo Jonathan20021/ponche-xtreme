@@ -15,38 +15,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($username === '' || $idCard === '') {
             $error = 'Por favor completa todos los campos.';
         } else {
-            // Verify user exists and ID card matches (for admin users)
-            $stmt = $pdo->prepare("
-                SELECT u.id, u.username, u.full_name, u.role
-                FROM users u
-                LEFT JOIN employees e ON e.user_id = u.id
-                WHERE u.username = ? 
-                AND (e.id_card_number = ? OR e.id_card_number IS NULL)
-                AND u.role IN ('Admin', 'OperationsManager', 'IT', 'HR', 'GeneralManager', 'Supervisor')
+            // Step 1: Verify user exists and has admin role
+            $userStmt = $pdo->prepare("
+                SELECT id, username, full_name, role
+                FROM users
+                WHERE username = ?
+                AND role IN ('Admin', 'OperationsManager', 'IT', 'HR', 'GeneralManager', 'Supervisor')
             ");
-            $stmt->execute([$username, $idCard]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            $userStmt->execute([$username]);
+            $user = $userStmt->fetch(PDO::FETCH_ASSOC);
             
-            // If user found but no employee record, check if ID card matches
-            if ($user) {
-                $checkEmployee = $pdo->prepare("SELECT id_card_number FROM employees WHERE user_id = ?");
-                $checkEmployee->execute([$user['id']]);
-                $employeeData = $checkEmployee->fetch(PDO::FETCH_ASSOC);
-                
-                // If employee exists but ID card doesn't match, deny access
-                if ($employeeData && $employeeData['id_card_number'] !== $idCard) {
-                    $user = null;
-                }
-            }
-            
-            if ($user) {
-                // Identity verified, allow password reset
-                $_SESSION['reset_user_id'] = $user['id'];
-                $_SESSION['reset_username'] = $user['username'];
-                $_SESSION['reset_role'] = $user['role'];
-                $step = 'reset';
+            if (!$user) {
+                $error = 'Usuario no encontrado o no tiene permisos administrativos.';
             } else {
-                $error = 'Usuario o número de cédula incorrectos.';
+                // Step 2: Check if employee record exists and verify ID card
+                $empStmt = $pdo->prepare("SELECT identification_number FROM employees WHERE user_id = ?");
+                $empStmt->execute([$user['id']]);
+                $empData = $empStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$empData) {
+                    // No employee record - allow password reset anyway
+                    $_SESSION['reset_user_id'] = $user['id'];
+                    $_SESSION['reset_username'] = $user['username'];
+                    $_SESSION['reset_role'] = $user['role'];
+                    $step = 'reset';
+                } elseif (!$empData['identification_number']) {
+                    // Employee exists but no ID card registered - allow password reset
+                    $_SESSION['reset_user_id'] = $user['id'];
+                    $_SESSION['reset_username'] = $user['username'];
+                    $_SESSION['reset_role'] = $user['role'];
+                    $step = 'reset';
+                } elseif ($empData['identification_number'] === $idCard) {
+                    // ID card matches - allow password reset
+                    $_SESSION['reset_user_id'] = $user['id'];
+                    $_SESSION['reset_username'] = $user['username'];
+                    $_SESSION['reset_role'] = $user['role'];
+                    $step = 'reset';
+                } else {
+                    // ID card doesn't match
+                    $error = 'Número de cédula incorrecto. Cédula registrada: ' . substr($empData['identification_number'], 0, 3) . '-*******-' . substr($empData['identification_number'], -1);
+                }
             }
         }
     } elseif (isset($_POST['reset_password'])) {
