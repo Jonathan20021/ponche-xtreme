@@ -1,5 +1,6 @@
--- Tabla opcional para almacenar tokens de reseteo de contraseña
+-- Tabla opcional para almacenar tokens de reseteo de contraseña (versión simplificada)
 -- Esta tabla es opcional. El sistema funciona sin ella, pero permite mejor seguimiento.
+-- Esta versión NO incluye la clave foránea para evitar problemas de compatibilidad
 
 CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -14,9 +15,3 @@ CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
   KEY `expires_at` (`expires_at`),
   KEY `idx_token_expires` (`token`, `expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Agregar la clave foránea después de crear la tabla
--- Solo ejecutar si no existe ya
-ALTER TABLE `password_reset_tokens` 
-ADD CONSTRAINT `password_reset_tokens_user_fk` 
-FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;

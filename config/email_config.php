@@ -30,6 +30,6 @@ return [
     
     // Application Settings
     'app_name' => 'Evallish BPO Control',
-    'app_url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname(dirname($_SERVER['SCRIPT_NAME'])),
+    'app_url' => 'https://punch.evallishbpo.com', // URL base sin slash final
     'support_email' => 'notificaciones@evallishbpo.com',
 ];
