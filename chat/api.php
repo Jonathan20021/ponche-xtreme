@@ -622,23 +622,29 @@ function getTypingUsers(PDO $pdo, int $conversationId, int $userId): void {
 }
 
 function checkChatPermission(PDO $pdo, int $userId, string $permission): bool {
-    $stmt = $pdo->prepare("
-        SELECT {$permission}, is_restricted, restricted_until
-        FROM chat_permissions
-        WHERE user_id = ?
-    ");
-    $stmt->execute([$userId]);
-    $perms = $stmt->fetch();
-    
-    if (!$perms) {
-        return true; // Por defecto permitir
-    }
-    
-    if ($perms['is_restricted']) {
-        if ($perms['restricted_until'] && strtotime($perms['restricted_until']) > time()) {
-            return false;
+    try {
+        $stmt = $pdo->prepare("
+            SELECT {$permission}, is_restricted, restricted_until
+            FROM chat_permissions
+            WHERE user_id = ?
+        ");
+        $stmt->execute([$userId]);
+        $perms = $stmt->fetch();
+        
+        if (!$perms) {
+            return true; // Por defecto permitir
         }
+        
+        if ($perms['is_restricted']) {
+            if ($perms['restricted_until'] && strtotime($perms['restricted_until']) > time()) {
+                return false;
+            }
+        }
+        
+        return (bool)$perms[$permission];
+    } catch (Exception $e) {
+        // Si la tabla no existe o hay error, permitir por defecto
+        error_log("Chat permission check error: " . $e->getMessage());
+        return true;
     }
-    
-    return (bool)$perms[$permission];
 }
