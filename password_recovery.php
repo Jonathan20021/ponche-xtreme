@@ -12,6 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim($_POST['username'] ?? '');
         $idCard = trim($_POST['id_card_number'] ?? '');
         
+        // Remove any non-numeric characters from ID card (allow with or without dashes)
+        $idCard = preg_replace('/[^0-9]/', '', $idCard);
+        
         if ($username === '' || $idCard === '') {
             $error = 'Por favor completa todos los campos.';
         } else {
@@ -44,15 +47,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['reset_username'] = $user['username'];
                     $_SESSION['reset_role'] = $user['role'];
                     $step = 'reset';
-                } elseif ($empData['identification_number'] === $idCard) {
-                    // ID card matches - allow password reset
-                    $_SESSION['reset_user_id'] = $user['id'];
-                    $_SESSION['reset_username'] = $user['username'];
-                    $_SESSION['reset_role'] = $user['role'];
-                    $step = 'reset';
                 } else {
-                    // ID card doesn't match
-                    $error = 'Número de cédula incorrecto. Cédula registrada: ' . substr($empData['identification_number'], 0, 3) . '-*******-' . substr($empData['identification_number'], -1);
+                    // Normalize stored ID card (remove dashes)
+                    $storedIdCard = preg_replace('/[^0-9]/', '', $empData['identification_number']);
+                    
+                    if ($storedIdCard === $idCard) {
+                        // ID card matches - allow password reset
+                        $_SESSION['reset_user_id'] = $user['id'];
+                        $_SESSION['reset_username'] = $user['username'];
+                        $_SESSION['reset_role'] = $user['role'];
+                        $step = 'reset';
+                    } else {
+                        // ID card doesn't match
+                        $error = 'Número de cédula incorrecto.';
+                    }
                 }
             }
         }
@@ -174,12 +182,12 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                             name="id_card_number" 
                             id="id_card_number" 
                             required 
-                            placeholder="000-0000000-0"
-                            pattern="\d{3}-?\d{7}-?\d{1}"
-                            title="Formato: 000-0000000-0">
+                            placeholder="00000000000"
+                            pattern="\d{11}"
+                            title="Ingresa 11 dígitos">
                         <p class="text-xs text-slate-400 mt-1">
                             <i class="fas fa-info-circle"></i>
-                            Ingresa tu cédula en formato: 000-0000000-0
+                            Ingresa los 11 dígitos de tu cédula (sin guiones)
                         </p>
                     </div>
                     
