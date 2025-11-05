@@ -1,4 +1,7 @@
 <?php
+// Establecer zona horaria para todo el sistema
+date_default_timezone_set('America/Santo_Domingo');
+
 // Configuración de base de datos
 $host = '192.185.46.27';
 $dbname = 'hhempeos_ponche';
@@ -231,9 +234,6 @@ if (!function_exists('ensureDepartmentExists')) {
 }
 
 if (!function_exists('ensureRoleExists')) {
-    /**
-     * Inserts the role into roles table if it does not already exist.
-     */
     function ensureRoleExists(PDO $pdo, string $roleName, ?string $label = null): void
     {
         if ($roleName === '') {

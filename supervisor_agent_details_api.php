@@ -8,6 +8,10 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
 session_start();
+
+// IMPORTANTE: Establecer zona horaria de Santo Domingo
+date_default_timezone_set('America/Santo_Domingo');
+
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, must-revalidate');
 
@@ -29,23 +33,30 @@ if ($userId <= 0) {
 }
 
 try {
-    // Obtener tipos de punch con colores
-    $attendanceTypes = getAttendanceTypes($pdo, true);
+    // Obtener tipos de punch con colores - usar UPPER en slug para match consistente
+    $typesStmt = $pdo->query("
+        SELECT 
+            UPPER(slug) as slug,
+            label,
+            icon_class,
+            color_start,
+            color_end,
+            is_paid
+        FROM attendance_types
+        WHERE is_active = 1
+    ");
+    $attendanceTypes = $typesStmt->fetchAll(PDO::FETCH_ASSOC);
+    
     $typesMap = [];
     foreach ($attendanceTypes as $type) {
-        // Usar tanto minúsculas como mayúsculas como keys para asegurar match
-        $slugUpper = strtoupper($type['slug']);
-        $typeData = [
+        $slug = $type['slug'];
+        $typesMap[$slug] = [
             'label' => $type['label'],
             'icon' => $type['icon_class'] ?? 'fas fa-circle',
             'color_start' => $type['color_start'] ?? '#6366f1',
             'color_end' => $type['color_end'] ?? '#4338ca',
             'is_paid' => isset($type['is_paid']) ? (int)$type['is_paid'] : 1
         ];
-        
-        $typesMap[$slugUpper] = $typeData;
-        $typesMap[strtolower($type['slug'])] = $typeData;
-        $typesMap[$type['slug']] = $typeData;
     }
     
     // Información básica del usuario
@@ -90,13 +101,13 @@ try {
     $punchesFormatted = [];
     foreach ($punches as $punch) {
         $typeSlug = strtoupper($punch['type']);
-        $typeInfo = $typesMap[$typeSlug] ?? [
-            'label' => $punch['type'],
-            'icon' => 'fas fa-circle',
-            'color_start' => '#6B7280',
-            'color_end' => '#4B5563',
-            'is_paid' => 0
-        ];
+        
+        if (!isset($typesMap[$typeSlug])) {
+            error_log("Tipo $typeSlug no encontrado en typesMap al formatear punches");
+            continue;
+        }
+        
+        $typeInfo = $typesMap[$typeSlug];
         
         $punchesFormatted[] = [
             'id' => (int)$punch['id'],
@@ -105,7 +116,7 @@ try {
             'icon' => $typeInfo['icon'],
             'color_start' => $typeInfo['color_start'],
             'color_end' => $typeInfo['color_end'],
-            'is_paid' => $typeInfo['is_paid'],
+            'is_paid' => (int)$typeInfo['is_paid'],
             'timestamp' => $punch['timestamp'],
             'time' => date('h:i A', strtotime($punch['timestamp'])),
             'seconds_ago' => (int)$punch['seconds_ago']
@@ -139,16 +150,27 @@ try {
     for ($i = 0; $i < count($timeData); $i++) {
         $currentPunch = $timeData[$i];
         $typeSlug = strtoupper($currentPunch['type']);
-        $typeInfo = $typesMap[$typeSlug] ?? ['is_paid' => 0, 'label' => $currentPunch['type']];
         
-        // Inicializar el tipo si no existe
+        // IMPORTANTE: Verificar que el tipo existe en el mapa
+        if (!isset($typesMap[$typeSlug])) {
+            error_log("Tipo no encontrado en mapa: $typeSlug");
+            continue; // Saltar este punch si no está en el mapa
+        }
+        
+        $typeInfo = $typesMap[$typeSlug];
+        
+        // Inicializar el tipo si no existe en stats - usar valores directos para evitar referencias
         if (!isset($stats['by_type'][$typeSlug])) {
+            $label = (string)$typeInfo['label'];
+            $isPaid = (int)$typeInfo['is_paid'];
+            
             $stats['by_type'][$typeSlug] = [
-                'label' => $typeInfo['label'],
+                'label' => $label,
                 'count' => 0,
                 'total_seconds' => 0,
-                'is_paid' => (int)$typeInfo['is_paid']
+                'is_paid' => $isPaid
             ];
+            
         }
         
         // Incrementar contador
@@ -171,9 +193,11 @@ try {
             }
         } else {
             // Último punch - solo calcular si es pagado
+            $currentTime = time();
+            $punchTime = strtotime($currentPunch['timestamp']);
+            $duration = $currentTime - $punchTime;
+            
             if ((int)$typeInfo['is_paid'] === 1) {
-                $duration = time() - strtotime($currentPunch['timestamp']);
-                
                 if ($duration > 0 && $duration < 43200) {
                     $stats['by_type'][$typeSlug]['total_seconds'] += $duration;
                     $stats['total_paid_time'] += $duration;
@@ -203,6 +227,7 @@ try {
         $data['percentage'] = $stats['total_time'] > 0 
             ? round(($data['total_seconds'] / $stats['total_time']) * 100, 1) 
             : 0;
+        
     }
     
     // Preparar datos para gráfica
@@ -214,7 +239,11 @@ try {
     ];
     
     foreach ($stats['by_type'] as $type => $data) {
-        $typeInfo = $typesMap[$type] ?? ['label' => $type, 'color_start' => '#6B7280'];
+        if (!isset($typesMap[$type])) {
+            error_log("Tipo $type no encontrado en typesMap al crear gráfica");
+            continue;
+        }
+        $typeInfo = $typesMap[$type];
         $chartData['labels'][] = $typeInfo['label'];
         $chartData['data'][] = round($data['total_seconds'] / 60, 1); // Convertir a minutos
         $chartData['colors'][] = $typeInfo['color_start'];
