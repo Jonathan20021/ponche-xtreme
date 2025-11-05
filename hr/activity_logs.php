@@ -95,6 +95,7 @@ $page_title = "Logs de Actividad del Sistema";
 include '../header.php';
 ?>
 
+<link rel="stylesheet" href="../css/pagination-styles.css">
 <style>
 .logs-container {
     padding: 20px;
@@ -280,32 +281,7 @@ include '../header.php';
     color: #333;
 }
 
-.pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    padding: 20px;
-}
-
-.pagination a,
-.pagination span {
-    padding: 8px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--text-color);
-    text-decoration: none;
-}
-
-.pagination a:hover {
-    background: var(--hover-bg);
-}
-
-.pagination .current {
-    background: #007bff;
-    color: white;
-    border-color: #007bff;
-}
+/* Pagination styles moved to external CSS file */
 
 .stats-grid {
     display: grid;
@@ -508,19 +484,72 @@ include '../header.php';
     </div>
 
     <!-- Pagination -->
-    <?php if ($total_pages > 1): ?>
-        <div class="pagination">
-            <?php if ($page > 1): ?>
-                <a href="?page=1<?php echo $filter_module ? "&module={$filter_module}" : ''; ?><?php echo $filter_action ? "&action={$filter_action}" : ''; ?><?php echo $filter_user ? "&user={$filter_user}" : ''; ?><?php echo $filter_date_from ? "&date_from={$filter_date_from}" : ''; ?><?php echo $filter_date_to ? "&date_to={$filter_date_to}" : ''; ?><?php echo $search ? "&search={$search}" : ''; ?>">Primera</a>
-                <a href="?page=<?php echo $page - 1; ?><?php echo $filter_module ? "&module={$filter_module}" : ''; ?><?php echo $filter_action ? "&action={$filter_action}" : ''; ?><?php echo $filter_user ? "&user={$filter_user}" : ''; ?><?php echo $filter_date_from ? "&date_from={$filter_date_from}" : ''; ?><?php echo $filter_date_to ? "&date_to={$filter_date_to}" : ''; ?><?php echo $search ? "&search={$search}" : ''; ?>">Anterior</a>
-            <?php endif; ?>
-
-            <span class="current">Página <?php echo $page; ?> de <?php echo $total_pages; ?></span>
-
-            <?php if ($page < $total_pages): ?>
-                <a href="?page=<?php echo $page + 1; ?><?php echo $filter_module ? "&module={$filter_module}" : ''; ?><?php echo $filter_action ? "&action={$filter_action}" : ''; ?><?php echo $filter_user ? "&user={$filter_user}" : ''; ?><?php echo $filter_date_from ? "&date_from={$filter_date_from}" : ''; ?><?php echo $filter_date_to ? "&date_to={$filter_date_to}" : ''; ?><?php echo $search ? "&search={$search}" : ''; ?>">Siguiente</a>
-                <a href="?page=<?php echo $total_pages; ?><?php echo $filter_module ? "&module={$filter_module}" : ''; ?><?php echo $filter_action ? "&action={$filter_action}" : ''; ?><?php echo $filter_user ? "&user={$filter_user}" : ''; ?><?php echo $filter_date_from ? "&date_from={$filter_date_from}" : ''; ?><?php echo $filter_date_to ? "&date_to={$filter_date_to}" : ''; ?><?php echo $search ? "&search={$search}" : ''; ?>">Última</a>
-            <?php endif; ?>
+    <?php if ($total_pages > 1): 
+        // Build filter query string
+        $filter_params = '';
+        if ($filter_module) $filter_params .= "&module=" . urlencode($filter_module);
+        if ($filter_action) $filter_params .= "&action=" . urlencode($filter_action);
+        if ($filter_user) $filter_params .= "&user=" . urlencode($filter_user);
+        if ($filter_date_from) $filter_params .= "&date_from=" . urlencode($filter_date_from);
+        if ($filter_date_to) $filter_params .= "&date_to=" . urlencode($filter_date_to);
+        if ($search) $filter_params .= "&search=" . urlencode($search);
+        
+        $start_record = ($page - 1) * $per_page + 1;
+        $end_record = min($page * $per_page, $total_records);
+    ?>
+        <div class="pagination-wrapper">
+            <div class="pagination-info">
+                Mostrando <strong><?= number_format($start_record) ?></strong> a
+                <strong><?= number_format($end_record) ?></strong> de
+                <strong><?= number_format($total_records) ?></strong> registros
+            </div>
+            <div class="pagination-controls">
+                <?php if ($page > 1): ?>
+                    <a class="pagination-btn" href="?page=<?= $page - 1 ?><?= $filter_params ?>">
+                        <i class="fas fa-chevron-left"></i>
+                        <span>Anterior</span>
+                    </a>
+                <?php endif; ?>
+                
+                <div class="pagination-pages">
+                    <?php
+                    // Calculate page range to display
+                    $range = 2;
+                    $startPage = max(1, $page - $range);
+                    $endPage = min($total_pages, $page + $range);
+                    
+                    // First page
+                    if ($startPage > 1): ?>
+                        <a class="page-btn" href="?page=1<?= $filter_params ?>">1</a>
+                        <?php if ($startPage > 2): ?>
+                            <span class="page-ellipsis">...</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    
+                    <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                        <?php if ($i == $page): ?>
+                            <span class="page-btn active"><?= $i ?></span>
+                        <?php else: ?>
+                            <a class="page-btn" href="?page=<?= $i ?><?= $filter_params ?>"><?= $i ?></a>
+                        <?php endif; ?>
+                    <?php endfor; ?>
+                    
+                    <?php // Last page
+                    if ($endPage < $total_pages): ?>
+                        <?php if ($endPage < $total_pages - 1): ?>
+                            <span class="page-ellipsis">...</span>
+                        <?php endif; ?>
+                        <a class="page-btn" href="?page=<?= $total_pages ?><?= $filter_params ?>"><?= $total_pages ?></a>
+                    <?php endif; ?>
+                </div>
+                
+                <?php if ($page < $total_pages): ?>
+                    <a class="pagination-btn primary" href="?page=<?= $page + 1 ?><?= $filter_params ?>">
+                        <span>Siguiente</span>
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                <?php endif; ?>
+            </div>
         </div>
     <?php endif; ?>
 </div>

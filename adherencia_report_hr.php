@@ -395,6 +395,7 @@ $departmentChartJson = json_encode($departmentChartData, JSON_HEX_TAG | JSON_HEX
 
 include __DIR__ . '/header.php';
 ?>
+<link rel="stylesheet" href="css/pagination-styles.css">
 <section class="space-y-10">
     <div class="glass-card">
         <div class="panel-heading">
@@ -595,23 +596,56 @@ include __DIR__ . '/header.php';
             </table>
         </div>
         <?php if ($totalPages > 1): ?>
-            <div class="flex flex-wrap items-center justify-between mt-6 text-sm text-slate-300">
-                <div>
-                    Mostrando <?= number_format(min($totalRecords, $offset + 1)) ?> -
-                    <?= number_format(min($totalRecords, $offset + $recordsPerPage)) ?> de
-                    <?= number_format($totalRecords) ?>
+            <div class="pagination-wrapper">
+                <div class="pagination-info">
+                    Mostrando <strong><?= number_format(min($totalRecords, $offset + 1)) ?></strong> a
+                    <strong><?= number_format(min($totalRecords, $offset + $recordsPerPage)) ?></strong> de
+                    <strong><?= number_format($totalRecords) ?></strong> registros
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="pagination-controls">
                     <?php if ($currentPage > 1): ?>
-                        <a class="btn-secondary" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $currentPage - 1 ?>">
-                            <i class="fas fa-arrow-left"></i>
-                            Anterior
+                        <a class="pagination-btn" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $currentPage - 1 ?>">
+                            <i class="fas fa-chevron-left"></i>
+                            <span>Anterior</span>
                         </a>
                     <?php endif; ?>
+                    
+                    <div class="pagination-pages">
+                        <?php
+                        // Calculate page range to display
+                        $range = 2; // Pages to show before and after current page
+                        $startPage = max(1, $currentPage - $range);
+                        $endPage = min($totalPages, $currentPage + $range);
+                        
+                        // First page
+                        if ($startPage > 1): ?>
+                            <a class="page-btn" href="?month=<?= urlencode($selectedMonth) ?>&page=1">1</a>
+                            <?php if ($startPage > 2): ?>
+                                <span class="page-ellipsis">...</span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        
+                        <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                            <?php if ($i == $currentPage): ?>
+                                <span class="page-btn active"><?= $i ?></span>
+                            <?php else: ?>
+                                <a class="page-btn" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $i ?>"><?= $i ?></a>
+                            <?php endif; ?>
+                        <?php endfor; ?>
+                        
+                        <?php // Last page
+                        if ($endPage < $totalPages): ?>
+                            <?php if ($endPage < $totalPages - 1): ?>
+                                <span class="page-ellipsis">...</span>
+                            <?php endif; ?>
+                            <a class="page-btn" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $totalPages ?>"><?= $totalPages ?></a>
+                        <?php endif; ?>
+                    </div>
+                    
                     <?php if ($currentPage < $totalPages): ?>
-                        <a class="btn-secondary" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $currentPage + 1 ?>">
-                            Siguiente
-                            <i class="fas fa-arrow-right"></i>
+                        <a class="pagination-btn primary" href="?month=<?= urlencode($selectedMonth) ?>&page=<?= $currentPage + 1 ?>">
+                            <span>Siguiente</span>
+                            <i class="fas fa-chevron-right"></i>
                         </a>
                     <?php endif; ?>
                 </div>

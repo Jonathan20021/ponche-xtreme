@@ -105,6 +105,7 @@ $usernames = $usernames_stmt->fetchAll(PDO::FETCH_COLUMN);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/pagination-styles.css">
     <title>Administrative Hours</title>
 </head>
 <body class="bg-gray-100">
@@ -204,39 +205,71 @@ $usernames = $usernames_stmt->fetchAll(PDO::FETCH_COLUMN);
         </div>
 
         <!-- Pagination -->
-        <?php if ($total_pages > 1): ?>
-            <div class="mt-6 flex justify-center">
-                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    <!-- Previous Page -->
+        <?php if ($total_pages > 1): 
+            // Build filter query string
+            $filter_params = '';
+            if ($search) $filter_params .= '&search=' . urlencode($search);
+            if ($start_date) $filter_params .= '&start_date=' . urlencode($start_date);
+            if ($end_date) $filter_params .= '&end_date=' . urlencode($end_date);
+            if ($type) $filter_params .= '&type=' . urlencode($type);
+            if ($username) $filter_params .= '&username=' . urlencode($username);
+            
+            $start_record = ($page - 1) * $records_per_page + 1;
+            $end_record = min($page * $records_per_page, $total_records);
+        ?>
+            <div class="pagination-wrapper mt-6">
+                <div class="pagination-info">
+                    Mostrando <strong><?= number_format($start_record) ?></strong> a
+                    <strong><?= number_format($end_record) ?></strong> de
+                    <strong><?= number_format($total_records) ?></strong> registros
+                </div>
+                <div class="pagination-controls">
                     <?php if ($page > 1): ?>
-                        <a href="?page=<?= $page - 1 ?>&search=<?= urlencode($search) ?>&start_date=<?= urlencode($start_date) ?>&end_date=<?= urlencode($end_date) ?>&type=<?= urlencode($type) ?>&username=<?= urlencode($username) ?>" 
-                           class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                            Previous
+                        <a class="pagination-btn" href="?page=<?= $page - 1 ?><?= $filter_params ?>">
+                            <i class="fas fa-chevron-left"></i>
+                            <span>Anterior</span>
                         </a>
                     <?php endif; ?>
-
-                    <!-- Page Numbers -->
-                    <?php 
-                    // Show maximum 5 page numbers with current page in the middle when possible
-                    $start_page = max(1, min($page - 2, $total_pages - 4));
-                    $end_page = min($total_pages, $start_page + 4);
                     
-                    for ($i = $start_page; $i <= $end_page; $i++): 
-                    ?>
-                        <a href="?page=<?= $i ?>&search=<?= urlencode($search) ?>&start_date=<?= urlencode($start_date) ?>&end_date=<?= urlencode($end_date) ?>&type=<?= urlencode($type) ?>&username=<?= urlencode($username) ?>" 
-                           class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium <?= $i === $page ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50' ?>">
-                            <?= $i ?>
-                        </a>
-                    <?php endfor; ?>
-
-                    <!-- Next Page -->
+                    <div class="pagination-pages">
+                        <?php
+                        // Calculate page range to display
+                        $range = 2;
+                        $startPage = max(1, $page - $range);
+                        $endPage = min($total_pages, $page + $range);
+                        
+                        // First page
+                        if ($startPage > 1): ?>
+                            <a class="page-btn" href="?page=1<?= $filter_params ?>">1</a>
+                            <?php if ($startPage > 2): ?>
+                                <span class="page-ellipsis">...</span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        
+                        <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                            <?php if ($i == $page): ?>
+                                <span class="page-btn active"><?= $i ?></span>
+                            <?php else: ?>
+                                <a class="page-btn" href="?page=<?= $i ?><?= $filter_params ?>"><?= $i ?></a>
+                            <?php endif; ?>
+                        <?php endfor; ?>
+                        
+                        <?php // Last page
+                        if ($endPage < $total_pages): ?>
+                            <?php if ($endPage < $total_pages - 1): ?>
+                                <span class="page-ellipsis">...</span>
+                            <?php endif; ?>
+                            <a class="page-btn" href="?page=<?= $total_pages ?><?= $filter_params ?>"><?= $total_pages ?></a>
+                        <?php endif; ?>
+                    </div>
+                    
                     <?php if ($page < $total_pages): ?>
-                        <a href="?page=<?= $page + 1 ?>&search=<?= urlencode($search) ?>&start_date=<?= urlencode($start_date) ?>&end_date=<?= urlencode($end_date) ?>&type=<?= urlencode($type) ?>&username=<?= urlencode($username) ?>" 
-                           class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                            Next
+                        <a class="pagination-btn primary" href="?page=<?= $page + 1 ?><?= $filter_params ?>">
+                            <span>Siguiente</span>
+                            <i class="fas fa-chevron-right"></i>
                         </a>
                     <?php endif; ?>
-                </nav>
+                </div>
             </div>
         <?php endif; ?>
     </div>
