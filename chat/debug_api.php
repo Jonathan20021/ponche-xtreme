@@ -180,8 +180,10 @@ QUERY STRING: <?php echo $_SERVER['QUERY_STRING'] ?? 'N/A'; ?>
             const testData = {
                 action: 'send_message',
                 conversation_id: 1, // Cambia esto según tu DB
-                message: 'Mensaje de prueba desde debug: ' + new Date().toISOString()
+                message_text: 'Mensaje de prueba desde debug: ' + new Date().toISOString()
             };
+            
+            resultEl.textContent += '\n\n📤 Datos enviados:\n' + JSON.stringify(testData, null, 2);
             
             try {
                 const response = await fetch('api.php', {
@@ -189,23 +191,33 @@ QUERY STRING: <?php echo $_SERVER['QUERY_STRING'] ?? 'N/A'; ?>
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(testData)
+                    body: JSON.stringify(testData),
+                    cache: 'no-cache'
                 });
                 
                 const responseText = await response.text();
                 
-                resultEl.textContent = `Status: ${response.status} ${response.statusText}\n\n`;
+                resultEl.textContent += `\n\n📥 Respuesta:\nStatus: ${response.status} ${response.statusText}\n\n`;
                 resultEl.textContent += `Headers:\n${JSON.stringify(Object.fromEntries(response.headers), null, 2)}\n\n`;
                 resultEl.textContent += `Response Body:\n${responseText}\n\n`;
                 
                 try {
                     const json = JSON.parse(responseText);
                     resultEl.textContent += `Parsed JSON:\n${JSON.stringify(json, null, 2)}`;
+                    
+                    if (json.success) {
+                        resultEl.textContent += '\n\n✅ ÉXITO: El mensaje se envió correctamente';
+                    } else {
+                        resultEl.textContent += '\n\n❌ ERROR: ' + (json.error || 'Error desconocido');
+                        if (json.debug) {
+                            resultEl.textContent += '\n\nDebug info:\n' + JSON.stringify(json.debug, null, 2);
+                        }
+                    }
                 } catch (e) {
-                    resultEl.textContent += `⚠️ No es JSON válido`;
+                    resultEl.textContent += `⚠️ No es JSON válido: ${e.message}`;
                 }
             } catch (error) {
-                resultEl.textContent = `❌ Error: ${error.message}`;
+                resultEl.textContent = `❌ Error de red: ${error.message}`;
             }
         }
         
