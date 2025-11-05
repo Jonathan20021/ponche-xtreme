@@ -749,7 +749,10 @@ async function refreshData() {
         if (data.success) {
             agentsData = data.agents;
             updateStats(data);
-            renderAgents(agentsData);
+            
+            // Aplicar el filtro actual en lugar de mostrar todos
+            filterAgents(currentFilter);
+            
             updateLastUpdateTime(data.timestamp);
         } else {
             console.error('Error:', data.error);
