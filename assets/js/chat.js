@@ -12,6 +12,7 @@ class ChatApp {
         this.searchTimeout = null;
         this.selectedUsers = [];
         this.unreadCount = 0;
+        this.audioContext = null; // Para el sonido de notificación
         
         this.init();
     }
@@ -370,9 +371,18 @@ class ChatApp {
             const data = await response.json();
             
             if (data.success && data.messages.length > 0) {
+                // Verificar si hay mensajes nuevos de otros usuarios
+                const currentUserId = this.getCurrentUserId();
+                const hasNewMessagesFromOthers = data.messages.some(msg => msg.user_id != currentUserId);
+                
                 this.renderMessages(data.messages);
                 this.lastMessageId = Math.max(...data.messages.map(m => m.id));
                 this.scrollToBottom();
+                
+                // Reproducir sonido solo si hay mensajes de otros usuarios
+                if (hasNewMessagesFromOthers) {
+                    this.playNotificationSound();
+                }
             }
         } catch (error) {
             console.error('Error loading messages:', error);
@@ -843,6 +853,43 @@ class ChatApp {
     scrollToBottom() {
         const container = document.getElementById('messagesContainer');
         container.scrollTop = container.scrollHeight;
+    }
+    
+    // Reproducir sonido de notificación
+    playNotificationSound() {
+        try {
+            // Inicializar AudioContext si no existe
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            const ctx = this.audioContext;
+            const currentTime = ctx.currentTime;
+            
+            // Crear oscilador para el sonido
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            
+            // Conectar nodos
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            
+            // Configurar sonido tipo "ding" (dos tonos)
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, currentTime); // Primera nota
+            oscillator.frequency.setValueAtTime(1000, currentTime + 0.1); // Segunda nota más alta
+            
+            // Envolvente de volumen
+            gainNode.gain.setValueAtTime(0, currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.3, currentTime + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.3);
+            
+            // Reproducir
+            oscillator.start(currentTime);
+            oscillator.stop(currentTime + 0.3);
+        } catch (error) {
+            console.warn('No se pudo reproducir el sonido de notificación:', error);
+        }
     }
     
     // Utilidades
