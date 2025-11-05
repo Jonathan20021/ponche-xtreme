@@ -8,7 +8,8 @@ require_once __DIR__ . '/db.php';
 // Detect if we're in a subdirectory first
 $isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || 
                strpos($_SERVER['PHP_SELF'], '/hr/') !== false || 
-               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false);
+               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false ||
+               strpos($_SERVER['PHP_SELF'], '/chat/') !== false);
 $baseHref = $isInSubdir ? '../' : '';
 
 $navItems = [
@@ -145,6 +146,7 @@ $navItems = [
             ],
         ],
     ],
+    'chat_admin' => ['label' => 'Administración de Chat', 'href' => $baseHref . 'chat/admin.php', 'icon' => 'fa-comments-alt'],
     'activity_logs' => ['label' => 'Logs de Actividad', 'href' => $baseHref . 'hr/activity_logs.php', 'icon' => 'fa-history'],
     'login_logs' => ['label' => 'Registros de Acceso', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
     'settings' => ['label' => 'Configuración', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],
@@ -160,7 +162,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 // Detect if we're in a subdirectory
 $isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || 
                strpos($_SERVER['PHP_SELF'], '/hr/') !== false || 
-               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false);
+               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false ||
+               strpos($_SERVER['PHP_SELF'], '/chat/') !== false);
 $assetBase = $isInSubdir ? '../assets' : 'assets';
 $baseHref = $isInSubdir ? '../' : '';
 
@@ -183,9 +186,16 @@ if ($isAuthenticated) {
     <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <link href="<?= htmlspecialchars($assetBase) ?>/css/theme.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs" defer></script>
+    <link href="<?= htmlspecialchars($assetBase) ?>/css/chat.css" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
+    <?php if ($isAuthenticated && userHasPermission('chat')): ?>
+    <script>
+        const currentUserId = <?= (int)$_SESSION['user_id'] ?>;
+    </script>
+    <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js?v=<?= time() ?>" defer></script>
+    <?php endif; ?>
     <title>Evallish BPO Control</title>
 </head>
 

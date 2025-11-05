@@ -20,8 +20,9 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 $assetBase = (strpos($_SERVER['PHP_SELF'], '/agents/') === 0) ? '../assets' : 'assets';
 
 // Determine base path for links
-$inAgentsDir = strpos($_SERVER['PHP_SELF'], '/agents/') !== false;
-$basePath = $inAgentsDir ? '../' : '';
+$inSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || 
+             strpos($_SERVER['PHP_SELF'], '/chat/') !== false);
+$basePath = $inSubdir ? '../' : '';
 
 $agentNavItems = [
     'agent_dashboard' => ['label' => 'Panel de Control', 'href' => $basePath . 'agent_dashboard.php', 'icon' => 'fa-house-user'],
@@ -31,6 +32,30 @@ $agentNavItems = [
     'helpdesk_tickets' => ['label' => 'Mis Tickets', 'href' => $basePath . 'agents/helpdesk_tickets.php', 'icon' => 'fa-ticket-alt'],
     'helpdesk_suggestions' => ['label' => 'Buzón de Sugerencias', 'href' => $basePath . 'agents/suggestions.php', 'icon' => 'fa-lightbulb'],
 ];
+
+$enforceExitBeforeLogout = (($_SESSION['role'] ?? '') === 'AGENT');
+$hasExitPunchToday = true;
+
+if ($enforceExitBeforeLogout) {
+    $exitSlug = sanitizeAttendanceTypeSlug('EXIT');
+
+    if ($exitSlug !== '') {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT 1
+                FROM attendance
+                WHERE user_id = ?
+                  AND DATE(timestamp) = CURDATE()
+                  AND UPPER(type) = ?
+                LIMIT 1
+            ");
+            $stmt->execute([(int) $_SESSION['user_id'], $exitSlug]);
+            $hasExitPunchToday = $stmt->fetchColumn() !== false;
+        } catch (PDOException $e) {
+            $hasExitPunchToday = true;
+        }
+    }
+}
 
 $currentPath = basename($_SERVER['PHP_SELF']);
 ?>
@@ -45,7 +70,14 @@ $currentPath = basename($_SERVER['PHP_SELF']);
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <link href="<?= htmlspecialchars($assetBase) ?>/css/theme.css" rel="stylesheet">
+    <link href="<?= htmlspecialchars($assetBase) ?>/css/chat.css" rel="stylesheet">
     <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
+    <?php if (userHasPermission('chat')): ?>
+    <script>
+        const currentUserId = <?= (int)$_SESSION['user_id'] ?>;
+    </script>
+    <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js" defer></script>
+    <?php endif; ?>
     <title>Área de Agentes</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -89,7 +121,9 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                         </a>
                     <?php endif; ?>
                 <?php endforeach; ?>
-                <a href="<?= $basePath ?>logout_agent.php" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
+                <a href="<?= $basePath ?>logout_agent.php"
+                   class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors"
+                   data-agent-logout>
                     <i class="fas fa-sign-out-alt text-xs"></i>
                     <span>Cerrar Sesión</span>
                 </a>
@@ -100,6 +134,25 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                     </button>
                 </form>
             </nav>
+            <?php if ($enforceExitBeforeLogout): ?>
+            <script>
+            (function () {
+                const hasExitToday = <?= $hasExitPunchToday ? 'true' : 'false' ?>;
+                document.addEventListener('DOMContentLoaded', function () {
+                    const logoutLink = document.querySelector('[data-agent-logout]');
+                    if (!logoutLink) {
+                        return;
+                    }
+                    logoutLink.addEventListener('click', function (event) {
+                        if (!hasExitToday) {
+                            event.preventDefault();
+                            alert('Debes registrar tu salida (EXIT) antes de cerrar sesion.');
+                        }
+                    });
+                });
+            })();
+            </script>
+            <?php endif; ?>
         </div>
     </header>
     <main class="app-shell agent-shell">

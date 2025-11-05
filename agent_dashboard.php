@@ -37,6 +37,7 @@ if ($username === null || $full_name === null) {
 // Handle punch submission
 $punch_error = null;
 $punch_success = null;
+$logout_error = null;
 
 // Check for flash messages from session
 if (isset($_SESSION['punch_success'])) {
@@ -46,6 +47,10 @@ if (isset($_SESSION['punch_success'])) {
 if (isset($_SESSION['punch_error'])) {
     $punch_error = $_SESSION['punch_error'];
     unset($_SESSION['punch_error']);
+}
+if (isset($_SESSION['logout_error'])) {
+    $logout_error = $_SESSION['logout_error'];
+    unset($_SESSION['logout_error']);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
@@ -405,6 +410,15 @@ $chartColorsJson = json_encode($chartColors);
                 <div class="flex items-center gap-2">
                     <i class="fas fa-check-circle text-green-400"></i>
                     <p class="text-green-300 text-sm"><?= htmlspecialchars($punch_success) ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
+        
+        <?php if ($logout_error): ?>
+            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-red-400"></i>
+                    <p class="text-red-300 text-sm"><?= htmlspecialchars($logout_error) ?></p>
                 </div>
             </div>
         <?php endif; ?>

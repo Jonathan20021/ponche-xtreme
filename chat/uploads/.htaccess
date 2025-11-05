@@ -1,0 +1,11 @@
+# Proteger directorio de uploads del chat
+# Los archivos solo deben ser accesibles a través de serve.php
+
+# Denegar acceso directo a todos los archivos
+Order Deny,Allow
+Deny from all
+
+# Permitir acceso a PHP para procesar solicitudes
+<FilesMatch "\.(php)$">
+    Allow from all
+</FilesMatch>
