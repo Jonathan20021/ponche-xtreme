@@ -28,9 +28,37 @@ $jsonData = $rawInput ? json_decode($rawInput, true) : null;
 // Obtener action del JSON body o query string
 $action = ($jsonData['action'] ?? null) ?: ($_GET['action'] ?? $_POST['action'] ?? '');
 
-// Debug
-error_log('Action: ' . var_export($action, true));
+// Debug mejorado
+error_log('=== CHAT API DEBUG ===');
+error_log('Method: ' . $_SERVER['REQUEST_METHOD']);
+error_log('Content-Type: ' . ($_SERVER['CONTENT_TYPE'] ?? 'not set'));
+error_log('Raw Input Length: ' . strlen($rawInput));
+error_log('Raw Input: ' . $rawInput);
+error_log('JSON Decode Error: ' . json_last_error_msg());
 error_log('JSON Data: ' . var_export($jsonData, true));
+error_log('GET: ' . var_export($_GET, true));
+error_log('POST: ' . var_export($_POST, true));
+error_log('Action resolved: ' . var_export($action, true));
+error_log('=== END DEBUG ===');
+
+// Si no hay action, devolver error detallado
+if (empty($action)) {
+    http_response_code(400);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Acción no válida',
+        'debug' => [
+            'method' => $_SERVER['REQUEST_METHOD'],
+            'content_type' => $_SERVER['CONTENT_TYPE'] ?? 'not set',
+            'raw_input_length' => strlen($rawInput),
+            'json_error' => json_last_error_msg(),
+            'has_json_data' => $jsonData !== null,
+            'has_get_action' => isset($_GET['action']),
+            'has_post_action' => isset($_POST['action'])
+        ]
+    ]);
+    exit;
+}
 
 try {
     switch ($action) {
