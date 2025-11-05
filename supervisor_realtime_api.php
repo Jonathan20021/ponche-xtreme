@@ -53,7 +53,7 @@ try {
             LIMIT 1
         )
         WHERE u.is_active = 1
-        AND u.role NOT IN ('admin', 'superadmin')
+        AND u.role = 'agent'
         ORDER BY 
             CASE 
                 WHEN a.timestamp IS NULL THEN 1
