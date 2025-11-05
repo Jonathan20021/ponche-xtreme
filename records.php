@@ -170,6 +170,9 @@ $durationTypes = array_values(array_filter($attendanceTypes, function (array $ty
     return ((int) ($typeRow['is_active'] ?? 0) === 1) && ((int) ($typeRow['is_unique_daily'] ?? 0) === 0);
 }));
 
+// Get paid attendance type slugs for payment calculations
+$paidTypeSlugs = getPaidAttendanceTypeSlugs($pdo);
+
 $summaryColumns = array_map(function (array $typeRow): array {
     return [
         'slug' => $typeRow['slug'],
@@ -279,7 +282,8 @@ $summary_query = "
     SELECT 
         attendance.user_id,
         users.full_name,
-        users.username, 
+        users.username,
+        users.preferred_currency,
         DATE(attendance.timestamp) AS record_date,
         attendance.type AS type_slug,
         attendance.timestamp,
@@ -322,7 +326,7 @@ $work_summary = [];
 $currentGroup = null;
 $currentKey = null;
 
-$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $hourly_rates, $userExitTimes, $defaultExitTime, $exitSlug, $overtimeEnabled, $defaultOvertimeMultiplier, $overtimeStartMinutes, $userOvertimeMultipliers, $pdo): void {
+$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $paidTypeSlugs, $hourly_rates, $userExitTimes, $defaultExitTime, $exitSlug, $overtimeEnabled, $defaultOvertimeMultiplier, $overtimeStartMinutes, $userOvertimeMultipliers, $pdo): void {
     if ($group === null) {
         return;
     }
@@ -352,24 +356,26 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
         $durationMap[$columnSlug] = $durationsAll[$columnSlug] ?? 0;
     }
 
-    $totalSeconds = array_sum($durationsAll);
-    $pauseSeconds = 0;
-    foreach ($nonWorkSlugs as $pauseSlug) {
-        $pauseSeconds += $durationsAll[$pauseSlug] ?? 0;
+    // Calculate work seconds only from PAID punch types
+    $workSeconds = 0;
+    foreach ($paidTypeSlugs as $paidSlug) {
+        if (isset($durationsAll[$paidSlug])) {
+            $workSeconds += $durationsAll[$paidSlug];
+        }
     }
-
-    $workSeconds = max(0, $totalSeconds - $pauseSeconds);
+    $workSeconds = max(0, $workSeconds);
 
     $recordDate = $group['record_date'] ?? null;
     $username = $group['username'] ?? null;
     $userId = $group['user_id'] ?? null;
+    $preferredCurrency = $group['preferred_currency'] ?? 'USD';
     $overtimeSeconds = 0;
     $overtimePayment = 0.0;
 
     // Get hourly rate for the specific date (uses rate history)
     $hourlyRate = 0.0;
     if ($userId !== null && $recordDate !== null) {
-        $hourlyRate = getUserHourlyRateForDate($pdo, $userId, $recordDate, 'USD');
+        $hourlyRate = getUserHourlyRateForDate($pdo, $userId, $recordDate, $preferredCurrency);
     } else if (isset($hourly_rates[$username])) {
         $hourlyRate = (float) $hourly_rates[$username];
     }
@@ -431,6 +437,7 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
         'full_name' => $group['full_name'],
         'username' => $group['username'],
         'record_date' => $group['record_date'],
+        'preferred_currency' => $preferredCurrency,
         'durations' => $durationMap,
         'work_seconds' => $workSeconds,
         'overtime_seconds' => $overtimeSeconds,
@@ -462,6 +469,7 @@ foreach ($raw_summary_rows as $row) {
             'user_id' => $row['user_id'],
             'full_name' => $row['full_name'],
             'username' => $row['username'],
+            'preferred_currency' => $row['preferred_currency'] ?? 'USD',
             'record_date' => $recordDate,
             'events' => [],
         ];
@@ -474,6 +482,47 @@ foreach ($raw_summary_rows as $row) {
 }
 
 $finalizeSummaryGroup($currentGroup);
+
+// Calculate agent payment summary (grouped by agent and date)
+$agent_payments = [];
+foreach ($work_summary as $summary) {
+    $key = $summary['username'] . '|' . $summary['record_date'];
+    if (!isset($agent_payments[$key])) {
+        $agent_payments[$key] = [
+            'user_id' => null,
+            'full_name' => $summary['full_name'],
+            'username' => $summary['username'],
+            'record_date' => $summary['record_date'],
+            'preferred_currency' => $summary['preferred_currency'] ?? 'USD',
+            'work_seconds' => 0,
+            'overtime_seconds' => 0,
+            'overtime_payment' => 0.0,
+            'total_payment' => 0.0,
+        ];
+    }
+    $agent_payments[$key]['work_seconds'] += $summary['work_seconds'];
+    $agent_payments[$key]['overtime_seconds'] += $summary['overtime_seconds'] ?? 0;
+    $agent_payments[$key]['overtime_payment'] += $summary['overtime_payment'] ?? 0;
+    $agent_payments[$key]['total_payment'] += $summary['total_payment'];
+}
+$agent_payments = array_values($agent_payments);
+$agentPaymentsTotal = count($agent_payments);
+
+// Calculate totals by currency
+$paymentTotals = [
+    'USD' => ['work_seconds' => 0, 'overtime_seconds' => 0, 'overtime_payment' => 0.0, 'total_payment' => 0.0, 'count' => 0],
+    'DOP' => ['work_seconds' => 0, 'overtime_seconds' => 0, 'overtime_payment' => 0.0, 'total_payment' => 0.0, 'count' => 0],
+];
+foreach ($agent_payments as $payment) {
+    $currency = $payment['preferred_currency'] ?? 'USD';
+    if (isset($paymentTotals[$currency])) {
+        $paymentTotals[$currency]['work_seconds'] += $payment['work_seconds'];
+        $paymentTotals[$currency]['overtime_seconds'] += $payment['overtime_seconds'];
+        $paymentTotals[$currency]['overtime_payment'] += $payment['overtime_payment'];
+        $paymentTotals[$currency]['total_payment'] += $payment['total_payment'];
+        $paymentTotals[$currency]['count']++;
+    }
+}
 
 // Colculo de Porcentaje de Tardanza Diario
 $tardiness_query = "
@@ -566,6 +615,40 @@ $missing_exit_data = array_map(function (array $row) use ($attendanceTypeMap): a
         : ($row['first_type'] ?? '');
     return $row;
 }, $missing_exit_data);
+
+// Query para empleados que SÍ tienen "Exit" registrado
+$with_exit_query = "
+    SELECT 
+        users.full_name AS agent_name,
+        users.username,
+        DATE(attendance.timestamp) AS exit_date,
+        TIME(attendance.timestamp) AS exit_time,
+        attendance.timestamp AS exit_timestamp
+    FROM attendance
+    JOIN users ON attendance.user_id = users.id
+    WHERE UPPER(attendance.type) = 'EXIT'
+";
+
+$with_exit_params = [];
+if ($user_filter !== '') {
+    $with_exit_query .= " AND users.username = ?";
+    $with_exit_params[] = $user_filter;
+}
+if (!empty($dateValues)) {
+    $with_exit_query .= " AND DATE(attendance.timestamp) IN ($datePlaceholders)";
+    $with_exit_params = array_merge($with_exit_params, $dateValues);
+} else {
+    // If no date filter, use reference date
+    $with_exit_query .= " AND DATE(attendance.timestamp) = ?";
+    $with_exit_params[] = $referenceDate;
+}
+
+$with_exit_query .= " ORDER BY attendance.timestamp DESC";
+
+$stmt_with_exit = $pdo->prepare($with_exit_query);
+$stmt_with_exit->execute($with_exit_params);
+$with_exit_data = $stmt_with_exit->fetchAll(PDO::FETCH_ASSOC) ?: [];
+$withExitCount = count($with_exit_data);
 
 $recordsTotal = count($records);
 $latestRecordTimestamp = $recordsTotal > 0 ? strtotime($records[0]['record_date'] . ' ' . $records[0]['record_time']) : null;
@@ -804,12 +887,16 @@ $tardinessTotal = count($tardiness_data);
                             Horas extra
                             <i class="fas fa-info-circle text-xs text-muted ml-1" title="Las horas extras se calculan automaticamente despues de la hora de salida de cada empleado. El multiplicador se aplica al pago."></i>
                         </th>
-                        <th title="Pago por horas extras con multiplicador aplicado">Pago HE (USD)</th>
-                        <th>Pago Total (USD)</th>
+                        <th title="Pago por horas extras con multiplicador aplicado">Pago HE</th>
+                        <th>Pago Total</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($work_summary as $summary): ?>
+                        <?php 
+                            $currency = $summary['preferred_currency'] ?? 'USD';
+                            $currencySymbol = $currency === 'DOP' ? 'RD$' : '$';
+                        ?>
                         <tr>
                             <td><?= htmlspecialchars($summary['full_name']) ?></td>
                             <td><?= htmlspecialchars($summary['username']) ?></td>
@@ -820,8 +907,8 @@ $tardinessTotal = count($tardiness_data);
                             <?php endforeach; ?>
                             <td><?= gmdate('H:i:s', max(0, (int) $summary['work_seconds'])) ?></td>
                             <td><?= gmdate('H:i:s', max(0, (int) ($summary['overtime_seconds'] ?? 0))) ?></td>
-                            <td>$<?= number_format($summary['overtime_payment'] ?? 0, 2) ?></td>
-                            <td><strong>$<?= number_format($summary['total_payment'], 2) ?></strong></td>
+                            <td><?= $currencySymbol ?><?= number_format($summary['overtime_payment'] ?? 0, 2) ?> <?= $currency ?></td>
+                            <td><strong><?= $currencySymbol ?><?= number_format($summary['total_payment'], 2) ?> <?= $currency ?></strong></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -829,6 +916,92 @@ $tardinessTotal = count($tardiness_data);
         </div>
         <?php if (empty($work_summary)): ?>
             <div class="data-table-empty">No hay datos de productividad para el periodo seleccionado.</div>
+        <?php endif; ?>
+    </div>
+
+    <div class="glass-card space-y-6">
+        <div class="panel-heading">
+            <div>
+                <h2>Pagos por Agente</h2>
+                <p class="text-muted text-sm">Resumen consolidado de pagos por empleado y fecha, calculado solo con tipos de punch pagados.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="chip"><i class="fas fa-users"></i> <?= number_format($agentPaymentsTotal) ?> registros</span>
+                <?php if ($paymentTotals['USD']['count'] > 0): ?>
+                    <span class="chip" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;">
+                        <i class="fas fa-dollar-sign"></i> $<?= number_format($paymentTotals['USD']['total_payment'], 2) ?> USD
+                    </span>
+                <?php endif; ?>
+                <?php if ($paymentTotals['DOP']['count'] > 0): ?>
+                    <span class="chip" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white;">
+                        <i class="fas fa-coins"></i> RD$<?= number_format($paymentTotals['DOP']['total_payment'], 2) ?> DOP
+                    </span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <div class="responsive-scroll">
+            <table id="agentPaymentsTable" class="data-table js-datatable" data-export-name="agent-payments" data-length="25">
+                <thead>
+                    <tr>
+                        <th>Nombre Completo</th>
+                        <th>Usuario</th>
+                        <th>Fecha</th>
+                        <th>Horas Trabajadas</th>
+                        <th title="Horas extras acumuladas">Horas Extra</th>
+                        <th title="Pago por horas extras">Pago HE</th>
+                        <th title="Pago total del día">Pago Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($agent_payments as $payment): ?>
+                        <?php 
+                            $currency = $payment['preferred_currency'] ?? 'USD';
+                            $currencySymbol = $currency === 'DOP' ? 'RD$' : '$';
+                        ?>
+                        <tr>
+                            <td><?= htmlspecialchars($payment['full_name']) ?></td>
+                            <td><?= htmlspecialchars($payment['username']) ?></td>
+                            <td><?= htmlspecialchars($payment['record_date']) ?></td>
+                            <td><?= gmdate('H:i:s', max(0, (int) $payment['work_seconds'])) ?></td>
+                            <td><?= gmdate('H:i:s', max(0, (int) $payment['overtime_seconds'])) ?></td>
+                            <td><?= $currencySymbol ?><?= number_format($payment['overtime_payment'], 2) ?> <?= $currency ?></td>
+                            <td><strong><?= $currencySymbol ?><?= number_format($payment['total_payment'], 2) ?> <?= $currency ?></strong></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+                <tfoot>
+                    <tr style="background: rgba(99, 102, 241, 0.1); font-weight: 600;">
+                        <td colspan="3" class="text-right"><strong>Totales:</strong></td>
+                        <td><?= gmdate('H:i:s', max(0, (int) ($paymentTotals['USD']['work_seconds'] + $paymentTotals['DOP']['work_seconds']))) ?></td>
+                        <td><?= gmdate('H:i:s', max(0, (int) ($paymentTotals['USD']['overtime_seconds'] + $paymentTotals['DOP']['overtime_seconds']))) ?></td>
+                        <td>
+                            <?php if ($paymentTotals['USD']['count'] > 0): ?>
+                                $<?= number_format($paymentTotals['USD']['overtime_payment'], 2) ?> USD
+                            <?php endif; ?>
+                            <?php if ($paymentTotals['USD']['count'] > 0 && $paymentTotals['DOP']['count'] > 0): ?>
+                                <br>
+                            <?php endif; ?>
+                            <?php if ($paymentTotals['DOP']['count'] > 0): ?>
+                                RD$<?= number_format($paymentTotals['DOP']['overtime_payment'], 2) ?> DOP
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if ($paymentTotals['USD']['count'] > 0): ?>
+                                <strong>$<?= number_format($paymentTotals['USD']['total_payment'], 2) ?> USD</strong>
+                            <?php endif; ?>
+                            <?php if ($paymentTotals['USD']['count'] > 0 && $paymentTotals['DOP']['count'] > 0): ?>
+                                <br>
+                            <?php endif; ?>
+                            <?php if ($paymentTotals['DOP']['count'] > 0): ?>
+                                <strong>RD$<?= number_format($paymentTotals['DOP']['total_payment'], 2) ?> DOP</strong>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <?php if (empty($agent_payments)): ?>
+            <div class="data-table-empty">No hay datos de pagos para el periodo seleccionado.</div>
         <?php endif; ?>
     </div>
 
@@ -902,6 +1075,46 @@ $tardinessTotal = count($tardiness_data);
                 </table>
             </div>
         </div>
+    </div>
+
+    <div class="glass-card space-y-6">
+        <div class="panel-heading">
+            <div>
+                <h2>Salidas Registradas (EXIT)</h2>
+                <p class="text-muted text-sm">Empleados que han marcado su salida en el periodo seleccionado.</p>
+            </div>
+            <span class="chip"><i class="fas fa-door-open"></i> <?= number_format($withExitCount) ?> registros</span>
+        </div>
+        <div class="responsive-scroll">
+            <table id="withExitTable" class="data-table js-datatable" data-export-name="exits-registered" data-length="25">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Usuario</th>
+                        <th>Fecha</th>
+                        <th>Hora de Salida</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($with_exit_data as $row): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($row['agent_name']) ?></td>
+                            <td><?= htmlspecialchars($row['username']) ?></td>
+                            <td><?= htmlspecialchars($row['exit_date']) ?></td>
+                            <td>
+                                <span class="badge" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 0.35rem 0.75rem; border-radius: 9999px;">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    <?= htmlspecialchars($row['exit_time']) ?>
+                                </span>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php if (empty($with_exit_data)): ?>
+            <div class="data-table-empty">No hay salidas registradas para el periodo seleccionado.</div>
+        <?php endif; ?>
     </div>
 
     <div class="glass-card space-y-6">
@@ -1001,7 +1214,7 @@ $(document).ready(function() {
     };
 
     const tableInstances = {};
-    ['#recordsTable', '#summaryTable'].forEach(function (selector) {
+    ['#recordsTable', '#summaryTable', '#agentPaymentsTable', '#withExitTable'].forEach(function (selector) {
         const $table = $(selector);
         if ($table.length) {
             const customConfig = $.extend(true, {}, tableConfig);
