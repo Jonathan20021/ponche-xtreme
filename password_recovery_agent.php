@@ -17,13 +17,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             // Verify user exists and ID card matches
             $stmt = $pdo->prepare("
-                SELECT u.id, u.username, u.full_name, e.id_card_number 
+                SELECT u.id, u.username, u.full_name
                 FROM users u
-                INNER JOIN employees e ON e.user_id = u.id
-                WHERE u.username = ? AND e.id_card_number = ?
+                LEFT JOIN employees e ON e.user_id = u.id
+                WHERE u.username = ? 
+                AND (e.id_card_number = ? OR e.id_card_number IS NULL)
             ");
             $stmt->execute([$username, $idCard]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // If user found but no employee record, check if ID card matches
+            if ($user) {
+                $checkEmployee = $pdo->prepare("SELECT id_card_number FROM employees WHERE user_id = ?");
+                $checkEmployee->execute([$user['id']]);
+                $employeeData = $checkEmployee->fetch(PDO::FETCH_ASSOC);
+                
+                // If employee exists but ID card doesn't match, deny access
+                if ($employeeData && $employeeData['id_card_number'] !== $idCard) {
+                    $user = null;
+                }
+            }
             
             if ($user) {
                 // Identity verified, allow password reset
