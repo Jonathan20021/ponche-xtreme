@@ -13,6 +13,8 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $pdo->exec("SET NAMES utf8mb4");
+    // Configurar zona horaria de MySQL para coincidir con PHP
+    $pdo->exec("SET time_zone = '-04:00'");
 } catch (PDOException $e) {
     die("Error de conexión a la base de datos: " . $e->getMessage());
 }
@@ -23,6 +25,8 @@ if ($conn->connect_error) {
     die("Error de conexión MySQLi: " . $conn->connect_error);
 }
 $conn->set_charset("utf8mb4");
+// Configurar zona horaria de MySQL para coincidir con PHP
+$conn->query("SET time_zone = '-04:00'");
 
 if (!function_exists('getScheduleConfig')) {
     /**

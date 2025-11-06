@@ -346,10 +346,15 @@ function sendMessage(PDO $pdo, int $userId, array $data): void {
     ");
     $stmt->execute([$conversationId, $messageId, $conversationId, $userId]);
     
+    // Obtener el timestamp exacto del mensaje recién creado
+    $stmt = $pdo->prepare("SELECT created_at FROM chat_messages WHERE id = ?");
+    $stmt->execute([$messageId]);
+    $createdAt = $stmt->fetchColumn();
+    
     echo json_encode([
         'success' => true, 
         'message_id' => $messageId,
-        'created_at' => date('Y-m-d H:i:s')
+        'created_at' => $createdAt
     ]);
 }
 

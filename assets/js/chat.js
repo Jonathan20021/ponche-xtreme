@@ -1108,7 +1108,17 @@ class ChatApp {
     
     formatTime(timestamp) {
         if (!timestamp) return '';
-        const date = new Date(timestamp);
+        
+        // Si el timestamp viene de MySQL (formato 'YYYY-MM-DD HH:mm:ss'), 
+        // lo tratamos como hora local, no UTC
+        let date;
+        if (typeof timestamp === 'string' && timestamp.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
+            // Reemplazar espacio con 'T' para que JavaScript lo interprete como hora local
+            date = new Date(timestamp.replace(' ', 'T'));
+        } else {
+            date = new Date(timestamp);
+        }
+        
         const now = new Date();
         const diff = now - date;
         
