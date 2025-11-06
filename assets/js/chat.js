@@ -6,6 +6,7 @@
 class ChatApp {
     constructor() {
         this.currentConversationId = null;
+        this.currentConversation = null;
         this.lastMessageId = 0;
         this.pollInterval = null;
         this.typingTimeout = null;
@@ -174,7 +175,11 @@ class ChatApp {
                         <div class="chat-avatar" id="currentChatAvatar"></div>
                         <div class="chat-conversation-info" style="flex: 1;">
                             <div class="chat-conversation-name" id="currentChatName"></div>
+                            <div class="chat-conversation-type" id="currentChatType" style="font-size: 11px; color: #94a3b8;"></div>
                         </div>
+                        <button class="chat-input-btn" id="groupOptionsBtn" style="display: none;" title="Opciones del grupo">
+                            <i class="fas fa-cog"></i>
+                        </button>
                     </div>
                     
                     <div class="chat-messages-container" id="messagesContainer"></div>
@@ -205,8 +210,27 @@ class ChatApp {
                         </button>
                     </div>
                     <div class="chat-modal-body">
+                        <!-- Tipo de conversación -->
+                        <div class="chat-conversation-type" style="margin-bottom: 15px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px; background: rgba(99, 102, 241, 0.1); border-radius: 8px;">
+                                <input type="checkbox" id="isGroupChat" style="width: 18px; height: 18px; cursor: pointer;">
+                                <span style="font-weight: 500; color: #4f46e5;">
+                                    <i class="fas fa-users"></i> Crear grupo de chat
+                                </span>
+                            </label>
+                        </div>
+                        
+                        <!-- Nombre del grupo (solo visible si es grupo) -->
+                        <div id="groupNameContainer" style="display: none; margin-bottom: 15px;">
+                            <input type="text" class="chat-search-input" id="groupNameInput" placeholder="Nombre del grupo..." maxlength="100">
+                        </div>
+                        
+                        <!-- Búsqueda de usuarios -->
                         <input type="text" class="chat-search-input" id="userSearchInput" placeholder="Buscar usuarios...">
                         <div class="chat-user-list" id="userList"></div>
+                        
+                        <!-- Contador de usuarios seleccionados -->
+                        <div id="selectedUsersCount" style="padding: 8px; text-align: center; color: #64748b; font-size: 13px; display: none;"></div>
                     </div>
                     <div class="chat-modal-footer">
                         <button class="chat-modal-btn chat-modal-btn-secondary" id="cancelModalBtn">Cancelar</button>
@@ -285,6 +309,22 @@ class ChatApp {
             e.preventDefault();
             e.stopPropagation();
             this.startNewConversation();
+        });
+        
+        // Toggle tipo de conversación (directo o grupo)
+        document.getElementById('isGroupChat').addEventListener('change', (e) => {
+            const isGroup = e.target.checked;
+            const groupNameContainer = document.getElementById('groupNameContainer');
+            const selectedCountDiv = document.getElementById('selectedUsersCount');
+            
+            if (isGroup) {
+                groupNameContainer.style.display = 'block';
+                selectedCountDiv.style.display = 'block';
+                document.getElementById('groupNameInput').focus();
+            } else {
+                groupNameContainer.style.display = 'none';
+                selectedCountDiv.style.display = 'none';
+            }
         });
         
         // Buscar usuarios en tiempo real con debounce
@@ -473,13 +513,32 @@ class ChatApp {
         
         if (conversation) {
             const displayName = conversation.display_name || 'Chat';
+            const isGroup = conversation.type === 'group';
             console.log('Display name:', displayName);
             document.getElementById('currentChatName').textContent = displayName;
             document.getElementById('currentChatAvatar').textContent = this.getInitials(displayName);
+            
+            // Mostrar tipo de conversación
+            const typeDiv = document.getElementById('currentChatType');
+            if (isGroup) {
+                typeDiv.textContent = 'Grupo';
+                typeDiv.style.display = 'block';
+                document.getElementById('groupOptionsBtn').style.display = 'block';
+            } else {
+                typeDiv.textContent = '';
+                typeDiv.style.display = 'none';
+                document.getElementById('groupOptionsBtn').style.display = 'none';
+            }
+            
+            // Guardar datos de la conversación actual
+            this.currentConversation = conversation;
         } else {
             console.warn('⚠️ Conversación no encontrada en la lista');
             document.getElementById('currentChatName').textContent = 'Chat';
             document.getElementById('currentChatAvatar').textContent = '?';
+            document.getElementById('currentChatType').textContent = '';
+            document.getElementById('groupOptionsBtn').style.display = 'none';
+            this.currentConversation = null;
         }
         
         // Mostrar vista de mensajes
@@ -706,6 +765,9 @@ class ChatApp {
         this.currentConversationId = null;
         this.lastMessageId = 0;
         
+        // Recargar la lista de conversaciones para actualizar los badges
+        this.loadConversations();
+        
         // Restaurar scroll suave en móviles
         if (this.isMobile) {
             const conversationsTab = document.getElementById('conversationsTab');
@@ -719,6 +781,10 @@ class ChatApp {
         document.getElementById('newConversationModal').classList.add('open');
         this.selectedUsers = [];
         document.getElementById('userSearchInput').value = '';
+        document.getElementById('isGroupChat').checked = false;
+        document.getElementById('groupNameInput').value = '';
+        document.getElementById('groupNameContainer').style.display = 'none';
+        document.getElementById('selectedUsersCount').style.display = 'none';
         
         // Mostrar mensaje inicial
         const container = document.getElementById('userList');
@@ -812,13 +878,36 @@ class ChatApp {
     
     toggleUserSelection(userId, element) {
         const index = this.selectedUsers.indexOf(userId);
+        const isGroup = document.getElementById('isGroupChat').checked;
         
         if (index > -1) {
             this.selectedUsers.splice(index, 1);
             element.classList.remove('selected');
         } else {
+            // Si no es grupo, limpiar selección previa (solo permite 1 usuario)
+            if (!isGroup && this.selectedUsers.length > 0) {
+                document.querySelectorAll('.chat-user-item.selected').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                this.selectedUsers = [];
+            }
             this.selectedUsers.push(userId);
             element.classList.add('selected');
+        }
+        
+        // Actualizar contador
+        this.updateSelectedUsersCount();
+    }
+    
+    updateSelectedUsersCount() {
+        const countDiv = document.getElementById('selectedUsersCount');
+        const isGroup = document.getElementById('isGroupChat').checked;
+        
+        if (isGroup && this.selectedUsers.length > 0) {
+            countDiv.textContent = `${this.selectedUsers.length} usuario(s) seleccionado(s)`;
+            countDiv.style.display = 'block';
+        } else if (!isGroup) {
+            countDiv.style.display = 'none';
         }
     }
     
@@ -828,13 +917,30 @@ class ChatApp {
             return;
         }
         
+        const isGroup = document.getElementById('isGroupChat').checked;
+        const groupName = document.getElementById('groupNameInput').value.trim();
+        
+        // Validar nombre del grupo si es necesario
+        if (isGroup) {
+            if (!groupName) {
+                alert('El nombre del grupo es requerido');
+                document.getElementById('groupNameInput').focus();
+                return;
+            }
+            if (this.selectedUsers.length < 2) {
+                alert('Selecciona al menos 2 usuarios para crear un grupo');
+                return;
+            }
+        }
+        
         try {
             const basePath = this.getBasePath();
             const url = `${basePath}api.php`;
             const payload = {
                 action: 'create_conversation',
-                type: 'direct',
-                participants: this.selectedUsers
+                type: isGroup ? 'group' : 'direct',
+                participants: this.selectedUsers,
+                name: isGroup ? groupName : null
             };
             
             console.log('🚀 Creando conversación...');
@@ -887,7 +993,14 @@ class ChatApp {
                 body: `conversation_id=${conversationId}`
             });
             
+            // Actualizar el badge global y recargar conversaciones
             this.updateUnreadCount();
+            
+            // Si estamos en la vista de conversaciones, actualizarlas también
+            const conversationsTab = document.getElementById('conversationsTab');
+            if (conversationsTab && conversationsTab.children.length > 0) {
+                this.loadConversations();
+            }
         } catch (error) {
             console.error('Error marking as read:', error);
         }
@@ -1005,6 +1118,13 @@ class ChatApp {
             if (this.currentConversationId) {
                 this.loadMessages();
                 this.checkTyping();
+            } else {
+                // Si no hay conversación abierta, actualizar la lista de conversaciones
+                const conversationsTab = document.getElementById('conversationsTab');
+                const messagesView = document.getElementById('messagesView');
+                if (conversationsTab && !messagesView.classList.contains('active')) {
+                    this.loadConversations();
+                }
             }
             this.updateUnreadCount();
         }, 2000);

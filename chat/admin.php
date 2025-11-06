@@ -593,9 +593,107 @@ async function loadConversation(conversationId) {
             document.getElementById('message-stats').style.display = 'block';
             document.getElementById('total-messages').textContent = data.messages.length;
             document.getElementById('messages-with-files').textContent = data.messages.filter(m => m.has_attachment).length;
+            
+            // Si es un grupo, cargar participantes
+            if (data.conversation.type === 'group' || data.conversation.type === 'channel') {
+                await loadParticipants(conversationId);
+            } else {
+                // Ocultar panel de participantes si no es grupo
+                const participantsPanel = document.getElementById('participants-panel');
+                if (participantsPanel) participantsPanel.style.display = 'none';
+            }
         }
     } catch (error) {
         console.error('Error loading conversation:', error);
+    }
+}
+
+async function loadParticipants(conversationId) {
+    try {
+        const response = await fetch(`monitoring_api.php?action=get_participants&conversation_id=${conversationId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderParticipants(data.participants, conversationId);
+        }
+    } catch (error) {
+        console.error('Error loading participants:', error);
+    }
+}
+
+function renderParticipants(participants, conversationId) {
+    let participantsPanel = document.getElementById('participants-panel');
+    
+    // Crear panel si no existe
+    if (!participantsPanel) {
+        participantsPanel = document.createElement('div');
+        participantsPanel.id = 'participants-panel';
+        participantsPanel.className = 'bg-slate-800 border border-slate-700 rounded-lg p-4 mt-4';
+        document.querySelector('.col-span-2').appendChild(participantsPanel);
+    }
+    
+    participantsPanel.style.display = 'block';
+    participantsPanel.innerHTML = `
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-cyan-400">
+                <i class="fas fa-users mr-2"></i>Participantes del Grupo (${participants.length})
+            </h3>
+        </div>
+        <div class="space-y-2">
+            ${participants.map(p => `
+                <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center text-white font-semibold">
+                            ${p.full_name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                            <p class="font-medium text-white">${escapeHtml(p.full_name)}</p>
+                            <p class="text-xs text-slate-400">@${escapeHtml(p.username)} • ${escapeHtml(p.user_role)}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${p.role === 'admin' ? 
+                            '<span class="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full">Admin</span>' : 
+                            '<span class="px-2 py-1 bg-slate-600 text-slate-300 text-xs rounded-full">Miembro</span>'
+                        }
+                        <button onclick="confirmRemoveParticipant(${conversationId}, ${p.user_id}, '${escapeHtml(p.full_name)}')" 
+                                class="text-red-400 hover:text-red-300 transition-colors p-2"
+                                title="Remover participante">
+                            <i class="fas fa-user-minus"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+async function confirmRemoveParticipant(conversationId, userId, userName) {
+    if (!confirm(`¿Estás seguro de remover a ${userName} del grupo?`)) {
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('conversation_id', conversationId);
+        formData.append('user_id', userId);
+        
+        const response = await fetch('monitoring_api.php?action=remove_participant', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert('Participante removido exitosamente');
+            await loadParticipants(conversationId);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error removing participant:', error);
+        alert('Error al remover participante');
     }
 }
 

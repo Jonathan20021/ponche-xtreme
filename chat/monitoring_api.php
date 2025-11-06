@@ -35,6 +35,22 @@ try {
             getMessages();
             break;
             
+        case 'get_participants':
+            getParticipants();
+            break;
+            
+        case 'remove_participant':
+            removeParticipant();
+            break;
+            
+        case 'add_participant':
+            addParticipant();
+            break;
+            
+        case 'update_group_name':
+            updateGroupName();
+            break;
+            
         default:
             http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'Acción inválida']);
@@ -264,4 +280,118 @@ function getMessages() {
             'message' => $e->getMessage()
         ]);
     }
+}
+
+function getParticipants() {
+    global $pdo;
+    
+    $conversationId = $_GET['conversation_id'] ?? 0;
+    
+    if (!$conversationId) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'ID de conversación requerido']);
+        return;
+    }
+    
+    $stmt = $pdo->prepare("
+        SELECT 
+            cp.id,
+            cp.user_id,
+            cp.role,
+            cp.joined_at,
+            u.username,
+            u.full_name,
+            u.role as user_role
+        FROM chat_participants cp
+        JOIN users u ON u.id = cp.user_id
+        WHERE cp.conversation_id = ? AND cp.is_active = 1
+        ORDER BY cp.role DESC, u.full_name ASC
+    ");
+    $stmt->execute([$conversationId]);
+    $participants = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo json_encode(['success' => true, 'participants' => $participants]);
+}
+
+function removeParticipant() {
+    global $pdo;
+    
+    $conversationId = $_POST['conversation_id'] ?? 0;
+    $userId = $_POST['user_id'] ?? 0;
+    
+    if (!$conversationId || !$userId) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Parámetros inválidos']);
+        return;
+    }
+    
+    // Verificar que no sea el creador del grupo
+    $stmt = $pdo->prepare("SELECT created_by FROM chat_conversations WHERE id = ?");
+    $stmt->execute([$conversationId]);
+    $conv = $stmt->fetch();
+    
+    if ($conv && $conv['created_by'] == $userId) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'No se puede remover al creador del grupo']);
+        return;
+    }
+    
+    // Remover participante
+    $stmt = $pdo->prepare("
+        UPDATE chat_participants 
+        SET is_active = 0 
+        WHERE conversation_id = ? AND user_id = ?
+    ");
+    $stmt->execute([$conversationId, $userId]);
+    
+    echo json_encode(['success' => true, 'message' => 'Participante removido']);
+}
+
+function addParticipant() {
+    global $pdo;
+    
+    $conversationId = $_POST['conversation_id'] ?? 0;
+    $userId = $_POST['user_id'] ?? 0;
+    
+    if (!$conversationId || !$userId) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Parámetros inválidos']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO chat_participants (conversation_id, user_id, role, is_active)
+            VALUES (?, ?, 'member', 1)
+            ON DUPLICATE KEY UPDATE is_active = 1
+        ");
+        $stmt->execute([$conversationId, $userId]);
+        
+        echo json_encode(['success' => true, 'message' => 'Participante agregado']);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Error al agregar participante']);
+    }
+}
+
+function updateGroupName() {
+    global $pdo;
+    
+    $conversationId = $_POST['conversation_id'] ?? 0;
+    $name = trim($_POST['name'] ?? '');
+    
+    if (!$conversationId || !$name) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Parámetros inválidos']);
+        return;
+    }
+    
+    $stmt = $pdo->prepare("
+        UPDATE chat_conversations 
+        SET name = ? 
+        WHERE id = ? AND type IN ('group', 'channel')
+    ");
+    $stmt->execute([$name, $conversationId]);
+    
+    echo json_encode(['success' => true, 'message' => 'Nombre del grupo actualizado']);
 }

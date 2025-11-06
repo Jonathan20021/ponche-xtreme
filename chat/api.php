@@ -466,12 +466,18 @@ function markConversationAsRead(PDO $pdo, int $userId, int $conversationId): voi
 }
 
 function getUnreadCount(PDO $pdo, int $userId): void {
+    // Contar mensajes no leídos de todas las conversaciones del usuario
     $stmt = $pdo->prepare("
         SELECT COUNT(*) as count
-        FROM chat_notifications
-        WHERE user_id = ? AND is_read = 0
+        FROM chat_messages cm
+        JOIN chat_participants p ON p.conversation_id = cm.conversation_id
+        WHERE p.user_id = ? 
+        AND p.is_active = 1
+        AND cm.user_id != ?
+        AND cm.created_at > COALESCE(p.last_read_at, '1970-01-01')
+        AND cm.is_deleted = 0
     ");
-    $stmt->execute([$userId]);
+    $stmt->execute([$userId, $userId]);
     $result = $stmt->fetch();
     
     echo json_encode(['success' => true, 'unread_count' => (int)$result['count']]);
