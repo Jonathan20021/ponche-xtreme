@@ -686,7 +686,19 @@ function checkChatPermission(PDO $pdo, int $userId, string $permission): bool {
         $perms = $stmt->fetch();
         
         if (!$perms) {
-            return true; // Por defecto permitir
+            // Si no hay registro, verificar el rol del usuario
+            $userStmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
+            $userStmt->execute([$userId]);
+            $user = $userStmt->fetch();
+            
+            // Solo ADMIN y SUPERVISOR tienen permisos por defecto para crear grupos
+            // AGENT y otros roles deben tener un registro explícito
+            if ($permission === 'can_create_groups') {
+                return in_array($user['role'] ?? '', ['ADMIN', 'SUPERVISOR']);
+            }
+            
+            // Otros permisos por defecto permitir
+            return true;
         }
         
         if ($perms['is_restricted']) {
@@ -697,8 +709,8 @@ function checkChatPermission(PDO $pdo, int $userId, string $permission): bool {
         
         return (bool)$perms[$permission];
     } catch (Exception $e) {
-        // Si la tabla no existe o hay error, permitir por defecto
+        // Si la tabla no existe o hay error, denegar por seguridad
         error_log("Chat permission check error: " . $e->getMessage());
-        return true;
+        return false;
     }
 }
