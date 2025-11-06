@@ -14,7 +14,76 @@ class ChatApp {
         this.unreadCount = 0;
         this.audioContext = null; // Para el sonido de notificación
         
+        // Detección de dispositivo móvil y características
+        this.isMobile = this.detectMobile();
+        this.isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        this.screenWidth = window.innerWidth;
+        
         this.init();
+        this.setupResponsiveHandlers();
+    }
+    
+    detectMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+            || window.innerWidth <= 640;
+    }
+    
+    setupResponsiveHandlers() {
+        // Manejar cambios de orientación y tamaño de pantalla
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                this.handleResize();
+            }, 250);
+        });
+        
+        // Manejar cambios de orientación
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                this.handleResize();
+            }, 100);
+        });
+        
+        // Prevenir zoom en inputs en iOS
+        if (this.isMobile && /iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            const viewport = document.querySelector('meta[name=viewport]');
+            if (viewport) {
+                viewport.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+            }
+        }
+    }
+    
+    handleResize() {
+        const newWidth = window.innerWidth;
+        const wasMobile = this.isMobile;
+        this.isMobile = this.detectMobile();
+        this.screenWidth = newWidth;
+        
+        // Si cambió de móvil a desktop o viceversa
+        if (wasMobile !== this.isMobile) {
+            console.log(`📱 Cambio de dispositivo detectado: ${this.isMobile ? 'Móvil' : 'Desktop'}`);
+            this.adjustForDevice();
+        }
+        
+        // Ajustar altura del contenedor de mensajes en móviles
+        if (this.isMobile) {
+            this.adjustMobileLayout();
+        }
+    }
+    
+    adjustForDevice() {
+        const chatWindow = document.getElementById('chatWindow');
+        if (chatWindow && chatWindow.classList.contains('open')) {
+            // Recalcular layout del chat
+            this.scrollToBottom();
+        }
+    }
+    
+    adjustMobileLayout() {
+        // Ajustar altura considerando teclado virtual
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
     }
     
     init() {
@@ -23,6 +92,12 @@ class ChatApp {
         console.log('📦 Widget creado');
         this.attachEventListeners();
         console.log('🔗 Event listeners adjuntados');
+        
+        // Agregar soporte para gestos táctiles en móviles
+        if (this.isTouch) {
+            this.setupTouchGestures();
+        }
+        
         this.startPolling();
         console.log('🔄 Polling iniciado');
         this.updateUserStatus('online');
@@ -32,6 +107,33 @@ class ChatApp {
         window.addEventListener('beforeunload', () => {
             this.updateUserStatus('offline');
         });
+    }
+    
+    setupTouchGestures() {
+        const chatWindow = document.getElementById('chatWindow');
+        if (!chatWindow) return;
+        
+        let touchStartY = 0;
+        let touchEndY = 0;
+        
+        // Gesto de deslizar hacia abajo para cerrar (solo en móviles)
+        chatWindow.addEventListener('touchstart', (e) => {
+            if (!this.isMobile) return;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        
+        chatWindow.addEventListener('touchend', (e) => {
+            if (!this.isMobile) return;
+            touchEndY = e.changedTouches[0].clientY;
+            
+            // Si deslizó hacia abajo más de 100px desde el header
+            const header = chatWindow.querySelector('.chat-header');
+            const headerRect = header ? header.getBoundingClientRect() : null;
+            
+            if (headerRect && touchStartY < headerRect.bottom && touchEndY - touchStartY > 100) {
+                this.toggleChat();
+            }
+        }, { passive: true });
     }
     
     createChatWidget() {
@@ -256,11 +358,32 @@ class ChatApp {
     
     toggleChat() {
         const chatWindow = document.getElementById('chatWindow');
+        const isOpening = !chatWindow.classList.contains('open');
+        
         chatWindow.classList.toggle('open');
         
-        if (chatWindow.classList.contains('open')) {
+        if (isOpening) {
             this.loadConversations();
             this.updateUnreadCount();
+            
+            // En móviles, prevenir scroll del body cuando el chat está abierto
+            if (this.isMobile) {
+                document.body.style.overflow = 'hidden';
+                this.adjustMobileLayout();
+            }
+            
+            // Focus en el input si hay una conversación abierta
+            if (this.currentConversationId && !this.isMobile) {
+                setTimeout(() => {
+                    const input = document.getElementById('messageInput');
+                    if (input) input.focus();
+                }, 300);
+            }
+        } else {
+            // Restaurar scroll del body
+            if (this.isMobile) {
+                document.body.style.overflow = '';
+            }
         }
     }
     
@@ -582,6 +705,14 @@ class ChatApp {
         document.getElementById('conversationsTab').style.display = 'block';
         this.currentConversationId = null;
         this.lastMessageId = 0;
+        
+        // Restaurar scroll suave en móviles
+        if (this.isMobile) {
+            const conversationsTab = document.getElementById('conversationsTab');
+            if (conversationsTab) {
+                conversationsTab.scrollTop = 0;
+            }
+        }
     }
     
     async openNewConversationModal() {
@@ -898,9 +1029,28 @@ class ChatApp {
         }
     }
     
-    scrollToBottom() {
+    scrollToBottom(smooth = false) {
         const container = document.getElementById('messagesContainer');
-        container.scrollTop = container.scrollHeight;
+        if (!container) return;
+        
+        if (smooth && 'scrollBehavior' in document.documentElement.style) {
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+        } else {
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // En móviles, asegurar que el input sea visible
+        if (this.isMobile && this.currentConversationId) {
+            setTimeout(() => {
+                const inputContainer = document.querySelector('.chat-input-container');
+                if (inputContainer) {
+                    inputContainer.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+            }, 100);
+        }
     }
     
     // Reproducir sonido de notificación

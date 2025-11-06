@@ -26,9 +26,26 @@ if (empty($file)) {
 
 // Sanitizar el nombre del archivo para prevenir directory traversal
 $file = basename($file);
-$filePath = CHAT_UPLOAD_DIR . $file;
 
-if (!file_exists($filePath)) {
+// Buscar el archivo en el directorio base y subdirectorios
+$possiblePaths = [
+    CHAT_UPLOAD_DIR . $file,
+    CHAT_UPLOAD_DIR . 'documents/' . $file,
+    CHAT_UPLOAD_DIR . 'images/' . $file,
+    CHAT_UPLOAD_DIR . 'videos/' . $file,
+    CHAT_UPLOAD_DIR . 'audio/' . $file,
+    CHAT_UPLOAD_DIR . 'thumbnails/' . $file,
+];
+
+$filePath = null;
+foreach ($possiblePaths as $path) {
+    if (file_exists($path)) {
+        $filePath = $path;
+        break;
+    }
+}
+
+if (!$filePath) {
     http_response_code(404);
     die('Archivo no encontrado');
 }

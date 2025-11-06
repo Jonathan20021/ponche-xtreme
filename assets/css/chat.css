@@ -802,37 +802,432 @@ body > .chat-widget {
     font-size: 14px;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+/* ========================================
+   RESPONSIVE DESIGN - ADAPTACIÓN COMPLETA
+   ======================================== */
+
+/* Tablets y pantallas medianas (hasta 1024px) */
+@media (max-width: 1024px) {
     .chat-window {
-        width: calc(100% - 20px);
-        height: calc(100vh - 100px);
-        bottom: 10px;
-        right: 10px;
-        max-width: 500px;
+        width: 400px;
+        height: 550px;
+    }
+    
+    .chat-message-content {
+        max-width: 65%;
     }
 }
 
-@media (max-width: 640px) {
+/* Tablets pequeñas (hasta 768px) */
+@media (max-width: 768px) {
     .chat-window {
-        width: 100%;
-        height: 100vh;
-        bottom: 0;
-        right: 0;
-        left: 0;
-        border-radius: 0;
-        max-width: none;
+        width: calc(100vw - 40px);
+        height: calc(100vh - 120px);
+        bottom: 90px !important;
+        right: 20px !important;
+        left: 20px !important;
+        max-width: 500px;
+        margin: 0 auto;
     }
     
     .chat-toggle-btn {
+        width: 56px;
+        height: 56px;
+        font-size: 22px;
         bottom: 20px;
         right: 20px;
+    }
+    
+    .chat-message-content {
+        max-width: 75%;
+    }
+    
+    .chat-conversation-item {
+        padding: 10px 14px;
+    }
+    
+    .chat-avatar {
+        width: 44px;
+        height: 44px;
+        font-size: 16px;
+    }
+    
+    .chat-header {
+        padding: 14px 16px;
+    }
+    
+    .chat-header-title {
+        font-size: 17px;
+    }
+}
+
+/* Móviles grandes y tablets en orientación vertical (hasta 640px) */
+@media (max-width: 640px) {
+    /* Chat en pantalla completa en móviles */
+    .chat-window {
+        width: 100vw !important;
+        height: 100vh !important;
+        /* Usar --vh para manejar correctamente el teclado virtual en iOS */
+        height: calc(var(--vh, 1vh) * 100) !important;
+        bottom: 0 !important;
+        right: 0 !important;
+        left: 0 !important;
+        top: 0 !important;
+        border-radius: 0 !important;
+        max-width: none !important;
+        border: none !important;
+    }
+    
+    /* Botón flotante en móviles */
+    .chat-toggle-btn {
+        width: 56px;
+        height: 56px;
+        bottom: 16px;
+        right: 16px;
+        font-size: 20px;
+        box-shadow: 0 4px 16px rgba(6, 182, 212, 0.5);
     }
     
     .chat-widget {
         bottom: 0;
         right: 0;
     }
+    
+    /* Header más compacto */
+    .chat-header {
+        padding: 12px 16px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .chat-header-title {
+        font-size: 16px;
+    }
+    
+    .chat-header-btn {
+        font-size: 15px;
+        padding: 8px;
+    }
+    
+    /* Tabs más grandes para mejor touch */
+    .chat-tabs {
+        position: sticky;
+        top: 0;
+        z-index: 9;
+    }
+    
+    .chat-tab {
+        padding: 14px;
+        font-size: 13px;
+        touch-action: manipulation;
+    }
+    
+    /* Mensajes con mejor uso del espacio */
+    .chat-messages-container {
+        padding: 12px;
+    }
+    
+    .chat-message {
+        margin-bottom: 10px;
+    }
+    
+    .chat-message-content {
+        max-width: 80%;
+    }
+    
+    .chat-message-bubble {
+        padding: 9px 12px;
+        font-size: 14px;
+    }
+    
+    .chat-message-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+    }
+    
+    /* Input área más grande para móviles */
+    .chat-input-container {
+        padding: 12px 16px;
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+    }
+    
+    .chat-input {
+        padding: 10px 14px;
+        font-size: 15px;
+        border-radius: 24px;
+    }
+    
+    .chat-input-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 17px;
+        touch-action: manipulation;
+    }
+    
+    /* Conversaciones más espaciadas para touch */
+    .chat-conversation-item {
+        padding: 12px 16px;
+        touch-action: manipulation;
+    }
+    
+    .chat-avatar {
+        width: 42px;
+        height: 42px;
+        font-size: 15px;
+    }
+    
+    /* Modal en pantalla completa */
+    .chat-modal-content {
+        width: 100%;
+        max-width: none;
+        max-height: 100vh;
+        height: 100vh;
+        border-radius: 0;
+    }
+    
+    .chat-modal-header {
+        padding: 16px;
+    }
+    
+    .chat-modal-title {
+        font-size: 17px;
+    }
+    
+    .chat-modal-body {
+        padding: 16px;
+    }
+    
+    .chat-search-input {
+        padding: 12px 16px;
+        font-size: 15px;
+        touch-action: manipulation;
+    }
+    
+    .chat-user-item {
+        padding: 12px;
+        touch-action: manipulation;
+    }
+    
+    .chat-modal-footer {
+        padding: 16px;
+    }
+    
+    .chat-modal-btn {
+        padding: 14px;
+        font-size: 15px;
+        touch-action: manipulation;
+    }
+    
+    /* Archivos adjuntos más grandes */
+    .chat-attachment {
+        max-width: 100%;
+    }
+    
+    .chat-attachment-file {
+        padding: 10px;
+    }
+    
+    .chat-attachment-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+    }
+}
+
+/* Móviles pequeños (hasta 480px) */
+@media (max-width: 480px) {
+    .chat-header-title {
+        font-size: 15px;
+    }
+    
+    .chat-header-btn {
+        font-size: 14px;
+        padding: 6px;
+    }
+    
+    .chat-tab {
+        padding: 12px 8px;
+        font-size: 12px;
+    }
+    
+    .chat-message-content {
+        max-width: 85%;
+    }
+    
+    .chat-message-bubble {
+        padding: 8px 11px;
+        font-size: 13px;
+    }
+    
+    .chat-input {
+        font-size: 14px;
+        padding: 9px 12px;
+    }
+    
+    .chat-conversation-name {
+        font-size: 14px;
+    }
+    
+    .chat-conversation-last-message {
+        font-size: 12px;
+    }
+    
+    .chat-toggle-btn {
+        width: 52px;
+        height: 52px;
+        font-size: 18px;
+    }
+}
+
+/* Móviles muy pequeños (hasta 360px) */
+@media (max-width: 360px) {
+    .chat-toggle-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 16px;
+        bottom: 12px;
+        right: 12px;
+    }
+    
+    .chat-header {
+        padding: 10px 12px;
+    }
+    
+    .chat-input-container {
+        padding: 10px 12px;
+    }
+    
+    .chat-messages-container {
+        padding: 10px;
+    }
+    
+    .chat-conversation-item {
+        padding: 10px 12px;
+    }
+    
+    .chat-avatar {
+        width: 38px;
+        height: 38px;
+        font-size: 14px;
+    }
+    
+    .chat-message-avatar {
+        width: 26px;
+        height: 26px;
+        font-size: 10px;
+    }
+}
+
+/* Orientación horizontal (landscape) en móviles */
+@media (max-width: 896px) and (orientation: landscape) {
+    .chat-window {
+        height: 100vh !important;
+        width: 100vw !important;
+    }
+    
+    .chat-messages-container {
+        padding: 8px 12px;
+    }
+    
+    .chat-input-container {
+        padding: 8px 12px;
+    }
+    
+    .chat-header {
+        padding: 8px 12px;
+    }
+}
+
+/* Pantallas muy grandes (más de 1440px) */
+@media (min-width: 1441px) {
+    .chat-window {
+        width: 420px;
+        height: 650px;
+    }
+    
+    .chat-toggle-btn {
+        width: 64px;
+        height: 64px;
+        font-size: 26px;
+    }
+}
+
+/* Ajustes para dispositivos táctiles */
+@media (hover: none) and (pointer: coarse) {
+    /* Aumentar áreas táctiles */
+    .chat-tab {
+        padding: 16px 12px;
+    }
+    
+    .chat-conversation-item {
+        padding: 14px 16px;
+    }
+    
+    .chat-input-btn,
+    .chat-header-btn,
+    .chat-back-btn,
+    .chat-modal-close {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    
+    /* Desactivar hover effects en touch */
+    .chat-conversation-item:hover,
+    .chat-user-item:hover,
+    .chat-attachment-file:hover,
+    .chat-reaction:hover {
+        background: inherit;
+    }
+    
+    /* Usar :active en vez de :hover */
+    .chat-conversation-item:active {
+        background: var(--bg-hover, #1e293b);
+    }
+    
+    .chat-user-item:active {
+        background: var(--bg-hover, #0f172a);
+    }
+}
+
+/* Mejoras de accesibilidad */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .chat-window {
+        animation: none;
+    }
+    
+    .chat-message {
+        animation: none;
+    }
+}
+
+/* Modo de alto contraste */
+@media (prefers-contrast: high) {
+    .chat-window {
+        border: 2px solid currentColor;
+    }
+    
+    .chat-message-bubble {
+        border: 1px solid currentColor;
+    }
+    
+    .chat-input {
+        border: 2px solid currentColor;
+    }
+}
+
+/* Variables CSS personalizadas */
+:root {
+    --vh: 1vh;
 }
 
 /* FORZAR POSICIÓN DEL PORTAL Y WIDGET - MÁXIMA PRIORIDAD */
