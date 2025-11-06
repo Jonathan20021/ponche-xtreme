@@ -135,10 +135,24 @@ $stats = $pdo->query("
     <div class="flex items-center justify-between mb-8">
         <div>
             <h1 class="text-3xl font-bold">Administración de Chat</h1>
-            <p class="text-slate-400 mt-1">Gestiona permisos y restricciones del sistema de chat</p>
+            <p class="text-slate-400 mt-1">Gestiona permisos, restricciones y monitorea conversaciones</p>
         </div>
     </div>
     
+    <!-- Pestañas -->
+    <div class="flex gap-4 mb-6 border-b border-slate-700">
+        <button onclick="switchTab('permissions')" id="tab-permissions" 
+                class="px-4 py-2 font-semibold border-b-2 border-cyan-500 text-cyan-400 transition-colors">
+            <i class="fas fa-shield-alt mr-2"></i>Permisos
+        </button>
+        <button onclick="switchTab('monitoring')" id="tab-monitoring"
+                class="px-4 py-2 font-semibold border-b-2 border-transparent text-slate-400 hover:text-white transition-colors">
+            <i class="fas fa-eye mr-2"></i>Monitoreo de Conversaciones
+        </button>
+    </div>
+    
+    <!-- Contenido de Permisos -->
+    <div id="permissions-content">
     <!-- Estadísticas -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
@@ -285,12 +299,71 @@ $stats = $pdo->query("
             </table>
         </div>
     </div>
+    </div>
+    <!-- Fin de Contenido de Permisos -->
+    
+    <!-- Contenido de Monitoreo -->
+    <div id="monitoring-content" class="hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Lista de Conversaciones -->
+            <div class="lg:col-span-1 bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
+                <div class="p-4 border-b border-slate-700">
+                    <h3 class="font-semibold">Conversaciones</h3>
+                    <div class="mt-3">
+                        <input type="text" id="search-conversations" placeholder="Buscar conversaciones..." 
+                               class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
+                    </div>
+                </div>
+                <div id="conversations-list" class="overflow-y-auto" style="max-height: calc(100vh - 400px);">
+                    <div class="p-4 text-center text-slate-400">
+                        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                        <p class="text-sm">Cargando conversaciones...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mensajes de la Conversación Seleccionada -->
+            <div class="lg:col-span-2 bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-700">
+                    <div id="conversation-header" class="flex items-center justify-between">
+                        <div>
+                            <h3 class="font-semibold" id="conversation-title">Selecciona una conversación</h3>
+                            <p class="text-sm text-slate-400" id="conversation-subtitle"></p>
+                        </div>
+                        <button id="refresh-messages" onclick="refreshMessages()" class="text-slate-400 hover:text-white hidden">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="messages-container" class="flex-1 overflow-y-auto p-4" style="max-height: calc(100vh - 450px);">
+                    <div class="flex items-center justify-center h-full text-slate-400">
+                        <div class="text-center">
+                            <i class="fas fa-comments text-4xl mb-3 opacity-50"></i>
+                            <p>Selecciona una conversación para ver los mensajes</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-700 bg-slate-900/50" id="message-stats" style="display: none;">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-slate-400">Total mensajes: <span id="total-messages" class="font-semibold text-white">0</span></span>
+                        <span class="text-slate-400">Con archivos: <span id="messages-with-files" class="font-semibold text-white">0</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Fin de Contenido de Monitoreo -->
 </div>
 
 <!-- Modal de edición de permisos -->
-<div id="editModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+<div id="editModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50" onclick="if(event.target === this) closeModal()">
     <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-md w-full mx-4">
-        <h3 class="text-xl font-bold mb-4">Editar Permisos</h3>
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold">Editar Permisos</h3>
+            <button type="button" onclick="closeModal()" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
         <form method="POST" id="editForm">
             <input type="hidden" name="action" value="update_permissions">
             <input type="hidden" name="user_id" id="edit_user_id">
@@ -342,9 +415,14 @@ $stats = $pdo->query("
 </div>
 
 <!-- Modal de restricción -->
-<div id="restrictModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+<div id="restrictModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50" onclick="if(event.target === this) closeRestrictModal()">
     <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-md w-full mx-4">
-        <h3 class="text-xl font-bold mb-4">Restringir Usuario</h3>
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xl font-bold">Restringir Usuario</h3>
+            <button type="button" onclick="closeRestrictModal()" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
         <form method="POST">
             <input type="hidden" name="action" value="restrict_user">
             <input type="hidden" name="user_id" id="restrict_user_id">
@@ -378,6 +456,9 @@ $stats = $pdo->query("
 
 <script>
 const usersData = <?= json_encode($users) ?>;
+let currentConversationId = null;
+let conversations = [];
+let monitoringInterval = null;
 
 function editPermissions(userId) {
     const user = usersData.find(u => u.id === userId);
@@ -393,6 +474,234 @@ function editPermissions(userId) {
     
     document.getElementById('editModal').classList.remove('hidden');
 }
+
+function switchTab(tab) {
+    // Update tab styles
+    document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+        btn.classList.remove('border-cyan-500', 'text-cyan-400');
+        btn.classList.add('border-transparent', 'text-slate-400');
+    });
+    document.getElementById(`tab-${tab}`).classList.remove('border-transparent', 'text-slate-400');
+    document.getElementById(`tab-${tab}`).classList.add('border-cyan-500', 'text-cyan-400');
+    
+    // Show/hide content
+    document.getElementById('permissions-content').classList.toggle('hidden', tab !== 'permissions');
+    document.getElementById('monitoring-content').classList.toggle('hidden', tab !== 'monitoring');
+    
+    // Load monitoring data if needed
+    if (tab === 'monitoring' && conversations.length === 0) {
+        loadConversations();
+        startMonitoring();
+    } else if (tab === 'permissions') {
+        stopMonitoring();
+    }
+}
+
+function startMonitoring() {
+    if (monitoringInterval) return;
+    monitoringInterval = setInterval(loadConversations, 10000); // Actualizar cada 10 segundos
+}
+
+function stopMonitoring() {
+    if (monitoringInterval) {
+        clearInterval(monitoringInterval);
+        monitoringInterval = null;
+    }
+}
+
+async function loadConversations() {
+    try {
+        console.log('Loading conversations...');
+        const response = await fetch('monitoring_api.php?action=get_conversations');
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Data received:', data);
+        
+        if (data.success) {
+            conversations = data.conversations;
+            renderConversations(conversations);
+        } else {
+            throw new Error(data.error || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('Error loading conversations:', error);
+        const container = document.getElementById('conversations-list');
+        container.innerHTML = `
+            <div class="p-4 text-center text-red-400">
+                <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
+                <p class="text-sm">Error al cargar conversaciones</p>
+                <p class="text-xs mt-1">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function renderConversations(convs) {
+    const container = document.getElementById('conversations-list');
+    
+    if (convs.length === 0) {
+        container.innerHTML = `
+            <div class="p-4 text-center text-slate-400">
+                <i class="fas fa-inbox text-2xl mb-2"></i>
+                <p class="text-sm">No hay conversaciones activas</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = convs.map(conv => {
+        const isActive = currentConversationId === conv.id;
+        return `
+            <div class="conversation-item p-4 hover:bg-slate-700/30 cursor-pointer border-b border-slate-700 transition-colors ${isActive ? 'bg-slate-700/50' : ''}"
+                 onclick="loadConversation(${conv.id})">
+                <div class="flex items-start gap-3">
+                    <div class="flex-shrink-0">
+                        ${conv.is_group ? 
+                            '<div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400"><i class="fas fa-users"></i></div>' :
+                            '<div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400"><i class="fas fa-user"></i></div>'
+                        }
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <p class="font-semibold truncate">${escapeHtml(conv.name)}</p>
+                            <span class="text-xs text-slate-500">${conv.participant_count} <i class="fas fa-user text-xs"></i></span>
+                        </div>
+                        <p class="text-sm text-slate-400 truncate">${conv.last_message || 'Sin mensajes'}</p>
+                        <p class="text-xs text-slate-500 mt-1">${conv.last_message_time}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadConversation(conversationId) {
+    currentConversationId = conversationId;
+    
+    try {
+        const response = await fetch(`monitoring_api.php?action=get_messages&conversation_id=${conversationId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderMessages(data.messages, data.conversation);
+            document.getElementById('refresh-messages').classList.remove('hidden');
+            document.getElementById('message-stats').style.display = 'block';
+            document.getElementById('total-messages').textContent = data.messages.length;
+            document.getElementById('messages-with-files').textContent = data.messages.filter(m => m.has_attachment).length;
+        }
+    } catch (error) {
+        console.error('Error loading conversation:', error);
+    }
+}
+
+function renderMessages(messages, conversation) {
+    const container = document.getElementById('messages-container');
+    const title = document.getElementById('conversation-title');
+    const subtitle = document.getElementById('conversation-subtitle');
+    
+    title.textContent = conversation.name;
+    subtitle.textContent = `${conversation.participant_count} participante(s) • ${messages.length} mensajes`;
+    
+    if (messages.length === 0) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center h-full text-slate-400">
+                <div class="text-center">
+                    <i class="fas fa-comment-slash text-4xl mb-3 opacity-50"></i>
+                    <p>No hay mensajes en esta conversación</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = messages.map(msg => {
+        const isDeleted = parseInt(msg.is_deleted) === 1;
+        const isEdited = parseInt(msg.is_edited) === 1;
+        const hasAttachment = msg.has_attachment && msg.attachment_name;
+        
+        // Determinar qué mostrar
+        let messageContent = '';
+        if (isDeleted) {
+            messageContent = '(Mensaje eliminado)';
+        } else if (!msg.content && hasAttachment) {
+            messageContent = ''; // No mostrar nada si solo hay archivo
+        } else if (msg.content) {
+            messageContent = escapeHtml(msg.content);
+        } else {
+            messageContent = '(Mensaje sin contenido)';
+        }
+        
+        const attachmentHtml = hasAttachment && !isDeleted ? `
+            <div class="mt-2 p-2 bg-slate-700/50 rounded border border-slate-600 text-sm">
+                <i class="fas fa-paperclip mr-2"></i>
+                <span class="text-cyan-400">${escapeHtml(msg.attachment_name)}</span>
+                <span class="text-slate-400 ml-2">(${formatFileSize(msg.attachment_size)})</span>
+            </div>
+        ` : '';
+        
+        return `
+            <div class="mb-4">
+                <div class="flex items-start gap-3">
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center text-white text-sm font-semibold">
+                            ${msg.sender_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-baseline gap-2">
+                            <p class="font-semibold text-sm">${escapeHtml(msg.sender_name)}</p>
+                            <span class="text-xs text-slate-500">${msg.sent_at}</span>
+                            ${isDeleted ? '<span class="text-xs text-red-400"><i class="fas fa-trash"></i> Eliminado</span>' : ''}
+                            ${isEdited && !isDeleted ? '<span class="text-xs text-slate-400"><i class="fas fa-edit"></i> Editado</span>' : ''}
+                        </div>
+                        ${messageContent ? `<div class="mt-1 text-sm ${isDeleted ? 'text-slate-500 italic' : ''}">${messageContent}</div>` : ''}
+                        ${attachmentHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.scrollTop = container.scrollHeight;
+}
+
+function refreshMessages() {
+    if (currentConversationId) {
+        loadConversation(currentConversationId);
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatFileSize(bytes) {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Search functionality
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('search-conversations')?.addEventListener('input', (e) => {
+        const search = e.target.value.toLowerCase();
+        const filtered = conversations.filter(conv => 
+            conv.name.toLowerCase().includes(search) || 
+            (conv.last_message && conv.last_message.toLowerCase().includes(search))
+        );
+        renderConversations(filtered);
+    });
+});
 
 function restrictUser(userId) {
     document.getElementById('restrict_user_id').value = userId;
