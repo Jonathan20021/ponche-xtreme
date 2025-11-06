@@ -82,29 +82,30 @@ $currentPath = basename($_SERVER['PHP_SELF']);
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <header class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
-        <div class="max-w-5xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div class="flex items-center justify-between gap-3 w-full md:w-auto">
-                <div class="flex items-center gap-3">
-                    <div class="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300">
-                        <i class="fas fa-user"></i>
+        <div class="max-w-full mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center gap-4">
+            <div class="flex items-center justify-between w-full md:w-auto md:flex-shrink-0">
+                <div class="flex items-center gap-2">
+                    <img src="<?= htmlspecialchars($assetBase) ?>/logo.png" 
+                         alt="Evallish BPO Agentes" 
+                         class="h-8 md:h-9 w-auto object-contain flex-shrink-0"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="h-8 md:h-9 w-8 md:w-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 items-center justify-center text-emerald-300 hidden flex-shrink-0">
+                        <i class="fas fa-user text-base"></i>
                     </div>
-                    <div>
-                        <h1 class="brand-title text-lg font-semibold">Evallish BPO Agentes</h1>
-                        <p class="brand-subtitle text-xs"><?= htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username'] ?? '') ?></p>
-                    </div>
+                    <h1 class="brand-title text-sm md:text-base font-semibold whitespace-nowrap">Evallish BPO</h1>
                 </div>
                 <button type="button"
-                        class="mobile-nav-toggle md:hidden"
+                        class="mobile-nav-toggle md:hidden ml-4 px-3 py-2 rounded-lg bg-slate-800 text-slate-200"
                         data-nav-toggle
                         data-nav-target="agent-nav"
                         aria-controls="agent-nav"
                         aria-expanded="false">
-                    <i class="fas fa-bars"></i>
+                    <i class="fas fa-bars mr-2"></i>
                     Menú
                 </button>
             </div>
 
-            <nav id="agent-nav" class="main-nav flex flex-wrap items-center gap-2" data-open="false" data-nav>
+            <nav id="agent-nav" class="main-nav w-full md:w-auto md:flex-1 flex flex-col md:flex-row flex-wrap items-stretch md:items-center justify-start md:justify-end gap-2" data-open="false" data-nav>
                 <?php foreach ($agentNavItems as $sectionKey => $item): ?>
                     <?php
                         // Show HR request links to all agents without permission check

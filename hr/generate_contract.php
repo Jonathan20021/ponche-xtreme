@@ -57,6 +57,13 @@ $day = $dateObj->format('d');
 $month = $months[(int)$dateObj->format('m')];
 $year = $dateObj->format('Y');
 
+// Prepare logo for embedding in PDF
+$logoPath = dirname(__DIR__) . '/assets/logo.png';
+$logoData = '';
+if (file_exists($logoPath)) {
+    $logoData = base64_encode(file_get_contents($logoPath));
+}
+
 // Generate HTML for PDF
 $html = <<<HTML
 <!DOCTYPE html>
@@ -73,6 +80,14 @@ $html = <<<HTML
             line-height: 1.5;
             text-align: justify;
             color: #000;
+        }
+        .header-logo {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header-logo img {
+            max-height: 60px;
+            width: auto;
         }
         h1 {
             text-align: center;
@@ -128,6 +143,17 @@ $html = <<<HTML
     </style>
 </head>
 <body>
+HTML;
+
+if ($logoData) {
+    $html .= <<<HTML
+    <div class="header-logo">
+        <img src="data:image/png;base64,$logoData" alt="Evallish BPO Logo">
+    </div>
+HTML;
+}
+
+$html .= <<<HTML
     <h1>CONTRATO DE TRABAJO</h1>
     
     <p><strong>ENTRE: EVALLISH SRL</strong>, empresa constituida y existente de conformidad con las leyes dominicanas, identificada con el RNC No. 1-32637453, con su domicilio principal y asiento social en la Calle 6 No. 6, Reparto Conet de esta ciudad de Santiago, debidamente representada por el señor <strong>Hugo Antonio Hidalgo Núñez</strong>, dominicano, mayor de edad, casado, empresario, portador de la cédula de identidad No.031-0411132-7, domiciliado y residente en esta ciudad la cual sociedad en lo adelante del presente contrato, se denominará <strong>EL EMPLEADOR</strong>; y de la otra parte <strong>$employeeName</strong>, dominicano(a), mayor de edad, (a), residente de la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>, provisto de la cédula de identidad y electoral <strong>No. $idCard</strong> domiciliado(a) y residente en la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>.</p>

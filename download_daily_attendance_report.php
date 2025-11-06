@@ -380,6 +380,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 
 $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
@@ -389,9 +390,24 @@ $sheet->setTitle('Asistencia Diaria');
 $totalColumns = 10 + count($durationTypes); // 3 básicas + duración types + 7 adicionales
 $lastCol = chr(65 + $totalColumns - 1);
 
+// Agregar logo
+$logoPath = __DIR__ . '/assets/logo.png';
+if (file_exists($logoPath)) {
+    $drawing = new Drawing();
+    $drawing->setName('Logo');
+    $drawing->setDescription('Evallish BPO Logo');
+    $drawing->setPath($logoPath);
+    $drawing->setHeight(40);
+    $drawing->setCoordinates('A1');
+    $drawing->setOffsetX(10);
+    $drawing->setOffsetY(5);
+    $drawing->setWorksheet($sheet);
+    $sheet->getRowDimension(1)->setRowHeight(50);
+}
+
 // Título del reporte
 $dateRange = count($dateValues) === 1 ? $dateValues[0] : $dateValues[0] . ' - ' . end($dateValues);
-$sheet->setCellValue('A1', 'REPORTE DE ASISTENCIA DIARIA');
+$sheet->setCellValue('B1', 'REPORTE DE ASISTENCIA DIARIA');
 $sheet->setCellValue('A2', 'Periodo: ' . $dateRange);
 $sheet->setCellValue('A3', 'Generado: ' . date('Y-m-d H:i:s'));
 if ($user_filter !== '') {
@@ -400,7 +416,7 @@ if ($user_filter !== '') {
     $sheet->getStyle('A4')->applyFromArray($subtitleStyle);
 }
 
-$sheet->mergeCells('A1:' . $lastCol . '1');
+$sheet->mergeCells('B1:' . $lastCol . '1');
 $sheet->mergeCells('A2:' . $lastCol . '2');
 $sheet->mergeCells('A3:' . $lastCol . '3');
 
@@ -410,8 +426,10 @@ $titleStyle = [
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
 ];
-$sheet->getStyle('A1')->applyFromArray($titleStyle);
-$sheet->getRowDimension(1)->setRowHeight(30);
+$sheet->getStyle('B1:' . $lastCol . '1')->applyFromArray($titleStyle);
+$sheet->getStyle('A1')->applyFromArray([
+    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
+]);
 
 $subtitleStyle = [
     'font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],

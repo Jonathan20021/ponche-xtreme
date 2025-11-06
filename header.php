@@ -201,31 +201,30 @@ if ($isAuthenticated) {
 
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <header class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
-        <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div class="flex items-center justify-between gap-3 w-full md:w-auto">
-            <div class="flex items-center gap-3">
-                <div class="h-10 w-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
-                    <i class="fas fa-bolt"></i>
+        <div class="max-w-full mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center gap-4">
+            <div class="flex items-center justify-between w-full md:w-auto md:flex-shrink-0">
+                <div class="flex items-center gap-2">
+                    <img src="<?= htmlspecialchars($assetBase) ?>/logo.png" 
+                         alt="Evallish BPO Control" 
+                         class="h-8 md:h-9 w-auto object-contain flex-shrink-0"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div class="h-8 md:h-9 w-8 md:w-9 rounded-xl bg-cyan-500/20 border border-cyan-500/40 items-center justify-center text-cyan-300 hidden flex-shrink-0">
+                        <i class="fas fa-bolt text-base"></i>
+                    </div>
+                    <h1 class="brand-title text-sm md:text-base font-semibold whitespace-nowrap">Evallish BPO</h1>
                 </div>
-                <div>
-                    <h1 class="brand-title text-xl font-semibold">Evallish BPO Control</h1>
-                    <?php if ($userDisplayName): ?>
-                        <p class="brand-subtitle text-xs">Bienvenido, <?= htmlspecialchars($userDisplayName) ?></p>
-                    <?php endif; ?>
-                </div>
-            </div>
                 <button type="button"
-                        class="mobile-nav-toggle md:hidden"
+                        class="mobile-nav-toggle md:hidden ml-4 px-3 py-2 rounded-lg bg-slate-800 text-slate-200"
                         data-nav-toggle
                         data-nav-target="primary-nav"
                         aria-controls="primary-nav"
                         aria-expanded="false">
-                    <i class="fas fa-bars"></i>
+                    <i class="fas fa-bars mr-2"></i>
                     Menú
                 </button>
             </div>
 
-            <nav id="primary-nav" class="main-nav flex flex-wrap items-center gap-2" data-open="false" data-nav>
+            <nav id="primary-nav" class="main-nav w-full md:w-auto md:flex-1 flex flex-col md:flex-row flex-wrap items-stretch md:items-center justify-start md:justify-end gap-2" data-open="false" data-nav>
                 <?php if ($isAuthenticated): ?>
                     <?php foreach ($navItems as $sectionKey => $item): ?>
                         <?php if (isset($item['children']) && is_array($item['children'])): ?>

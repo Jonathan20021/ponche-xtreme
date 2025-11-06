@@ -9,6 +9,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 
 // Check permissions
 ensurePermission('hr_payroll');
@@ -54,13 +55,28 @@ $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Nómina');
 
+// Add logo
+$logoPath = dirname(__DIR__) . '/assets/logo.png';
+if (file_exists($logoPath)) {
+    $drawing = new Drawing();
+    $drawing->setName('Logo');
+    $drawing->setDescription('Evallish BPO Logo');
+    $drawing->setPath($logoPath);
+    $drawing->setHeight(40);
+    $drawing->setCoordinates('A1');
+    $drawing->setOffsetX(10);
+    $drawing->setOffsetY(5);
+    $drawing->setWorksheet($sheet);
+    $sheet->getRowDimension(1)->setRowHeight(50);
+}
+
 // Header
-$sheet->setCellValue('A1', 'REPORTE DE NÓMINA - REPÚBLICA DOMINICANA');
-$sheet->mergeCells('A1:N1');
-$sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
-$sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
-$sheet->getStyle('A1')->getFont()->getColor()->setRGB('FFFFFF');
+$sheet->setCellValue('B1', 'REPORTE DE NÓMINA - REPÚBLICA DOMINICANA');
+$sheet->mergeCells('B1:N1');
+$sheet->getStyle('B1:N1')->getFont()->setBold(true)->setSize(16);
+$sheet->getStyle('B1:N1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$sheet->getStyle('A1:N1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
+$sheet->getStyle('B1:N1')->getFont()->getColor()->setRGB('FFFFFF');
 
 // Period info
 $sheet->setCellValue('A2', 'Período: ' . $period['name']);

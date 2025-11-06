@@ -31,6 +31,13 @@ $day = $dateObj->format('d');
 $month = $months[(int)$dateObj->format('m')];
 $year = $dateObj->format('Y');
 
+// Prepare logo for embedding in PDF
+$logoPath = dirname(__DIR__) . '/assets/logo.png';
+$logoData = '';
+if (file_exists($logoPath)) {
+    $logoData = base64_encode(file_get_contents($logoPath));
+}
+
 // Generate HTML for Confidentiality Contract PDF
 $html = <<<HTML
 <!DOCTYPE html>
@@ -47,6 +54,14 @@ $html = <<<HTML
             line-height: 1.6;
             text-align: justify;
             color: #000;
+        }
+        .header-logo {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header-logo img {
+            max-height: 60px;
+            width: auto;
         }
         h1 {
             text-align: center;
@@ -92,6 +107,17 @@ $html = <<<HTML
     </style>
 </head>
 <body>
+HTML;
+
+if ($logoData) {
+    $html .= <<<HTML
+    <div class="header-logo">
+        <img src="data:image/png;base64,$logoData" alt="Evallish BPO Logo">
+    </div>
+HTML;
+}
+
+$html .= <<<HTML
     <h1>CONTRATO DE CONFIDENCIALIDAD</h1>
     <h2>EVALLISH SRL. RNC 1-3263745-3</h2>
     
