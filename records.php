@@ -870,7 +870,13 @@ $tardinessTotal = count($tardiness_data);
                 <h2>Resumen de tiempo trabajado</h2>
                 <p class="text-muted text-sm">Horas acumuladas, descansos y pagos generados por usuario.</p>
             </div>
-            <span class="chip"><i class="fas fa-users-cog"></i> <?= number_format($workSummaryTotal) ?> registros</span>
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="chip"><i class="fas fa-users-cog"></i> <?= number_format($workSummaryTotal) ?> registros</span>
+                <button id="downloadDailyReport" class="btn-primary" title="Descargar reporte de asistencia diaria en Excel">
+                    <i class="fas fa-download"></i>
+                    Reporte de Asistencia Diaria
+                </button>
+            </div>
         </div>
         <div class="responsive-scroll">
             <table id="summaryTable" class="data-table js-datatable" data-export-name="worktime-summary" data-length="25">
@@ -1274,6 +1280,40 @@ $(document).ready(function() {
            'Mes anterior': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
         }
     });
+
+    // Descargar reporte de asistencia diaria
+    $('#downloadDailyReport').on('click', function() {
+        const button = $(this);
+        const originalHtml = button.html();
+        
+        button.prop('disabled', true)
+              .html('<i class="fas fa-spinner fa-spin"></i> Generando reporte...');
+        
+        // Construir URL con parámetros actuales
+        const params = new URLSearchParams();
+        
+        // Obtener el rango de fechas - si está vacío, usar la fecha actual
+        let dateRange = $('#daterange').val();
+        if (!dateRange || dateRange.trim() === '') {
+            // Si no hay filtro, usar la fecha actual
+            const today = moment().format('YYYY-MM-DD');
+            dateRange = today + ' - ' + today;
+        }
+        params.append('dates', dateRange);
+        
+        const userFilter = $('#user-filter').val();
+        if (userFilter) {
+            params.append('user', userFilter);
+        }
+        
+        // Redirigir para descargar
+        window.location.href = 'download_daily_attendance_report.php?' + params.toString();
+        
+        // Restaurar botón después de un breve delay
+        setTimeout(() => {
+            button.prop('disabled', false).html(originalHtml);
+        }, 2000);
+    });
 });
 </script>
 
@@ -1318,6 +1358,41 @@ $(document).ready(function() {
     
     .punch-btn span {
         font-size: 0.625rem;
+    }
+}
+
+/* Daily Report Button Styling */
+#downloadDailyReport {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3);
+}
+
+#downloadDailyReport:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4);
+}
+
+#downloadDailyReport:active {
+    transform: translateY(0);
+}
+
+#downloadDailyReport:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+@media (max-width: 640px) {
+    #downloadDailyReport {
+        width: 100%;
+        justify-content: center;
     }
 }
 

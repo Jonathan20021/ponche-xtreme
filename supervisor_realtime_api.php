@@ -28,7 +28,8 @@ try {
             'icon' => $type['icon_class'],
             'color_start' => $type['color_start'],
             'color_end' => $type['color_end'],
-            'is_paid' => (int)$type['is_paid']
+            'is_paid' => (int)$type['is_paid'],
+            'is_unique_daily' => (int)($type['is_unique_daily'] ?? 0)
         ];
     }
     
@@ -79,7 +80,8 @@ try {
             'icon' => 'fas fa-question-circle',
             'color_start' => '#6B7280',
             'color_end' => '#4B5563',
-            'is_paid' => 0
+            'is_paid' => 0,
+            'is_unique_daily' => 0
         ];
         
         // Determinar estado
@@ -116,6 +118,7 @@ try {
                 'color_start' => $typeInfo['color_start'],
                 'color_end' => $typeInfo['color_end'],
                 'is_paid' => $typeInfo['is_paid'],
+                'is_unique_daily' => $typeInfo['is_unique_daily'],
                 'timestamp' => $agent['last_punch_time'],
                 'duration_seconds' => $durationSeconds,
                 'duration_formatted' => $durationFormatted

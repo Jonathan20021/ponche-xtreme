@@ -57,20 +57,42 @@ try {
     }
 
     $typeStmt = $pdo->prepare("
-        SELECT slug
+        SELECT slug, is_unique_daily
         FROM attendance_types
         WHERE UPPER(slug) = ?
           AND is_active = 1
         LIMIT 1
     ");
     $typeStmt->execute([$newTypeSlug]);
-    $typeExists = $typeStmt->fetchColumn();
+    $typeRow = $typeStmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$typeExists) {
+    if (!$typeRow) {
         $pdo->rollBack();
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Tipo de punch inv\u00e1lido o inactivo.']);
         exit;
+    }
+
+    $isUniqueDaily = (int)($typeRow['is_unique_daily'] ?? 0) === 1;
+
+    if ($isUniqueDaily) {
+        $checkStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM attendance
+            WHERE user_id = ?
+              AND type = ?
+              AND DATE(timestamp) = DATE(?)
+              AND id <> ?
+        ");
+        $checkStmt->execute([$targetUserId, $newTypeSlug, $punch['timestamp'], $punchId]);
+        $alreadyExists = (int)$checkStmt->fetchColumn() > 0;
+
+        if ($alreadyExists) {
+            $pdo->rollBack();
+            http_response_code(409);
+            echo json_encode(['success' => false, 'error' => 'Ya existe un punch de este tipo para la fecha seleccionada.']);
+            exit;
+        }
     }
 
     if (strtoupper($punch['type']) === $newTypeSlug) {

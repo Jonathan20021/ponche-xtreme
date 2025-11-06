@@ -251,6 +251,21 @@ include 'header.php';
     background: rgba(16, 185, 129, 0.25);
 }
 
+.theme-light .punch-create-container {
+    background: rgba(99, 102, 241, 0.06);
+    border-color: rgba(99, 102, 241, 0.25);
+}
+
+.theme-light .ninja-add-btn {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #047857;
+}
+
+.theme-light .ninja-add-btn:hover {
+    background: rgba(16, 185, 129, 0.2);
+}
+
 .theme-light .punch-edit-cancel {
     background: rgba(239, 68, 68, 0.12);
     color: #b91c1c;
@@ -542,6 +557,50 @@ include 'header.php';
     margin-top: 0.5rem;
     display: flex;
     justify-content: flex-end;
+}
+
+.punch-create-container {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px dashed var(--border-color);
+    border-radius: 10px;
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.punch-create-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.punch-create-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ninja-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ninja-add-btn:hover {
+    background: rgba(16, 185, 129, 0.25);
+    border-color: rgba(16, 185, 129, 0.5);
 }
 
 .ninja-edit-btn {
@@ -842,6 +901,9 @@ include 'header.php';
 <script>
 let agentsData = [];
 let punchTypesCache = [];
+let modalPunchesCache = [];
+let punchStatusMessages = {};
+let activePunchEditorId = null;
 let currentFilter = 'all';
 let refreshInterval;
 
@@ -1028,6 +1090,9 @@ function openAgentModal(userId, fullName) {
     document.getElementById('modalAgentName').textContent = fullName;
     document.getElementById('agentModal').classList.add('active');
     document.body.style.overflow = 'hidden';
+    activePunchEditorId = null;
+    punchStatusMessages = {};
+    modalPunchesCache = [];
     
     // Cargar datos del agente
     loadAgentDetails(userId);
@@ -1044,10 +1109,13 @@ function openAgentModal(userId, fullName) {
 }
 
 function closeAgentModal() {
-    closePunchEditors();
+    hideAllPunchEditors();
     document.getElementById('agentModal').classList.remove('active');
     document.body.style.overflow = 'auto';
     currentAgentId = null;
+    activePunchEditorId = null;
+    punchStatusMessages = {};
+    modalPunchesCache = [];
     
     // Detener actualización del modal
     if (modalRefreshInterval) {
@@ -1114,34 +1182,83 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;');
 }
 
-function buildPunchOptions(selectedSlug) {
+function buildPunchOptions(selectedSlug, config = {}) {
     const selected = (selectedSlug || '').toUpperCase();
     if (!Array.isArray(punchTypesCache) || punchTypesCache.length === 0) {
         return selected ? `<option value="${selected}" selected>${selected}</option>` : '';
     }
-    return punchTypesCache
-        .map(type => {
-            const slug = (type.slug || '').toUpperCase();
-            if (!slug) {
-                return '';
-            }
-            const label = escapeHtml(type.label || slug);
-            const isSelected = slug === selected ? 'selected' : '';
-            return `<option value="${slug}" ${isSelected}>${label}</option>`;
-        })
-        .join('');
+
+    const {
+        disableUniqueTaken = false,
+        existingTypes = [],
+        includePlaceholder = false
+    } = config;
+
+    const takenSet = new Set(
+        (existingTypes || []).map(value => (value || '').toUpperCase())
+    );
+
+    const options = [];
+
+    if (includePlaceholder) {
+        const placeholderSelected = selected === '' ? 'selected' : '';
+        options.push(`<option value="" disabled ${placeholderSelected}>Selecciona un tipo</option>`);
+    }
+
+    punchTypesCache.forEach(type => {
+        const slug = (type.slug || '').toUpperCase();
+        if (!slug) {
+            return;
+        }
+        const label = escapeHtml(type.label || slug);
+        const isUnique = (type.is_unique_daily || type.is_unique_daily === 0)
+            ? Number(type.is_unique_daily) === 1
+            : false;
+        const alreadyTaken = disableUniqueTaken && isUnique && takenSet.has(slug) && slug !== selected;
+        const disabledAttr = alreadyTaken ? 'disabled' : '';
+        const suffix = alreadyTaken ? ' (registrado)' : '';
+        const isSelected = slug === selected ? 'selected' : '';
+        options.push(`<option value="${slug}" ${isSelected} ${disabledAttr}>${label}${suffix}</option>`);
+    });
+
+    return options.join('');
 }
 
-function closePunchEditors(exceptId = null) {
+function applyStoredPunchStatus(key) {
+    const statusKey = String(key);
+    const state = punchStatusMessages[statusKey];
+    const statusEl = statusKey === 'new'
+        ? document.getElementById('punch-create-status')
+        : document.getElementById(`punch-edit-status-${key}`);
+    if (!statusEl) {
+        return;
+    }
+    if (!state || !state.message) {
+        statusEl.textContent = '';
+        statusEl.style.color = 'var(--text-secondary)';
+        return;
+    }
+    statusEl.textContent = state.message;
+    statusEl.style.color = state.isError ? '#f87171' : 'var(--text-secondary)';
+}
+
+function hideAllPunchEditors() {
     document.querySelectorAll('.punch-edit-controls').forEach(ctrl => {
-        if (!exceptId || ctrl.id !== `punch-edit-${exceptId}`) {
-            ctrl.classList.add('is-hidden');
-        }
+        ctrl.classList.add('is-hidden');
     });
 }
 
 function setPunchEditStatus(punchId, message, isError = false) {
-    const statusEl = document.getElementById(`punch-edit-status-${punchId}`);
+    const statusKey = String(punchId);
+    if (!message) {
+        delete punchStatusMessages[statusKey];
+    } else {
+        punchStatusMessages[statusKey] = { message, isError };
+    }
+
+    const statusEl = statusKey === 'new'
+        ? document.getElementById('punch-create-status')
+        : document.getElementById(`punch-edit-status-${punchId}`);
     if (!statusEl) {
         return;
     }
@@ -1160,19 +1277,16 @@ function openPunchNinja(event, punchId, currentType) {
         return;
     }
 
-    select.innerHTML = buildPunchOptions(currentType);
+    activePunchEditorId = String(punchId);
+    hideAllPunchEditors();
+
+    const existingTypes = modalPunchesCache.map(p => (p.type || '').toUpperCase());
+    select.innerHTML = buildPunchOptions(currentType, { disableUniqueTaken: false, existingTypes });
     select.value = (currentType || '').toUpperCase();
 
-    const isHidden = controls.classList.contains('is-hidden');
-    closePunchEditors(punchId);
-
-    if (isHidden) {
-        controls.classList.remove('is-hidden');
-        setPunchEditStatus(punchId, '');
-        select.focus();
-    } else {
-        controls.classList.add('is-hidden');
-    }
+    controls.classList.remove('is-hidden');
+    applyStoredPunchStatus(punchId);
+    select.focus();
 }
 
 function cancelPunchEdit(punchId) {
@@ -1181,6 +1295,9 @@ function cancelPunchEdit(punchId) {
         controls.classList.add('is-hidden');
     }
     setPunchEditStatus(punchId, '');
+    if (activePunchEditorId === String(punchId)) {
+        activePunchEditorId = null;
+    }
 }
 
 async function submitPunchEdit(punchId) {
@@ -1227,9 +1344,6 @@ async function submitPunchEdit(punchId) {
             setPunchEditStatus(punchId, 'Punch actualizado correctamente.', false);
             await loadAgentDetails(currentAgentId);
             refreshData();
-            setTimeout(() => {
-                cancelPunchEdit(punchId);
-            }, 800);
         } else {
             setPunchEditStatus(punchId, data.error || 'No se pudo actualizar el punch.', true);
         }
@@ -1242,58 +1356,234 @@ async function submitPunchEdit(punchId) {
     }
 }
 
+function getExistingPunchSlugs() {
+    return modalPunchesCache.map(punch => (punch.type || '').toUpperCase());
+}
+
+function openPunchCreate(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    if (!currentAgentId || !Array.isArray(punchTypesCache) || punchTypesCache.length === 0) {
+        return;
+    }
+
+    activePunchEditorId = 'new';
+    hideAllPunchEditors();
+
+    const controls = document.getElementById('punch-create-controls');
+    const select = document.getElementById('punch-create-select');
+
+    if (!controls || !select) {
+        return;
+    }
+
+    const existingTypes = getExistingPunchSlugs();
+    select.innerHTML = buildPunchOptions('', {
+        disableUniqueTaken: true,
+        existingTypes,
+        includePlaceholder: true
+    });
+    select.value = '';
+    controls.classList.remove('is-hidden');
+    applyStoredPunchStatus('new');
+    select.focus();
+}
+
+function cancelPunchCreate() {
+    const controls = document.getElementById('punch-create-controls');
+    if (controls) {
+        controls.classList.add('is-hidden');
+    }
+    setPunchEditStatus('new', '');
+    if (activePunchEditorId === 'new') {
+        activePunchEditorId = null;
+    }
+}
+
+async function submitPunchCreate() {
+    const select = document.getElementById('punch-create-select');
+    if (!select) {
+        return;
+    }
+    const newType = (select.value || '').toUpperCase();
+    if (!newType) {
+        setPunchEditStatus('new', 'Selecciona un tipo válido.', true);
+        return;
+    }
+    if (!currentAgentId) {
+        setPunchEditStatus('new', 'No hay un agente seleccionado.', true);
+        return;
+    }
+
+    const controls = document.getElementById('punch-create-controls');
+    if (!controls) {
+        return;
+    }
+
+    const buttons = controls.querySelectorAll('button');
+    buttons.forEach(btn => {
+        btn.disabled = true;
+    });
+    setPunchEditStatus('new', 'Registrando punch...', false);
+
+    try {
+        const response = await fetch('supervisor_create_punch_api.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: currentAgentId,
+                punch_type: newType
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            setPunchEditStatus('new', 'Punch registrado correctamente.', false);
+            await loadAgentDetails(currentAgentId);
+            refreshData();
+        } else {
+            setPunchEditStatus('new', data.error || 'No se pudo registrar el punch.', true);
+        }
+    } catch (error) {
+        setPunchEditStatus('new', 'Error: ' + error.message, true);
+    } finally {
+        buttons.forEach(btn => {
+            btn.disabled = false;
+        });
+    }
+}
+
 function updatePunchTimeline(punches) {
     const timeline = document.getElementById('punchTimeline');
-    
-    if (punches.length === 0) {
-        timeline.innerHTML = `
+    modalPunchesCache = Array.isArray(punches) ? punches.slice() : [];
+
+    const existingTypes = getExistingPunchSlugs();
+
+    const createControls = punchTypesCache.length > 0 ? `
+        <div class="punch-create-container">
+            <div class="punch-create-header">
+                <div class="punch-create-title">
+                    <i class="fas fa-user-ninja"></i>
+                    Modo Ninja
+                </div>
+                <button type="button" class="ninja-add-btn" onclick="openPunchCreate(event)">
+                    <i class="fas fa-plus-circle"></i> Agregar Punch
+                </button>
+            </div>
+            <div class="punch-edit-controls is-hidden" id="punch-create-controls">
+                <div class="punch-edit-row">
+                    <select id="punch-create-select">
+                        ${buildPunchOptions('', { disableUniqueTaken: true, existingTypes, includePlaceholder: true })}
+                    </select>
+                    <button type="button" onclick="submitPunchCreate()">Registrar</button>
+                    <button type="button" class="punch-edit-cancel" onclick="cancelPunchCreate()">Cancelar</button>
+                </div>
+                <div class="punch-edit-status" id="punch-create-status"></div>
+            </div>
+        </div>
+    ` : '';
+
+    let timelineItems = '';
+    if (!Array.isArray(punches) || punches.length === 0) {
+        timelineItems = `
             <div class="text-center text-muted py-4">
                 <i class="fas fa-inbox text-2xl mb-2"></i>
                 <p class="text-sm">No hay punches registrados hoy</p>
             </div>
         `;
+    } else {
+        timelineItems = punches.map(punch => {
+            const safeLabel = escapeHtml(punch.type_label);
+            const safeTime = escapeHtml(punch.time);
+            const sanitizedType = (punch.type || '').toUpperCase();
+            const jsCurrentType = sanitizedType.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
+            const ninjaControls = punchTypesCache.length > 0 ? `
+                <div class="punch-timeline-actions">
+                    <button type="button" class="ninja-edit-btn" onclick="openPunchNinja(event, ${punch.id}, '${jsCurrentType}')">
+                        <i class="fas fa-user-ninja"></i> Ninja
+                    </button>
+                </div>
+                <div class="punch-edit-controls is-hidden" id="punch-edit-${punch.id}">
+                    <div class="punch-edit-row">
+                        <select id="punch-select-${punch.id}">
+                            ${buildPunchOptions(sanitizedType)}
+                        </select>
+                        <button type="button" onclick="submitPunchEdit(${punch.id})">Aplicar</button>
+                        <button type="button" class="punch-edit-cancel" onclick="cancelPunchEdit(${punch.id})">Cancelar</button>
+                    </div>
+                    <div class="punch-edit-status" id="punch-edit-status-${punch.id}"></div>
+                </div>
+            ` : '';
+            
+            return `
+                <div class="punch-timeline-item" style="--item-color-start: ${punch.color_start}; --item-color-end: ${punch.color_end};">
+                    <div class="punch-timeline-icon">
+                        <i class="${punch.icon}"></i>
+                    </div>
+                    <div class="punch-timeline-content">
+                        <div class="punch-timeline-type">${safeLabel}</div>
+                        <div class="punch-timeline-time">
+                            <i class="fas fa-clock"></i> ${safeTime}
+                            ${punch.is_paid ? '<span class="ml-2 text-green-400"><i class="fas fa-dollar-sign"></i> Pagado</span>' : '<span class="ml-2 text-orange-400"><i class="fas fa-pause-circle"></i> No pagado</span>'}
+                        </div>
+                        ${ninjaControls}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    timeline.innerHTML = `${createControls}${timelineItems}`;
+    restorePunchEditorState(existingTypes);
+}
+
+function restorePunchEditorState(existingTypes = []) {
+    if (!activePunchEditorId) {
         return;
     }
-    
-    timeline.innerHTML = punches.map(punch => {
-        const safeLabel = escapeHtml(punch.type_label);
-        const safeTime = escapeHtml(punch.time);
-        const sanitizedType = (punch.type || '').toUpperCase();
-        const jsCurrentType = sanitizedType.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
-        const ninjaControls = punchTypesCache.length > 0 ? `
-            <div class="punch-timeline-actions">
-                <button type="button" class="ninja-edit-btn" onclick="openPunchNinja(event, ${punch.id}, '${jsCurrentType}')">
-                    <i class="fas fa-user-ninja"></i> Ninja
-                </button>
-            </div>
-            <div class="punch-edit-controls is-hidden" id="punch-edit-${punch.id}">
-                <div class="punch-edit-row">
-                    <select id="punch-select-${punch.id}">
-                        ${buildPunchOptions(sanitizedType)}
-                    </select>
-                    <button type="button" onclick="submitPunchEdit(${punch.id})">Aplicar</button>
-                    <button type="button" class="punch-edit-cancel" onclick="cancelPunchEdit(${punch.id})">Cancelar</button>
-                </div>
-                <div class="punch-edit-status" id="punch-edit-status-${punch.id}"></div>
-            </div>
-        ` : '';
-        
-        return `
-            <div class="punch-timeline-item" style="--item-color-start: ${punch.color_start}; --item-color-end: ${punch.color_end};">
-                <div class="punch-timeline-icon">
-                    <i class="${punch.icon}"></i>
-                </div>
-                <div class="punch-timeline-content">
-                    <div class="punch-timeline-type">${safeLabel}</div>
-                    <div class="punch-timeline-time">
-                        <i class="fas fa-clock"></i> ${safeTime}
-                        ${punch.is_paid ? '<span class="ml-2 text-green-400"><i class="fas fa-dollar-sign"></i> Pagado</span>' : '<span class="ml-2 text-orange-400"><i class="fas fa-pause-circle"></i> No pagado</span>'}
-                    </div>
-                    ${ninjaControls}
-                </div>
-            </div>
-        `;
-    }).join('');
+
+    if (activePunchEditorId === 'new') {
+        const controls = document.getElementById('punch-create-controls');
+        const select = document.getElementById('punch-create-select');
+        if (controls && select) {
+            controls.classList.remove('is-hidden');
+            select.innerHTML = buildPunchOptions('', {
+                disableUniqueTaken: true,
+                existingTypes,
+                includePlaceholder: true
+            });
+            select.value = '';
+            applyStoredPunchStatus('new');
+        }
+        return;
+    }
+
+    const punchId = parseInt(activePunchEditorId, 10);
+    if (Number.isNaN(punchId)) {
+        return;
+    }
+
+    const punch = modalPunchesCache.find(item => Number(item.id) === punchId);
+    if (!punch) {
+        activePunchEditorId = null;
+        return;
+    }
+
+    const controls = document.getElementById(`punch-edit-${punchId}`);
+    const select = document.getElementById(`punch-select-${punchId}`);
+    if (controls && select) {
+        controls.classList.remove('is-hidden');
+        select.innerHTML = buildPunchOptions(punch.type, {
+            disableUniqueTaken: false,
+            existingTypes
+        });
+        select.value = (punch.type || '').toUpperCase();
+        applyStoredPunchStatus(punchId);
+    }
 }
 
 function updatePunchBreakdown(byType) {
