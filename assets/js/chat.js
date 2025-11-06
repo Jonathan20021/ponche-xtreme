@@ -7,6 +7,7 @@ class ChatApp {
     constructor() {
         this.currentConversationId = null;
         this.currentConversation = null;
+        this.currentTab = 'conversations'; // Rastrear pestaña activa
         this.lastMessageId = 0;
         this.pollInterval = null;
         this.typingTimeout = null;
@@ -14,6 +15,8 @@ class ChatApp {
         this.selectedUsers = [];
         this.unreadCount = 0;
         this.audioContext = null; // Para el sonido de notificación
+        this.emojisLoaded = false;
+        this.stickersLoaded = false;
         
         // Detección de dispositivo móvil y características
         this.isMobile = this.detectMobile();
@@ -191,10 +194,29 @@ class ChatApp {
                             <button class="chat-input-btn chat-attach-btn" id="attachBtn">
                                 <i class="fas fa-paperclip"></i>
                             </button>
+                            <button class="chat-input-btn chat-emoji-btn" id="emojiBtn" title="Emojis y Stickers">
+                                <i class="far fa-smile"></i>
+                            </button>
                             <textarea class="chat-input" id="messageInput" placeholder="Escribe un mensaje..." rows="1"></textarea>
                             <button class="chat-input-btn chat-send-btn" id="sendBtn">
                                 <i class="fas fa-paper-plane"></i>
                             </button>
+                        </div>
+                        
+                        <!-- Emoji & Sticker Picker -->
+                        <div class="chat-emoji-picker" id="emojiPicker" style="display: none;">
+                            <div class="emoji-picker-tabs">
+                                <button class="emoji-tab active" data-emoji-tab="emojis">
+                                    <i class="far fa-smile"></i> Emojis
+                                </button>
+                                <button class="emoji-tab" data-emoji-tab="stickers">
+                                    <i class="fas fa-image"></i> Stickers
+                                </button>
+                            </div>
+                            <div class="emoji-picker-content">
+                                <div id="emojisTab" class="emoji-content active"></div>
+                                <div id="stickersTab" class="emoji-content" style="display: none;"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -370,6 +392,28 @@ class ChatApp {
             this.showConversations();
         });
         
+        // Emoji picker
+        document.getElementById('emojiBtn').addEventListener('click', () => {
+            this.toggleEmojiPicker();
+        });
+        
+        // Tabs del emoji picker
+        document.querySelectorAll('.emoji-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const tabName = e.currentTarget.dataset.emojiTab;
+                this.switchEmojiTab(tabName);
+            });
+        });
+        
+        // Cerrar emoji picker al hacer clic fuera
+        document.addEventListener('click', (e) => {
+            const emojiPicker = document.getElementById('emojiPicker');
+            const emojiBtn = document.getElementById('emojiBtn');
+            if (emojiPicker && !emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
+                emojiPicker.style.display = 'none';
+            }
+        });
+        
         // Adjuntar archivo
         document.getElementById('attachBtn').addEventListener('click', () => {
             document.getElementById('fileInput').click();
@@ -430,6 +474,9 @@ class ChatApp {
     switchTab(tab) {
         document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
         document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+        
+        // Actualizar pestaña actual
+        this.currentTab = tab;
         
         if (tab === 'conversations') {
             this.loadConversations();
@@ -786,6 +833,13 @@ class ChatApp {
         document.getElementById('groupNameContainer').style.display = 'none';
         document.getElementById('selectedUsersCount').style.display = 'none';
         
+        // Ocultar opción de grupo si el usuario no tiene permisos
+        const groupOption = document.querySelector('.chat-conversation-type');
+        const userCanCreateGroups = typeof canCreateGroups !== 'undefined' ? canCreateGroups : true;
+        if (groupOption) {
+            groupOption.style.display = userCanCreateGroups ? 'block' : 'none';
+        }
+        
         // Mostrar mensaje inicial
         const container = document.getElementById('userList');
         container.innerHTML = `
@@ -1052,22 +1106,48 @@ class ChatApp {
             if (data.success) {
                 const container = document.getElementById('conversationsTab');
                 
-                container.innerHTML = data.users.map(user => `
-                    <div class="chat-conversation-item" data-user-id="${user.id}">
-                        <div class="chat-avatar online">
-                            ${this.getInitials(user.full_name)}
+                if (data.users.length === 0) {
+                    container.innerHTML = `
+                        <div class="chat-empty-state">
+                            <i class="fas fa-users"></i>
+                            <p>No hay usuarios disponibles</p>
                         </div>
-                        <div class="chat-conversation-info">
-                            <div class="chat-conversation-name">${this.escapeHtml(user.full_name)}</div>
-                            <div class="chat-conversation-last-message">@${this.escapeHtml(user.username)}</div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = data.users.map(user => {
+                    const isOnline = user.is_online || false;
+                    const statusClass = isOnline ? 'online' : 'offline';
+                    const statusIcon = isOnline ? '<i class="fas fa-circle" style="color: #10b981; font-size: 8px;"></i>' : '';
+                    
+                    return `
+                        <div class="chat-conversation-item" data-user-id="${user.id}">
+                            <div class="chat-avatar ${statusClass}">
+                                ${this.getInitials(user.full_name)}
+                                ${statusIcon ? `<span class="chat-avatar-status">${statusIcon}</span>` : ''}
+                            </div>
+                            <div class="chat-conversation-info">
+                                <div class="chat-conversation-name">
+                                    ${this.escapeHtml(user.full_name)}
+                                    ${isOnline ? '<span style="color: #10b981; font-size: 10px; margin-left: 5px;">● En línea</span>' : ''}
+                                </div>
+                                <div class="chat-conversation-last-message">
+                                    @${this.escapeHtml(user.username)} • ${this.escapeHtml(user.role)}
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
                 
                 // Agregar listeners para iniciar chat
                 container.querySelectorAll('.chat-conversation-item').forEach(item => {
                     item.addEventListener('click', async () => {
                         const userId = parseInt(item.dataset.userId);
+                        // No iniciar chat con uno mismo
+                        if (userId === this.getCurrentUserId()) {
+                            return;
+                        }
                         this.selectedUsers = [userId];
                         await this.startNewConversation();
                     });
@@ -1119,11 +1199,16 @@ class ChatApp {
                 this.loadMessages();
                 this.checkTyping();
             } else {
-                // Si no hay conversación abierta, actualizar la lista de conversaciones
+                // Si no hay conversación abierta, actualizar según la pestaña activa
                 const conversationsTab = document.getElementById('conversationsTab');
                 const messagesView = document.getElementById('messagesView');
                 if (conversationsTab && !messagesView.classList.contains('active')) {
-                    this.loadConversations();
+                    // Solo actualizar si estamos en la pestaña de conversaciones
+                    if (this.currentTab === 'conversations') {
+                        this.loadConversations();
+                    } else if (this.currentTab === 'online') {
+                        this.loadOnlineUsers();
+                    }
                 }
             }
             this.updateUnreadCount();
@@ -1284,6 +1369,121 @@ class ChatApp {
         // Si estamos en el root
         console.log('✅ En root, usando ruta: chat/');
         return 'chat/';
+    }
+    
+    toggleEmojiPicker() {
+        const picker = document.getElementById('emojiPicker');
+        const isVisible = picker.style.display === 'block';
+        
+        if (!isVisible) {
+            // Cargar emojis si no se han cargado
+            if (!this.emojisLoaded) {
+                this.loadEmojis();
+                this.emojisLoaded = true;
+            }
+            picker.style.display = 'block';
+        } else {
+            picker.style.display = 'none';
+        }
+    }
+    
+    switchEmojiTab(tabName) {
+        // Actualizar tabs
+        document.querySelectorAll('.emoji-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelector(`[data-emoji-tab="${tabName}"]`).classList.add('active');
+        
+        // Actualizar contenido
+        document.querySelectorAll('.emoji-content').forEach(content => {
+            content.style.display = 'none';
+        });
+        
+        if (tabName === 'emojis') {
+            document.getElementById('emojisTab').style.display = 'grid';
+        } else if (tabName === 'stickers') {
+            document.getElementById('stickersTab').style.display = 'grid';
+            if (!this.stickersLoaded) {
+                this.loadStickers();
+                this.stickersLoaded = true;
+            }
+        }
+    }
+    
+    loadEmojis() {
+        const emojis = [
+            // Caras y emociones
+            '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
+            '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐',
+            '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒',
+            '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '😶‍🌫️', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐',
+            // Gestos y manos
+            '👍', '👎', '👊', '✊', '🤛', '🤜', '🤞', '✌️', '🤟', '🤘', '👌', '🤌', '🤏', '👈', '👉', '👆',
+            '👇', '☝️', '✋', '🤚', '🖐️', '🖖', '👋', '🤙', '💪', '🙏', '👏', '🤝', '❤️', '🧡', '💛', '💚',
+            // Animales y naturaleza
+            '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔',
+            '🦄', '🐴', '🦋', '🐌', '🐛', '🐝', '🐞', '🦗', '🌸', '🌺', '🌻', '🌹', '🌷', '🌼', '🌱', '🌿',
+            // Comida y bebida
+            '🍎', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍑', '🍒', '🍍', '🥝', '🥑', '🍅', '🍆', '🥕', '🌽',
+            '🍕', '🍔', '🍟', '🌭', '🥪', '🌮', '🌯', '🥗', '🍿', '🧈', '🍰', '🎂', '🧁', '🍩', '🍪', '🍫',
+            // Objetos y símbolos
+            '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱', '🎮', '🎯', '🎲', '🎰', '🎺', '🎸', '🎹', '🥁',
+            '💯', '✨', '🎉', '🎊', '🎈', '🎁', '🏆', '🥇', '🥈', '🥉', '⭐', '🌟', '💫', '✅', '❌', '⚠️'
+        ];
+        
+        const container = document.getElementById('emojisTab');
+        container.innerHTML = emojis.map(emoji => `
+            <button class="emoji-item" data-emoji="${emoji}">${emoji}</button>
+        `).join('');
+        
+        // Agregar eventos
+        container.querySelectorAll('.emoji-item').forEach(item => {
+            item.addEventListener('click', () => {
+                this.insertEmoji(item.dataset.emoji);
+            });
+        });
+    }
+    
+    loadStickers() {
+        const stickers = [
+            '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎵', '🎶', '🎯', '🎲',
+            '🎰', '🎳', '🎮', '🎴', '🃏', '🀄', '🎁', '🎀', '🎊', '🎉',
+            '🎈', '🎆', '🎇', '🧨', '✨', '🎄', '🎃', '🎑', '🎐', '🎏',
+            '🔥', '💥', '💫', '💯', '💢', '💬', '💭', '💤', '💨', '💦'
+        ];
+        
+        const container = document.getElementById('stickersTab');
+        container.innerHTML = stickers.map(sticker => `
+            <button class="sticker-item" data-sticker="${sticker}">${sticker}</button>
+        `).join('');
+        
+        // Agregar eventos
+        container.querySelectorAll('.sticker-item').forEach(item => {
+            item.addEventListener('click', () => {
+                this.insertEmoji(item.dataset.sticker);
+            });
+        });
+    }
+    
+    insertEmoji(emoji) {
+        const input = document.getElementById('messageInput');
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const text = input.value;
+        
+        // Insertar emoji en la posición del cursor
+        input.value = text.substring(0, start) + emoji + text.substring(end);
+        
+        // Mover cursor después del emoji
+        const newPosition = start + emoji.length;
+        input.selectionStart = newPosition;
+        input.selectionEnd = newPosition;
+        
+        // Focus en el input
+        input.focus();
+        
+        // Cerrar el picker
+        document.getElementById('emojiPicker').style.display = 'none';
     }
 }
 

@@ -504,16 +504,31 @@ function getOnlineUsers(PDO $pdo): void {
             u.id,
             u.username,
             u.full_name,
-            s.status,
+            u.role,
+            COALESCE(s.status, 'offline') as status,
             s.last_seen
         FROM users u
         LEFT JOIN chat_user_status s ON s.user_id = u.id
-        WHERE s.status = 'online' 
-        OR (s.last_seen > DATE_SUB(NOW(), INTERVAL " . CHAT_ONLINE_THRESHOLD . " SECOND))
-        ORDER BY u.full_name
+        WHERE u.is_active = 1
+        ORDER BY 
+            CASE 
+                WHEN s.status = 'online' THEN 1
+                WHEN s.last_seen > DATE_SUB(NOW(), INTERVAL " . CHAT_ONLINE_THRESHOLD . " SECOND) THEN 2
+                ELSE 3
+            END,
+            u.full_name
     ");
     
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Marcar como online si tiene actividad reciente
+    foreach ($users as &$user) {
+        if ($user['last_seen'] && strtotime($user['last_seen']) > time() - CHAT_ONLINE_THRESHOLD) {
+            $user['is_online'] = true;
+        } else {
+            $user['is_online'] = ($user['status'] === 'online');
+        }
+    }
     
     echo json_encode(['success' => true, 'users' => $users]);
 }

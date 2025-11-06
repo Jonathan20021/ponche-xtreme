@@ -193,6 +193,15 @@ if ($isAuthenticated) {
     <?php if ($isAuthenticated && userHasPermission('chat')): ?>
     <script>
         const currentUserId = <?= (int)$_SESSION['user_id'] ?>;
+        const currentUserRole = <?= json_encode($_SESSION['role'] ?? 'agent') ?>;
+        <?php 
+        // Obtener permisos de chat del usuario
+        $chatPermsStmt = $pdo->prepare("SELECT can_create_groups FROM chat_permissions WHERE user_id = ?");
+        $chatPermsStmt->execute([$_SESSION['user_id']]);
+        $chatPerms = $chatPermsStmt->fetch();
+        $canCreateGroups = $chatPerms ? (bool)$chatPerms['can_create_groups'] : true;
+        ?>
+        const canCreateGroups = <?= json_encode($canCreateGroups) ?>;
     </script>
     <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js?v=<?= time() ?>" defer></script>
     <?php endif; ?>
