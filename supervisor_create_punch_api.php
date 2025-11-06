@@ -13,19 +13,43 @@ if (!isset($_SESSION['user_id']) || !userHasPermission('supervisor_dashboard')) 
     exit;
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
+$rawInput = file_get_contents('php://input');
+$input = json_decode($rawInput, true);
+
+// Debug: registrar lo que se recibió
+error_log("CREATE - Raw input: " . $rawInput);
+error_log("CREATE - Decoded input: " . print_r($input, true));
+error_log("CREATE - JSON decode error: " . json_last_error_msg());
+
 if (!is_array($input)) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Solicitud inválida.']);
+    echo json_encode([
+        'success' => false, 
+        'error' => 'Solicitud inválida.',
+        'debug' => [
+            'raw_input' => $rawInput,
+            'json_error' => json_last_error_msg()
+        ]
+    ]);
     exit;
 }
 
 $targetUserId = isset($input['user_id']) ? (int)$input['user_id'] : 0;
 $typeSlug = sanitizeAttendanceTypeSlug($input['punch_type'] ?? '');
 
+error_log("CREATE - Parsed values - targetUserId: $targetUserId, typeSlug: $typeSlug");
+
 if ($targetUserId <= 0 || $typeSlug === '') {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Datos incompletos para registrar el punch.']);
+    echo json_encode([
+        'success' => false, 
+        'error' => 'Datos incompletos para registrar el punch.',
+        'debug' => [
+            'user_id' => $targetUserId,
+            'punch_type' => $typeSlug,
+            'input' => $input
+        ]
+    ]);
     exit;
 }
 

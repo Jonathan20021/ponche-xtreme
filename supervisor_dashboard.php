@@ -232,19 +232,23 @@ include 'header.php';
 
 .theme-light .ninja-edit-btn {
     background: rgba(99, 102, 241, 0.12);
-    border-color: rgba(99, 102, 241, 0.35);
+    border-color: rgba(99, 102, 241, 0.4);
     color: #4338ca;
+}
+
+.theme-light .ninja-edit-btn:hover {
+    background: rgba(99, 102, 241, 0.2);
 }
 
 .theme-light .punch-edit-controls {
     background: rgba(99, 102, 241, 0.08);
-    border-color: rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.35);
 }
 
 .theme-light .punch-edit-row button {
     background: rgba(16, 185, 129, 0.15);
     color: #047857;
-    border-color: rgba(16, 185, 129, 0.35);
+    border-color: rgba(16, 185, 129, 0.4);
 }
 
 .theme-light .punch-edit-row button:hover:not(:disabled) {
@@ -253,12 +257,12 @@ include 'header.php';
 
 .theme-light .punch-create-container {
     background: rgba(99, 102, 241, 0.06);
-    border-color: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.4);
 }
 
 .theme-light .ninja-add-btn {
     background: rgba(16, 185, 129, 0.12);
-    border-color: rgba(16, 185, 129, 0.3);
+    border-color: rgba(16, 185, 129, 0.4);
     color: #047857;
 }
 
@@ -269,7 +273,11 @@ include 'header.php';
 .theme-light .punch-edit-cancel {
     background: rgba(239, 68, 68, 0.12);
     color: #b91c1c;
-    border-color: rgba(239, 68, 68, 0.35);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.theme-light .punch-edit-status {
+    background: rgba(0, 0, 0, 0.05);
 }
 
 .theme-light .summary-value.text-green-400 {
@@ -554,16 +562,17 @@ include 'header.php';
 }
 
 .punch-timeline-actions {
-    margin-top: 0.5rem;
+    margin-top: 0.75rem;
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
 }
 
 .punch-create-container {
     margin-bottom: 1rem;
-    padding: 0.75rem;
-    border: 1px dashed var(--border-color);
-    border-radius: 10px;
+    padding: 1rem;
+    border: 2px dashed rgba(99, 102, 241, 0.4);
+    border-radius: 12px;
     background: rgba(99, 102, 241, 0.08);
 }
 
@@ -572,12 +581,11 @@ include 'header.php';
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    margin-bottom: 0.5rem;
 }
 
 .punch-create-title {
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     color: var(--text-primary);
     display: flex;
     align-items: center;
@@ -587,47 +595,65 @@ include 'header.php';
 .ninja-add-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.65rem;
-    border-radius: 6px;
-    border: 1px solid rgba(16, 185, 129, 0.35);
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.4);
     background: rgba(16, 185, 129, 0.15);
     color: #34d399;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .ninja-add-btn:hover {
     background: rgba(16, 185, 129, 0.25);
-    border-color: rgba(16, 185, 129, 0.5);
+    border-color: rgba(16, 185, 129, 0.6);
+    transform: translateY(-1px);
 }
 
 .ninja-edit-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.35rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    padding: 0.4rem 0.7rem;
+    border-radius: 7px;
+    border: 1px solid rgba(99, 102, 241, 0.4);
     background: rgba(99, 102, 241, 0.15);
     color: #c7d2fe;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .ninja-edit-btn:hover {
     background: rgba(99, 102, 241, 0.25);
-    border-color: rgba(99, 102, 241, 0.5);
+    border-color: rgba(99, 102, 241, 0.6);
+    transform: translateY(-1px);
 }
 
 .punch-edit-controls {
     margin-top: 0.75rem;
-    padding: 0.75rem;
-    border-radius: 8px;
-    border: 1px dashed var(--border-color);
+    padding: 1rem;
+    border-radius: 10px;
+    border: 2px solid rgba(99, 102, 241, 0.3);
     background: rgba(99, 102, 241, 0.1);
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        padding: 0 1rem;
+    }
+    to {
+        opacity: 1;
+        max-height: 200px;
+        padding: 1rem;
+    }
 }
 
 .punch-edit-controls.is-hidden {
@@ -640,30 +666,56 @@ include 'header.php';
     flex-wrap: wrap;
 }
 
-.punch-edit-row select {
+.punch-edit-row select,
+.punch-edit-row input[type="time"] {
     flex: 1;
-    min-width: 160px;
+    min-width: 120px;
     background: var(--card-bg);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 0.35rem 0.5rem;
-    font-size: 0.8rem;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.punch-edit-row input[type="time"] {
+    flex: 0 0 140px;
+    min-width: 140px;
+}
+
+.punch-edit-row select:focus,
+.punch-edit-row input[type="time"]:focus {
+    outline: none;
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Estilos para el input de hora en tema claro */
+.theme-light .punch-edit-row input[type="time"] {
+    color-scheme: light;
+}
+
+/* Estilos para el input de hora en tema oscuro */
+.theme-dark .punch-edit-row input[type="time"] {
+    color-scheme: dark;
 }
 
 .punch-edit-row button {
     background: rgba(16, 185, 129, 0.15);
     color: #34d399;
     border: 1px solid rgba(16, 185, 129, 0.4);
-    border-radius: 6px;
-    padding: 0.35rem 0.75rem;
-    font-size: 0.75rem;
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.8rem;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .punch-edit-row button:hover:not(:disabled) {
     background: rgba(16, 185, 129, 0.25);
+    transform: translateY(-1px);
 }
 
 .punch-edit-row button[disabled] {
@@ -679,12 +731,46 @@ include 'header.php';
 
 .punch-edit-cancel:hover:not(:disabled) {
     background: rgba(239, 68, 68, 0.2);
+    transform: translateY(-1px);
 }
 
 .punch-edit-status {
-    margin-top: 0.5rem;
-    font-size: 0.7rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
     color: var(--text-secondary);
+    text-align: center;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.interaction-indicator {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: none;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.65rem;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 6px;
+    font-size: 0.7rem;
+    color: #a5b4fc;
+    z-index: 10;
+}
+
+.interaction-indicator.active {
+    display: flex;
+}
+
+.interaction-indicator i {
+    font-size: 0.65rem;
+}
+
+.punch-create-container {
+    position: relative;
 }
 
 .stats-grid {
@@ -906,6 +992,8 @@ let punchStatusMessages = {};
 let activePunchEditorId = null;
 let currentFilter = 'all';
 let refreshInterval;
+let isUserInteracting = false;
+let interactionTimeout = null;
 
 // Inicializar al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
@@ -1102,8 +1190,10 @@ function openAgentModal(userId, fullName) {
         clearInterval(modalRefreshInterval);
     }
     modalRefreshInterval = setInterval(() => {
-        if (currentAgentId) {
-            loadAgentDetails(currentAgentId);
+        if (currentAgentId && !isUserInteracting) {
+            // Preservar el estado del editor activo durante las actualizaciones automáticas
+            // Solo si el usuario NO está interactuando con los controles
+            loadAgentDetails(currentAgentId, true);
         }
     }, 3000);
 }
@@ -1116,6 +1206,13 @@ function closeAgentModal() {
     activePunchEditorId = null;
     punchStatusMessages = {};
     modalPunchesCache = [];
+    
+    // Limpiar estado de interacción
+    isUserInteracting = false;
+    if (interactionTimeout) {
+        clearTimeout(interactionTimeout);
+        interactionTimeout = null;
+    }
     
     // Detener actualización del modal
     if (modalRefreshInterval) {
@@ -1136,7 +1233,7 @@ function closeModalOnOverlay(event) {
     }
 }
 
-async function loadAgentDetails(userId) {
+async function loadAgentDetails(userId, preserveEditorState = false) {
     try {
         const timestamp = new Date().getTime();
         const response = await fetch(`supervisor_agent_details_api.php?user_id=${userId}&_=${timestamp}`, {
@@ -1153,7 +1250,7 @@ async function loadAgentDetails(userId) {
                 punchTypesCache = data.attendance_types;
             }
             updateModalStats(data.stats);
-            updatePunchTimeline(data.punches);
+            updatePunchTimeline(data.punches, preserveEditorState);
             updatePunchBreakdown(data.stats.by_type);
             updateChart(data.chart_data);
         } else {
@@ -1266,12 +1363,13 @@ function setPunchEditStatus(punchId, message, isError = false) {
     statusEl.style.color = isError ? '#f87171' : 'var(--text-secondary)';
 }
 
-function openPunchNinja(event, punchId, currentType) {
+function openPunchNinja(event, punchId, currentType, currentTimestamp) {
     event.preventDefault();
     event.stopPropagation();
 
     const controls = document.getElementById(`punch-edit-${punchId}`);
     const select = document.getElementById(`punch-select-${punchId}`);
+    const timeInput = document.getElementById(`punch-time-${punchId}`);
 
     if (!controls || !select) {
         return;
@@ -1286,7 +1384,51 @@ function openPunchNinja(event, punchId, currentType) {
 
     controls.classList.remove('is-hidden');
     applyStoredPunchStatus(punchId);
+    
+    // Agregar listeners para detectar interacción del usuario
+    setupInteractionListeners(select);
+    if (timeInput) {
+        setupInteractionListeners(timeInput);
+    }
+    
     select.focus();
+}
+
+function setupInteractionListeners(select) {
+    const indicator = document.getElementById('interaction-indicator');
+    
+    // Marcar como interactuando cuando el usuario abre el dropdown o escribe
+    select.addEventListener('focus', () => {
+        isUserInteracting = true;
+        if (indicator) indicator.classList.add('active');
+        if (interactionTimeout) clearTimeout(interactionTimeout);
+    });
+    
+    select.addEventListener('mousedown', () => {
+        isUserInteracting = true;
+        if (indicator) indicator.classList.add('active');
+        if (interactionTimeout) clearTimeout(interactionTimeout);
+    });
+    
+    select.addEventListener('change', () => {
+        // Esperar 1 segundo después de un cambio antes de permitir actualizaciones
+        isUserInteracting = true;
+        if (indicator) indicator.classList.add('active');
+        if (interactionTimeout) clearTimeout(interactionTimeout);
+        interactionTimeout = setTimeout(() => {
+            isUserInteracting = false;
+            if (indicator) indicator.classList.remove('active');
+        }, 1000);
+    });
+    
+    select.addEventListener('blur', () => {
+        // Esperar 500ms después de perder el foco antes de permitir actualizaciones
+        if (interactionTimeout) clearTimeout(interactionTimeout);
+        interactionTimeout = setTimeout(() => {
+            isUserInteracting = false;
+            if (indicator) indicator.classList.remove('active');
+        }, 500);
+    });
 }
 
 function cancelPunchEdit(punchId) {
@@ -1298,18 +1440,35 @@ function cancelPunchEdit(punchId) {
     if (activePunchEditorId === String(punchId)) {
         activePunchEditorId = null;
     }
+    // Liberar el bloqueo de interacción
+    isUserInteracting = false;
+    if (interactionTimeout) {
+        clearTimeout(interactionTimeout);
+        interactionTimeout = null;
+    }
 }
 
 async function submitPunchEdit(punchId) {
     const select = document.getElementById(`punch-select-${punchId}`);
+    const timeInput = document.getElementById(`punch-time-${punchId}`);
+    
     if (!select) {
+        console.error('Select no encontrado para punch:', punchId);
         return;
     }
+    
     const newType = (select.value || '').toUpperCase();
     if (!newType) {
         setPunchEditStatus(punchId, 'Selecciona un tipo válido.', true);
         return;
     }
+    
+    const newTime = timeInput ? timeInput.value : null;
+    if (!newTime) {
+        setPunchEditStatus(punchId, 'Ingresa una hora válida.', true);
+        return;
+    }
+    
     if (!currentAgentId) {
         setPunchEditStatus(punchId, 'No hay un agente seleccionado.', true);
         return;
@@ -1326,30 +1485,70 @@ async function submitPunchEdit(punchId) {
     });
     setPunchEditStatus(punchId, 'Actualizando...', false);
 
+    // Asegurar que punchId y currentAgentId sean números
+    const numericPunchId = parseInt(punchId, 10);
+    const numericUserId = parseInt(currentAgentId, 10);
+    
+    const payload = {
+        punch_id: numericPunchId,
+        user_id: numericUserId,
+        new_type: newType,
+        new_time: newTime
+    };
+    
+    console.log('Enviando datos:', payload);
+
     try {
         const response = await fetch('supervisor_update_punch_api.php', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
-            body: JSON.stringify({
-                punch_id: punchId,
-                user_id: currentAgentId,
-                new_type: newType
-            })
+            body: JSON.stringify(payload),
+            cache: 'no-cache',
+            redirect: 'follow'
         });
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Respuesta no JSON:', text);
+            setPunchEditStatus(punchId, 'Error: Respuesta inválida del servidor', true);
+            buttons.forEach(btn => {
+                btn.disabled = false;
+            });
+            return;
+        }
+        
         const data = await response.json();
+        console.log('Respuesta recibida:', data);
 
         if (data.success) {
-            setPunchEditStatus(punchId, 'Punch actualizado correctamente.', false);
-            await loadAgentDetails(currentAgentId);
-            refreshData();
+            setPunchEditStatus(punchId, '✓ Punch actualizado', false);
+            // Cerrar el editor después de 1 segundo
+            setTimeout(() => {
+                cancelPunchEdit(punchId);
+                loadAgentDetails(currentAgentId, false);
+                refreshData();
+            }, 1000);
         } else {
-            setPunchEditStatus(punchId, data.error || 'No se pudo actualizar el punch.', true);
+            let errorMsg = data.error || 'No se pudo actualizar el punch.';
+            
+            // Mostrar información de debug si está disponible
+            if (data.debug) {
+                console.error('Debug info:', data.debug);
+                errorMsg += ' (Ver consola para detalles)';
+            }
+            
+            setPunchEditStatus(punchId, errorMsg, true);
+            buttons.forEach(btn => {
+                btn.disabled = false;
+            });
         }
     } catch (error) {
+        console.error('Error en submitPunchEdit:', error);
         setPunchEditStatus(punchId, 'Error: ' + error.message, true);
-    } finally {
         buttons.forEach(btn => {
             btn.disabled = false;
         });
@@ -1388,6 +1587,10 @@ function openPunchCreate(event) {
     select.value = '';
     controls.classList.remove('is-hidden');
     applyStoredPunchStatus('new');
+    
+    // Agregar listeners para detectar interacción del usuario
+    setupInteractionListeners(select);
+    
     select.focus();
 }
 
@@ -1400,11 +1603,18 @@ function cancelPunchCreate() {
     if (activePunchEditorId === 'new') {
         activePunchEditorId = null;
     }
+    // Liberar el bloqueo de interacción
+    isUserInteracting = false;
+    if (interactionTimeout) {
+        clearTimeout(interactionTimeout);
+        interactionTimeout = null;
+    }
 }
 
 async function submitPunchCreate() {
     const select = document.getElementById('punch-create-select');
     if (!select) {
+        console.error('Select de creación no encontrado');
         return;
     }
     const newType = (select.value || '').toUpperCase();
@@ -1428,43 +1638,94 @@ async function submitPunchCreate() {
     });
     setPunchEditStatus('new', 'Registrando punch...', false);
 
+    // Asegurar que currentAgentId sea número
+    const numericUserId = parseInt(currentAgentId, 10);
+    
+    const payload = {
+        user_id: numericUserId,
+        punch_type: newType
+    };
+    
+    console.log('Creando punch:', payload);
+
     try {
         const response = await fetch('supervisor_create_punch_api.php', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
-            body: JSON.stringify({
-                user_id: currentAgentId,
-                punch_type: newType
-            })
+            body: JSON.stringify(payload),
+            cache: 'no-cache',
+            redirect: 'follow'
         });
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Respuesta no JSON:', text);
+            setPunchEditStatus('new', 'Error: Respuesta inválida del servidor', true);
+            buttons.forEach(btn => {
+                btn.disabled = false;
+            });
+            return;
+        }
+        
         const data = await response.json();
+        console.log('Respuesta recibida:', data);
 
         if (data.success) {
-            setPunchEditStatus('new', 'Punch registrado correctamente.', false);
-            await loadAgentDetails(currentAgentId);
-            refreshData();
+            setPunchEditStatus('new', '✓ Punch registrado', false);
+            // Cerrar el editor después de 1 segundo
+            setTimeout(() => {
+                cancelPunchCreate();
+                loadAgentDetails(currentAgentId, false);
+                refreshData();
+            }, 1000);
         } else {
-            setPunchEditStatus('new', data.error || 'No se pudo registrar el punch.', true);
+            let errorMsg = data.error || 'No se pudo registrar el punch.';
+            
+            // Mostrar información de debug si está disponible
+            if (data.debug) {
+                console.error('Debug info:', data.debug);
+                errorMsg += ' (Ver consola para detalles)';
+            }
+            
+            setPunchEditStatus('new', errorMsg, true);
+            buttons.forEach(btn => {
+                btn.disabled = false;
+            });
         }
     } catch (error) {
+        console.error('Error en submitPunchCreate:', error);
         setPunchEditStatus('new', 'Error: ' + error.message, true);
-    } finally {
         buttons.forEach(btn => {
             btn.disabled = false;
         });
     }
 }
 
-function updatePunchTimeline(punches) {
+function updatePunchTimeline(punches, preserveEditorState = false) {
     const timeline = document.getElementById('punchTimeline');
     modalPunchesCache = Array.isArray(punches) ? punches.slice() : [];
 
     const existingTypes = getExistingPunchSlugs();
+    
+    // Si estamos preservando el estado y el editor de creación está activo, guardamos su HTML
+    let savedCreateContainer = null;
+    if (preserveEditorState && activePunchEditorId === 'new') {
+        const container = document.querySelector('.punch-create-container');
+        if (container) {
+            savedCreateContainer = container.cloneNode(true);
+        }
+    }
 
     const createControls = punchTypesCache.length > 0 ? `
-        <div class="punch-create-container">
+        <div class="punch-create-container" id="punch-create-container">
+            <div class="interaction-indicator" id="interaction-indicator">
+                <i class="fas fa-pause-circle"></i>
+                <span>Actualizaciones pausadas</span>
+            </div>
             <div class="punch-create-header">
                 <div class="punch-create-title">
                     <i class="fas fa-user-ninja"></i>
@@ -1501,9 +1762,13 @@ function updatePunchTimeline(punches) {
             const safeTime = escapeHtml(punch.time);
             const sanitizedType = (punch.type || '').toUpperCase();
             const jsCurrentType = sanitizedType.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
+            const punchTimestamp = punch.timestamp || '';
+            const punchTime = punchTimestamp ? punchTimestamp.substring(11, 16) : ''; // HH:MM
+            const jsTimestamp = punchTimestamp.replace(/'/g, '\\\'');
+            
             const ninjaControls = punchTypesCache.length > 0 ? `
                 <div class="punch-timeline-actions">
-                    <button type="button" class="ninja-edit-btn" onclick="openPunchNinja(event, ${punch.id}, '${jsCurrentType}')">
+                    <button type="button" class="ninja-edit-btn" onclick="openPunchNinja(event, ${punch.id}, '${jsCurrentType}', '${jsTimestamp}')">
                         <i class="fas fa-user-ninja"></i> Ninja
                     </button>
                 </div>
@@ -1512,6 +1777,7 @@ function updatePunchTimeline(punches) {
                         <select id="punch-select-${punch.id}">
                             ${buildPunchOptions(sanitizedType)}
                         </select>
+                        <input type="time" id="punch-time-${punch.id}" value="${punchTime}" />
                         <button type="button" onclick="submitPunchEdit(${punch.id})">Aplicar</button>
                         <button type="button" class="punch-edit-cancel" onclick="cancelPunchEdit(${punch.id})">Cancelar</button>
                     </div>
@@ -1538,7 +1804,23 @@ function updatePunchTimeline(punches) {
     }
 
     timeline.innerHTML = `${createControls}${timelineItems}`;
-    restorePunchEditorState(existingTypes);
+    
+    // Si teníamos el contenedor de creación guardado, restaurarlo
+    if (savedCreateContainer) {
+        const newContainer = document.getElementById('punch-create-container');
+        if (newContainer && newContainer.parentNode) {
+            newContainer.parentNode.replaceChild(savedCreateContainer, newContainer);
+            
+            // Re-adjuntar los event listeners
+            const select = savedCreateContainer.querySelector('#punch-create-select');
+            if (select) {
+                setupInteractionListeners(select);
+            }
+        }
+    } else if (preserveEditorState) {
+        // Solo restaurar el estado del editor si se solicita y no lo guardamos ya
+        restorePunchEditorState(existingTypes);
+    }
 }
 
 function restorePunchEditorState(existingTypes = []) {
@@ -1550,13 +1832,27 @@ function restorePunchEditorState(existingTypes = []) {
         const controls = document.getElementById('punch-create-controls');
         const select = document.getElementById('punch-create-select');
         if (controls && select) {
+            // Guardar el valor seleccionado antes de reconstruir
+            const currentValue = select.value;
+            const wasFocused = document.activeElement === select;
+            
             controls.classList.remove('is-hidden');
             select.innerHTML = buildPunchOptions('', {
                 disableUniqueTaken: true,
                 existingTypes,
                 includePlaceholder: true
             });
-            select.value = '';
+            
+            // Restaurar el valor seleccionado
+            if (currentValue) {
+                select.value = currentValue;
+            }
+            
+            // Restaurar el foco si estaba activo
+            if (wasFocused) {
+                requestAnimationFrame(() => select.focus());
+            }
+            
             applyStoredPunchStatus('new');
         }
         return;
@@ -1575,13 +1871,36 @@ function restorePunchEditorState(existingTypes = []) {
 
     const controls = document.getElementById(`punch-edit-${punchId}`);
     const select = document.getElementById(`punch-select-${punchId}`);
+    const timeInput = document.getElementById(`punch-time-${punchId}`);
+    
     if (controls && select) {
+        // Guardar el valor seleccionado y el estado de foco
+        const currentValue = select.value;
+        const currentTime = timeInput ? timeInput.value : null;
+        const wasFocusedSelect = document.activeElement === select;
+        const wasFocusedTime = timeInput && document.activeElement === timeInput;
+        
         controls.classList.remove('is-hidden');
         select.innerHTML = buildPunchOptions(punch.type, {
             disableUniqueTaken: false,
             existingTypes
         });
-        select.value = (punch.type || '').toUpperCase();
+        
+        // Restaurar el valor seleccionado o el original
+        select.value = currentValue || (punch.type || '').toUpperCase();
+        
+        // Restaurar el valor de tiempo si existe
+        if (timeInput && currentTime) {
+            timeInput.value = currentTime;
+        }
+        
+        // Restaurar el foco si estaba activo
+        if (wasFocusedSelect) {
+            requestAnimationFrame(() => select.focus());
+        } else if (wasFocusedTime && timeInput) {
+            requestAnimationFrame(() => timeInput.focus());
+        }
+        
         applyStoredPunchStatus(punchId);
     }
 }
