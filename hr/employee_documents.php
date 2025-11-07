@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../db.php';
-ensurePermission('hr_employee_documents');
+ensurePermission('hr_employee_documents', '../unauthorized.php');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';

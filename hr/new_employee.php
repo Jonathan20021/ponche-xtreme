@@ -5,7 +5,7 @@ require_once '../lib/email_functions.php';
 require_once '../lib/logging_functions.php';
 
 // Check permissions
-ensurePermission('hr_employees');
+ensurePermission('hr_employees', '../unauthorized.php');
 
 $success = null;
 $error = null;

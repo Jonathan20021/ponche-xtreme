@@ -3,7 +3,7 @@ session_start();
 require_once '../db.php';
 
 // Check permissions
-ensurePermission('hr_job_postings');
+ensurePermission('hr_job_postings', '../unauthorized.php');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';

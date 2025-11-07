@@ -3,7 +3,7 @@ session_start();
 require_once '../db.php';
 
 // Check permissions
-ensurePermission('hr_calendar');
+ensurePermission('hr_calendar', '../unauthorized.php');
 
 header('Content-Type: application/json');
 

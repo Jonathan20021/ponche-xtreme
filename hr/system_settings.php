@@ -4,7 +4,7 @@ require_once '../db.php';
 require_once '../lib/logging_functions.php';
 
 // Check permissions
-ensurePermission('system_settings');
+ensurePermission('system_settings', '../unauthorized.php');
 
 $success = null;
 $error = null;

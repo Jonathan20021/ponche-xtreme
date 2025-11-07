@@ -3,7 +3,7 @@ session_start();
 require_once '../db.php';
 
 // Check permissions
-ensurePermission('hr_job_postings');
+ensurePermission('hr_job_postings', '../unauthorized.php');
 
 $job_id = $_GET['id'] ?? 0;
 $new_status = $_GET['status'] ?? 'inactive';

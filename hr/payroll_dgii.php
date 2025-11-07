@@ -4,7 +4,7 @@ require_once '../db.php';
 require_once 'payroll_functions.php';
 
 // Check permissions
-ensurePermission('hr_payroll');
+ensurePermission('hr_payroll', '../unauthorized.php');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';

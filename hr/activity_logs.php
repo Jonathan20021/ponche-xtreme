@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Check permission
-ensurePermission('activity_logs');
+ensurePermission('activity_logs', '../unauthorized.php');
 
 // Pagination
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;

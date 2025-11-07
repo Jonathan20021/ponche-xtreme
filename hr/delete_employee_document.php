@@ -4,7 +4,7 @@ require_once '../db.php';
 require_once '../lib/logging_functions.php';
 
 // Check permissions
-ensurePermission('hr_employee_documents');
+ensurePermission('hr_employee_documents', '../unauthorized.php');
 
 header('Content-Type: application/json');
 

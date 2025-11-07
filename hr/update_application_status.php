@@ -4,7 +4,7 @@ require_once '../db.php';
 require_once '../lib/logging_functions.php';
 
 // Check permissions
-ensurePermission('hr_recruitment');
+ensurePermission('hr_recruitment', '../unauthorized.php');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: recruitment.php");

@@ -6,7 +6,7 @@ require_once '../vendor/autoload.php';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-ensurePermission('hr_employees');
+ensurePermission('hr_employees', '../unauthorized.php');
 
 // Get data from session
 $contractData = $_SESSION['contract_data'] ?? null;

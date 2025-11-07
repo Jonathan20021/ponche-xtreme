@@ -4,7 +4,7 @@ require_once '../db.php';
 require_once '../lib/logging_functions.php';
 
 // Check permissions
-ensurePermission('hr_employees');
+ensurePermission('hr_employees', '../unauthorized.php');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';

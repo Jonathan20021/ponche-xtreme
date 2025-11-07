@@ -1,4 +1,8 @@
 <?php
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 session_start();
 require_once '../db.php';
 require_once '../vendor/autoload.php';
@@ -6,11 +10,22 @@ require_once '../vendor/autoload.php';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-ensurePermission('hr_employees');
+ensurePermission('hr_employees', '../unauthorized.php');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: contracts.php');
     exit;
+}
+
+// Log the request for debugging
+error_log("Contract generation started for: " . ($_POST['employee_name'] ?? 'unknown'));
+
+// Validate required fields
+$requiredFields = ['employee_name', 'id_card', 'province', 'position', 'salary', 'work_schedule', 'contract_date', 'city'];
+foreach ($requiredFields as $field) {
+    if (!isset($_POST[$field]) || trim($_POST[$field]) === '') {
+        die("Error: El campo '$field' es requerido.");
+    }
 }
 
 // Get manual input data from form
@@ -24,27 +39,35 @@ $contractDate = $_POST['contract_date'];
 $city = trim($_POST['city']);
 $action = $_POST['action'] ?? 'employment';
 
+error_log("Processing contract: Action=$action, Employee=$employeeName");
+
 // Save contract to database (employee_id is NULL for manual contracts)
 $contractType = ($action === 'confidentiality') ? 'CONFIDENCIALIDAD' : 'TRABAJO';
 
-$insertStmt = $pdo->prepare("
-    INSERT INTO employment_contracts 
-    (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
-    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-");
-$insertStmt->execute([
-    $employeeName,
-    $idCard,
-    $province,
-    $contractDate,
-    $salary,
-    $workSchedule,
-    $city,
-    $contractType,
-    $_SESSION['user_id']
-]);
-
-$contractId = $pdo->lastInsertId();
+try {
+    $insertStmt = $pdo->prepare("
+        INSERT INTO employment_contracts 
+        (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    ");
+    $insertStmt->execute([
+        $employeeName,
+        $idCard,
+        $province,
+        $contractDate,
+        $salary,
+        $workSchedule,
+        $city,
+        $contractType,
+        $_SESSION['user_id']
+    ]);
+    
+    $contractId = $pdo->lastInsertId();
+    error_log("Contract saved to database with ID: $contractId");
+} catch (PDOException $e) {
+    error_log("Database error: " . $e->getMessage());
+    die("Error al guardar el contrato en la base de datos: " . $e->getMessage());
+}
 
 // Format date for contract
 $dateObj = new DateTime($contractDate);
@@ -317,16 +340,23 @@ if ($action === 'confidentiality') {
 }
 
 // Generate Employment Contract PDF (default action)
-$options = new Options();
-$options->set('isHtml5ParserEnabled', true);
-$options->set('isRemoteEnabled', true);
-$options->set('defaultFont', 'Times New Roman');
-
-$dompdf = new Dompdf($options);
-$dompdf->loadHtml($html);
-$dompdf->setPaper('Letter', 'portrait');
-$dompdf->render();
-
-// Output PDF
-$filename = 'Contrato_Trabajo_' . str_replace(' ', '_', $employeeName) . '_' . date('Y-m-d') . '.pdf';
-$dompdf->stream($filename, ['Attachment' => false]);
+try {
+    $options = new Options();
+    $options->set('isHtml5ParserEnabled', true);
+    $options->set('isRemoteEnabled', true);
+    $options->set('defaultFont', 'Times New Roman');
+    
+    $dompdf = new Dompdf($options);
+    $dompdf->loadHtml($html);
+    $dompdf->setPaper('Letter', 'portrait');
+    $dompdf->render();
+    
+    // Output PDF
+    $filename = 'Contrato_Trabajo_' . str_replace(' ', '_', $employeeName) . '_' . date('Y-m-d') . '.pdf';
+    $dompdf->stream($filename, ['Attachment' => false]);
+    
+    error_log("Contract generated successfully: $filename");
+} catch (Exception $e) {
+    error_log("Error generating contract: " . $e->getMessage());
+    die("Error al generar el contrato: " . $e->getMessage());
+}

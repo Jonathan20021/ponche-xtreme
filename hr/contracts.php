@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../db.php';
-ensurePermission('hr_employees');
+ensurePermission('hr_employees', '../unauthorized.php');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
@@ -59,7 +59,7 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                 Nuevo Contrato
             </h2>
             
-            <form action="generate_contract.php" method="POST" target="_blank">
+            <form action="generate_contract.php" method="POST" target="_blank" id="contractForm">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- Manual Input Fields -->
                     <div class="md:col-span-2">

@@ -9,7 +9,7 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-ensurePermission('hr_dashboard');
+ensurePermission('hr_dashboard', '../unauthorized.php');
 
 $userId = $_SESSION['user_id'];
 $userName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Usuario';

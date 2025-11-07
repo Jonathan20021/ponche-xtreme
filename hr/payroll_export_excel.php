@@ -12,7 +12,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 
 // Check permissions
-ensurePermission('hr_payroll');
+ensurePermission('hr_payroll', '../unauthorized.php');
 
 $periodId = isset($_GET['period_id']) ? (int)$_GET['period_id'] : 0;
 

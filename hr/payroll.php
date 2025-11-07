@@ -5,7 +5,7 @@ require_once 'payroll_functions.php';
 require_once '../lib/logging_functions.php';
 
 // Check permissions
-ensurePermission('hr_payroll');
+ensurePermission('hr_payroll', '../unauthorized.php');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';

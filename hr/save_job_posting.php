@@ -3,7 +3,7 @@ session_start();
 require_once '../db.php';
 
 // Check permissions
-ensurePermission('hr_job_postings');
+ensurePermission('hr_job_postings', '../unauthorized.php');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header("Location: job_postings.php");

@@ -3,7 +3,7 @@ session_start();
 require_once '../db.php';
 
 // Check permissions
-ensurePermission('hr_employee_documents');
+ensurePermission('hr_employee_documents', '../unauthorized.php');
 
 $documentId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 

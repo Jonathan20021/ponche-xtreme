@@ -3,7 +3,7 @@ session_start();
 require_once '../db.php';
 
 // Check permissions
-ensurePermission('hr_employees');
+ensurePermission('hr_employees', '../unauthorized.php');
 
 header('Content-Type: application/json');
 
