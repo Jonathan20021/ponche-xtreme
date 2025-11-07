@@ -90,6 +90,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
         }
     }
     
+    // Validar secuencia ENTRY/EXIT
+    require_once 'lib/authorization_functions.php';
+    $sequenceValidation = validateEntryExitSequence($pdo, $user_id, $typeSlug);
+    if (!$sequenceValidation['valid']) {
+        $_SESSION['punch_error'] = $sequenceValidation['message'];
+        header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+        exit;
+    }
+    
+    // Check authorization requirements
+    $authSystemEnabled = isAuthorizationSystemEnabled($pdo);
+    $authRequiredForOvertime = isAuthorizationRequiredForContext($pdo, 'overtime');
+    $authRequiredForEarlyPunch = isAuthorizationRequiredForContext($pdo, 'early_punch');
+    $authorizationCodeId = null;
+    
+    // Check overtime authorization
+    if ($authSystemEnabled && $authRequiredForOvertime) {
+        $isOvertime = isOvertimeAttempt($pdo, $user_id, $typeSlug);
+        
+        if ($isOvertime) {
+            $_SESSION['punch_error'] = "Se requiere código de autorización para registrar hora extra. Use el formulario de punch principal.";
+            header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+            exit;
+        }
+    }
+    
+    // Check early punch authorization
+    if ($authSystemEnabled && $authRequiredForEarlyPunch) {
+        $isEarly = isEarlyPunchAttempt($pdo, $user_id);
+        
+        if ($isEarly) {
+            $_SESSION['punch_error'] = "Se requiere código de autorización para marcar entrada antes de su horario. Use el formulario de punch principal.";
+            header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+            exit;
+        }
+    }
+    
     // Register the punch
     $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
     $insert_stmt = $pdo->prepare("
@@ -843,15 +880,12 @@ $tardinessTotal = count($tardiness_data);
                             <td><?= htmlspecialchars($record['ip_address']) ?></td>
                             <td class="text-center">
                                 <div class="flex items-center justify-center gap-3 text-sm">
-                                    <a href="edit_record.php?id=<?= $record['id'] ?>" class="text-cyan-300 hover:text-cyan-100 transition-colors">
+                                    <button type="button" onclick="openEditModal(<?= $record['id'] ?>)" class="text-cyan-300 hover:text-cyan-100 transition-colors" title="Editar registro">
                                         <i class="fas fa-edit"></i>
-                                    </a>
-                                    <form method="POST" action="delete_record.php" class="inline">
-                                        <input type="hidden" name="id" value="<?= $record['id'] ?>">
-                                        <button type="submit" class="text-rose-300 hover:text-rose-100 transition-colors" onclick="return confirm('&#191;Seguro que deseas eliminar este registro?');">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </button>
-                                    </form>
+                                    </button>
+                                    <button type="button" onclick="openDeleteModal(<?= $record['id'] ?>)" class="text-rose-300 hover:text-rose-100 transition-colors" title="Eliminar registro">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -1517,6 +1551,344 @@ $(document).ready(function() {
         padding: 0.5rem 0.75rem !important;
     }
 }
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    margin: 10% auto;
+    padding: 2rem;
+    border-radius: 1rem;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.1);
+}
+
+.modal-header h3 {
+    color: #f1f5f9;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.modal-close {
+    color: #94a3b8;
+    font-size: 1.75rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.2s;
+    background: none;
+    border: none;
+    line-height: 1;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+    color: #f1f5f9;
+}
+
+.modal-body {
+    margin-bottom: 1.5rem;
+}
+
+.modal-input-group {
+    margin-bottom: 1rem;
+}
+
+.modal-input-group label {
+    display: block;
+    color: #cbd5e1;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.modal-input-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid rgba(226, 232, 240, 0.2);
+    border-radius: 0.5rem;
+    background: rgba(248, 250, 252, 0.05);
+    color: #f1f5f9;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+
+.modal-input-group input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    background: rgba(248, 250, 252, 0.1);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.modal-input-group input::placeholder {
+    color: #64748b;
+}
+
+.modal-info {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.modal-info p {
+    color: #fbbf24;
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.modal-footer {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.modal-btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.modal-btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.modal-btn-danger:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.3);
+}
+
+.modal-btn-secondary {
+    background: rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.modal-btn-secondary:hover {
+    background: rgba(148, 163, 184, 0.3);
+    color: #f1f5f9;
+}
+
+.modal-btn-primary {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+}
+
+.modal-btn-primary:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+}
 </style>
+
+<?php
+// Define authorization requirements before modals
+require_once 'lib/authorization_functions.php';
+$editAuthRequired = isAuthorizationRequiredForContext($pdo, 'edit_records');
+$deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
+?>
+
+<!-- Modal para editar registro con código de autorización -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-edit"></i> Editar Registro</h3>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            
+            <div class="modal-info">
+                <p><i class="fas fa-info-circle"></i> Vas a editar un registro de asistencia</p>
+            </div>
+            
+            <?php if ($editAuthRequired): ?>
+            <div class="modal-input-group">
+                <label for="edit_auth_code">
+                    <i class="fas fa-lock"></i> Código de Autorización *
+                </label>
+                <input 
+                    type="text" 
+                    id="edit_auth_code" 
+                    name="authorization_code"
+                    placeholder="Ingresa el código de autorización"
+                    required
+                >
+            </div>
+            <?php endif; ?>
+            
+            <input type="hidden" id="edit_record_id">
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="modal-btn modal-btn-secondary" onclick="closeEditModal()">
+                <i class="fas fa-times"></i> Cancelar
+            </button>
+            <button type="button" class="modal-btn modal-btn-primary" onclick="submitEdit()">
+                <i class="fas fa-edit"></i> Continuar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para eliminar registro con código de autorización -->
+<div id="deleteModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-trash-alt"></i> Eliminar Registro</h3>
+            <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-info">
+                <p><i class="fas fa-exclamation-triangle"></i> ¿Estás seguro de que deseas eliminar este registro?</p>
+            </div>
+            
+            <?php if ($deleteAuthRequired): ?>
+            <div class="modal-input-group">
+                <label for="delete_auth_code">
+                    <i class="fas fa-lock"></i> Código de Autorización *
+                </label>
+                <input 
+                    type="text" 
+                    id="delete_auth_code" 
+                    name="authorization_code"
+                    placeholder="Ingresa el código de autorización"
+                    required
+                >
+            </div>
+            <?php endif; ?>
+            
+            <form id="deleteForm" method="POST" action="delete_record.php">
+                <input type="hidden" name="id" id="delete_record_id">
+                <input type="hidden" name="authorization_code" id="delete_auth_code_hidden">
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="modal-btn modal-btn-secondary" onclick="closeDeleteModal()">
+                <i class="fas fa-times"></i> Cancelar
+            </button>
+            <button type="button" class="modal-btn modal-btn-danger" onclick="submitDelete()">
+                <i class="fas fa-trash-alt"></i> Eliminar
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Edit modal functions
+function openEditModal(recordId) {
+    document.getElementById('edit_record_id').value = recordId;
+    document.getElementById('editModal').style.display = 'block';
+    <?php if ($editAuthRequired): ?>
+    document.getElementById('edit_auth_code').value = '';
+    document.getElementById('edit_auth_code').focus();
+    <?php endif; ?>
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+function submitEdit() {
+    const recordId = document.getElementById('edit_record_id').value;
+    <?php if ($editAuthRequired): ?>
+    const authCode = document.getElementById('edit_auth_code').value.trim();
+    if (!authCode) {
+        alert('Por favor ingresa el código de autorización');
+        return;
+    }
+    // Redirect to edit page with auth code in URL
+    window.location.href = `edit_record.php?id=${recordId}&auth_code=${encodeURIComponent(authCode)}`;
+    <?php else: ?>
+    window.location.href = `edit_record.php?id=${recordId}`;
+    <?php endif; ?>
+}
+
+// Delete modal functions
+function openDeleteModal(recordId) {
+    document.getElementById('delete_record_id').value = recordId;
+    document.getElementById('deleteModal').style.display = 'block';
+    <?php if ($deleteAuthRequired): ?>
+    document.getElementById('delete_auth_code').value = '';
+    document.getElementById('delete_auth_code').focus();
+    <?php endif; ?>
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+}
+
+function submitDelete() {
+    <?php if ($deleteAuthRequired): ?>
+    const authCode = document.getElementById('delete_auth_code').value.trim();
+    if (!authCode) {
+        alert('Por favor ingresa el código de autorización');
+        return;
+    }
+    document.getElementById('delete_auth_code_hidden').value = authCode;
+    <?php endif; ?>
+    
+    document.getElementById('deleteForm').submit();
+}
+
+// Close modals when clicking outside
+window.onclick = function(event) {
+    const editModal = document.getElementById('editModal');
+    const deleteModal = document.getElementById('deleteModal');
+    if (event.target === editModal) {
+        closeEditModal();
+    }
+    if (event.target === deleteModal) {
+        closeDeleteModal();
+    }
+}
+
+// Close modals with ESC key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeEditModal();
+        closeDeleteModal();
+    }
+});
+</script>
 
 <?php include 'footer.php'; ?>

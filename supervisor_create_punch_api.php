@@ -6,6 +6,7 @@ header('Cache-Control: no-cache, must-revalidate');
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/lib/logging_functions.php';
+require_once __DIR__ . '/lib/authorization_functions.php';
 
 if (!isset($_SESSION['user_id']) || !userHasPermission('supervisor_dashboard')) {
     http_response_code(403);
@@ -86,6 +87,14 @@ try {
             echo json_encode(['success' => false, 'error' => 'Ya existe un punch de este tipo registrado hoy.']);
             exit;
         }
+    }
+
+    // Validar secuencia ENTRY/EXIT
+    $sequenceValidation = validateEntryExitSequence($pdo, $targetUserId, $typeSlug);
+    if (!$sequenceValidation['valid']) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => $sequenceValidation['message']]);
+        exit;
     }
 
     $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';

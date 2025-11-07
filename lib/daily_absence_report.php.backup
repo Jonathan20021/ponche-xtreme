@@ -1,0 +1,662 @@
+<?php
+/**
+ * Daily Absence Report System
+ * Genera reportes de empleados que no han ponchado hoy
+ * Valida permisos, vacaciones y licencias médicas
+ */
+
+require_once __DIR__ . '/../db.php';
+
+/**
+ * Obtiene todos los empleados activos que deberían trabajar hoy
+ */
+function getActiveEmployees(PDO $pdo): array {
+    $stmt = $pdo->query("
+        SELECT 
+            e.id,
+            e.employee_code,
+            e.first_name,
+            e.last_name,
+            e.position,
+            e.department_id,
+            e.email,
+            d.name as department_name,
+            u.id as user_id,
+            u.username
+        FROM employees e
+        LEFT JOIN departments d ON e.department_id = d.id
+        LEFT JOIN users u ON e.user_id = u.id
+        WHERE e.employment_status = 'active'
+        ORDER BY e.last_name, e.first_name
+    ");
+    
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Verifica si un empleado tiene algún punch hoy
+ */
+function hasEmployeePunchedToday(PDO $pdo, int $userId): bool {
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) 
+        FROM attendance 
+        WHERE user_id = ? 
+        AND DATE(timestamp) = CURDATE()
+    ");
+    $stmt->execute([$userId]);
+    
+    return (int)$stmt->fetchColumn() > 0;
+}
+
+/**
+ * Obtiene permisos aprobados que cubren la fecha de hoy
+ */
+function getApprovedPermissionsForToday(PDO $pdo, int $employeeId): array {
+    $stmt = $pdo->prepare("
+        SELECT 
+            request_type,
+            start_date,
+            end_date,
+            start_time,
+            end_time,
+            total_days,
+            total_hours,
+            reason,
+            reviewed_at
+        FROM permission_requests
+        WHERE employee_id = ?
+        AND status = 'approved'
+        AND CURDATE() BETWEEN start_date AND end_date
+        ORDER BY start_date DESC
+    ");
+    $stmt->execute([$employeeId]);
+    
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Obtiene vacaciones aprobadas que cubren la fecha de hoy
+ */
+function getApprovedVacationsForToday(PDO $pdo, int $employeeId): array {
+    $stmt = $pdo->prepare("
+        SELECT 
+            vacation_type,
+            start_date,
+            end_date,
+            total_days,
+            reason,
+            reviewed_at
+        FROM vacation_requests
+        WHERE employee_id = ?
+        AND status = 'approved'
+        AND CURDATE() BETWEEN start_date AND end_date
+        ORDER BY start_date DESC
+    ");
+    $stmt->execute([$employeeId]);
+    
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Obtiene licencias médicas activas que cubren la fecha de hoy
+ */
+function getActiveMedicalLeavesForToday(PDO $pdo, int $employeeId): array {
+    $stmt = $pdo->prepare("
+        SELECT 
+            leave_type,
+            diagnosis,
+            start_date,
+            end_date,
+            total_days,
+            is_paid,
+            payment_percentage,
+            doctor_name,
+            medical_center,
+            status,
+            reviewed_at
+        FROM medical_leaves
+        WHERE employee_id = ?
+        AND status IN ('approved', 'active')
+        AND CURDATE() BETWEEN start_date AND end_date
+        ORDER BY start_date DESC
+    ");
+    $stmt->execute([$employeeId]);
+    
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Genera el reporte completo de ausencias del día
+ */
+function generateDailyAbsenceReport(PDO $pdo): array {
+    $employees = getActiveEmployees($pdo);
+    $absences = [];
+    $withJustification = [];
+    
+    foreach ($employees as $employee) {
+        $userId = $employee['user_id'];
+        $employeeId = $employee['id'];
+        
+        // Si no tiene user_id, no puede ponchar
+        if (!$userId) {
+            continue;
+        }
+        
+        // Verificar si ponchó hoy
+        $hasPunched = hasEmployeePunchedToday($pdo, $userId);
+        
+        if (!$hasPunched) {
+            // Verificar justificaciones
+            $permissions = getApprovedPermissionsForToday($pdo, $employeeId);
+            $vacations = getApprovedVacationsForToday($pdo, $employeeId);
+            $medicalLeaves = getActiveMedicalLeavesForToday($pdo, $employeeId);
+            
+            $employeeData = [
+                'employee_code' => $employee['employee_code'] ?? 'N/A',
+                'full_name' => trim(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')),
+                'position' => $employee['position'] ?? 'N/A',
+                'department' => $employee['department_name'] ?? 'Sin departamento',
+                'email' => $employee['email'] ?? null,
+                'permissions' => $permissions,
+                'vacations' => $vacations,
+                'medical_leaves' => $medicalLeaves,
+                'has_justification' => !empty($permissions) || !empty($vacations) || !empty($medicalLeaves)
+            ];
+            
+            if ($employeeData['has_justification']) {
+                $withJustification[] = $employeeData;
+            } else {
+                $absences[] = $employeeData;
+            }
+        }
+    }
+    
+    return [
+        'date' => date('Y-m-d'),
+        'date_formatted' => date('l, F j, Y'),
+        'total_employees' => count($employees),
+        'total_absences' => count($absences) + count($withJustification),
+        'absences_without_justification' => $absences,
+        'absences_with_justification' => $withJustification,
+        'generated_at' => date('Y-m-d H:i:s')
+    ];
+}
+
+/**
+ * Genera el HTML del reporte para envío por email
+ * Simplificado para evitar filtros de spam
+ */
+function generateReportHTML(array $reportData): string {
+    $date = $reportData['date_formatted'];
+    $totalEmployees = $reportData['total_employees'];
+    $totalAbsences = $reportData['total_absences'];
+    $absencesWithout = $reportData['absences_without_justification'];
+    $absencesWith = $reportData['absences_with_justification'];
+    
+    // Simplified HTML similar to password reset emails
+    $html = "<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 5px; }
+        .content { padding: 30px; background: #f9f9f9; margin-top: 20px; border-radius: 5px; }
+        .stats { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #667eea; }
+        .employee { background: white; padding: 15px; margin: 10px 0; border-radius: 5px; border: 1px solid #e0e0e0; }
+        .alert { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 10px 0; }
+        .success { background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 10px 0; }
+        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+        h1 { margin: 0; font-size: 24px; }
+        h2 { color: #667eea; font-size: 18px; }
+        h3 { font-size: 16px; margin-top: 0; }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>Reporte Diario de Ausencias</h1>
+            <p>{$date}</p>
+        </div>
+        
+        <div class='content'>
+            <div class='stats'>
+                <h3>Resumen del Dia</h3>
+                <p><strong>Total Empleados:</strong> {$totalEmployees}</p>
+                <p><strong>Total Ausencias:</strong> {$totalAbsences}</p>
+                <p><strong>Sin Justificar:</strong> " . count($absencesWithout) . "</p>
+                <p><strong>Justificadas:</strong> " . count($absencesWith) . "</p>
+            </div>";
+    
+    // Ausencias sin justificación
+    if (!empty($absencesWithout)) {
+        $html .= "
+            <div class='alert'>
+                <h2>Ausencias sin Justificacion (" . count($absencesWithout) . ")</h2>";
+        
+        foreach ($absencesWithout as $emp) {
+            $html .= "
+                <div class='employee'>
+                    <strong>{$emp['full_name']}</strong> ({$emp['employee_code']})<br>
+                    <small>Puesto: {$emp['position']} | Departamento: {$emp['department']}</small>
+                </div>";
+        }
+        
+        $html .= "</div>";
+    }
+    
+    // Ausencias con justificación
+    if (!empty($absencesWith)) {
+        $html .= "
+            <div class='success'>
+                <h2>Ausencias Justificadas (" . count($absencesWith) . ")</h2>";
+        
+        foreach ($absencesWith as $emp) {
+            $html .= "
+                <div class='employee'>
+                    <strong>{$emp['full_name']}</strong> ({$emp['employee_code']})<br>
+                    <small>{$emp['position']}</small><br>";
+            
+            // Permisos
+            if (!empty($emp['permissions'])) {
+                foreach ($emp['permissions'] as $perm) {
+                    $html .= "<small>• Permiso: {$perm['request_type']} ({$perm['start_date']} - {$perm['end_date']})</small><br>";
+                }
+            }
+            
+            // Vacaciones
+            if (!empty($emp['vacations'])) {
+                foreach ($emp['vacations'] as $vac) {
+                    $type = $vac['vacation_type'] ?? 'regular';
+                    $html .= "<small>• Vacaciones: {$type} ({$vac['start_date']} - {$vac['end_date']})</small><br>";
+                }
+            }
+            
+            // Licencias médicas
+            if (!empty($emp['medical_leaves'])) {
+                foreach ($emp['medical_leaves'] as $leave) {
+                    $html .= "<small>• Licencia Medica: {$leave['leave_type']} ({$leave['start_date']} - {$leave['end_date']})</small><br>";
+                }
+            }
+            
+            $html .= "</div>";
+        }
+        
+        $html .= "</div>";
+    }
+    
+    if (empty($absencesWithout) && empty($absencesWith)) {
+        $html .= "
+            <div class='success'>
+                <p><strong>Excelente!</strong> No hay ausencias registradas para el dia de hoy.</p>
+            </div>";
+    }
+    
+    $html .= "
+        </div>
+        
+        <div class='footer'>
+            <p>Reporte generado automaticamente el " . date('Y-m-d H:i:s') . "</p>
+            <p>Sistema de Control de Asistencia - Ponche Xtreme</p>
+        </div>
+    </div>
+</body>
+</html>";
+    
+    return $html;
+}
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f5f7fa;
+                margin: 0;
+                padding: 20px;
+            }
+            .container {
+                max-width: 900px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                overflow: hidden;
+            }
+            .header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 30px;
+                text-align: center;
+            }
+            .header h1 {
+                margin: 0;
+                font-size: 28px;
+                font-weight: 600;
+            }
+            .header p {
+                margin: 10px 0 0;
+                font-size: 16px;
+                opacity: 0.95;
+            }
+            .stats {
+                display: flex;
+                justify-content: space-around;
+                padding: 25px;
+                background: #f8f9fa;
+                border-bottom: 1px solid #e9ecef;
+            }
+            .stat {
+                text-align: center;
+            }
+            .stat-value {
+                font-size: 32px;
+                font-weight: bold;
+                color: #667eea;
+            }
+            .stat-label {
+                font-size: 13px;
+                color: #6c757d;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-top: 5px;
+            }
+            .section {
+                padding: 30px;
+            }
+            .section-title {
+                font-size: 20px;
+                font-weight: 600;
+                margin-bottom: 20px;
+                color: #2c3e50;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .alert-icon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background: #ef4444;
+                color: white;
+                font-size: 18px;
+            }
+            .success-icon {
+                background: #10b981;
+            }
+            .employee-card {
+                border: 1px solid #e9ecef;
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 15px;
+                background: #fafbfc;
+                transition: all 0.2s;
+            }
+            .employee-card:hover {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+                transform: translateY(-2px);
+            }
+            .employee-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: start;
+                margin-bottom: 12px;
+            }
+            .employee-name {
+                font-size: 18px;
+                font-weight: 600;
+                color: #1a202c;
+            }
+            .employee-code {
+                background: #667eea;
+                color: white;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            .employee-details {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin-bottom: 15px;
+            }
+            .detail-item {
+                font-size: 14px;
+                color: #4a5568;
+            }
+            .detail-label {
+                font-weight: 600;
+                color: #2d3748;
+            }
+            .justification {
+                background: #f0fdf4;
+                border-left: 4px solid #10b981;
+                padding: 12px 15px;
+                margin-top: 12px;
+                border-radius: 4px;
+            }
+            .justification-title {
+                font-weight: 600;
+                color: #065f46;
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+            .justification-item {
+                font-size: 13px;
+                color: #047857;
+                margin: 5px 0;
+                padding-left: 15px;
+                position: relative;
+            }
+            .justification-item:before {
+                content: '✓';
+                position: absolute;
+                left: 0;
+                font-weight: bold;
+            }
+            .no-data {
+                text-align: center;
+                padding: 40px;
+                color: #6c757d;
+                font-size: 16px;
+            }
+            .footer {
+                background: #f8f9fa;
+                padding: 20px;
+                text-align: center;
+                font-size: 13px;
+                color: #6c757d;
+                border-top: 1px solid #e9ecef;
+            }
+            @media (max-width: 600px) {
+                .stats {
+                    flex-direction: column;
+                    gap: 20px;
+                }
+                .employee-details {
+                    grid-template-columns: 1fr;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class='container'>
+            <div class='header'>
+                <h1>📊 Reporte Diario de Ausencias</h1>
+                <p>{$date}</p>
+            </div>
+            
+            <div class='stats'>
+                <div class='stat'>
+                    <div class='stat-value'>{$totalEmployees}</div>
+                    <div class='stat-label'>Total Empleados</div>
+                </div>
+                <div class='stat'>
+                    <div class='stat-value' style='color: #ef4444;'>" . count($absencesWithout) . "</div>
+                    <div class='stat-label'>Sin Justificar</div>
+                </div>
+                <div class='stat'>
+                    <div class='stat-value' style='color: #10b981;'>" . count($absencesWith) . "</div>
+                    <div class='stat-label'>Justificadas</div>
+                </div>
+            </div>";
+    
+    // Ausencias sin justificación
+    if (!empty($absencesWithout)) {
+        $html .= "
+            <div class='section'>
+                <div class='section-title'>
+                    <span class='alert-icon'>⚠️</span>
+                    Ausencias sin Justificación (" . count($absencesWithout) . ")
+                </div>";
+        
+        foreach ($absencesWithout as $emp) {
+            $html .= "
+                <div class='employee-card'>
+                    <div class='employee-header'>
+                        <div class='employee-name'>{$emp['full_name']}</div>
+                        <div class='employee-code'>{$emp['employee_code']}</div>
+                    </div>
+                    <div class='employee-details'>
+                        <div class='detail-item'>
+                            <span class='detail-label'>Puesto:</span> {$emp['position']}
+                        </div>
+                        <div class='detail-item'>
+                            <span class='detail-label'>Departamento:</span> {$emp['department']}
+                        </div>
+                    </div>
+                </div>";
+        }
+        
+        $html .= "</div>";
+    }
+    
+    // Ausencias con justificación
+    if (!empty($absencesWith)) {
+        $html .= "
+            <div class='section'>
+                <div class='section-title'>
+                    <span class='alert-icon success-icon'>✓</span>
+                    Ausencias Justificadas (" . count($absencesWith) . ")
+                </div>";
+        
+        foreach ($absencesWith as $emp) {
+            $html .= "
+                <div class='employee-card'>
+                    <div class='employee-header'>
+                        <div class='employee-name'>{$emp['full_name']}</div>
+                        <div class='employee-code'>{$emp['employee_code']}</div>
+                    </div>
+                    <div class='employee-details'>
+                        <div class='detail-item'>
+                            <span class='detail-label'>Puesto:</span> {$emp['position']}
+                        </div>
+                        <div class='detail-item'>
+                            <span class='detail-label'>Departamento:</span> {$emp['department']}
+                        </div>
+                    </div>
+                    <div class='justification'>
+                        <div class='justification-title'>Justificaciones:</div>";
+            
+            // Permisos
+            foreach ($emp['permissions'] as $perm) {
+                $type = ucfirst(strtolower($perm['request_type']));
+                $dates = date('d/m/Y', strtotime($perm['start_date']));
+                if ($perm['start_date'] != $perm['end_date']) {
+                    $dates .= ' - ' . date('d/m/Y', strtotime($perm['end_date']));
+                }
+                $html .= "<div class='justification-item'>Permiso {$type}: {$dates}</div>";
+            }
+            
+            // Vacaciones
+            foreach ($emp['vacations'] as $vac) {
+                $type = ucfirst(strtolower($vac['vacation_type'] ?? 'regular'));
+                $dates = date('d/m/Y', strtotime($vac['start_date'])) . ' - ' . date('d/m/Y', strtotime($vac['end_date']));
+                $html .= "<div class='justification-item'>Vacaciones {$type}: {$dates}</div>";
+            }
+            
+            // Licencias médicas
+            foreach ($emp['medical_leaves'] as $leave) {
+                $type = ucfirst(strtolower($leave['leave_type']));
+                $dates = date('d/m/Y', strtotime($leave['start_date'])) . ' - ' . date('d/m/Y', strtotime($leave['end_date']));
+                $diagnosis = !empty($leave['diagnosis']) ? " - {$leave['diagnosis']}" : "";
+                $html .= "<div class='justification-item'>Licencia Médica {$type}: {$dates}{$diagnosis}</div>";
+            }
+            
+            $html .= "
+                    </div>
+                </div>";
+        }
+        
+        $html .= "</div>";
+    }
+    
+    if (empty($absencesWithout) && empty($absencesWith)) {
+        $html .= "
+            <div class='no-data'>
+                <h3>🎉 ¡Excelente!</h3>
+                <p>Todos los empleados han registrado su asistencia hoy.</p>
+            </div>";
+    }
+    
+    $html .= "
+            <div class='footer'>
+                Reporte generado automáticamente el {$reportData['generated_at']}<br>
+                Sistema de Control de Asistencia - Ponche Xtreme
+            </div>
+        </div>
+    </body>
+    </html>";
+    
+    return $html;
+}
+
+/**
+ * Envía el reporte por correo electrónico
+ */
+function sendReportByEmail(PDO $pdo, array $reportData, array $recipients): bool {
+    if (empty($recipients)) {
+        error_log("No recipients configured for absence report");
+        return false;
+    }
+    
+    // Generate HTML content
+    $html = generateReportHTML($reportData);
+    
+    // Use the email functions system
+    require_once __DIR__ . '/email_functions.php';
+    
+    $result = sendDailyAbsenceReport($html, $recipients, $reportData);
+    
+    if ($result['success']) {
+        error_log("Absence report sent successfully: " . $result['message']);
+        return true;
+    } else {
+        error_log("Failed to send absence report: " . $result['message']);
+        return false;
+    }
+}
+
+/**
+ * Obtiene los destinatarios configurados del sistema
+ */
+function getReportRecipients(PDO $pdo): array {
+    $stmt = $pdo->prepare("
+        SELECT setting_value 
+        FROM system_settings 
+        WHERE setting_key = 'absence_report_recipients'
+    ");
+    $stmt->execute();
+    $value = $stmt->fetchColumn();
+    
+    if (empty($value)) {
+        return [];
+    }
+    
+    // Parsear emails separados por coma
+    $emails = array_map('trim', explode(',', $value));
+    return array_filter($emails, function($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL);
+    });
+}

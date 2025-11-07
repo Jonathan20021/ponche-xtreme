@@ -14,4 +14,6 @@ RewriteCond %{REQUEST_URI} !^/hr/
 RewriteCond %{REQUEST_URI} !^/ponche-xtreme/hr/
 RewriteCond %{REQUEST_URI} !supervisor_.*_api\.php$
 RewriteCond %{REQUEST_URI} !_api\.php$
+RewriteCond %{REQUEST_URI} !delete_record\.php$
+RewriteCond %{REQUEST_URI} !edit_record\.php$
 RewriteRule ^ %1 [R=301,L]

@@ -2,18 +2,52 @@
 session_start();
 include 'db.php';
 require_once 'lib/logging_functions.php';
+require_once 'lib/authorization_functions.php';
 
 // Check permission
 ensurePermission('records');
 
 // Obtener el ID del registro a editar
 if (!isset($_GET['id'])) {
-    header('Location: records.php'); // Redirigir a la página de registros
+    header('Location: records.php');
     exit;
 }
 
 $record_id = $_GET['id'];
 $message = '';
+$authCodeValidated = false;
+$validatedAuthCodeId = null;
+
+// Check if authorization code was provided via URL (from modal)
+if (isset($_GET['auth_code']) && !empty($_GET['auth_code'])) {
+    $authCodeFromUrl = trim($_GET['auth_code']);
+    
+    // Check if authorization is required
+    if (isAuthorizationRequiredForContext($pdo, 'edit_records')) {
+        $validation = validateAuthorizationCode(
+            $pdo,
+            $authCodeFromUrl,
+            'edit_records',
+            $_SESSION['user_id']
+        );
+        
+        if ($validation['valid']) {
+            $authCodeValidated = true;
+            $validatedAuthCodeId = $validation['code_id'];
+        } else {
+            $_SESSION['error'] = "Código de autorización inválido: " . $validation['error'];
+            header('Location: records.php');
+            exit;
+        }
+    }
+} else {
+    // If auth is required but no code provided, redirect back
+    if (isAuthorizationRequiredForContext($pdo, 'edit_records')) {
+        $_SESSION['error'] = "Se requiere un código de autorización para editar registros.";
+        header('Location: records.php');
+        exit;
+    }
+}
 
 // Obtener los datos del registro para prellenar el formulario, incluyendo Full Name y Username
 $query = "
@@ -47,38 +81,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ip_address = trim($_POST['ip_address'] ?? '');
 
     if ($type && $timestamp) {
-        // Get old values for logging
-        $oldValuesQuery = "SELECT type, timestamp, ip_address FROM attendance WHERE id = ?";
-        $oldStmt = $pdo->prepare($oldValuesQuery);
-        $oldStmt->execute([$record_id]);
-        $oldValues = $oldStmt->fetch(PDO::FETCH_ASSOC);
+        $authCodeId = $validatedAuthCodeId; // Use the pre-validated code ID
+        $shouldUpdate = true;
         
-        // Update record
-        $update_query = "UPDATE attendance SET type = ?, timestamp = ?, ip_address = ? WHERE id = ?";
-        $update_stmt = $pdo->prepare($update_query);
-        $update_stmt->execute([$type, $timestamp, $ip_address, $record_id]);
+        if (isset($shouldUpdate) && $shouldUpdate) {
+            // Get old values for logging
+            $oldValuesQuery = "SELECT type, timestamp, ip_address FROM attendance WHERE id = ?";
+            $oldStmt = $pdo->prepare($oldValuesQuery);
+            $oldStmt->execute([$record_id]);
+            $oldValues = $oldStmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Update record
+            $update_query = "UPDATE attendance SET type = ?, timestamp = ?, ip_address = ? WHERE id = ?";
+            $update_stmt = $pdo->prepare($update_query);
+            $update_stmt->execute([$type, $timestamp, $ip_address, $record_id]);
 
-        // Log the modification
-        $newValues = [
-            'type' => $type,
-            'timestamp' => $timestamp,
-            'ip_address' => $ip_address
-        ];
-        
-        log_attendance_modified(
-            $pdo,
-            $_SESSION['user_id'],
-            $_SESSION['full_name'],
-            $_SESSION['role'],
-            $record_id,
-            $record['full_name'],
-            $oldValues,
-            $newValues
-        );
+            // Log the authorization code usage
+            if ($authCodeId) {
+                logAuthorizationCodeUsage(
+                    $pdo,
+                    $authCodeId,
+                    $_SESSION['user_id'],
+                    'edit_records',
+                    $record_id,
+                    'attendance',
+                    [
+                        'old_values' => $oldValues,
+                        'new_values' => [
+                            'type' => $type,
+                            'timestamp' => $timestamp,
+                            'ip_address' => $ip_address
+                        ],
+                        'edited_by' => $_SESSION['full_name']
+                    ]
+                );
+            }
 
-        $message = "Registro actualizado exitosamente.";
-        header('Location: records.php');
-        exit;
+            // Log the modification
+            $newValues = [
+                'type' => $type,
+                'timestamp' => $timestamp,
+                'ip_address' => $ip_address
+            ];
+            
+            log_attendance_modified(
+                $pdo,
+                $_SESSION['user_id'],
+                $_SESSION['full_name'],
+                $_SESSION['role'],
+                $record_id,
+                $record['full_name'],
+                $oldValues,
+                $newValues
+            );
+
+            $message = "Registro actualizado exitosamente.";
+            header('Location: records.php');
+            exit;
+        }
     } else {
         $message = "Por favor completa todos los campos requeridos.";
     }
@@ -136,6 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="text" name="ip_address" id="ip_address" value="<?= htmlspecialchars($record['ip_address']) ?>" class="p-2 border rounded w-full">
                 <p class="text-xs text-gray-500 mt-1">Opcional - Dirección IP desde donde se registró</p>
             </div>
+            
             <div class="flex gap-3">
                 <button type="submit" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-700">
                     <i class="fas fa-save"></i> Guardar Cambios

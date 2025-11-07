@@ -98,6 +98,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
         }
     }
     
+    // Validar secuencia ENTRY/EXIT
+    require_once 'lib/authorization_functions.php';
+    $sequenceValidation = validateEntryExitSequence($pdo, $user_id, $typeSlug);
+    if (!$sequenceValidation['valid']) {
+        $_SESSION['punch_error'] = $sequenceValidation['message'];
+        header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
+        exit;
+    }
+    
+    // Check authorization requirements
+    $authSystemEnabled = isAuthorizationSystemEnabled($pdo);
+    $authRequiredForOvertime = isAuthorizationRequiredForContext($pdo, 'overtime');
+    $authRequiredForEarlyPunch = isAuthorizationRequiredForContext($pdo, 'early_punch');
+    $authorizationCodeId = null;
+    
+    // Check overtime authorization
+    if ($authSystemEnabled && $authRequiredForOvertime) {
+        $isOvertime = isOvertimeAttempt($pdo, $user_id, $typeSlug);
+        
+        if ($isOvertime) {
+            $_SESSION['punch_error'] = "Se requiere código de autorización para registrar hora extra. Use el formulario de punch principal.";
+            header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
+            exit;
+        }
+    }
+    
+    // Check early punch authorization
+    if ($authSystemEnabled && $authRequiredForEarlyPunch) {
+        $isEarly = isEarlyPunchAttempt($pdo, $user_id);
+        
+        if ($isEarly) {
+            $_SESSION['punch_error'] = "Se requiere código de autorización para marcar entrada antes de su horario. Use el formulario de punch principal.";
+            header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
+            exit;
+        }
+    }
+    
     // Register the punch
     $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
     $insert_stmt = $pdo->prepare("

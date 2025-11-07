@@ -44,6 +44,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // Validar secuencia ENTRY/EXIT
+                if (!$error) {
+                    require_once 'lib/authorization_functions.php';
+                    $sequenceValidation = validateEntryExitSequence($pdo, $user_id, $type);
+                    if (!$sequenceValidation['valid']) {
+                        $error = $sequenceValidation['message'];
+                    }
+                }
+
                 if (!$error) {
                     // Register the punch
                     $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];

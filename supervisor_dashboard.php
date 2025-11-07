@@ -8,6 +8,128 @@ ensurePermission('supervisor_dashboard');
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
+// Handle supervisor punch submission
+$supervisor_punch_error = null;
+$supervisor_punch_success = null;
+
+if (isset($_SESSION['supervisor_punch_success'])) {
+    $supervisor_punch_success = $_SESSION['supervisor_punch_success'];
+    unset($_SESSION['supervisor_punch_success']);
+}
+if (isset($_SESSION['supervisor_punch_error'])) {
+    $supervisor_punch_error = $_SESSION['supervisor_punch_error'];
+    unset($_SESSION['supervisor_punch_error']);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['supervisor_punch_type'])) {
+    $user_id = (int)$_SESSION['user_id'];
+    $typeSlug = strtoupper(trim($_POST['supervisor_punch_type'] ?? ''));
+    
+    // Only allow specific punch types for supervisors
+    $allowedTypes = ['ENTRY', 'BREAK', 'LUNCH', 'BANO', 'EXIT'];
+    
+    if (!in_array($typeSlug, $allowedTypes, true)) {
+        $_SESSION['supervisor_punch_error'] = "Tipo de asistencia no permitido para supervisores.";
+        header('Location: supervisor_dashboard.php');
+        exit;
+    }
+    
+    // Validate if attendance type exists and is active
+    $typeStmt = $pdo->prepare("SELECT * FROM attendance_types WHERE UPPER(slug) = ? AND is_active = 1");
+    $typeStmt->execute([$typeSlug]);
+    $typeRow = $typeStmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$typeRow) {
+        $_SESSION['supervisor_punch_error'] = "Tipo de asistencia no válido o inactivo.";
+        header('Location: supervisor_dashboard.php');
+        exit;
+    }
+    
+    $typeLabel = $typeRow['label'] ?? $typeSlug;
+    
+    // Validate unique per day constraint
+    if ((int)($typeRow['is_unique_daily'] ?? 0) === 1) {
+        $checkStmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM attendance 
+            WHERE user_id = ? AND type = ? AND DATE(timestamp) = CURDATE()
+        ");
+        $checkStmt->execute([$user_id, $typeSlug]);
+        $exists = (int)$checkStmt->fetchColumn();
+        
+        if ($exists > 0) {
+            $_SESSION['supervisor_punch_error'] = "Solo puedes registrar '{$typeLabel}' una vez por día.";
+            header('Location: supervisor_dashboard.php');
+            exit;
+        }
+    }
+    
+    // Validate ENTRY/EXIT sequence
+    require_once 'lib/authorization_functions.php';
+    $sequenceValidation = validateEntryExitSequence($pdo, $user_id, $typeSlug);
+    if (!$sequenceValidation['valid']) {
+        $_SESSION['supervisor_punch_error'] = $sequenceValidation['message'];
+        header('Location: supervisor_dashboard.php');
+        exit;
+    }
+    
+    // Check authorization requirements
+    $authSystemEnabled = isAuthorizationSystemEnabled($pdo);
+    $authRequiredForOvertime = isAuthorizationRequiredForContext($pdo, 'overtime');
+    $authRequiredForEarlyPunch = isAuthorizationRequiredForContext($pdo, 'early_punch');
+    $authorizationCodeId = null;
+    
+    // Check overtime authorization
+    if ($authSystemEnabled && $authRequiredForOvertime) {
+        $isOvertime = isOvertimeAttempt($pdo, $user_id, $typeSlug);
+        
+        if ($isOvertime) {
+            $_SESSION['supervisor_punch_error'] = "Se requiere código de autorización para registrar hora extra. Use el formulario principal de punch.";
+            header('Location: supervisor_dashboard.php');
+            exit;
+        }
+    }
+    
+    // Check early punch authorization
+    if ($authSystemEnabled && $authRequiredForEarlyPunch) {
+        $isEarly = isEarlyPunchAttempt($pdo, $user_id);
+        
+        if ($isEarly) {
+            $_SESSION['supervisor_punch_error'] = "Se requiere código de autorización para marcar entrada antes de su horario. Use el formulario principal de punch.";
+            header('Location: supervisor_dashboard.php');
+            exit;
+        }
+    }
+    
+    // Register the punch
+    $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
+    $insertStmt = $pdo->prepare("
+        INSERT INTO attendance (user_id, type, ip_address, timestamp) 
+        VALUES (?, ?, ?, NOW())
+    ");
+    $insertStmt->execute([$user_id, $typeSlug, $ip_address]);
+    
+    // Log attendance registration
+    require_once 'lib/logging_functions.php';
+    $recordId = $pdo->lastInsertId();
+    log_custom_action(
+        $pdo,
+        $user_id,
+        $_SESSION['full_name'] ?? $_SESSION['username'],
+        $_SESSION['role'],
+        'attendance',
+        'create',
+        "Registro de asistencia supervisor desde dashboard: {$typeSlug}",
+        'attendance_record',
+        $recordId,
+        ['type' => $typeSlug, 'ip_address' => $ip_address]
+    );
+    
+    $_SESSION['supervisor_punch_success'] = "¡Asistencia registrada exitosamente como {$typeLabel}!";
+    header('Location: supervisor_dashboard.php');
+    exit;
+}
+
 include 'header.php';
 ?>
 
@@ -819,9 +941,102 @@ include 'header.php';
 .agent-card:active {
     transform: scale(0.98);
 }
+
+/* Supervisor Punch Button Styles */
+.supervisor-punch-btn {
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.supervisor-punch-btn:active {
+    transform: scale(0.95) !important;
+}
+
+.supervisor-punch-btn:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+}
 </style>
 
 <div class="container-fluid py-4">
+    <!-- Supervisor Quick Punch Section -->
+    <section class="glass-card mb-4">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-xl font-semibold text-primary flex items-center gap-2">
+                    <i class="fas fa-fingerprint text-emerald-400"></i>
+                    Mi Registro de Asistencia
+                </h2>
+                <p class="text-sm text-muted mt-1">Marca tu asistencia como supervisor</p>
+            </div>
+        </div>
+        
+        <?php if ($supervisor_punch_success): ?>
+            <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-check-circle text-green-400"></i>
+                    <p class="text-green-300 text-sm"><?= htmlspecialchars($supervisor_punch_success) ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
+        
+        <?php if ($supervisor_punch_error): ?>
+            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                    <p class="text-red-300 text-sm"><?= htmlspecialchars($supervisor_punch_error) ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
+        
+        <form method="POST" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <?php
+            // Definir los tipos de punch permitidos para supervisores con sus configuraciones
+            $supervisorPunchTypes = [
+                ['slug' => 'ENTRY', 'label' => 'Entrada', 'icon' => 'fas fa-sign-in-alt', 'color_start' => '#10b981', 'color_end' => '#059669'],
+                ['slug' => 'BREAK', 'label' => 'Break', 'icon' => 'fas fa-coffee', 'color_start' => '#f59e0b', 'color_end' => '#d97706'],
+                ['slug' => 'LUNCH', 'label' => 'Almuerzo', 'icon' => 'fas fa-utensils', 'color_start' => '#3b82f6', 'color_end' => '#2563eb'],
+                ['slug' => 'BANO', 'label' => 'Baño', 'icon' => 'fas fa-restroom', 'color_start' => '#8b5cf6', 'color_end' => '#7c3aed'],
+                ['slug' => 'EXIT', 'label' => 'Salida', 'icon' => 'fas fa-sign-out-alt', 'color_start' => '#ef4444', 'color_end' => '#dc2626'],
+            ];
+            
+            foreach ($supervisorPunchTypes as $type):
+            ?>
+                <button type="submit" 
+                        name="supervisor_punch_type" 
+                        value="<?= htmlspecialchars($type['slug'], ENT_QUOTES, 'UTF-8') ?>" 
+                        class="supervisor-punch-btn group relative overflow-hidden rounded-xl p-4 transition-all duration-300 hover:scale-105 hover:shadow-lg"
+                        style="background: linear-gradient(135deg, <?= $type['color_start'] ?> 0%, <?= $type['color_end'] ?> 100%);">
+                    <div class="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300"></div>
+                    <div class="relative flex flex-col items-center gap-2">
+                        <i class="<?= $type['icon'] ?> text-2xl text-white"></i>
+                        <span class="text-xs font-semibold text-white text-center"><?= htmlspecialchars($type['label']) ?></span>
+                    </div>
+                </button>
+            <?php endforeach; ?>
+        </form>
+    </section>
+
     <div class="glass-card mb-4">
         <div class="panel-heading">
             <div>

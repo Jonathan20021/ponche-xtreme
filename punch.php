@@ -1,5 +1,6 @@
 <?php
 include 'db.php';
+require_once 'lib/authorization_functions.php';
 date_default_timezone_set('America/Santo_Domingo');
 
 function normalizeColorValue(?string $color, string $default): string
@@ -105,6 +106,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $user_id = $user['id'];
                     $full_name = $user['full_name'];
 
+                    // Verificar si requiere código de autorización para hora extra
+                    $authSystemEnabled = isAuthorizationSystemEnabled($pdo);
+                    $authRequiredForOvertime = isAuthorizationRequiredForContext($pdo, 'overtime');
+                    $authRequiredForEarlyPunch = isAuthorizationRequiredForContext($pdo, 'early_punch');
+                    $authorizationCodeId = null;
+
+                    // Check overtime authorization
+                    if ($authSystemEnabled && $authRequiredForOvertime) {
+                        $isOvertime = isOvertimeAttempt($pdo, $user_id, $typeSlug);
+                        
+                        if ($isOvertime) {
+                            $authCode = trim($_POST['authorization_code'] ?? '');
+                            
+                            if (empty($authCode)) {
+                                $error = "Se requiere código de autorización para registrar hora extra.";
+                            } else {
+                                $validation = validateAuthorizationCode($pdo, $authCode, 'overtime');
+                                
+                                if (!$validation['valid']) {
+                                    $error = "Código de autorización inválido: " . $validation['message'];
+                                } else {
+                                    $authorizationCodeId = $validation['code_id'];
+                                }
+                            }
+                        }
+                    }
+
+                    // Check early punch authorization
+                    if (!$error && $authSystemEnabled && $authRequiredForEarlyPunch) {
+                        $isEarly = isEarlyPunchAttempt($pdo, $user_id);
+                        
+                        if ($isEarly) {
+                            $authCode = trim($_POST['authorization_code'] ?? '');
+                            
+                            if (empty($authCode)) {
+                                $error = "Se requiere código de autorización para marcar entrada antes de su horario.";
+                            } else {
+                                $validation = validateAuthorizationCode($pdo, $authCode, 'early_punch');
+                                
+                                if (!$validation['valid']) {
+                                    $error = "Código de autorización inválido: " . $validation['message'];
+                                } else {
+                                    // If overtime already set authorization, keep it; otherwise use early punch authorization
+                                    if ($authorizationCodeId === null) {
+                                        $authorizationCodeId = $validation['code_id'];
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Validate unique per day constraint when applicable
                     if ((int) ($selectedTypeMeta['is_unique_daily'] ?? 0) === 1) {
                         $check_stmt = $pdo->prepare("
@@ -120,31 +172,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
+                    // Validar secuencia ENTRY/EXIT: No permitir dos ENTRY o dos EXIT consecutivos
+                    if (!$error) {
+                        $sequenceValidation = validateEntryExitSequence($pdo, $user_id, $typeSlug);
+                        if (!$sequenceValidation['valid']) {
+                            $error = $sequenceValidation['message'];
+                        }
+                    }
+
                     if (!$error) {
                         // Register the punch
                         $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
                         $insert_stmt = $pdo->prepare("
-                            INSERT INTO attendance (user_id, type, ip_address, timestamp) 
-                            VALUES (?, ?, ?, NOW())
+                            INSERT INTO attendance (user_id, type, ip_address, timestamp, authorization_code_id) 
+                            VALUES (?, ?, ?, NOW(), ?)
                         ");
-                        $insert_stmt->execute([$user_id, $typeSlug, $ip_address]);
+                        $insert_stmt->execute([$user_id, $typeSlug, $ip_address, $authorizationCodeId]);
+                        
+                        $recordId = $pdo->lastInsertId();
+                        
+                        // Si se usó un código de autorización, registrar su uso
+                        if ($authorizationCodeId !== null) {
+                            logAuthorizationCodeUsage(
+                                $pdo,
+                                $authorizationCodeId,
+                                $user_id,
+                                'overtime',
+                                $recordId,
+                                'attendance',
+                                ['type' => $typeSlug, 'username' => $username]
+                            );
+                        }
                         
                         // Log attendance registration
                         require_once 'lib/logging_functions.php';
-                        $recordId = $pdo->lastInsertId();
                         log_custom_action(
                             $pdo,
                             $user_id,
-                            $_SESSION['full_name'],
-                            $_SESSION['role'],
+                            $_SESSION['full_name'] ?? $full_name,
+                            $_SESSION['role'] ?? 'employee',
                             'attendance',
                             'create',
-                            "Registro de asistencia: {$typeSlug}",
+                            "Registro de asistencia: {$typeSlug}" . ($authorizationCodeId ? " (con código de autorización)" : ""),
                             'attendance_record',
                             $recordId,
-                            ['type' => $typeSlug, 'ip_address' => $ip_address]
+                            ['type' => $typeSlug, 'ip_address' => $ip_address, 'authorization_code_id' => $authorizationCodeId]
                         );
-                        $success = "Attendance recorded successfully as {$typeLabel}.";
+                        $success = "Attendance recorded successfully as {$typeLabel}." . ($authorizationCodeId ? " (Código de autorización validado)" : "");
                         $show_last_punch = true;
 
                         // Get last 5 records for history
@@ -466,6 +540,28 @@ if (isset($_COOKIE['savedUsername'])) {
                         </div>
                     </div>
 
+                    <!-- Authorization Code Field (Hidden by default, shown when needed) -->
+                    <div id="authCodeContainer" class="hidden">
+                        <label for="authorization_code" class="block text-sm font-medium text-gray-700 mb-3">
+                            <i class="fas fa-key mr-2 text-yellow-600"></i> Código de Autorización
+                            <span class="text-xs text-red-600 font-semibold">(Requerido para Hora Extra)</span>
+                        </label>
+                        <div class="relative">
+                            <input type="text" 
+                                   id="authorization_code" 
+                                   name="authorization_code" 
+                                   class="input-focus w-full p-4 pr-12 border-2 border-yellow-400 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 transition-all bg-yellow-50" 
+                                   placeholder="Ingrese código de supervisor/gerente" 
+                                   autocomplete="off"
+                                   maxlength="50">
+                            <i class="fas fa-shield-alt absolute right-4 top-1/2 transform -translate-y-1/2 text-yellow-600 text-xl"></i>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-2">
+                            <i class="fas fa-info-circle"></i> 
+                            Contacte a su supervisor para obtener el código de autorización.
+                        </p>
+                    </div>
+
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-3">
                             <i class="fas fa-clock mr-2"></i> Select Attendance Type
@@ -533,6 +629,47 @@ if (isset($_COOKIE['savedUsername'])) {
     </div>
 
     <script>
+        // Variables globales para el sistema de autorización
+        let authSystemEnabled = false;
+        let authRequiredForOvertime = false;
+
+        // Verificar configuración del sistema de autorización al cargar
+        async function checkAuthorizationRequirement() {
+            try {
+                const response = await fetch('api/authorization_codes.php?action=check_requirement&context=overtime');
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    authSystemEnabled = data.data.system_enabled;
+                    authRequiredForOvertime = data.data.required;
+                }
+            } catch (error) {
+                console.error('Error checking authorization requirement:', error);
+            }
+        }
+
+        // Verificar si se necesita código de autorización antes de enviar
+        async function checkIfOvertimeAttempt(username) {
+            if (!authSystemEnabled || !authRequiredForOvertime || !username) {
+                return false;
+            }
+
+            try {
+                // Aquí podrías hacer una llamada al servidor para verificar si es hora extra
+                // Por ahora, simplemente mostraremos el campo si el sistema está habilitado
+                // y dejamos que el servidor valide
+                const currentHour = new Date().getHours();
+                // Si es después de las 7 PM o antes de las 7 AM, considerar posible hora extra
+                if (currentHour >= 19 || currentHour < 7) {
+                    return true;
+                }
+            } catch (error) {
+                console.error('Error checking overtime:', error);
+            }
+            
+            return false;
+        }
+
         // FunciÃ³n para mostrar mensajes de estado
         function showStatus(message, isError = false) {
             const statusDiv = document.getElementById('storageStatus');
@@ -606,8 +743,11 @@ if (isset($_COOKIE['savedUsername'])) {
         }
 
         // Event Listeners
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             try {
+                // Verificar configuración de autorización
+                await checkAuthorizationRequirement();
+
                 // Cargar username guardado
                 const savedUsername = getSavedUsername();
                 if (savedUsername) {
@@ -615,16 +755,55 @@ if (isset($_COOKIE['savedUsername'])) {
                     showStatus('Saved username loaded');
                 }
 
+                // Monitorear cambios en el username para verificar hora extra
+                const usernameInput = document.getElementById('username');
+                usernameInput.addEventListener('blur', async function() {
+                    const username = this.value.trim();
+                    if (username && authSystemEnabled && authRequiredForOvertime) {
+                        const isOvertime = await checkIfOvertimeAttempt(username);
+                        const authContainer = document.getElementById('authCodeContainer');
+                        const authInput = document.getElementById('authorization_code');
+                        
+                        if (isOvertime) {
+                            authContainer.classList.remove('hidden');
+                            authInput.setAttribute('required', 'required');
+                        } else {
+                            authContainer.classList.add('hidden');
+                            authInput.removeAttribute('required');
+                            authInput.value = '';
+                        }
+                    }
+                });
+
                 // Configurar el formulario
-                document.getElementById('punchForm').addEventListener('submit', function(e) {
+                document.getElementById('punchForm').addEventListener('submit', async function(e) {
                     const username = document.getElementById('username').value;
                     if (username) {
                         saveUsername(username);
                     }
+
+                    // Si el campo de autorización está visible y vacío, prevenir envío
+                    const authContainer = document.getElementById('authCodeContainer');
+                    const authInput = document.getElementById('authorization_code');
+                    
+                    if (!authContainer.classList.contains('hidden') && !authInput.value.trim()) {
+                        e.preventDefault();
+                        showStatus('Por favor ingrese el código de autorización para hora extra.', true);
+                        authInput.focus();
+                        return false;
+                    }
                 });
 
                 // Configurar el botÃ³n de limpiar
-                document.getElementById('clearUsername').addEventListener('click', clearSavedUsername);
+                document.getElementById('clearUsername').addEventListener('click', function() {
+                    clearSavedUsername();
+                    // Ocultar campo de autorización al limpiar
+                    const authContainer = document.getElementById('authCodeContainer');
+                    const authInput = document.getElementById('authorization_code');
+                    authContainer.classList.add('hidden');
+                    authInput.removeAttribute('required');
+                    authInput.value = '';
+                });
 
                 const shortcutButtons = Array.from(document.querySelectorAll('.punch-button[data-shortcut]'));
                 if (shortcutButtons.length > 0) {

@@ -740,3 +740,140 @@ HTML;
         ];
     }
 }
+
+/**
+ * Send daily absence report via email
+ * 
+ * @param string $htmlContent HTML content of the report
+ * @param array $recipients Array of email addresses
+ * @param array $reportData Report data including statistics
+ * @return array Result with 'success' boolean and 'message' string
+ */
+function sendDailyAbsenceReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+        
+        if (empty($recipients)) {
+            return [
+                'success' => false,
+                'message' => 'No se especificaron destinatarios'
+            ];
+        }
+        
+        if (empty($htmlContent)) {
+            return [
+                'success' => false,
+                'message' => 'El contenido del reporte está vacío'
+            ];
+        }
+        
+        $mail = new PHPMailer(true);
+        
+        // Server settings - EXACTLY like password reset
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host = $config['smtp_host'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $config['smtp_username'];
+        $mail->Password = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port = $config['smtp_port'];
+        $mail->CharSet = $config['charset'];
+        
+        // Recipients - Set from FIRST like other functions
+        $mail->setFrom($config['from_email'], $config['from_name']);
+        
+        // Add all recipients
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        
+        if ($validRecipients === 0) {
+            return [
+                'success' => false,
+                'message' => 'No se encontraron destinatarios válidos'
+            ];
+        }
+        
+        // Content
+        $dateFormatted = $reportData['date_formatted'] ?? date('l, F j, Y');
+        $totalAbsences = $reportData['total_absences'] ?? 0;
+        $withoutJustification = count($reportData['absences_without_justification'] ?? []);
+        
+        $mail->isHTML(true);
+        $mail->Subject = "Reporte Diario de Ausencias - $dateFormatted"; // Sin emoji para evitar filtros de spam
+        $mail->Body = $htmlContent;
+        
+        // Plain text alternative
+        $plainText = "REPORTE DIARIO DE AUSENCIAS\n";
+        $plainText .= "============================\n\n";
+        $plainText .= "Fecha: $dateFormatted\n";
+        $plainText .= "Total Empleados: {$reportData['total_employees']}\n";
+        $plainText .= "Total Ausencias: $totalAbsences\n";
+        $plainText .= "Sin Justificación: $withoutJustification\n";
+        $plainText .= "Con Justificación: " . count($reportData['absences_with_justification'] ?? []) . "\n\n";
+        
+        if (!empty($reportData['absences_without_justification'])) {
+            $plainText .= "AUSENCIAS SIN JUSTIFICACIÓN:\n";
+            $plainText .= "----------------------------\n";
+            foreach ($reportData['absences_without_justification'] as $emp) {
+                $plainText .= "- {$emp['full_name']} ({$emp['employee_code']}) - {$emp['position']} - {$emp['department']}\n";
+            }
+            $plainText .= "\n";
+        }
+        
+        if (!empty($reportData['absences_with_justification'])) {
+            $plainText .= "AUSENCIAS JUSTIFICADAS:\n";
+            $plainText .= "----------------------\n";
+            foreach ($reportData['absences_with_justification'] as $emp) {
+                $plainText .= "- {$emp['full_name']} ({$emp['employee_code']}) - {$emp['position']}\n";
+                
+                if (!empty($emp['permissions'])) {
+                    foreach ($emp['permissions'] as $perm) {
+                        $plainText .= "  • Permiso: {$perm['request_type']} ({$perm['start_date']} - {$perm['end_date']})\n";
+                    }
+                }
+                
+                if (!empty($emp['vacations'])) {
+                    foreach ($emp['vacations'] as $vac) {
+                        $type = $vac['vacation_type'] ?? 'regular';
+                        $plainText .= "  • Vacaciones: $type ({$vac['start_date']} - {$vac['end_date']})\n";
+                    }
+                }
+                
+                if (!empty($emp['medical_leaves'])) {
+                    foreach ($emp['medical_leaves'] as $leave) {
+                        $plainText .= "  • Licencia Médica: {$leave['leave_type']} ({$leave['start_date']} - {$leave['end_date']})\n";
+                    }
+                }
+                
+                $plainText .= "\n";
+            }
+        }
+        
+        $plainText .= "\n---\n";
+        $plainText .= "Sistema de Control de Asistencia - {$config['app_name']}\n";
+        $plainText .= "Generado el: {$reportData['generated_at']}\n";
+        
+        $mail->AltBody = $plainText;
+        
+        // Send email - EXACTLY like password reset
+        $mail->send();
+        
+        return [
+            'success' => true,
+            'message' => "Reporte enviado exitosamente a $validRecipients destinatario(s)"
+        ];
+        
+    } catch (Exception $e) {
+        return [
+            'success' => false,
+            'message' => 'Error al enviar email: ' . $e->getMessage()
+        ];
+    }
+}

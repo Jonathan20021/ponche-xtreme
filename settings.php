@@ -2,6 +2,7 @@
 session_start();
 include 'db.php';
 require_once 'lib/email_functions.php';
+require_once 'lib/authorization_functions.php';
 
 ensurePermission('settings');
 
@@ -730,6 +731,145 @@ try {
                 }
                 break;
 
+            case 'create_auth_code':
+                $codeName = trim($_POST['code_name'] ?? '');
+                $code = trim($_POST['code'] ?? '');
+                $roleType = trim($_POST['role_type'] ?? '');
+                $usageContext = trim($_POST['usage_context'] ?? '') ?: null;
+                $validFrom = trim($_POST['valid_from'] ?? '') ?: null;
+                $validUntil = trim($_POST['valid_until'] ?? '') ?: null;
+                $maxUses = trim($_POST['max_uses'] ?? '') !== '' ? (int)$_POST['max_uses'] : null;
+
+                if (empty($codeName) || empty($code) || empty($roleType)) {
+                    $errorMessages[] = 'Nombre, código y tipo de rol son obligatorios.';
+                    break;
+                }
+
+                $result = createAuthorizationCode(
+                    $pdo,
+                    $codeName,
+                    $code,
+                    $roleType,
+                    $usageContext,
+                    $_SESSION['user_id'],
+                    $validFrom,
+                    $validUntil,
+                    $maxUses
+                );
+
+                if ($result['success']) {
+                    $successMessages[] = $result['message'];
+                } else {
+                    $errorMessages[] = $result['message'];
+                }
+                break;
+
+            case 'update_auth_code':
+                $codeId = (int)($_POST['code_id'] ?? 0);
+                $codeName = trim($_POST['code_name'] ?? '');
+                $code = trim($_POST['code'] ?? '');
+                $roleType = trim($_POST['role_type'] ?? '');
+                $isActive = isset($_POST['is_active']) ? 1 : 0;
+                $usageContext = trim($_POST['usage_context'] ?? '') ?: null;
+                $validFrom = trim($_POST['valid_from'] ?? '') ?: null;
+                $validUntil = trim($_POST['valid_until'] ?? '') ?: null;
+                $maxUses = trim($_POST['max_uses'] ?? '') !== '' ? (int)$_POST['max_uses'] : null;
+
+                if ($codeId <= 0) {
+                    $errorMessages[] = 'ID de código inválido.';
+                    break;
+                }
+
+                if (empty($codeName) || empty($code) || empty($roleType)) {
+                    $errorMessages[] = 'Nombre, código y tipo de rol son obligatorios.';
+                    break;
+                }
+
+                $result = updateAuthorizationCode(
+                    $pdo,
+                    $codeId,
+                    $codeName,
+                    $code,
+                    $roleType,
+                    $isActive,
+                    $usageContext,
+                    $validFrom,
+                    $validUntil,
+                    $maxUses
+                );
+
+                if ($result['success']) {
+                    $successMessages[] = $result['message'];
+                } else {
+                    $errorMessages[] = $result['message'];
+                }
+                break;
+
+            case 'delete_auth_code':
+                $codeId = (int)($_POST['code_id'] ?? 0);
+
+                if ($codeId <= 0) {
+                    $errorMessages[] = 'ID de código inválido.';
+                    break;
+                }
+
+                $result = deleteAuthorizationCode($pdo, $codeId);
+
+                if ($result['success']) {
+                    $successMessages[] = $result['message'];
+                } else {
+                    $errorMessages[] = $result['message'];
+                }
+                break;
+
+            case 'toggle_auth_system':
+                $enabled = isset($_POST['authorization_codes_enabled']) ? 1 : 0;
+                $requireForOvertime = isset($_POST['authorization_require_for_overtime']) ? 1 : 0;
+                $requireForEdit = isset($_POST['authorization_require_for_edit_records']) ? 1 : 0;
+                $requireForDelete = isset($_POST['authorization_require_for_delete_records']) ? 1 : 0;
+                $requireForEarlyPunch = isset($_POST['authorization_require_for_early_punch']) ? 1 : 0;
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'boolean', 'authorization')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    
+                    $stmt->execute(['authorization_codes_enabled', $enabled]);
+                    $stmt->execute(['authorization_require_for_overtime', $requireForOvertime]);
+                    $stmt->execute(['authorization_require_for_edit_records', $requireForEdit]);
+                    $stmt->execute(['authorization_require_for_delete_records', $requireForDelete]);
+                    $stmt->execute(['authorization_require_for_early_punch', $requireForEarlyPunch]);
+                    
+                    $successMessages[] = 'Configuración del sistema de autorización actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración.';
+                }
+                break;
+
+            case 'update_absence_report_config':
+                $recipients = trim($_POST['absence_report_recipients'] ?? '');
+                $enabled = isset($_POST['absence_report_enabled']) ? 1 : 0;
+                $time = trim($_POST['absence_report_time'] ?? '08:00');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    
+                    $stmt->execute(['absence_report_recipients', $recipients]);
+                    $stmt->execute(['absence_report_enabled', $enabled]);
+                    $stmt->execute(['absence_report_time', $time]);
+                    
+                    $successMessages[] = 'Configuración del reporte de ausencias actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del reporte.';
+                }
+                break;
+
             case 'send_password_reset':
                 $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
                 
@@ -890,6 +1030,46 @@ foreach ($attendanceTypesList as $typeRow) {
     if ((int) ($typeRow['is_active'] ?? 0) === 1) {
         $attendanceTypeActiveCount++;
     }
+}
+
+// Get authorization codes data
+try {
+    $authCodesList = getActiveAuthorizationCodes($pdo);
+    $authSystemEnabled = isAuthorizationSystemEnabled($pdo);
+    $authRequireForOvertime = isAuthorizationRequiredForContext($pdo, 'overtime');
+    $authRequireForEdit = isAuthorizationRequiredForContext($pdo, 'edit_records');
+    $authRequireForDelete = isAuthorizationRequiredForContext($pdo, 'delete_records');
+    $authRequireForEarlyPunch = isAuthorizationRequiredForContext($pdo, 'early_punch');
+} catch (Exception $e) {
+    $authCodesList = [];
+    $authSystemEnabled = false;
+    $authRequireForOvertime = false;
+    $authRequireForEdit = false;
+    $authRequireForDelete = false;
+    $authRequireForEarlyPunch = false;
+}
+
+// Get absence report settings
+$absenceReportRecipients = '';
+$absenceReportEnabled = false;
+$absenceReportTime = '08:00';
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'absence_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        switch ($row['setting_key']) {
+            case 'absence_report_recipients':
+                $absenceReportRecipients = $row['setting_value'] ?? '';
+                break;
+            case 'absence_report_enabled':
+                $absenceReportEnabled = ($row['setting_value'] ?? '0') === '1';
+                break;
+            case 'absence_report_time':
+                $absenceReportTime = $row['setting_value'] ?? '08:00';
+                break;
+        }
+    }
+} catch (Exception $e) {
+    error_log("Error loading absence report settings: " . $e->getMessage());
 }
 
 $permStmt = $pdo->query("SELECT section_key, role FROM section_permissions ORDER BY section_key, role");
@@ -1197,6 +1377,353 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 </div>
                 <?php endif; ?>
             </form>
+        </section>
+
+        <!-- Authorization Codes System -->
+        <section id="authorization-system-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">Configuración del Sistema de Códigos</h2>
+                    <p class="text-muted text-sm">Habilita y configura el sistema de códigos de autorización.</p>
+                </div>
+                <span class="chip <?= $authSystemEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' ?>">
+                    <i class="fas fa-<?= $authSystemEnabled ? 'check-circle' : 'times-circle' ?>"></i> 
+                    <?= $authSystemEnabled ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="toggle_auth_system">
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base font-medium cursor-pointer">
+                        <input type="checkbox" name="authorization_codes_enabled" value="1" 
+                               class="w-5 h-5 accent-cyan-500" <?= $authSystemEnabled ? 'checked' : '' ?>>
+                        <span>Habilitar Sistema de Códigos de Autorización</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Activa el sistema para requerir códigos de autorización en diversos contextos.</p>
+                </div>
+                <div class="space-y-4 ml-8">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="authorization_require_for_overtime" value="1" 
+                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForOvertime ? 'checked' : '' ?>>
+                        <span>Requerir código para Hora Extra</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Los empleados deberán ingresar un código de supervisor para registrar hora extra.</p>
+                </div>
+                <div class="space-y-4 ml-8">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="authorization_require_for_edit_records" value="1" 
+                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForEdit ? 'checked' : '' ?>>
+                        <span>Requerir código para Editar Registros</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se requiere autorización para modificar registros de asistencia.</p>
+                </div>
+                <div class="space-y-4 ml-8">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="authorization_require_for_delete_records" value="1" 
+                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForDelete ? 'checked' : '' ?>>
+                        <span>Requerir código para Eliminar Registros</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se requiere autorización para eliminar registros de asistencia.</p>
+                </div>
+                <div class="space-y-4 ml-8">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="authorization_require_for_early_punch" value="1" 
+                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForEarlyPunch ? 'checked' : '' ?>>
+                        <span>Requerir código para Entrada Anticipada</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Los empleados deberán ingresar un código de supervisor para marcar entrada antes de su horario programado.</p>
+                </div>
+                <div class="flex justify-end pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Configuración
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <article id="create-auth-code-card" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">Crear Código de Autorización</h2>
+                    <p class="text-muted text-sm">Crea códigos configurables para supervisores, IT, gerentes, etc.</p>
+                </div>
+                <button type="button" onclick="document.getElementById('authCodeForm').reset(); document.getElementById('generate-code-btn').click();" class="btn-secondary btn-sm">
+                    <i class="fas fa-plus"></i> Nuevo Código
+                </button>
+            </div>
+            <form id="authCodeForm" method="POST" class="space-y-4">
+                <input type="hidden" name="action" value="create_auth_code">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label">Nombre del Código <span class="text-red-500">*</span></label>
+                        <input type="text" name="code_name" class="input-control" placeholder="Supervisor Turno A" required>
+                    </div>
+                    <div>
+                        <label class="form-label">Código <span class="text-red-500">*</span></label>
+                        <div class="flex gap-2">
+                            <input type="text" id="auth_code_input" name="code" class="input-control" placeholder="SUP2025" required>
+                            <button type="button" id="generate-code-btn" class="btn-secondary btn-sm" onclick="generateAuthCode()">
+                                <i class="fas fa-random"></i> Generar
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label">Tipo de Rol <span class="text-red-500">*</span></label>
+                        <select name="role_type" class="input-control" required>
+                            <option value="">Seleccionar...</option>
+                            <option value="supervisor">Supervisor</option>
+                            <option value="it">IT</option>
+                            <option value="manager">Gerente</option>
+                            <option value="director">Director</option>
+                            <option value="hr">Recursos Humanos</option>
+                            <option value="universal">Universal (Todos)</option>
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Contexto de Uso</label>
+                        <select name="usage_context" class="input-control">
+                            <option value="">Todos los contextos</option>
+                            <option value="overtime_punch">Hora Extra</option>
+                            <option value="edit_record">Editar Registros</option>
+                            <option value="delete_record">Eliminar Registros</option>
+                            <option value="special_punch">Punch Especial</option>
+                        </select>
+                        <p class="text-xs text-muted mt-1">Especifica dónde se puede usar este código. Vacío = todos los contextos.</p>
+                    </div>
+                    <div>
+                        <label class="form-label">Válido Desde</label>
+                        <input type="datetime-local" name="valid_from" class="input-control">
+                    </div>
+                    <div>
+                        <label class="form-label">Válido Hasta</label>
+                        <input type="datetime-local" name="valid_until" class="input-control">
+                    </div>
+                    <div>
+                        <label class="form-label">Máximo de Usos</label>
+                        <input type="number" name="max_uses" class="input-control" placeholder="Dejar vacío = ilimitado" min="1">
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-plus"></i>
+                        Crear Código
+                    </button>
+                </div>
+            </form>
+        </article>
+
+        <section id="authorization-codes-section" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">Códigos de Autorización</h2>
+                    <p class="text-muted text-sm">Gestiona todos los códigos de autorización del sistema.</p>
+                </div>
+                <span class="chip"><i class="fas fa-key"></i> <?= count($authCodesList) ?> códigos</span>
+            </div>
+            
+            <?php if (empty($authCodesList)): ?>
+                <div class="text-center py-12 text-muted">
+                    <i class="fas fa-key text-5xl mb-4 opacity-25"></i>
+                    <p class="text-lg font-semibold">No hay códigos de autorización</p>
+                    <p class="text-sm">Crea tu primer código usando el formulario de arriba.</p>
+                </div>
+            <?php else: ?>
+                <div class="responsive-scroll">
+                    <table class="data-table w-full text-sm">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Código</th>
+                                <th>Tipo de Rol</th>
+                                <th>Contexto</th>
+                                <th>Válido Desde</th>
+                                <th>Válido Hasta</th>
+                                <th>Usos</th>
+                                <th>Estado</th>
+                                <th class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($authCodesList as $authCode): ?>
+                                <?php 
+                                    $codeId = (int)$authCode['id'];
+                                    $isExpired = !empty($authCode['valid_until']) && strtotime($authCode['valid_until']) < time();
+                                    $isLimited = $authCode['max_uses'] !== null && $authCode['current_uses'] >= $authCode['max_uses'];
+                                    $statusClass = $isExpired || $isLimited ? 'text-red-600' : 'text-green-600';
+                                    $statusIcon = $isExpired || $isLimited ? 'fa-times-circle' : 'fa-check-circle';
+                                    $statusText = $isExpired ? 'Expirado' : ($isLimited ? 'Límite alcanzado' : 'Activo');
+                                ?>
+                                <tr>
+                                    <td class="font-medium"><?= htmlspecialchars($authCode['code_name']) ?></td>
+                                    <td>
+                                        <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                                            <?= htmlspecialchars($authCode['code']) ?>
+                                        </code>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-primary">
+                                            <?= htmlspecialchars(ucfirst($authCode['role_type'])) ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <?php if (empty($authCode['usage_context'])): ?>
+                                            <span class="text-muted text-xs">Todos</span>
+                                        <?php else: ?>
+                                            <span class="badge badge-info">
+                                                <?= htmlspecialchars($authCode['usage_context']) ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="text-sm text-muted">
+                                        <?= $authCode['valid_from'] ? date('d/m/Y H:i', strtotime($authCode['valid_from'])) : '-' ?>
+                                    </td>
+                                    <td class="text-sm text-muted">
+                                        <?= $authCode['valid_until'] ? date('d/m/Y H:i', strtotime($authCode['valid_until'])) : '-' ?>
+                                    </td>
+                                    <td class="text-sm text-center">
+                                        <?= (int)$authCode['current_uses'] ?>
+                                        <?php if ($authCode['max_uses'] !== null): ?>
+                                            / <?= (int)$authCode['max_uses'] ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <span class="<?= $statusClass ?>">
+                                            <i class="fas <?= $statusIcon ?>"></i>
+                                            <?= $statusText ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="flex gap-2 justify-center">
+                                            <button type="button" onclick="viewCodeDetails(<?= $codeId ?>)" 
+                                                    class="btn-info btn-sm" title="Ver detalles">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <form method="POST" class="inline" onsubmit="return confirm('¿Desactivar este código?');">
+                                                <input type="hidden" name="action" value="delete_auth_code">
+                                                <input type="hidden" name="code_id" value="<?= $codeId ?>">
+                                                <button type="submit" class="btn-danger btn-sm" title="Desactivar">
+                                                    <i class="fas fa-ban"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </section>
+
+        <!-- Daily Absence Report Configuration -->
+        <section id="absence-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-file-medical-alt text-red-400"></i>
+                        Reporte Diario de Ausencias
+                    </h2>
+                    <p class="text-muted text-sm">Configuración del reporte automático de empleados que no han marcado asistencia.</p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $absenceReportEnabled ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $absenceReportEnabled ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_absence_report_config">
+                
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="absence_report_enabled" value="1" 
+                               class="w-5 h-5 accent-cyan-500" <?= $absenceReportEnabled ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático del reporte</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">El reporte se enviará automáticamente todos los días a la hora configurada.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label">
+                            <i class="fas fa-clock"></i> Hora de envío (GMT-4)
+                        </label>
+                        <input type="time" 
+                               name="absence_report_time" 
+                               value="<?= htmlspecialchars($absenceReportTime) ?>" 
+                               class="input-control"
+                               required>
+                        <p class="text-xs text-muted mt-1">Hora de Santo Domingo (GMT-4)</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label">
+                        <i class="fas fa-envelope"></i> Destinatarios del reporte
+                    </label>
+                    <textarea 
+                        name="absence_report_recipients" 
+                        rows="3" 
+                        class="input-control font-mono text-sm"
+                        placeholder="ejemplo@empresa.com, rrhh@empresa.com, gerencia@empresa.com"><?= htmlspecialchars($absenceReportRecipients) ?></textarea>
+                    <p class="text-xs text-muted mt-1">
+                        <i class="fas fa-info-circle"></i> 
+                        Ingrese los correos electrónicos separados por comas. El reporte incluye validación de permisos, vacaciones y licencias médicas.
+                    </p>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Configuración
+                    </button>
+                    
+                    <button type="button" 
+                            onclick="sendAbsenceReportManually()" 
+                            class="btn-secondary"
+                            id="sendReportBtn">
+                        <i class="fas fa-paper-plane"></i>
+                        Enviar Reporte Ahora
+                    </button>
+                </div>
+            </form>
+
+            <!-- Report Preview/Info -->
+            <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                <h3 class="text-blue-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-info-circle"></i>
+                    Información del Reporte
+                </h3>
+                <ul class="text-sm text-blue-200 space-y-2">
+                    <li><i class="fas fa-check text-green-400"></i> Muestra empleados que no han marcado asistencia hoy</li>
+                    <li><i class="fas fa-check text-green-400"></i> Valida permisos aprobados (medical, personal, study)</li>
+                    <li><i class="fas fa-check text-green-400"></i> Valida vacaciones activas</li>
+                    <li><i class="fas fa-check text-green-400"></i> Valida licencias médicas vigentes</li>
+                    <li><i class="fas fa-check text-green-400"></i> Separa ausencias justificadas de no justificadas</li>
+                    <li><i class="fas fa-check text-green-400"></i> Diseño profesional y responsive para email</li>
+                </ul>
+            </div>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío, configure el siguiente cron job en su servidor:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    0 8 * * * /usr/bin/php <?= __DIR__ ?>/cron_daily_absence_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i> 
+                    Esto ejecutará el reporte automáticamente todos los días a las 8:00 AM GMT-4.
+                    También puede usar wget/curl si su servidor no soporta ejecución PHP directa.
+                </p>
+            </div>
         </section>
 
         <section id="schedule-card" class="glass-card space-y-6">
@@ -1995,6 +2522,18 @@ document.addEventListener('DOMContentLoaded', function () {
             selectors: ['#create-attendance-type-card', '#attendance-types-section']
         },
         {
+            key: 'authorization',
+            label: 'Códigos de Autorización',
+            icon: 'fas fa-key',
+            selectors: ['#authorization-system-config', '#create-auth-code-card', '#authorization-codes-section']
+        },
+        {
+            key: 'absence_report',
+            label: 'Reporte de Ausencias',
+            icon: 'fas fa-file-medical-alt',
+            selectors: ['#absence-report-config']
+        },
+        {
             key: 'schedule',
             label: 'Horario objetivo',
             icon: 'fas fa-clock',
@@ -2220,6 +2759,225 @@ document.addEventListener('DOMContentLoaded', function () {
             }, 5000);
         }
     }
+
+    // Authorization Codes Functions
+    window.generateAuthCode = async function() {
+        try {
+            const response = await fetch('api/authorization_codes.php?action=generate_code&length=8');
+            const data = await response.json();
+            
+            if (data.success && data.data && data.data.code) {
+                document.getElementById('auth_code_input').value = data.data.code;
+            } else {
+                // Fallback: generate client-side
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let code = '';
+                for (let i = 0; i < 8; i++) {
+                    code += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                document.getElementById('auth_code_input').value = code;
+            }
+        } catch (error) {
+            console.error('Error generating code:', error);
+            // Fallback: generate client-side
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            for (let i = 0; i < 8; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            document.getElementById('auth_code_input').value = code;
+        }
+    };
+
+    window.viewCodeDetails = function(codeId) {
+        // Fetch code details and usage history via AJAX
+        fetch(`api/authorization_codes.php?action=code_details&id=${codeId}`)
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.text(); // Get as text first to see what we're getting
+            })
+            .then(text => {
+                console.log('Raw response:', text);
+                try {
+                    const data = JSON.parse(text);
+                    console.log('Parsed JSON:', data);
+                    
+                    if (data.success) {
+                        // La API retorna los datos dentro de data.data
+                        const code = data.data?.code || data.code;
+                        const history = data.data?.usage_history || data.usage_history;
+                        
+                        if (code) {
+                            showCodeDetailsModal(code, history || []);
+                        } else {
+                            console.error('No code data found:', data);
+                            alert('Error: Estructura de datos inválida. Revisa la consola para más detalles.');
+                        }
+                    } else {
+                        alert('Error: ' + (data.message || 'No se pudieron cargar los detalles'));
+                    }
+                } catch (e) {
+                    console.error('JSON Parse Error:', e);
+                    console.error('Text was:', text);
+                    alert('Error: La respuesta no es JSON válido. Revisa la consola.');
+                }
+            })
+            .catch(error => {
+                console.error('Fetch Error:', error);
+                alert('Error al cargar los detalles del código: ' + error.message);
+            });
+    };
+    
+    let isEditMode = false;
+    let currentCodeData = null;
+    
+    function showCodeDetailsModal(code, usageHistory) {
+        const modal = document.getElementById('codeDetailsModal');
+        if (!modal) return;
+        
+        // Store current code data
+        currentCodeData = code;
+        isEditMode = false;
+        
+        // Populate code details
+        document.getElementById('edit_code_id').value = code.id;
+        document.getElementById('detail_code').value = code.code;
+        document.getElementById('detail_name').value = code.code_name;
+        document.getElementById('detail_role').value = code.role_type;
+        document.getElementById('detail_context').value = code.usage_context || '';
+        document.getElementById('detail_status').value = code.is_active;
+        document.getElementById('detail_max_uses').value = code.max_uses || '';
+        document.getElementById('detail_current_uses').textContent = code.current_uses || 0;
+        
+        // Handle dates
+        if (code.valid_from && code.valid_from !== 'Sin límite') {
+            const fromDate = new Date(code.valid_from);
+            document.getElementById('detail_valid_from').value = fromDate.toISOString().slice(0, 16);
+        } else {
+            document.getElementById('detail_valid_from').value = '';
+        }
+        
+        if (code.valid_until && code.valid_until !== 'Sin límite') {
+            const untilDate = new Date(code.valid_until);
+            document.getElementById('detail_valid_until').value = untilDate.toISOString().slice(0, 16);
+        } else {
+            document.getElementById('detail_valid_until').value = '';
+        }
+        
+        document.getElementById('detail_created').textContent = code.created_at;
+        
+        // Set fields to readonly mode initially
+        setEditMode(false);
+        
+        // Populate usage history table
+        const tbody = document.getElementById('usageHistoryBody');
+        tbody.innerHTML = '';
+        
+        if (!usageHistory || usageHistory.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 dark:text-gray-400 p-6">No se ha usado este código aún</td></tr>';
+        } else {
+            usageHistory.forEach(usage => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors';
+                row.innerHTML = `
+                    <td class="p-3 text-gray-900 dark:text-gray-100">${usage.used_at}</td>
+                    <td class="p-3 text-gray-900 dark:text-gray-100">${usage.user_name || usage.username}</td>
+                    <td class="p-3"><span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">${usage.usage_context}</span></td>
+                    <td class="p-3 text-gray-700 dark:text-gray-300">${usage.reference_info || '-'}</td>
+                    <td class="p-3 text-gray-700 dark:text-gray-300 font-mono text-xs">${usage.ip_address}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Show modal
+        modal.style.display = 'block';
+    }
+    
+    window.toggleEditMode = function() {
+        isEditMode = !isEditMode;
+        setEditMode(isEditMode);
+    };
+    
+    function setEditMode(enabled) {
+        const fields = document.querySelectorAll('.editable-field');
+        const btnToggleEdit = document.getElementById('btnToggleEdit');
+        const btnSave = document.getElementById('btnSave');
+        const modalTitle = document.getElementById('modalTitle');
+        
+        // Enable/disable fields
+        fields.forEach(field => {
+            field.disabled = !enabled;
+        });
+        
+        if (enabled) {
+            btnToggleEdit.innerHTML = '<i class="fas fa-times"></i> Cancelar';
+            btnToggleEdit.className = 'btn-danger';
+            btnSave.style.display = 'inline-block';
+            modalTitle.textContent = 'Editar Código de Autorización';
+        } else {
+            btnToggleEdit.innerHTML = '<i class="fas fa-edit"></i> Editar';
+            btnToggleEdit.className = 'btn-success';
+            btnSave.style.display = 'none';
+            modalTitle.textContent = 'Detalles del Código de Autorización';
+            
+            // Restore original values if cancelled (only repopulate fields, don't call showCodeDetailsModal again)
+            if (currentCodeData && isEditMode === false) {
+                // Restore values directly without calling showCodeDetailsModal to avoid recursion
+                document.getElementById('detail_name').value = currentCodeData.code_name;
+                document.getElementById('detail_role').value = currentCodeData.role_type;
+                document.getElementById('detail_context').value = currentCodeData.usage_context || '';
+                document.getElementById('detail_status').value = currentCodeData.is_active;
+                document.getElementById('detail_max_uses').value = currentCodeData.max_uses || '';
+            }
+        }
+    }
+    
+    window.saveCodeChanges = function() {
+        const codeId = document.getElementById('edit_code_id').value;
+        const formData = {
+            id: codeId,
+            code_name: document.getElementById('detail_name').value,
+            role_type: document.getElementById('detail_role').value,
+            usage_context: document.getElementById('detail_context').value || null,
+            is_active: document.getElementById('detail_status').value,
+            max_uses: document.getElementById('detail_max_uses').value || null,
+            valid_from: document.getElementById('detail_valid_from').value || null,
+            valid_until: document.getElementById('detail_valid_until').value || null
+        };
+        
+        fetch('api/authorization_codes.php?action=update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ Código actualizado correctamente');
+                closeCodeDetailsModal();
+                location.reload(); // Reload to see changes
+            } else {
+                alert('❌ Error: ' + (data.message || 'No se pudo actualizar'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('❌ Error al guardar los cambios');
+        });
+    };
+    
+    window.closeCodeDetailsModal = function() {
+        document.getElementById('codeDetailsModal').style.display = 'none';
+        isEditMode = false;
+        currentCodeData = null;
+    };
 });
 </script>
 
@@ -2228,6 +2986,312 @@ document.addEventListener('DOMContentLoaded', function () {
         <option value="<?= htmlspecialchars($roleRow['name']) ?>" label="<?= htmlspecialchars($roleRow['label'] ?? $roleRow['name']) ?>"></option>
     <?php endforeach; ?>
 </datalist>
+
+<!-- Modal para ver detalles del código -->
+<div id="codeDetailsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" style="max-width: 900px; width: 90%;">
+        <!-- Header -->
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i class="fas fa-key"></i> <span id="modalTitle">Detalles del Código de Autorización</span>
+            </h3>
+            <button onclick="closeCodeDetailsModal()" class="modal-close-btn">
+                &times;
+            </button>
+        </div>
+        
+        <!-- Body -->
+        <form id="codeDetailsForm" class="modal-body">
+            <input type="hidden" id="edit_code_id" name="id">
+            
+            <!-- Code Information -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="p-4 rounded-lg border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20">
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Código</label>
+                    <input type="text" id="detail_code" name="code" readonly class="w-full text-2xl font-bold text-blue-600 dark:text-blue-400 bg-transparent border-none p-0 outline-none" style="cursor: default;">
+                </div>
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Nombre</label>
+                    <input type="text" id="detail_name" name="code_name" class="editable-field input-control w-full">
+                </div>
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Rol</label>
+                    <select id="detail_role" name="role_type" class="editable-field input-control w-full">
+                        <?php foreach ($rolesList as $roleRow): ?>
+                            <option value="<?= htmlspecialchars($roleRow['name']) ?>">
+                                <?= htmlspecialchars($roleRow['label'] ?? ucfirst($roleRow['name'])) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Contexto</label>
+                    <select id="detail_context" name="usage_context" class="editable-field input-control w-full">
+                        <option value="">🌐 Todos (Universal)</option>
+                        <option value="overtime">⏰ Horas Extras</option>
+                        <option value="edit_records">✏️ Editar Registros</option>
+                        <option value="delete_records">🗑️ Eliminar Registros</option>
+                    </select>
+                </div>
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Estado</label>
+                    <select id="detail_status" name="is_active" class="editable-field input-control w-full">
+                        <option value="1">✅ Activo</option>
+                        <option value="0">❌ Inactivo</option>
+                    </select>
+                </div>
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Usos Máximos</label>
+                    <input type="number" id="detail_max_uses" name="max_uses" class="editable-field input-control w-full" placeholder="∞ Ilimitado">
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">Usos actuales: <span id="detail_current_uses" class="font-semibold text-blue-600 dark:text-blue-400">0</span></div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Válido Desde</label>
+                    <input type="datetime-local" id="detail_valid_from" name="valid_from" class="editable-field input-control text-sm w-full">
+                </div>
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Válido Hasta</label>
+                    <input type="datetime-local" id="detail_valid_until" name="valid_until" class="editable-field input-control text-sm w-full">
+                </div>
+                <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Creado</div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-gray-100" id="detail_created">-</div>
+                </div>
+            </div>
+            
+            <!-- Usage History -->
+            <div class="mb-4">
+                <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                    <i class="fas fa-history text-blue-600 dark:text-blue-400"></i> Historial de Uso
+                </h4>
+            </div>
+            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700" style="max-height: 300px; overflow-y: auto;">
+                <table class="w-full">
+                    <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Fecha/Hora</th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Usuario</th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Contexto</th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Referencia</th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">IP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usageHistoryBody" class="text-sm bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </form>
+        
+        <!-- Footer -->
+        <div class="modal-footer flex justify-between items-center">
+            <button type="button" onclick="toggleEditMode()" id="btnToggleEdit" class="btn-success">
+                <i class="fas fa-edit"></i> Editar
+            </button>
+            <div class="flex gap-2">
+                <button type="button" onclick="saveCodeChanges()" id="btnSave" class="btn-primary" style="display: none;">
+                    <i class="fas fa-save"></i> Guardar
+                </button>
+                <button type="button" onclick="closeCodeDetailsModal()" class="btn-secondary">
+                    <i class="fas fa-times"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Modal Styles with Light/Dark Theme Support */
+.modal-overlay {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background: white;
+    margin: 2% auto;
+    padding: 0;
+    border-radius: 1rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.modal-close-btn {
+    color: #6b7280;
+    font-size: 1.75rem;
+    font-weight: bold;
+    cursor: pointer;
+    background: none;
+    border: none;
+    line-height: 1;
+}
+
+.modal-close-btn:hover {
+    color: #374151;
+}
+
+.modal-body {
+    padding: 2rem;
+}
+
+.modal-footer {
+    padding: 1.5rem 2rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+    .modal-content {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    }
+    
+    .modal-header {
+        border-bottom-color: rgba(226, 232, 240, 0.1);
+    }
+    
+    .modal-title {
+        color: #f1f5f9;
+    }
+    
+    .modal-close-btn {
+        color: #94a3b8;
+    }
+    
+    .modal-close-btn:hover {
+        color: #cbd5e1;
+    }
+    
+    .modal-footer {
+        border-top-color: rgba(226, 232, 240, 0.1);
+    }
+}
+
+/* Editable Field States */
+.editable-field:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #f9fafb !important;
+}
+
+.editable-field:not(:disabled) {
+    border-color: #3b82f6 !important;
+    background-color: #eff6ff !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+    .editable-field:disabled {
+        background-color: #1f2937 !important;
+    }
+    
+    .editable-field:not(:disabled) {
+        background-color: rgba(59, 130, 246, 0.15) !important;
+    }
+}
+</style>
+
+<script>
+// Send Absence Report Manually
+async function sendAbsenceReportManually() {
+    const btn = document.getElementById('sendReportBtn');
+    const originalHTML = btn.innerHTML;
+    
+    // Disable button and show loading
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+    
+    try {
+        const response = await fetch('send_absence_report.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Show success message
+            const successDiv = document.createElement('div');
+            successDiv.className = 'bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in';
+            successDiv.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-check-circle text-green-400"></i>
+                    <div>
+                        <p class="text-green-300 font-semibold">${result.message}</p>
+                        ${result.data ? `
+                            <p class="text-green-200 text-sm mt-1">
+                                Total empleados: ${result.data.total_employees} | 
+                                Ausencias: ${result.data.total_absences} 
+                                (${result.data.absences_without_justification} sin justificar, 
+                                ${result.data.absences_with_justification} justificadas)
+                            </p>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            // Insert at the top of the form
+            const form = btn.closest('form');
+            form.parentElement.insertBefore(successDiv, form);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                successDiv.style.opacity = '0';
+                successDiv.style.transition = 'opacity 0.5s';
+                setTimeout(() => successDiv.remove(), 500);
+            }, 10000);
+            
+        } else {
+            // Show error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4';
+            errorDiv.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                    <p class="text-red-300">${result.error || 'Error desconocido al enviar el reporte'}</p>
+                </div>
+            `;
+            
+            const form = btn.closest('form');
+            form.parentElement.insertBefore(errorDiv, form);
+            
+            setTimeout(() => errorDiv.remove(), 8000);
+        }
+        
+    } catch (error) {
+        console.error('Error sending report:', error);
+        alert('Error al enviar el reporte. Por favor, intente nuevamente.');
+    } finally {
+        // Re-enable button
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+</script>
 
 <?php include 'footer.php'; ?>
 
