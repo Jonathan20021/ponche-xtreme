@@ -1387,6 +1387,7 @@ window.addEventListener('beforeunload', function() {
 let currentAgentId = null;
 let modalRefreshInterval = null;
 let agentChart = null;
+let lastChartData = null; // Para comparar y evitar recrear la gráfica innecesariamente
 
 function openAgentModal(userId, fullName) {
     currentAgentId = userId;
@@ -1440,6 +1441,9 @@ function closeAgentModal() {
         agentChart.destroy();
         agentChart = null;
     }
+    
+    // Limpiar datos de comparación
+    lastChartData = null;
 }
 
 function closeModalOnOverlay(event) {
@@ -2160,15 +2164,31 @@ function updatePunchBreakdown(byType) {
 }
 
 function updateChart(chartData) {
-    const canvas = document.getElementById('timeDistributionChart');
-    const ctx = canvas.getContext('2d');
-    
-    // Destruir gráfica anterior si existe
-    if (agentChart) {
-        agentChart.destroy();
+    // Comparar datos para evitar recrear la gráfica si no cambiaron
+    const currentDataString = JSON.stringify(chartData);
+    if (lastChartData === currentDataString && agentChart) {
+        // Los datos no cambiaron, no hacer nada
+        return;
     }
     
-    // Crear nueva gráfica
+    // Actualizar datos guardados
+    lastChartData = currentDataString;
+    
+    const canvas = document.getElementById('timeDistributionChart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    
+    // Si la gráfica ya existe, actualizar sus datos en lugar de recrearla
+    if (agentChart) {
+        agentChart.data.labels = chartData.labels;
+        agentChart.data.datasets[0].data = chartData.data;
+        agentChart.data.datasets[0].backgroundColor = chartData.colors;
+        agentChart.update('none'); // 'none' evita animaciones en actualizaciones
+        return;
+    }
+    
+    // Crear nueva gráfica solo si no existe
     agentChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -2183,6 +2203,9 @@ function updateChart(chartData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+                duration: 750
+            },
             plugins: {
                 legend: {
                     position: 'bottom',

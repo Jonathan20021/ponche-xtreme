@@ -1,0 +1,63 @@
+-- =====================================================
+-- INSTALACIÓN DEL DASHBOARD DE GERENTE
+-- Monitor en tiempo real para personal administrativo
+-- =====================================================
+
+-- IMPORTANTE: Los permisos se asignan desde la UI
+-- Ir a: Configuración > Roles y Permisos > Asignar Permisos
+-- 
+-- Buscar la sección: "Monitor Administrativos" en la categoría "Gerencia"
+-- Asignar a los roles: manager, hr, developer (según se necesite)
+
+-- =====================================================
+-- VERIFICACIÓN DE PERMISOS (Opcional - Solo consulta)
+-- =====================================================
+-- 
+-- Ejecuta esta consulta para verificar qué roles tienen acceso:
+-- 
+-- SELECT 
+--     sp.id,
+--     sp.section_key,
+--     sp.role,
+--     r.label as role_label
+-- FROM section_permissions sp
+-- LEFT JOIN roles r ON r.name = sp.role
+-- WHERE sp.section_key = 'manager_dashboard'
+-- ORDER BY sp.role;
+
+-- =====================================================
+-- NOTAS DE INSTALACIÓN
+-- =====================================================
+-- 
+-- El Dashboard de Gerente permite:
+-- 1. Monitorear en tiempo real el estado de asistencia de todo el personal administrativo
+-- 2. Ver todos los roles excepto 'agent' (supervisor, manager, hr, developer, operations, etc.)
+-- 3. Filtrar por rol, estado de punch, y estado de pago
+-- 4. Actualización automática cada 5 segundos
+-- 5. Registro de asistencia del propio gerente
+--
+-- Archivos creados:
+-- - manager_dashboard.php: Interfaz principal del dashboard
+-- - manager_realtime_api.php: API para obtener datos en tiempo real
+-- - settings.php: Actualizado con la nueva sección 'manager_dashboard'
+-- 
+-- El dashboard muestra:
+-- - Total de personal administrativo
+-- - Personal activo hoy
+-- - Personal en punch pagado/no pagado
+-- - Desglose por supervisores
+-- - Filtros por rol (supervisor, manager, hr, etc.)
+--
+-- PASOS PARA ACTIVAR:
+-- 1. Ir a Configuración (⚙️)
+-- 2. Click en pestaña "Roles y Permisos"
+-- 3. En la sección "Asignar Permisos por Rol"
+-- 4. Buscar la categoría "Gerencia"
+-- 5. Marcar el checkbox "Monitor Administrativos" para los roles deseados:
+--    - manager (Gerente)
+--    - hr (Recursos Humanos)
+--    - developer (Desarrollador)
+-- 6. Click en "Guardar Permisos"
+-- 7. El menú "Monitor Administrativos" aparecerá automáticamente para esos roles
+--
+-- =====================================================

@@ -97,38 +97,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             
             // Calculate hours from attendance - only count paid punch types
             // Build the IN clause for paid types
-            $paidTypesPlaceholders = implode(',', array_fill(0, count($paidTypes), '?'));
+            if (empty($paidTypes)) {
+                // Si no hay tipos pagados configurados, saltar este empleado
+                continue;
+            }
             
-            $attendanceStmt = $pdo->prepare("
+            $paidTypesPlaceholders = implode(',', array_fill(0, count($paidTypes), '?'));
+            $paidTypesUpper = array_map('strtoupper', $paidTypes);
+            
+            // Get all punches for the period (only paid types)
+            $punchesStmt = $pdo->prepare("
                 SELECT 
-                    DATE(timestamp) as work_date,
-                    SUM(TIMESTAMPDIFF(SECOND, timestamp, 
-                        LEAD(timestamp) OVER (PARTITION BY DATE(timestamp) ORDER BY timestamp)
-                    )) as total_seconds
+                    id,
+                    timestamp,
+                    UPPER(type) as type,
+                    DATE(timestamp) as work_date
                 FROM attendance
                 WHERE user_id = ?
                 AND DATE(timestamp) BETWEEN ? AND ?
                 AND UPPER(type) IN ($paidTypesPlaceholders)
-                GROUP BY DATE(timestamp)
+                ORDER BY timestamp ASC
             ");
             
-            $params = array_merge([$userId, $period['start_date'], $period['end_date']], array_map('strtoupper', $paidTypes));
-            $attendanceStmt->execute($params);
-            $attendanceData = $attendanceStmt->fetchAll(PDO::FETCH_ASSOC);
+            $params = array_merge([$userId, $period['start_date'], $period['end_date']], $paidTypesUpper);
+            $punchesStmt->execute($params);
+            $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
             
             $totalRegularHours = 0;
             $totalOvertimeHours = 0;
             
-            foreach ($attendanceData as $day) {
-                if (!$day['total_seconds']) continue;
+            // Group punches by date and calculate hours
+            $punchesByDate = [];
+            foreach ($punches as $punch) {
+                $date = $punch['work_date'];
+                if (!isset($punchesByDate[$date])) {
+                    $punchesByDate[$date] = [];
+                }
+                $punchesByDate[$date][] = $punch;
+            }
+            
+            // Calculate hours for each day
+            foreach ($punchesByDate as $date => $dayPunches) {
+                $totalSecondsWorked = 0;
                 
-                $workedHours = $day['total_seconds'] / 3600;
+                // Process punches in pairs (entrada -> salida)
+                for ($i = 0; $i < count($dayPunches) - 1; $i += 2) {
+                    $entryTime = strtotime($dayPunches[$i]['timestamp']);
+                    $exitTime = strtotime($dayPunches[$i + 1]['timestamp']);
+                    
+                    if ($exitTime > $entryTime) {
+                        $totalSecondsWorked += ($exitTime - $entryTime);
+                    }
+                }
                 
-                if ($workedHours > $scheduledHours) {
-                    $totalRegularHours += $scheduledHours;
-                    $totalOvertimeHours += ($workedHours - $scheduledHours);
-                } else {
-                    $totalRegularHours += $workedHours;
+                // Convert to hours
+                if ($totalSecondsWorked > 0) {
+                    $workedHours = $totalSecondsWorked / 3600;
+                    
+                    if ($workedHours > $scheduledHours) {
+                        $totalRegularHours += $scheduledHours;
+                        $totalOvertimeHours += ($workedHours - $scheduledHours);
+                    } else {
+                        $totalRegularHours += $workedHours;
+                    }
                 }
             }
             

@@ -51,6 +51,9 @@ $sections = [
     // Supervisor
     'supervisor_dashboard' => ['label' => 'Monitor en Tiempo Real', 'category' => 'Supervisión', 'icon' => 'fa-users-cog', 'description' => 'Monitor en tiempo real del estado de todos los agentes'],
     
+    // Manager
+    'manager_dashboard' => ['label' => 'Monitor Administrativos', 'category' => 'Gerencia', 'icon' => 'fa-user-tie', 'description' => 'Monitor en tiempo real del personal administrativo (todos los roles excepto agentes)'],
+    
     // Chat
     'chat_admin' => ['label' => 'Administración de Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comments', 'description' => 'Gestión de permisos y monitoreo de conversaciones de chat']
 ];

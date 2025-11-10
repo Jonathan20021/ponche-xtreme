@@ -116,6 +116,7 @@ $navItems = [
         ],
     ],
     'supervisor_dashboard' => ['label' => 'Monitor en Tiempo Real', 'href' => $baseHref . 'supervisor_dashboard.php', 'icon' => 'fa-users-cog'],
+    'manager_dashboard' => ['label' => 'Monitor Administrativos', 'href' => $baseHref . 'manager_dashboard.php', 'icon' => 'fa-user-tie'],
     'tickets' => [
         'label' => 'Tickets',
         'icon' => 'fa-ticket-alt',
