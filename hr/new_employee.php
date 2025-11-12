@@ -513,7 +513,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 <i class="fas fa-clock text-blue-400 mr-2"></i>
                 Crear Nuevo Turno
             </h3>
-            <form id="newScheduleForm" onsubmit="saveNewSchedule(event)">
+            <form id="newScheduleForm" method="POST" onsubmit="saveNewSchedule(event); return false;">
                 <div class="form-group mb-4">
                     <label for="new_schedule_name">Nombre del Turno *</label>
                     <input type="text" id="new_schedule_name" name="name" required placeholder="Ej: Turno Especial 8am-5pm">
@@ -657,8 +657,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             
             if (!scheduleId) return;
             
+            // Use relative path that works from current location
+            const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/hr/'));
+            
             // Load schedule data
-            fetch('../get_schedule_template.php?id=' + scheduleId)
+            fetch(basePath + '/get_schedule_template.php?id=' + scheduleId)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -703,10 +706,13 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 return;
             }
             
+            // Use relative path that works from current location
+            const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/hr/'));
+            
             const formData = new FormData();
             formData.append('id', scheduleId);
             
-            fetch('../delete_schedule_template.php', {
+            fetch(basePath + '/delete_schedule_template.php', {
                 method: 'POST',
                 body: formData
             })
@@ -749,7 +755,9 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
             messageDiv.classList.remove('hidden');
             
-            const endpoint = isEditMode ? '../update_schedule_template.php' : '../save_schedule_template.php';
+            // Use relative path that works from current location
+            const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/hr/'));
+            const endpoint = isEditMode ? basePath + '/update_schedule_template.php' : basePath + '/save_schedule_template.php';
             
             fetch(endpoint, {
                 method: 'POST',
