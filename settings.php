@@ -43,6 +43,7 @@ $sections = [
     'hr_calendar' => ['label' => 'Calendario HR', 'category' => 'Recursos Humanos', 'icon' => 'fa-calendar-alt', 'description' => 'Calendario integrado de eventos'],
     'hr_recruitment' => ['label' => 'Reclutamiento', 'category' => 'Recursos Humanos', 'icon' => 'fa-user-plus', 'description' => 'Gestión de vacantes y solicitudes de empleo'],
     'hr_job_postings' => ['label' => 'Gestión de Vacantes', 'category' => 'Recursos Humanos', 'icon' => 'fa-briefcase', 'description' => 'Crear y administrar vacantes de empleo'],
+    'manage_campaigns' => ['label' => 'Gestión de Campañas', 'category' => 'Recursos Humanos', 'icon' => 'fa-bullhorn', 'description' => 'Crear, editar y gestionar campañas de agentes y supervisores'],
     
     // Agents
     'agent_dashboard' => ['label' => 'Dashboard de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-chart-bar', 'description' => 'Panel para agentes'],

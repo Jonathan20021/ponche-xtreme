@@ -37,6 +37,8 @@ if (isset($_POST['register'])) {
     $daily_salary_usd = !empty($_POST['daily_salary_usd']) ? (float)$_POST['daily_salary_usd'] : 0.00;
     $daily_salary_dop = !empty($_POST['daily_salary_dop']) ? (float)$_POST['daily_salary_dop'] : 0.00;
     $preferred_currency = !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD';
+    $supervisor_id = !empty($_POST['supervisor_id']) ? (int)$_POST['supervisor_id'] : null;
+    $campaign_id = !empty($_POST['campaign_id']) ? (int)$_POST['campaign_id'] : null;
 
     if ($username === '' || $full_name === '' || $first_name === '' || $last_name === '' || $hire_date === '' || $email === '') {
         $error = 'Los campos Usuario, Nombre completo, Nombre, Apellido, Email y Fecha de ingreso son obligatorios.';
@@ -103,13 +105,15 @@ if (isset($_POST['register'])) {
                     INSERT INTO employees (
                         user_id, employee_code, first_name, last_name, email, phone, 
                         birth_date, hire_date, position, department_id, employment_status,
-                        id_card_number, bank_id, bank_account_number, bank_account_type, photo_path
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TRIAL', ?, ?, ?, ?, ?)
+                        id_card_number, bank_id, bank_account_number, bank_account_type, photo_path,
+                        supervisor_id, campaign_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'TRIAL', ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $employeeInsert->execute([
                     $userId, $employeeCode, $first_name, $last_name, $email, $phone,
                     $birth_date ?: null, $hire_date, $position, $department_id,
-                    $id_card_number ?: null, $bank_id, $bank_account_number ?: null, $bank_account_type, $photoPath
+                    $id_card_number ?: null, $bank_id, $bank_account_number ?: null, $bank_account_type, $photoPath,
+                    $supervisor_id, $campaign_id
                 ]);
                 
                 $employeeId = $pdo->lastInsertId();
@@ -331,6 +335,59 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             }
                             ?>
                         </select>
+                    </div>
+                </div>
+                
+                <h3 class="text-lg font-semibold text-white mt-6 mb-3 border-b border-slate-700 pb-2">
+                    <i class="fas fa-users-cog text-blue-400 mr-2"></i>
+                    Asignación de Supervisor y Campaña
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="supervisor_id">Supervisor Asignado</label>
+                        <select id="supervisor_id" name="supervisor_id">
+                            <option value="">Sin supervisor</option>
+                            <?php
+                            $supervisors = $pdo->query("
+                                SELECT u.id, u.full_name, u.employee_code, u.role
+                                FROM users u
+                                WHERE u.role IN ('Supervisor', 'Admin', 'HR') AND u.is_active = 1
+                                ORDER BY u.full_name ASC
+                            ")->fetchAll(PDO::FETCH_ASSOC);
+                            foreach ($supervisors as $supervisor) {
+                                echo '<option value="' . htmlspecialchars($supervisor['id']) . '">';
+                                echo htmlspecialchars($supervisor['full_name']) . ' (' . htmlspecialchars($supervisor['role']) . ')';
+                                echo '</option>';
+                            }
+                            ?>
+                        </select>
+                        <p class="text-xs text-slate-400 mt-1">Supervisor responsable del empleado</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="campaign_id">Campaña</label>
+                        <div class="flex gap-2">
+                            <select id="campaign_id" name="campaign_id" class="flex-1">
+                                <option value="">Sin campaña</option>
+                                <?php
+                                $campaigns = $pdo->query("
+                                    SELECT id, name, code, color
+                                    FROM campaigns
+                                    WHERE is_active = 1
+                                    ORDER BY name ASC
+                                ")->fetchAll(PDO::FETCH_ASSOC);
+                                foreach ($campaigns as $campaign) {
+                                    echo '<option value="' . htmlspecialchars($campaign['id']) . '">';
+                                    echo htmlspecialchars($campaign['name']) . ' (' . htmlspecialchars($campaign['code']) . ')';
+                                    echo '</option>';
+                                }
+                                ?>
+                            </select>
+                            <button type="button" onclick="openNewCampaignModal()" class="btn-secondary px-3 whitespace-nowrap" title="Crear nueva campaña">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">Campaña a la que pertenece el agente</p>
                     </div>
                 </div>
                 
@@ -577,6 +634,54 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         </div>
     </div>
 
+    <!-- Modal para crear nueva campaña -->
+    <div id="newCampaignModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+        <div class="glass-card m-4" style="width: min(500px, 95%); max-height: 90vh; overflow-y: auto;">
+            <h3 class="text-xl font-semibold text-white mb-4">
+                <i class="fas fa-bullhorn text-blue-400 mr-2"></i>
+                Crear Nueva Campaña
+            </h3>
+            <form id="newCampaignForm" method="POST" onsubmit="saveNewCampaign(event); return false;">
+                <div class="form-group mb-4">
+                    <label for="campaign_name">Nombre de la Campaña *</label>
+                    <input type="text" id="campaign_name" name="name" required placeholder="Ej: Soporte Técnico">
+                </div>
+
+                <div class="form-group mb-4">
+                    <label for="campaign_code">Código de la Campaña *</label>
+                    <input type="text" id="campaign_code" name="code" required placeholder="Ej: TECH-SUPPORT" maxlength="50" style="text-transform: uppercase;">
+                    <p class="text-xs text-slate-400 mt-1">Código único para identificar la campaña (sin espacios)</p>
+                </div>
+
+                <div class="form-group mb-4">
+                    <label for="campaign_description">Descripción</label>
+                    <textarea id="campaign_description" name="description" rows="3" placeholder="Descripción opcional de la campaña"></textarea>
+                </div>
+
+                <div class="form-group mb-4">
+                    <label for="campaign_color">Color de Identificación</label>
+                    <div class="flex gap-3 items-center">
+                        <input type="color" id="campaign_color" name="color" value="#6366f1" class="h-10 w-20 border-0 rounded cursor-pointer">
+                        <span class="text-sm text-slate-400">Selecciona un color para identificar visualmente la campaña</span>
+                    </div>
+                </div>
+
+                <div id="campaignFormMessage" class="mb-4 hidden"></div>
+
+                <div class="flex gap-3">
+                    <button type="submit" class="btn-primary flex-1">
+                        <i class="fas fa-save"></i>
+                        Crear Campaña
+                    </button>
+                    <button type="button" onclick="closeNewCampaignModal()" class="btn-secondary flex-1">
+                        <i class="fas fa-times"></i>
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         let isEditMode = false;
         let editingScheduleId = null;
@@ -657,11 +762,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             
             if (!scheduleId) return;
             
-            // Use relative path that works from current location
-            const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/hr/'));
-            
             // Load schedule data
-            fetch(basePath + '/get_schedule_template.php?id=' + scheduleId)
+            fetch('../get_schedule_template.php?id=' + scheduleId)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -706,13 +808,10 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 return;
             }
             
-            // Use relative path that works from current location
-            const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/hr/'));
-            
             const formData = new FormData();
             formData.append('id', scheduleId);
             
-            fetch(basePath + '/delete_schedule_template.php', {
+            fetch('../delete_schedule_template.php', {
                 method: 'POST',
                 body: formData
             })
@@ -755,16 +854,34 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
             messageDiv.classList.remove('hidden');
             
-            // Use relative path that works from current location
-            const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/hr/'));
-            const endpoint = isEditMode ? basePath + '/update_schedule_template.php' : basePath + '/save_schedule_template.php';
+            // Use simple relative path - go up one directory from hr/
+            const endpoint = isEditMode ? '../update_schedule_template.php' : '../save_schedule_template.php';
+            
+            console.log('Endpoint:', endpoint);
+            console.log('FormData entries:');
+            for (let [key, value] of formData.entries()) {
+                console.log(key, '=', value);
+            }
             
             fetch(endpoint, {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                return response.text().then(text => {
+                    console.log('Response text:', text);
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('JSON parse error:', e);
+                        throw new Error('Respuesta inválida del servidor: ' + text.substring(0, 200));
+                    }
+                });
+            })
             .then(data => {
+                console.log('Parsed data:', data);
                 if (data.success) {
                     messageDiv.className = 'status-banner success mb-4';
                     messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
@@ -803,6 +920,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 }
             })
             .catch(error => {
+                console.error('Fetch error:', error);
                 messageDiv.className = 'status-banner error mb-4';
                 messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar: ' + error.message;
             });
@@ -812,6 +930,90 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         document.getElementById('newScheduleModal')?.addEventListener('click', function(e) {
             if (e.target === this) {
                 closeNewScheduleModal();
+            }
+        });
+
+        // ============================================
+        // Funciones para Modal de Campañas
+        // ============================================
+        function openNewCampaignModal() {
+            document.getElementById('newCampaignModal').classList.remove('hidden');
+            document.getElementById('newCampaignForm').reset();
+            document.getElementById('campaignFormMessage').classList.add('hidden');
+        }
+
+        function closeNewCampaignModal() {
+            document.getElementById('newCampaignModal').classList.add('hidden');
+        }
+
+        function saveNewCampaign(event) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const messageDiv = document.getElementById('campaignFormMessage');
+            
+            const campaignData = {
+                name: document.getElementById('campaign_name').value.trim(),
+                code: document.getElementById('campaign_code').value.trim().toUpperCase(),
+                description: document.getElementById('campaign_description').value.trim(),
+                color: document.getElementById('campaign_color').value,
+                is_active: 1
+            };
+            
+            // Validación
+            if (!campaignData.name || !campaignData.code) {
+                messageDiv.className = 'status-banner error mb-4';
+                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Nombre y código son obligatorios';
+                messageDiv.classList.remove('hidden');
+                return;
+            }
+            
+            // Show loading
+            messageDiv.className = 'status-banner mb-4';
+            messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando campaña...';
+            messageDiv.classList.remove('hidden');
+            
+            fetch('../api/campaigns.php?action=create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(campaignData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    messageDiv.className = 'status-banner success mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
+                    
+                    // Add new campaign to select
+                    const select = document.getElementById('campaign_id');
+                    const option = document.createElement('option');
+                    option.value = data.campaign_id;
+                    option.textContent = campaignData.name + ' (' + campaignData.code + ')';
+                    option.selected = true;
+                    select.appendChild(option);
+                    
+                    // Close modal after 1 second
+                    setTimeout(() => {
+                        closeNewCampaignModal();
+                    }, 1000);
+                } else {
+                    messageDiv.className = 'status-banner error mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                messageDiv.className = 'status-banner error mb-4';
+                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar: ' + error.message;
+            });
+        }
+
+        // Close campaign modal when clicking outside
+        document.getElementById('newCampaignModal')?.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeNewCampaignModal();
             }
         });
     </script>

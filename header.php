@@ -36,6 +36,12 @@ $navItems = [
                 'icon' => 'fa-id-card',
             ],
             [
+                'section' => 'manage_campaigns',
+                'label' => 'Gestión de Campañas',
+                'href' => $baseHref . 'hr/campaigns.php',
+                'icon' => 'fa-bullhorn',
+            ],
+            [
                 'section' => 'hr_trial_period',
                 'label' => 'Período de Prueba',
                 'href' => $baseHref . 'hr/trial_period.php',

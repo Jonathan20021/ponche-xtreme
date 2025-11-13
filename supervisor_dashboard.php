@@ -1291,11 +1291,20 @@ function createAgentCard(agent) {
     const paidBadge = agent.current_punch.is_paid === 1 ? 'paid' : 'unpaid';
     const paidLabel = agent.current_punch.is_paid === 1 ? 'Pagado' : 'No Pagado';
     
+    // Badge de campaña si existe
+    const campaignBadge = agent.campaign && agent.campaign.code ? `
+        <div class="stat-badge" style="background: ${agent.campaign.color}15; border-color: ${agent.campaign.color}40; color: ${agent.campaign.color};">
+            <i class="fas fa-bullhorn"></i>
+            ${agent.campaign.code}
+        </div>
+    ` : '';
+    
     return `
         <div class="agent-card ${statusClass}" 
              data-status="${agent.status}" 
              data-paid="${agent.current_punch.is_paid}"
              data-user-id="${agent.user_id}"
+             data-campaign="${agent.campaign ? agent.campaign.code : ''}"
              onclick="openAgentModal(${agent.user_id}, '${agent.full_name}')"
              style="--punch-gradient: linear-gradient(90deg, ${agent.current_punch.color_start}, ${agent.current_punch.color_end}); --punch-color-start: ${agent.current_punch.color_start}; --punch-color-end: ${agent.current_punch.color_end};">
             
@@ -1330,6 +1339,7 @@ function createAgentCard(agent) {
                     <i class="fas ${agent.current_punch.is_paid === 1 ? 'fa-dollar-sign' : 'fa-pause-circle'}"></i>
                     ${paidLabel}
                 </div>
+                ${campaignBadge}
             </div>
         </div>
     `;

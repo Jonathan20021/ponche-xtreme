@@ -13,6 +13,7 @@ $totalEmployees = $pdo->query("SELECT COUNT(*) FROM employees WHERE employment_s
 $trialEmployees = $pdo->query("SELECT COUNT(*) FROM employees WHERE employment_status = 'TRIAL'")->fetchColumn();
 $pendingPermissions = $pdo->query("SELECT COUNT(*) FROM permission_requests WHERE status = 'PENDING'")->fetchColumn();
 $pendingVacations = $pdo->query("SELECT COUNT(*) FROM vacation_requests WHERE status = 'PENDING'")->fetchColumn();
+$activeCampaigns = $pdo->query("SELECT COUNT(*) FROM campaigns WHERE is_active = 1")->fetchColumn();
 
 // Get upcoming birthdays (next 30 days)
 $upcomingBirthdays = $pdo->query("
@@ -178,11 +179,11 @@ $recentVacations = $pdo->query("
             <div class="stat-card">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-slate-400 text-sm mb-1">Vacaciones Pendientes</p>
-                        <h3 class="text-3xl font-bold text-white"><?= $pendingVacations ?></h3>
+                        <p class="text-slate-400 text-sm mb-1">Campañas Activas</p>
+                        <h3 class="text-3xl font-bold text-white"><?= $activeCampaigns ?></h3>
                     </div>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
-                        <i class="fas fa-umbrella-beach text-white"></i>
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);">
+                        <i class="fas fa-bullhorn text-white"></i>
                     </div>
                 </div>
             </div>
@@ -208,6 +209,16 @@ $recentVacations = $pdo->query("
                     <h3 class="text-xl font-semibold text-white">Período de Prueba</h3>
                 </div>
                 <p class="text-slate-400 text-sm">Seguimiento de empleados en prueba (90 días)</p>
+            </div>
+
+            <div class="module-card" onclick="window.location.href='campaigns.php'">
+                <div class="flex items-center mb-3">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <i class="fas fa-bullhorn text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white">Gestión de Campañas</h3>
+                </div>
+                <p class="text-slate-400 text-sm">Administrar campañas y asignar empleados</p>
             </div>
 
             <div class="module-card" onclick="window.location.href='payroll.php'">

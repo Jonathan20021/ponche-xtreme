@@ -95,6 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             'id_card_number' => trim($_POST['id_card_number']) ?: null,
             'bank_id' => !empty($_POST['bank_id']) ? (int)$_POST['bank_id'] : null,
             'bank_account_number' => trim($_POST['bank_account_number']) ?: null,
+            'supervisor_id' => !empty($_POST['supervisor_id']) ? (int)$_POST['supervisor_id'] : null,
+            'campaign_id' => !empty($_POST['campaign_id']) ? (int)$_POST['campaign_id'] : null,
         ];
         
         // Handle photo upload
@@ -134,7 +136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                 identification_type = ?, identification_number = ?,
                 blood_type = ?, marital_status = ?, gender = ?,
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?,
-                notes = ?, id_card_number = ?, bank_id = ?, bank_account_number = ?";
+                notes = ?, id_card_number = ?, bank_id = ?, bank_account_number = ?,
+                supervisor_id = ?, campaign_id = ?";
         
         $updateParams = [
             $data['first_name'], $data['last_name'], $data['email'], $data['phone'], $data['mobile'],
@@ -144,7 +147,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             $data['identification_type'], $data['identification_number'],
             $data['blood_type'], $data['marital_status'], $data['gender'],
             $data['emergency_contact_name'], $data['emergency_contact_phone'], $data['emergency_contact_relationship'],
-            $data['notes'], $data['id_card_number'], $data['bank_id'], $data['bank_account_number']
+            $data['notes'], $data['id_card_number'], $data['bank_id'], $data['bank_account_number'],
+            $data['supervisor_id'], $data['campaign_id']
         ];
         
         if (isset($data['photo_path'])) {
@@ -203,16 +207,22 @@ $searchQuery = $_GET['search'] ?? '';
 
 // Build query
 $query = "
-    SELECT e.*, u.username, u.compensation_type, u.hourly_rate, u.hourly_rate_dop, 
+    SELECT e.*, 
+           CONCAT(e.first_name, ' ', e.last_name) as full_name,
+           u.username, u.compensation_type, u.hourly_rate, u.hourly_rate_dop, 
            u.monthly_salary, u.monthly_salary_dop, u.daily_salary_usd, u.daily_salary_dop,
            u.preferred_currency, u.role, d.name as department_name,
            b.name as bank_name,
+           c.name as campaign_name, c.code as campaign_code, c.color as campaign_color,
+           s.full_name as supervisor_name,
            DATEDIFF(CURDATE(), e.hire_date) as days_employed,
            YEAR(CURDATE()) - YEAR(e.birth_date) as age
     FROM employees e
     JOIN users u ON u.id = e.user_id
     LEFT JOIN departments d ON d.id = e.department_id
     LEFT JOIN banks b ON b.id = e.bank_id
+    LEFT JOIN campaigns c ON c.id = e.campaign_id
+    LEFT JOIN users s ON s.id = e.supervisor_id
     WHERE 1=1
 ";
 
@@ -392,6 +402,408 @@ $stats = [
             </form>
         </div>
 
+        <script>
+        (function() {
+            // Helper function para asignar valores de forma segura
+            function setValue(id, value) {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.value = value || '';
+                }
+            }
+            
+            // Hacer funciones globales
+            window.editEmployee = function(button) {
+                const employee = JSON.parse(button.dataset.employee);
+                
+                // Basic Info
+                setValue('edit_employee_id', employee.id);
+                setValue('edit_first_name', employee.first_name);
+                setValue('edit_last_name', employee.last_name);
+                setValue('edit_email', employee.email);
+                setValue('edit_phone', employee.phone);
+                setValue('edit_mobile', employee.mobile);
+                setValue('edit_birth_date', employee.birth_date);
+                
+                // Employment Info
+                setValue('edit_position', employee.position);
+                setValue('edit_department_id', employee.department_id);
+                setValue('edit_hire_date', employee.hire_date);
+                setValue('edit_termination_date', employee.termination_date);
+                setValue('edit_employment_status', employee.employment_status || 'ACTIVE');
+                setValue('edit_employment_type', employee.employment_type || 'FULL_TIME');
+                
+                // Compensation Info
+                setValue('edit_compensation_type', employee.compensation_type || 'hourly');
+                setValue('edit_hourly_rate', employee.hourly_rate);
+                setValue('edit_hourly_rate_dop', employee.hourly_rate_dop);
+                setValue('edit_monthly_salary_usd', employee.monthly_salary);
+                setValue('edit_monthly_salary_dop', employee.monthly_salary_dop);
+                setValue('edit_daily_salary_usd', employee.daily_salary_usd);
+                setValue('edit_daily_salary_dop', employee.daily_salary_dop);
+                setValue('edit_preferred_currency', employee.preferred_currency || 'USD');
+                
+                // Toggle compensation fields based on type
+                if (typeof toggleEditCompensationFields === 'function') {
+                    toggleEditCompensationFields();
+                }
+                
+                // Address Info
+                setValue('edit_address', employee.address);
+                setValue('edit_city', employee.city);
+                setValue('edit_state', employee.state);
+                setValue('edit_postal_code', employee.postal_code);
+                
+                // Identification
+                setValue('edit_identification_type', employee.identification_type);
+                setValue('edit_identification_number', employee.identification_number);
+                
+                // Personal Details
+                setValue('edit_blood_type', employee.blood_type);
+                setValue('edit_marital_status', employee.marital_status);
+                setValue('edit_gender', employee.gender);
+                
+                // Emergency Contact
+                setValue('edit_emergency_contact_name', employee.emergency_contact_name);
+                setValue('edit_emergency_contact_phone', employee.emergency_contact_phone);
+                setValue('edit_emergency_contact_relationship', employee.emergency_contact_relationship);
+                
+                // Notes
+                setValue('edit_notes', employee.notes);
+                
+                // Banking Info
+                setValue('edit_id_card_number', employee.id_card_number);
+                setValue('edit_bank_id', employee.bank_id);
+                setValue('edit_bank_account_number', employee.bank_account_number);
+                
+                // Photo Preview
+                const photoPreview = document.getElementById('current_photo_preview');
+                if (photoPreview) {
+                    if (employee.photo_path) {
+                        photoPreview.innerHTML = '<img src="../' + employee.photo_path + '" alt="Foto actual" class="w-24 h-24 rounded-lg object-cover border-2 border-blue-500">';
+                    } else {
+                        photoPreview.innerHTML = '<p class="text-slate-400 text-sm">Sin foto actual</p>';
+                    }
+                }
+                
+                // Show modal first
+                const editModal = document.getElementById('editModal');
+                if (editModal) {
+                    editModal.classList.remove('hidden');
+                    // Prevent body scroll when modal is open
+                    document.body.style.overflow = 'hidden';
+                }
+                
+                // Load current schedule AFTER modal is visible with longer delay
+                if (typeof loadEmployeeSchedule === 'function') {
+                    setTimeout(() => {
+                        loadEmployeeSchedule(employee.id);
+                    }, 200);
+                }
+            };
+            
+            window.loadEmployeeSchedule = function(employeeId) {
+                // Verify elements exist first
+                const scheduleInfo = document.getElementById('current_schedule_info');
+                const scheduleSelect = document.getElementById('edit_schedule_template_id');
+                
+                if (!scheduleInfo) {
+                    console.warn('Schedule info element not found in modal');
+                    return; // Exit if element doesn't exist
+                }
+                
+                fetch(`get_employee_schedule.php?employee_id=${employeeId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Double check element still exists
+                        const info = document.getElementById('current_schedule_info');
+                        const select = document.getElementById('edit_schedule_template_id');
+                        
+                        if (!info) return; // Exit if element disappeared
+                        
+                        if (data.schedule) {
+                            const schedule = data.schedule;
+                            info.innerHTML = `
+                                <div class="text-green-400">
+                                    <i class="fas fa-check-circle mr-2"></i>
+                                    <strong>Horario Actual:</strong> ${schedule.schedule_name || 'Horario Personalizado'}
+                                </div>
+                                <div class="text-slate-300 mt-1">
+                                    <i class="fas fa-clock mr-2"></i>
+                                    ${schedule.entry_time} - ${schedule.exit_time} 
+                                    (${schedule.scheduled_hours} horas)
+                                </div>
+                            `;
+                            if (select) select.value = '';
+                        } else {
+                            info.innerHTML = `
+                                <div class="text-slate-400">
+                                    <i class="fas fa-info-circle mr-2"></i>
+                                    Usando horario global del sistema
+                                </div>
+                            `;
+                            if (select) select.value = '';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading schedule:', error);
+                        // Safely try to update error message
+                        const info = document.getElementById('current_schedule_info');
+                        if (info) {
+                            info.innerHTML = `
+                                <div class="text-slate-400">
+                                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                                    No se pudo cargar el horario actual
+                                </div>
+                            `;
+                        }
+                    });
+            };
+            
+            var isEditModeEdit = false;
+            var editingScheduleIdEdit = null;
+
+            window.updateScheduleButtonsEdit = function() {
+                const select = document.getElementById('edit_schedule_template_id');
+                const editBtn = document.getElementById('editScheduleBtnEdit');
+                const deleteBtn = document.getElementById('deleteScheduleBtnEdit');
+                
+                if (select.value && select.value !== '') {
+                    editBtn.classList.remove('hidden');
+                    deleteBtn.classList.remove('hidden');
+                } else {
+                    editBtn.classList.add('hidden');
+                    deleteBtn.classList.add('hidden');
+                }
+            };
+
+            window.openNewScheduleModalEdit = function() {
+                isEditModeEdit = false;
+                editingScheduleIdEdit = null;
+                document.getElementById('newScheduleModalEdit').classList.remove('hidden');
+                document.getElementById('newScheduleFormEdit').reset();
+                document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
+                document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-clock text-blue-400 mr-2"></i>Crear Nuevo Turno';
+            };
+
+            window.editSelectedScheduleEdit = function() {
+                const select = document.getElementById('edit_schedule_template_id');
+                const scheduleId = select.value;
+                
+                if (!scheduleId) return;
+                
+                fetch('../get_schedule_template.php?id=' + scheduleId)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const template = data.template;
+                            isEditModeEdit = true;
+                            editingScheduleIdEdit = template.id;
+                            
+                            document.getElementById('new_schedule_name_edit').value = template.name;
+                            document.getElementById('new_schedule_description_edit').value = template.description || '';
+                            document.getElementById('new_entry_time_edit').value = template.entry_time.substring(0, 5);
+                            document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
+                            document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
+                            document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '17:00';
+                            
+                            document.getElementById('newScheduleModalEdit').classList.remove('hidden');
+                            document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
+                            document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-edit text-blue-400 mr-2"></i>Editar Turno: ' + template.name;
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error al cargar el turno: ' + error.message);
+                    });
+            };
+
+            window.deleteSelectedScheduleEdit = function() {
+                const select = document.getElementById('edit_schedule_template_id');
+                const scheduleId = select.value;
+                const scheduleName = select.options[select.selectedIndex].text;
+                
+                if (!scheduleId) return;
+                
+                if (!confirm('¿Estás seguro de que deseas eliminar el turno "' + scheduleName + '"?\n\nEsta acción no se puede deshacer.')) {
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('id', scheduleId);
+                
+                fetch('../delete_schedule_template.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        select.remove(select.selectedIndex);
+                        updateScheduleButtonsEdit();
+                        alert(data.message);
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Error al eliminar el turno: ' + error.message);
+                });
+            };
+
+            window.closeNewScheduleModalEdit = function() {
+                document.getElementById('newScheduleModalEdit').classList.add('hidden');
+                isEditModeEdit = false;
+                editingScheduleIdEdit = null;
+            };
+
+            window.saveNewScheduleEdit = function(event) {
+                event.preventDefault();
+                
+                const form = event.target;
+                const formData = new FormData(form);
+                const messageDiv = document.getElementById('scheduleFormMessageEdit');
+                
+                if (isEditModeEdit && editingScheduleIdEdit) {
+                    formData.append('id', editingScheduleIdEdit);
+                }
+                
+                messageDiv.className = 'status-banner mb-4';
+                messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
+                messageDiv.classList.remove('hidden');
+                
+                const endpoint = isEditModeEdit ? '../update_schedule_template.php' : '../save_schedule_template.php';
+                
+                fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        messageDiv.className = 'status-banner success mb-4';
+                        messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
+                        
+                        const select = document.getElementById('edit_schedule_template_id');
+                        const template = data.template;
+                        const entryTime = new Date('2000-01-01 ' + template.entry_time);
+                        const exitTime = new Date('2000-01-01 ' + template.exit_time);
+                        const timeInfo = entryTime.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'}) + 
+                                       ' - ' + exitTime.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+                        
+                        if (isEditModeEdit) {
+                            const option = select.querySelector('option[value="' + template.id + '"]');
+                            if (option) {
+                                option.textContent = template.name + ' (' + timeInfo + ')';
+                            }
+                        } else {
+                            const option = document.createElement('option');
+                            option.value = template.id;
+                            option.textContent = template.name + ' (' + timeInfo + ')';
+                            option.selected = true;
+                            select.appendChild(option);
+                        }
+                        
+                        updateScheduleButtonsEdit();
+                        
+                        setTimeout(() => {
+                            closeNewScheduleModalEdit();
+                        }, 1000);
+                    } else {
+                        messageDiv.className = 'status-banner error mb-4';
+                        messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
+                    }
+                })
+                .catch(error => {
+                    messageDiv.className = 'status-banner error mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar el turno';
+                    console.error('Error:', error);
+                });
+            };
+            
+            document.getElementById('newScheduleModalEdit')?.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeNewScheduleModalEdit();
+                }
+            });
+            
+            window.toggleEditCompensationFields = function() {
+                const compensationTypeEl = document.getElementById('edit_compensation_type');
+                if (!compensationTypeEl) return;
+                
+                const compensationType = compensationTypeEl.value;
+                const hourlyFields = document.getElementById('edit_hourly_fields');
+                const fixedFields = document.getElementById('edit_fixed_fields');
+                const dailyFields = document.getElementById('edit_daily_fields');
+                
+                if (!hourlyFields || !fixedFields || !dailyFields) return;
+                
+                hourlyFields.classList.add('hidden');
+                fixedFields.classList.add('hidden');
+                dailyFields.classList.add('hidden');
+                
+                if (compensationType === 'hourly') {
+                    hourlyFields.classList.remove('hidden');
+                } else if (compensationType === 'fixed') {
+                    fixedFields.classList.remove('hidden');
+                } else if (compensationType === 'daily') {
+                    dailyFields.classList.remove('hidden');
+                }
+            };
+            
+            window.openEditCreateCampaignModal = function() {
+                document.getElementById('editCampaignModal').classList.remove('hidden');
+            };
+            
+            window.closeEditCampaignModal = function() {
+                document.getElementById('editCampaignModal').classList.add('hidden');
+                document.getElementById('editCampaignForm').reset();
+            };
+            
+            window.saveEditCampaign = function() {
+                const form = document.getElementById('editCampaignForm');
+                const formData = new FormData(form);
+                
+                const messageDiv = document.getElementById('editCampaignMessage');
+                messageDiv.className = 'status-banner mb-4';
+                messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creando campaña...';
+                messageDiv.classList.remove('hidden');
+                
+                fetch('../api/campaigns.php?action=create', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        messageDiv.className = 'status-banner success mb-4';
+                        messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Campaña creada exitosamente';
+                        
+                        const select = document.getElementById('edit_campaign_id');
+                        const option = document.createElement('option');
+                        option.value = data.campaign.id;
+                        option.textContent = data.campaign.name;
+                        option.selected = true;
+                        select.appendChild(option);
+                        
+                        setTimeout(() => {
+                            closeEditCampaignModal();
+                        }, 1000);
+                    } else {
+                        messageDiv.className = 'status-banner error mb-4';
+                        messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
+                    }
+                })
+                .catch(error => {
+                    messageDiv.className = 'status-banner error mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al crear la campaña';
+                    console.error('Error:', error);
+                });
+            };
+        })();
+        </script>
+
         <!-- Employees Grid -->
         <div class="glass-card">
             <h2 class="text-xl font-semibold text-white mb-4">
@@ -449,6 +861,20 @@ $stats = [
                                         <?= htmlspecialchars($employee['department_name']) ?>
                                     </p>
                                 <?php endif; ?>
+                                <?php if ($employee['campaign_name']): ?>
+                                    <p class="text-slate-300">
+                                        <i class="fas fa-bullhorn text-purple-400 mr-2 w-4"></i>
+                                        <span class="px-2 py-0.5 rounded text-xs" style="background-color: <?= htmlspecialchars($employee['campaign_color']) ?>20; color: <?= htmlspecialchars($employee['campaign_color']) ?>;">
+                                            <?= htmlspecialchars($employee['campaign_name']) ?>
+                                        </span>
+                                    </p>
+                                <?php endif; ?>
+                                <?php if ($employee['supervisor_name']): ?>
+                                    <p class="text-slate-300">
+                                        <i class="fas fa-user-tie text-yellow-400 mr-2 w-4"></i>
+                                        <?= htmlspecialchars($employee['supervisor_name']) ?>
+                                    </p>
+                                <?php endif; ?>
                                 <?php if ($employee['email']): ?>
                                     <p class="text-slate-300 truncate">
                                         <i class="fas fa-envelope text-green-400 mr-2 w-4"></i>
@@ -472,7 +898,16 @@ $stats = [
                             </div>
 
                             <div class="flex gap-2">
-                                <button onclick="editEmployee(<?= htmlspecialchars(json_encode($employee)) ?>)" class="btn-primary text-sm flex-1">
+                                <button type="button" 
+                                        onclick="quickAssign(this)" 
+                                        data-employee='<?= json_encode($employee) ?>'
+                                        class="btn-secondary text-xs px-2 py-1" 
+                                        title="Asignar Campaña/Supervisor">
+                                    <i class="fas fa-user-tag"></i>
+                                </button>
+                                <button type="button" onclick="editEmployee(this)" 
+                                        data-employee='<?= json_encode($employee) ?>' 
+                                        class="btn-primary text-sm flex-1">
                                     <i class="fas fa-edit"></i>
                                     Editar
                                 </button>
@@ -489,9 +924,12 @@ $stats = [
     </div>
 
     <!-- Edit Employee Modal -->
-    <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-        <div class="glass-card m-4" style="width: min(800px, 95%); max-height: 90vh; overflow-y: auto;">
-            <h3 class="text-xl font-semibold text-white mb-4">Editar Empleado</h3>
+    <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50" style="overflow-y: scroll; padding: 2rem;">
+        <div class="glass-card max-w-5xl mx-auto">
+            <h3 class="text-xl font-semibold text-white mb-6">
+                <i class="fas fa-user-edit text-blue-400 mr-2"></i>
+                Editar Empleado
+            </h3>
             <form method="POST" enctype="multipart/form-data" id="editForm">
                 <input type="hidden" name="update_employee" value="1">
                 <input type="hidden" name="employee_id" id="edit_employee_id">
@@ -812,7 +1250,7 @@ $stats = [
                         <i class="fas fa-save"></i>
                         Guardar Cambios
                     </button>
-                    <button type="button" onclick="document.getElementById('editModal').classList.add('hidden')" class="btn-secondary flex-1">
+                    <button type="button" onclick="document.getElementById('editModal').classList.add('hidden'); document.body.style.overflow = 'auto';" class="btn-secondary flex-1">
                         <i class="fas fa-times"></i>
                         Cancelar
                     </button>
@@ -820,6 +1258,16 @@ $stats = [
             </form>
         </div>
     </div>
+
+    <script>
+    // Close modal when clicking outside
+    document.getElementById('editModal')?.addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+    });
+    </script>
 
     <!-- Modal para crear nuevo turno -->
     <div id="newScheduleModalEdit" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
@@ -892,9 +1340,59 @@ $stats = [
         </div>
     </div>
 
-    <script>
-        function editEmployee(employee) {
-            // Basic Info
+    <!-- Modal para crear campaña (Edit Employee) -->
+    <div id="editCampaignModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-bullhorn mr-2"></i>
+                    Crear Nueva Campaña
+                </h3>
+                <button type="button" class="close-modal" onclick="closeEditCampaignModal()">&times;</button>
+            </div>
+            
+            <div id="editCampaignMessage" class="hidden"></div>
+            
+            <form id="editCampaignForm" onsubmit="event.preventDefault(); saveEditCampaign();">
+                <div class="form-group">
+                    <label for="edit_campaign_name">Nombre *</label>
+                    <input type="text" id="edit_campaign_name" name="name" required 
+                           placeholder="Nombre de la campaña">
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit_campaign_code">Código *</label>
+                    <input type="text" id="edit_campaign_code" name="code" required 
+                           placeholder="Código único (ej: SALES-2024)" maxlength="50">
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit_campaign_description">Descripción</label>
+                    <textarea id="edit_campaign_description" name="description" rows="3" 
+                              placeholder="Descripción de la campaña"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit_campaign_color">Color</label>
+                    <input type="color" id="edit_campaign_color" name="color" value="#3b82f6">
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" onclick="closeEditCampaignModal()" class="btn-secondary">
+                        <i class="fas fa-times mr-2"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save mr-2"></i>Crear Campaña
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <?php include '../footer.php'; ?>
+</body>
+</html>
+
             document.getElementById('edit_employee_id').value = employee.id;
             document.getElementById('edit_first_name').value = employee.first_name || '';
             document.getElementById('edit_last_name').value = employee.last_name || '';
@@ -906,6 +1404,8 @@ $stats = [
             // Employment Info
             document.getElementById('edit_position').value = employee.position || '';
             document.getElementById('edit_department_id').value = employee.department_id || '';
+            document.getElementById('edit_supervisor_id').value = employee.supervisor_id || '';
+            document.getElementById('edit_campaign_id').value = employee.campaign_id || '';
             document.getElementById('edit_hire_date').value = employee.hire_date || '';
             document.getElementById('edit_termination_date').value = employee.termination_date || '';
             document.getElementById('edit_employment_status').value = employee.employment_status || 'ACTIVE';
@@ -964,55 +1464,64 @@ $stats = [
             loadEmployeeSchedule(employee.id);
             
             document.getElementById('editModal').classList.remove('hidden');
-        }
+        };
         
-        function loadEmployeeSchedule(employeeId) {
-            fetch(`get_employee_schedule.php?employee_id=${employeeId}`)
-                .then(response => response.json())
-                .then(data => {
-                    const scheduleInfo = document.getElementById('current_schedule_info');
-                    const scheduleSelect = document.getElementById('edit_schedule_template_id');
-                    
-                    if (data.schedule) {
-                        const schedule = data.schedule;
-                        scheduleInfo.innerHTML = `
-                            <div class="text-green-400">
-                                <i class="fas fa-check-circle mr-2"></i>
-                                <strong>Horario Actual:</strong> ${schedule.schedule_name || 'Horario Personalizado'}
-                            </div>
-                            <div class="text-slate-300 mt-1">
-                                <i class="fas fa-clock mr-2"></i>
-                                ${schedule.entry_time} - ${schedule.exit_time} 
-                                (${schedule.scheduled_hours} horas)
-                            </div>
-                        `;
-                        // Try to select the matching template if it exists
-                        scheduleSelect.value = '';
-                    } else {
-                        scheduleInfo.innerHTML = `
-                            <div class="text-slate-400">
-                                <i class="fas fa-info-circle mr-2"></i>
-                                Usando horario global del sistema
-                            </div>
-                        `;
-                        scheduleSelect.value = '';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading schedule:', error);
-                    document.getElementById('current_schedule_info').innerHTML = `
-                        <div class="text-slate-400">
-                            <i class="fas fa-exclamation-triangle mr-2"></i>
-                            No se pudo cargar el horario actual
-                        </div>
-                    `;
-                });
-        }
-        
-        let isEditModeEdit = false;
-        let editingScheduleIdEdit = null;
+            window.loadEmployeeSchedule = function(employeeId) {
+                // Check if elements exist first
+                const scheduleInfo = document.getElementById('current_schedule_info');
+                const scheduleSelect = document.getElementById('edit_schedule_template_id');
+                
+                if (!scheduleInfo) {
+                    console.warn('Schedule info element not found');
+                    return;
+                }
+                
+                fetch(`get_employee_schedule.php?employee_id=${employeeId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!scheduleInfo) return; // Double check
+                        
+                        if (data.schedule) {
+                            const schedule = data.schedule;
+                            scheduleInfo.innerHTML = `
+                                <div class="text-green-400">
+                                    <i class="fas fa-check-circle mr-2"></i>
+                                    <strong>Horario Actual:</strong> ${schedule.schedule_name || 'Horario Personalizado'}
+                                </div>
+                                <div class="text-slate-300 mt-1">
+                                    <i class="fas fa-clock mr-2"></i>
+                                    ${schedule.entry_time} - ${schedule.exit_time} 
+                                    (${schedule.scheduled_hours} horas)
+                                </div>
+                            `;
+                            if (scheduleSelect) scheduleSelect.value = '';
+                        } else {
+                            scheduleInfo.innerHTML = `
+                                <div class="text-slate-400">
+                                    <i class="fas fa-info-circle mr-2"></i>
+                                    Usando horario global del sistema
+                                </div>
+                            `;
+                            if (scheduleSelect) scheduleSelect.value = '';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading schedule:', error);
+                        // Don't try to update UI if element doesn't exist
+                        const info = document.getElementById('current_schedule_info');
+                        if (info) {
+                            info.innerHTML = `
+                                <div class="text-slate-400">
+                                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                                    No se pudo cargar el horario actual
+                                </div>
+                            `;
+                        }
+                    });
+            };        var isEditModeEdit = false;
+        var editingScheduleIdEdit = null;
 
-        function updateScheduleButtonsEdit() {
+        window.updateScheduleButtonsEdit = function() {
             const select = document.getElementById('edit_schedule_template_id');
             const editBtn = document.getElementById('editScheduleBtnEdit');
             const deleteBtn = document.getElementById('deleteScheduleBtnEdit');
@@ -1024,18 +1533,18 @@ $stats = [
                 editBtn.classList.add('hidden');
                 deleteBtn.classList.add('hidden');
             }
-        }
+        };
 
-        function openNewScheduleModalEdit() {
+        window.openNewScheduleModalEdit = function() {
             isEditModeEdit = false;
             editingScheduleIdEdit = null;
             document.getElementById('newScheduleModalEdit').classList.remove('hidden');
             document.getElementById('newScheduleFormEdit').reset();
             document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
             document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-clock text-blue-400 mr-2"></i>Crear Nuevo Turno';
-        }
+        };
 
-        function editSelectedScheduleEdit() {
+        window.editSelectedScheduleEdit = function() {
             const select = document.getElementById('edit_schedule_template_id');
             const scheduleId = select.value;
             
@@ -1055,23 +1564,20 @@ $stats = [
                         document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
                         document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
                         document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '17:00';
-                        document.getElementById('new_lunch_minutes_edit').value = template.lunch_minutes;
-                        document.getElementById('new_break_minutes_edit').value = template.break_minutes;
-                        document.getElementById('new_scheduled_hours_edit').value = template.scheduled_hours;
                         
-                        document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-edit text-blue-400 mr-2"></i>Editar Turno';
                         document.getElementById('newScheduleModalEdit').classList.remove('hidden');
                         document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
+                        document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-edit text-blue-400 mr-2"></i>Editar Turno: ' + template.name;
                     } else {
-                        alert('Error al cargar el turno: ' + data.error);
+                        alert('Error: ' + data.error);
                     }
                 })
                 .catch(error => {
                     alert('Error al cargar el turno: ' + error.message);
                 });
-        }
+        };
 
-        function deleteSelectedScheduleEdit() {
+        window.deleteSelectedScheduleEdit = function() {
             const select = document.getElementById('edit_schedule_template_id');
             const scheduleId = select.value;
             const scheduleName = select.options[select.selectedIndex].text;
@@ -1102,15 +1608,15 @@ $stats = [
             .catch(error => {
                 alert('Error al eliminar el turno: ' + error.message);
             });
-        }
+        };
 
-        function closeNewScheduleModalEdit() {
+        window.closeNewScheduleModalEdit = function() {
             document.getElementById('newScheduleModalEdit').classList.add('hidden');
             isEditModeEdit = false;
             editingScheduleIdEdit = null;
-        }
+        };
 
-        function saveNewScheduleEdit(event) {
+        window.saveNewScheduleEdit = function(event) {
             event.preventDefault();
             
             const form = event.target;
@@ -1169,38 +1675,183 @@ $stats = [
             })
             .catch(error => {
                 messageDiv.className = 'status-banner error mb-4';
-                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar: ' + error.message;
+                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar el turno';
+                console.error('Error:', error);
             });
-        }
-
-        // Close modal when clicking outside
+        };
+        
         document.getElementById('newScheduleModalEdit')?.addEventListener('click', function(e) {
             if (e.target === this) {
                 closeNewScheduleModalEdit();
             }
         });
         
-        // Función para mostrar/ocultar campos según el tipo de compensación en el formulario de edición
-        function toggleEditCompensationFields() {
-            const compensationType = document.getElementById('edit_compensation_type').value;
-            const hourlyFields = document.getElementById('edit_hourly_fields');
-            const fixedFields = document.getElementById('edit_fixed_fields');
-            const dailyFields = document.getElementById('edit_daily_fields');
+        })();
+    </script>
+
+    <!-- Quick Assign Modal -->
+    <div id="quickAssignModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-[9999]" style="backdrop-filter: blur(4px);">
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-2xl w-full max-w-lg mx-4 border border-purple-500/30 overflow-hidden">
+            <!-- Header -->
+            <div class="flex items-center justify-between p-5 border-b border-purple-500/30 bg-gradient-to-r from-purple-900/40 to-blue-900/40">
+                <h3 class="text-xl font-bold text-white flex items-center">
+                    <i class="fas fa-user-tag mr-3 text-purple-400"></i>
+                    Asignar Campaña y Supervisor
+                </h3>
+                <button type="button" onclick="closeQuickAssign()" class="text-slate-300 hover:text-white transition-colors">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
             
-            // Ocultar todos los campos
-            hourlyFields.classList.add('hidden');
-            fixedFields.classList.add('hidden');
-            dailyFields.classList.add('hidden');
-            
-            // Mostrar campos correspondientes
-            if (compensationType === 'hourly') {
-                hourlyFields.classList.remove('hidden');
-            } else if (compensationType === 'fixed') {
-                fixedFields.classList.remove('hidden');
-            } else if (compensationType === 'daily') {
-                dailyFields.classList.remove('hidden');
+            <form id="quickAssignForm" class="p-6 space-y-5">
+                <input type="hidden" id="quick_employee_id" name="employee_id">
+                
+                <!-- Empleado Info -->
+                <div class="bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg p-4 border border-blue-500/20">
+                    <label class="text-xs font-semibold text-purple-300 uppercase tracking-wide mb-2 block">
+                        <i class="fas fa-user mr-2"></i>Empleado
+                    </label>
+                    <p id="quick_employee_name" class="text-white font-semibold text-lg"></p>
+                </div>
+
+                <!-- Campaña -->
+                <div>
+                    <label for="quick_campaign_id" class="text-sm font-semibold text-white mb-2 block">
+                        <i class="fas fa-bullhorn mr-2 text-purple-400"></i>
+                        Campaña 
+                        <span class="text-slate-400 text-xs font-normal ml-1">(opcional)</span>
+                    </label>
+                    <select id="quick_campaign_id" name="campaign_id" 
+                            class="w-full px-4 py-3 bg-slate-700 border-2 border-slate-600 rounded-lg text-white text-base
+                                   focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50 focus:outline-none
+                                   transition-all duration-200">
+                        <option value="">Sin campaña</option>
+                        <?php
+                        $campaignsQuery = $conn->query("SELECT id, name, code, color FROM campaigns WHERE is_active = 1 ORDER BY name");
+                        while ($campaign = $campaignsQuery->fetch_assoc()):
+                        ?>
+                            <option value="<?= $campaign['id'] ?>" data-color="<?= htmlspecialchars($campaign['color']) ?>">
+                                <?= htmlspecialchars($campaign['name']) ?> (<?= htmlspecialchars($campaign['code']) ?>)
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+
+                <!-- Supervisor -->
+                <div>
+                    <label for="quick_supervisor_id" class="text-sm font-semibold text-white mb-2 block">
+                        <i class="fas fa-user-tie mr-2 text-yellow-400"></i>
+                        Supervisor 
+                        <span class="text-slate-400 text-xs font-normal ml-1">(opcional)</span>
+                    </label>
+                    <select id="quick_supervisor_id" name="supervisor_id" 
+                            class="w-full px-4 py-3 bg-slate-700 border-2 border-slate-600 rounded-lg text-white text-base
+                                   focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50 focus:outline-none
+                                   transition-all duration-200">
+                        <option value="">Sin supervisor</option>
+                        <?php
+                        $supervisorsQuery = $conn->query("SELECT id, full_name, username FROM users WHERE role IN ('supervisor', 'manager', 'admin') AND is_active = 1 ORDER BY full_name");
+                        while ($supervisor = $supervisorsQuery->fetch_assoc()):
+                        ?>
+                            <option value="<?= $supervisor['id'] ?>">
+                                <?= htmlspecialchars($supervisor['full_name']) ?> (<?= htmlspecialchars($supervisor['username']) ?>)
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+
+                <div id="quickAssignMessage" class="hidden"></div>
+
+                <!-- Botones -->
+                <div class="flex gap-3 pt-4">
+                    <button type="submit" 
+                            class="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 
+                                   text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 
+                                   shadow-lg hover:shadow-purple-500/50 transform hover:scale-105">
+                        <i class="fas fa-save mr-2"></i>
+                        Guardar
+                    </button>
+                    <button type="button" onclick="closeQuickAssign()" 
+                            class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 
+                                   rounded-lg transition-all duration-200 border-2 border-slate-600">
+                        <i class="fas fa-times mr-2"></i>
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        window.quickAssign = function(button) {
+            try {
+                const employee = JSON.parse(button.getAttribute('data-employee'));
+                console.log('Opening quick assign for:', employee);
+                
+                document.getElementById('quick_employee_id').value = employee.id;
+                
+                // Mostrar nombre completo con código de empleado
+                const employeeName = employee.full_name || `${employee.first_name} ${employee.last_name}`;
+                const employeeCode = employee.employee_code ? ` (${employee.employee_code})` : '';
+                document.getElementById('quick_employee_name').textContent = employeeName + employeeCode;
+                
+                document.getElementById('quick_campaign_id').value = employee.campaign_id || '';
+                document.getElementById('quick_supervisor_id').value = employee.supervisor_id || '';
+                
+                document.getElementById('quickAssignModal').classList.remove('hidden');
+                document.getElementById('quickAssignModal').classList.add('flex');
+            } catch (error) {
+                console.error('Error opening quick assign modal:', error);
+                alert('Error al abrir el modal: ' + error.message);
             }
-        }
+        };
+
+        window.closeQuickAssign = function() {
+            document.getElementById('quickAssignModal').classList.add('hidden');
+            document.getElementById('quickAssignModal').classList.remove('flex');
+            document.getElementById('quickAssignMessage').classList.add('hidden');
+        };
+
+        document.getElementById('quickAssignForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const messageDiv = document.getElementById('quickAssignMessage');
+            const formData = new FormData(this);
+            
+            try {
+                const response = await fetch('../api/employees.php?action=quick_assign', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageDiv.className = 'status-banner success';
+                    messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
+                    messageDiv.classList.remove('hidden');
+                    
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    messageDiv.className = 'status-banner error';
+                    messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
+                    messageDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                messageDiv.className = 'status-banner error';
+                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar';
+                messageDiv.classList.remove('hidden');
+                console.error('Error:', error);
+            }
+        });
+
+        document.getElementById('quickAssignModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeQuickAssign();
+            }
+        });
     </script>
 
     <?php include '../footer.php'; ?>
