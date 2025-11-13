@@ -179,36 +179,36 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 </button>
             </div>
             
-            <form id="campaignForm" onsubmit="saveCampaign(event)">
-                <input type="hidden" id="campaignId" name="id">
+            <div id="campaignFormContainer">
+                <input type="hidden" id="campaignId">
                 
                 <div class="form-group mb-4">
                     <label for="campaignName">Nombre de la Campaña *</label>
-                    <input type="text" id="campaignName" name="name" required placeholder="Ej: Soporte Técnico" class="w-full">
+                    <input type="text" id="campaignName" required placeholder="Ej: Soporte Técnico" class="w-full">
                 </div>
                 
                 <div class="form-group mb-4">
                     <label for="campaignCode">Código *</label>
-                    <input type="text" id="campaignCode" name="code" required placeholder="Ej: TECH-SUPPORT" maxlength="50" style="text-transform: uppercase;" class="w-full">
+                    <input type="text" id="campaignCode" required placeholder="Ej: TECH-SUPPORT" maxlength="50" style="text-transform: uppercase;" class="w-full">
                     <p class="text-xs text-slate-400 mt-1">Código único sin espacios</p>
                 </div>
                 
                 <div class="form-group mb-4">
                     <label for="campaignDescription">Descripción</label>
-                    <textarea id="campaignDescription" name="description" rows="3" placeholder="Descripción opcional" class="w-full"></textarea>
+                    <textarea id="campaignDescription" rows="3" placeholder="Descripción opcional" class="w-full"></textarea>
                 </div>
                 
                 <div class="form-group mb-4">
                     <label for="campaignColor">Color de Identificación</label>
                     <div class="flex gap-3 items-center">
-                        <input type="color" id="campaignColor" name="color" value="#6366f1" class="h-10 w-20">
+                        <input type="color" id="campaignColor" value="#6366f1" class="h-10 w-20">
                         <span class="text-sm text-slate-400">Selecciona un color para identificar la campaña</span>
                     </div>
                 </div>
                 
                 <div class="form-group mb-4">
                     <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" id="campaignActive" name="is_active" checked class="form-checkbox">
+                        <input type="checkbox" id="campaignActive" checked class="form-checkbox">
                         <span class="text-sm text-slate-300">Campaña activa</span>
                     </label>
                 </div>
@@ -216,7 +216,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 <div id="formMessage" class="mb-4 hidden"></div>
                 
                 <div class="flex gap-3">
-                    <button type="submit" class="btn-primary flex-1">
+                    <button type="button" onclick="saveCampaign(event)" class="btn-primary flex-1">
                         <i class="fas fa-save"></i>
                         Guardar Campaña
                     </button>
@@ -225,7 +225,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         Cancelar
                     </button>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
     
@@ -431,8 +431,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         
         function openCreateModal() {
             document.getElementById('modalTitle').innerHTML = '<i class="fas fa-bullhorn text-blue-400 mr-2"></i>Nueva Campaña';
-            document.getElementById('campaignForm').reset();
             document.getElementById('campaignId').value = '';
+            document.getElementById('campaignName').value = '';
+            document.getElementById('campaignCode').value = '';
+            document.getElementById('campaignDescription').value = '';
+            document.getElementById('campaignColor').value = '#6366f1';
             document.getElementById('campaignActive').checked = true;
             document.getElementById('formMessage').classList.add('hidden');
             document.getElementById('campaignModal').classList.add('active');
@@ -463,12 +466,27 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         }
         
         async function saveCampaign(event) {
-            event.preventDefault();
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            // Validación básica
+            const name = document.getElementById('campaignName').value.trim();
+            const code = document.getElementById('campaignCode').value.trim().toUpperCase();
+            
+            if (!name || !code) {
+                const messageDiv = document.getElementById('formMessage');
+                messageDiv.className = 'status-banner error mb-4';
+                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Nombre y código son obligatorios';
+                messageDiv.classList.remove('hidden');
+                return false;
+            }
             
             const id = document.getElementById('campaignId').value;
             const formData = {
-                name: document.getElementById('campaignName').value.trim(),
-                code: document.getElementById('campaignCode').value.trim().toUpperCase(),
+                name: name,
+                code: code,
                 description: document.getElementById('campaignDescription').value.trim(),
                 color: document.getElementById('campaignColor').value,
                 is_active: document.getElementById('campaignActive').checked ? 1 : 0
@@ -484,16 +502,29 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             messageDiv.classList.remove('hidden');
             
             try {
-                const url = id ? '../api/campaigns.php' : '../api/campaigns.php?action=create';
-                const method = id ? 'PUT' : 'POST';
+                const url = '../api/campaigns.php';
+                const method = 'POST';
+                
+                if (id) {
+                    formData.action = 'update';
+                } else {
+                    formData.action = 'create';
+                }
+                
+                console.log('Saving campaign:', { url, method, formData });
                 
                 const response = await fetch(url, {
                     method: method,
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
                     body: JSON.stringify(formData)
                 });
                 
+                console.log('Response status:', response.status);
                 const data = await response.json();
+                console.log('Response data:', data);
                 
                 if (data.success) {
                     messageDiv.className = 'status-banner success mb-4';
@@ -511,6 +542,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 messageDiv.className = 'status-banner error mb-4';
                 messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error: ' + error.message;
             }
+            
+            return false; // Prevenir submit del form
         }
         
         async function confirmDelete(id) {

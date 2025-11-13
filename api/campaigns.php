@@ -4,22 +4,13 @@
  * Endpoints para crear, listar, editar y eliminar campañas
  */
 
-// Deshabilitar visualización de errores en producción
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-
 // Limpiar cualquier salida previa
-ob_start();
+while (ob_get_level()) {
+    ob_end_clean();
+}
 
 session_start();
 require_once '../db.php';
-
-// Limpiar buffer y descartar cualquier salida generada
-ob_end_clean();
-
-// Iniciar nuevo buffer para capturar solo JSON
-ob_start();
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-cache, must-revalidate');
@@ -28,7 +19,6 @@ header('Cache-Control: no-cache, must-revalidate');
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);
     echo json_encode(['success' => false, 'error' => 'No autenticado']);
-    ob_end_flush();
     exit;
 }
 
@@ -36,12 +26,21 @@ if (!isset($_SESSION['user_id'])) {
 if (!userHasPermission('manage_campaigns')) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'No tiene permisos para gestionar campañas']);
-    ob_end_flush();
     exit;
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
+
+// Si es POST, intentar obtener action del body
+if ($method === 'POST' && empty($action)) {
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+    $action = $data['action'] ?? '';
+    error_log("Action from POST body: " . $action);
+}
+
+error_log("Final action: $action, Method: $method");
 
 try {
     switch ($method) {
@@ -61,12 +60,12 @@ try {
             http_response_code(405);
             echo json_encode(['success' => false, 'error' => 'Método no permitido']);
     }
-    ob_end_flush();
 } catch (Exception $e) {
+    error_log("Campaign API Error: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-    ob_end_flush();
 }
+exit;
 
 function handleGet($pdo, $action) {
     switch ($action) {
@@ -236,6 +235,9 @@ function handleGet($pdo, $action) {
 function handlePost($pdo, $action) {
     $data = json_decode(file_get_contents('php://input'), true);
     
+    error_log("Campaign POST Action: " . $action);
+    error_log("Campaign POST Data: " . print_r($data, true));
+    
     if ($action === 'create') {
         // Crear nueva campaña
         $name = trim($data['name'] ?? '');
@@ -243,6 +245,8 @@ function handlePost($pdo, $action) {
         $description = trim($data['description'] ?? '');
         $color = trim($data['color'] ?? '#6366f1');
         $is_active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
+        
+        error_log("Campaign CREATE - Name: $name, Code: $code");
         
         if (empty($name) || empty($code)) {
             http_response_code(400);
@@ -267,26 +271,62 @@ function handlePost($pdo, $action) {
         
         $campaignId = $pdo->lastInsertId();
         
-        // Log activity
-        require_once '../lib/logging_functions.php';
-        log_custom_action(
-            $pdo,
-            $_SESSION['user_id'],
-            $_SESSION['full_name'],
-            $_SESSION['role'],
-            'campaigns',
-            'create',
-            "Campaña creada: {$name}",
-            'campaign',
-            $campaignId,
-            ['name' => $name, 'code' => $code]
-        );
+        error_log("Campaign created with ID: " . $campaignId);
         
         echo json_encode([
             'success' => true,
             'message' => 'Campaña creada exitosamente',
             'campaign_id' => $campaignId
         ]);
+        return;
+        
+    } elseif ($action === 'update') {
+        // Actualizar campaña existente
+        $id = (int)($data['id'] ?? 0);
+        
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'ID de campaña requerido']);
+            return;
+        }
+        
+        $name = trim($data['name'] ?? '');
+        $code = trim($data['code'] ?? '');
+        $description = trim($data['description'] ?? '');
+        $color = trim($data['color'] ?? '#6366f1');
+        $is_active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
+        
+        error_log("Campaign UPDATE - ID: $id, Name: $name, Code: $code");
+        
+        if (empty($name) || empty($code)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Nombre y código son obligatorios']);
+            return;
+        }
+        
+        // Verificar que el código sea único (excluyendo la campaña actual)
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM campaigns WHERE code = ? AND id != ?");
+        $stmt->execute([$code, $id]);
+        if ($stmt->fetchColumn() > 0) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'El código de campaña ya existe']);
+            return;
+        }
+        
+        $stmt = $pdo->prepare("
+            UPDATE campaigns 
+            SET name = ?, code = ?, description = ?, color = ?, is_active = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([$name, $code, $description, $color, $is_active, $id]);
+        
+        error_log("Campaign updated: ID $id");
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Campaña actualizada exitosamente'
+        ]);
+        return;
         
     } elseif ($action === 'assign_supervisor') {
         // Asignar supervisor a campaña

@@ -8,6 +8,8 @@ RewriteRule ^(.*)$ $1.php [L]
 
 # Redirigir URLs con .php a URLs sin .php (excepto APIs que necesitan POST)
 RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s([^.]+)\.php [NC]
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteCond %{REQUEST_URI} !^/ponche-xtreme/api/
 RewriteCond %{REQUEST_URI} !^/chat/
 RewriteCond %{REQUEST_URI} !^/ponche-xtreme/chat/
 RewriteCond %{REQUEST_URI} !^/hr/
