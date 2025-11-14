@@ -38,6 +38,10 @@ if ($username === null || $full_name === null) {
 $punch_error = null;
 $punch_success = null;
 $logout_error = null;
+$permission_success = null;
+$permission_error = null;
+$vacation_success = null;
+$vacation_error = null;
 
 // Check for flash messages from session
 if (isset($_SESSION['punch_success'])) {
@@ -51,6 +55,22 @@ if (isset($_SESSION['punch_error'])) {
 if (isset($_SESSION['logout_error'])) {
     $logout_error = $_SESSION['logout_error'];
     unset($_SESSION['logout_error']);
+}
+if (isset($_SESSION['permission_success'])) {
+    $permission_success = $_SESSION['permission_success'];
+    unset($_SESSION['permission_success']);
+}
+if (isset($_SESSION['permission_error'])) {
+    $permission_error = $_SESSION['permission_error'];
+    unset($_SESSION['permission_error']);
+}
+if (isset($_SESSION['vacation_success'])) {
+    $vacation_success = $_SESSION['vacation_success'];
+    unset($_SESSION['vacation_success']);
+}
+if (isset($_SESSION['vacation_error'])) {
+    $vacation_error = $_SESSION['vacation_error'];
+    unset($_SESSION['vacation_error']);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
@@ -343,34 +363,66 @@ $employeeId = $employeeData['id'] ?? null;
 // Handle permission request submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permission'])) {
     if ($employeeId) {
-        $permissionType = $_POST['permission_type'];
-        $startDate = $_POST['permission_start_date'];
-        $endDate = $_POST['permission_end_date'];
-        $reason = trim($_POST['permission_reason']);
-        
-        $insertStmt = $pdo->prepare("
-            INSERT INTO permission_requests (employee_id, permission_type, start_date, end_date, reason, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'PENDING', NOW())
-        ");
-        $insertStmt->execute([$employeeId, $permissionType, $startDate, $endDate, $reason]);
-        $permissionSuccess = "Solicitud de permiso enviada correctamente.";
+        try {
+            $permissionType = $_POST['permission_type'];
+            $startDate = $_POST['permission_start_date'];
+            $endDate = $_POST['permission_end_date'];
+            $reason = trim($_POST['permission_reason']);
+            
+            // Calculate total days
+            $start = new DateTime($startDate);
+            $end = new DateTime($endDate);
+            $interval = $start->diff($end);
+            $totalDays = $interval->days + 1;
+            
+            $insertStmt = $pdo->prepare("
+                INSERT INTO permission_requests (employee_id, user_id, request_type, start_date, end_date, total_days, reason, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', NOW())
+            ");
+            $insertStmt->execute([$employeeId, $user_id, $permissionType, $startDate, $endDate, $totalDays, $reason]);
+            
+            $_SESSION['permission_success'] = "Solicitud de permiso enviada correctamente.";
+            header('Location: agent_dashboard.php?dates=' . urlencode($date_filter));
+            exit;
+        } catch (Exception $e) {
+            $_SESSION['permission_error'] = "Error al enviar la solicitud: " . $e->getMessage();
+            header('Location: agent_dashboard.php?dates=' . urlencode($date_filter));
+            exit;
+        }
+    } else {
+        $_SESSION['permission_error'] = "No se encontró información de empleado para este usuario.";
+        header('Location: agent_dashboard.php?dates=' . urlencode($date_filter));
+        exit;
     }
 }
 
 // Handle vacation request submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vacation'])) {
     if ($employeeId) {
-        $startDate = $_POST['vacation_start_date'];
-        $endDate = $_POST['vacation_end_date'];
-        $days = (int)$_POST['vacation_days'];
-        $reason = trim($_POST['vacation_reason']);
-        
-        $insertStmt = $pdo->prepare("
-            INSERT INTO vacation_requests (employee_id, start_date, end_date, days_requested, reason, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'PENDING', NOW())
-        ");
-        $insertStmt->execute([$employeeId, $startDate, $endDate, $days, $reason]);
-        $vacationSuccess = "Solicitud de vacaciones enviada correctamente.";
+        try {
+            $startDate = $_POST['vacation_start_date'];
+            $endDate = $_POST['vacation_end_date'];
+            $days = (int)$_POST['vacation_days'];
+            $reason = trim($_POST['vacation_reason']);
+            
+            $insertStmt = $pdo->prepare("
+                INSERT INTO vacation_requests (employee_id, user_id, start_date, end_date, total_days, reason, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'PENDING', NOW())
+            ");
+            $insertStmt->execute([$employeeId, $user_id, $startDate, $endDate, $days, $reason]);
+            
+            $_SESSION['vacation_success'] = "Solicitud de vacaciones enviada correctamente.";
+            header('Location: agent_dashboard.php?dates=' . urlencode($date_filter));
+            exit;
+        } catch (Exception $e) {
+            $_SESSION['vacation_error'] = "Error al enviar la solicitud: " . $e->getMessage();
+            header('Location: agent_dashboard.php?dates=' . urlencode($date_filter));
+            exit;
+        }
+    } else {
+        $_SESSION['vacation_error'] = "No se encontró información de empleado para este usuario.";
+        header('Location: agent_dashboard.php?dates=' . urlencode($date_filter));
+        exit;
     }
 }
 
@@ -613,9 +665,21 @@ $chartColorsJson = json_encode($chartColors);
                 <p class="text-sm text-muted">Envía una solicitud de permiso a Recursos Humanos</p>
             </header>
             
-            <?php if (isset($permissionSuccess)): ?>
-                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4">
-                    <p class="text-green-300 text-sm"><i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($permissionSuccess) ?></p>
+            <?php if ($permission_success): ?>
+                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-check-circle text-green-400"></i>
+                        <p class="text-green-300 text-sm"><?= htmlspecialchars($permission_success) ?></p>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($permission_error): ?>
+                <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-exclamation-circle text-red-400"></i>
+                        <p class="text-red-300 text-sm"><?= htmlspecialchars($permission_error) ?></p>
+                    </div>
                 </div>
             <?php endif; ?>
 
@@ -657,7 +721,7 @@ $chartColorsJson = json_encode($chartColors);
                         <?php foreach ($pendingPermissions as $perm): ?>
                             <div class="bg-slate-800/50 rounded-lg p-3">
                                 <div class="flex justify-between items-start mb-1">
-                                    <span class="text-sm font-medium"><?= htmlspecialchars($perm['permission_type']) ?></span>
+                                    <span class="text-sm font-medium"><?= htmlspecialchars($perm['request_type']) ?></span>
                                     <span class="px-2 py-1 rounded text-xs <?= $perm['status'] === 'APPROVED' ? 'bg-green-500/20 text-green-300' : ($perm['status'] === 'REJECTED' ? 'bg-red-500/20 text-red-300' : 'bg-yellow-500/20 text-yellow-300') ?>">
                                         <?= htmlspecialchars($perm['status']) ?>
                                     </span>
@@ -679,9 +743,21 @@ $chartColorsJson = json_encode($chartColors);
                 <p class="text-sm text-muted">Envía una solicitud de vacaciones a Recursos Humanos</p>
             </header>
 
-            <?php if (isset($vacationSuccess)): ?>
-                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4">
-                    <p class="text-green-300 text-sm"><i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($vacationSuccess) ?></p>
+            <?php if ($vacation_success): ?>
+                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-check-circle text-green-400"></i>
+                        <p class="text-green-300 text-sm"><?= htmlspecialchars($vacation_success) ?></p>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($vacation_error): ?>
+                <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-exclamation-circle text-red-400"></i>
+                        <p class="text-red-300 text-sm"><?= htmlspecialchars($vacation_error) ?></p>
+                    </div>
                 </div>
             <?php endif; ?>
 
@@ -717,7 +793,7 @@ $chartColorsJson = json_encode($chartColors);
                         <?php foreach ($pendingVacations as $vac): ?>
                             <div class="bg-slate-800/50 rounded-lg p-3">
                                 <div class="flex justify-between items-start mb-1">
-                                    <span class="text-sm font-medium"><?= htmlspecialchars($vac['days_requested']) ?> días</span>
+                                    <span class="text-sm font-medium"><?= htmlspecialchars($vac['total_days']) ?> días</span>
                                     <span class="px-2 py-1 rounded text-xs <?= $vac['status'] === 'APPROVED' ? 'bg-green-500/20 text-green-300' : ($vac['status'] === 'REJECTED' ? 'bg-red-500/20 text-red-300' : 'bg-yellow-500/20 text-yellow-300') ?>">
                                         <?= htmlspecialchars($vac['status']) ?>
                                     </span>

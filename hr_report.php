@@ -505,21 +505,25 @@ include __DIR__ . '/header.php';
                 <canvas id="departmentChart" class="w-full h-72"></canvas>
             </div>
             <div class="section-card p-0 overflow-hidden">
-                <table class="table-auto text-sm">
-                    <thead>
-                        <tr>
-                            <th>Departamento</th>
-                            <th>Integrantes</th>
-                            <th>Horas</th>
-                            <th>Pago USD</th>
-                            <th>Base USD</th>
-                            <th>Dif USD</th>
-                            <th>Pago DOP</th>
-                            <th>Base DOP</th>
-                            <th>Dif DOP</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                <div class="p-4 border-b border-gray-700">
+                    <input type="text" id="searchDepartments" class="input-control" placeholder="Buscar departamento..." onkeyup="filterTable('deptTable', 'searchDepartments', 0)">
+                </div>
+                <div class="overflow-auto">
+                    <table class="table-auto text-sm" id="deptTable">
+                        <thead>
+                            <tr>
+                                <th>Departamento</th>
+                                <th>Integrantes</th>
+                                <th>Horas</th>
+                                <th>Pago USD</th>
+                                <th>Base USD</th>
+                                <th>Dif USD</th>
+                                <th>Pago DOP</th>
+                                <th>Base DOP</th>
+                                <th>Dif DOP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                         <?php if (empty($departmentSummaryList)): ?>
                             <tr>
                                 <td colspan="9" class="text-center text-muted py-6">No hay datos disponibles.</td>
@@ -549,6 +553,13 @@ include __DIR__ . '/header.php';
                         <?php endif; ?>
                     </tbody>
                 </table>
+                </div>
+                <div class="p-4 border-t border-gray-700 flex justify-between items-center">
+                    <div class="text-sm text-muted">
+                        Mostrando <span id="deptCount"><?= count($departmentSummaryList) ?></span> de <?= count($departmentSummaryList) ?> departamentos
+                    </div>
+                    <div class="flex gap-2" id="deptPagination"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -573,24 +584,28 @@ include __DIR__ . '/header.php';
             </div>
         </div>
         <div class="section-card p-0 overflow-hidden">
-            <table class="table-auto text-sm">
-                <thead>
-                    <tr>
-                        <th>Colaborador</th>
-                        <th>Departamento</th>
-                        <th>Dias</th>
-                        <th>Horas</th>
-                        <th>Tarifa USD</th>
-                        <th>Tarifa DOP</th>
-                        <th>Pago USD</th>
-                        <th>Base USD</th>
-                        <th>Dif USD</th>
-                        <th>Pago DOP</th>
-                        <th>Base DOP</th>
-                        <th>Dif DOP</th>
-                    </tr>
-                </thead>
-                <tbody>
+            <div class="p-4 border-b border-gray-700">
+                <input type="text" id="searchEmployees" class="input-control" placeholder="Buscar por colaborador o departamento..." onkeyup="filterTable('employeeTable', 'searchEmployees', [0,1])">
+            </div>
+            <div class="overflow-auto">
+                <table class="table-auto text-sm" id="employeeTable">
+                    <thead>
+                        <tr>
+                            <th>Colaborador</th>
+                            <th>Departamento</th>
+                            <th>Dias</th>
+                            <th>Horas</th>
+                            <th>Tarifa USD</th>
+                            <th>Tarifa DOP</th>
+                            <th>Pago USD</th>
+                            <th>Base USD</th>
+                            <th>Dif USD</th>
+                            <th>Pago DOP</th>
+                            <th>Base DOP</th>
+                            <th>Dif DOP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                     <?php if (empty($employeeSummaries)): ?>
                         <tr>
                             <td colspan="12" class="text-center text-muted py-6">No se registraron movimientos en el periodo.</td>
@@ -619,6 +634,13 @@ include __DIR__ . '/header.php';
                     <?php endif; ?>
                 </tbody>
             </table>
+            </div>
+            <div class="p-4 border-t border-gray-700 flex justify-between items-center">
+                <div class="text-sm text-muted">
+                    Mostrando <span id="employeeCount"><?= count($employeeSummaries) ?></span> de <?= count($employeeSummaries) ?> colaboradores
+                </div>
+                <div class="flex gap-2" id="employeePagination"></div>
+            </div>
         </div>
     </div>
 
@@ -630,21 +652,25 @@ include __DIR__ . '/header.php';
             </div>
             <span class="chip"><i class="fas fa-clock"></i> <?= number_format($dailyTotalHours, 1) ?> h | USD $<?= number_format($dailyTotalAmountUsd, 2) ?> | DOP RD$<?= number_format($dailyTotalAmountDop, 2) ?></span>
         </div>
-        <div class="section-card p-0 overflow-auto">
-            <table class="table-auto text-sm">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Colaborador</th>
-                        <th>Departamento</th>
-                        <th>Entrada</th>
-                        <th>Salida</th>
-                        <th>Horas</th>
-                        <th>Pago USD</th>
-                        <th>Pago DOP</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <div class="section-card p-0 overflow-hidden">
+            <div class="p-4 border-b border-gray-700">
+                <input type="text" id="searchDaily" class="input-control" placeholder="Buscar por fecha, colaborador o departamento..." onkeyup="filterTable('dailyTable', 'searchDaily', [0,1,2])">
+            </div>
+            <div class="overflow-auto">
+                <table class="table-auto text-sm" id="dailyTable">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Colaborador</th>
+                            <th>Departamento</th>
+                            <th>Entrada</th>
+                            <th>Salida</th>
+                            <th>Horas</th>
+                            <th>Pago USD</th>
+                            <th>Pago DOP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                     <?php if (empty($dailySummaries)): ?>
                         <tr>
                             <td colspan="8" class="text-center text-muted py-6">Sin registros en el periodo seleccionado.</td>
@@ -665,9 +691,199 @@ include __DIR__ . '/header.php';
                     <?php endif; ?>
                 </tbody>
             </table>
+            </div>
+            <div class="p-4 border-t border-gray-700 flex justify-between items-center">
+                <div class="text-sm text-muted">
+                    Mostrando <span id="dailyCount"><?= count($dailySummaries) ?></span> de <?= count($dailySummaries) ?> registros
+                </div>
+                <div class="flex gap-2" id="dailyPagination"></div>
+            </div>
         </div>
     </div>
 </section>
+
+<script>
+// Función de búsqueda en tablas
+function filterTable(tableId, searchId, columnIndexes) {
+    const input = document.getElementById(searchId);
+    const filter = input.value.toUpperCase();
+    const table = document.getElementById(tableId);
+    const tbody = table.getElementsByTagName('tbody')[0];
+    const tr = tbody.getElementsByTagName('tr');
+    let visibleCount = 0;
+
+    // Convertir columnIndexes a array si es un número
+    const columns = Array.isArray(columnIndexes) ? columnIndexes : [columnIndexes];
+
+    for (let i = 0; i < tr.length; i++) {
+        // Skip if this is an "empty" row
+        const firstTd = tr[i].getElementsByTagName('td')[0];
+        if (firstTd && firstTd.getAttribute('colspan')) {
+            continue;
+        }
+
+        let found = false;
+        const td = tr[i].getElementsByTagName('td');
+        
+        for (let colIdx of columns) {
+            if (td[colIdx]) {
+                const txtValue = td[colIdx].textContent || td[colIdx].innerText;
+                if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if (found) {
+            tr[i].style.display = '';
+            visibleCount++;
+        } else {
+            tr[i].style.display = 'none';
+        }
+    }
+
+    // Update count
+    const countId = tableId.replace('Table', 'Count');
+    const countEl = document.getElementById(countId);
+    if (countEl) {
+        countEl.textContent = visibleCount;
+    }
+
+    // Reset to first page after filtering
+    if (window.tablePaginators && window.tablePaginators[tableId]) {
+        window.tablePaginators[tableId].currentPage = 1;
+        window.tablePaginators[tableId].render();
+    }
+}
+
+// Sistema de paginación
+class TablePaginator {
+    constructor(tableId, rowsPerPage = 20) {
+        this.tableId = tableId;
+        this.rowsPerPage = rowsPerPage;
+        this.currentPage = 1;
+        this.table = document.getElementById(tableId);
+        this.tbody = this.table ? this.table.getElementsByTagName('tbody')[0] : null;
+        this.paginationId = tableId.replace('Table', 'Pagination');
+        this.countId = tableId.replace('Table', 'Count');
+        
+        if (this.tbody) {
+            this.init();
+        }
+    }
+
+    init() {
+        this.render();
+    }
+
+    getVisibleRows() {
+        const allRows = Array.from(this.tbody.getElementsByTagName('tr'));
+        return allRows.filter(row => {
+            // Skip empty state rows
+            const firstTd = row.getElementsByTagName('td')[0];
+            if (firstTd && firstTd.getAttribute('colspan')) {
+                return false;
+            }
+            return row.style.display !== 'none';
+        });
+    }
+
+    render() {
+        const visibleRows = this.getVisibleRows();
+        const totalRows = visibleRows.length;
+        const totalPages = Math.ceil(totalRows / this.rowsPerPage);
+
+        // Hide all visible rows first
+        visibleRows.forEach(row => row.classList.add('hidden'));
+
+        // Show only rows for current page
+        const start = (this.currentPage - 1) * this.rowsPerPage;
+        const end = start + this.rowsPerPage;
+        visibleRows.slice(start, end).forEach(row => row.classList.remove('hidden'));
+
+        // Render pagination controls
+        this.renderPaginationControls(totalPages);
+    }
+
+    renderPaginationControls(totalPages) {
+        const container = document.getElementById(this.paginationId);
+        if (!container || totalPages <= 1) {
+            if (container) container.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+
+        // Previous button
+        html += `<button onclick="window.tablePaginators['${this.tableId}'].goToPage(${this.currentPage - 1})" 
+                    class="px-3 py-1 rounded ${this.currentPage === 1 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary-dark'}" 
+                    ${this.currentPage === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i>
+                </button>`;
+
+        // Page numbers
+        const maxButtons = 5;
+        let startPage = Math.max(1, this.currentPage - Math.floor(maxButtons / 2));
+        let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+        if (endPage - startPage < maxButtons - 1) {
+            startPage = Math.max(1, endPage - maxButtons + 1);
+        }
+
+        if (startPage > 1) {
+            html += `<button onclick="window.tablePaginators['${this.tableId}'].goToPage(1)" 
+                        class="px-3 py-1 rounded bg-gray-700 text-white hover:bg-gray-600">1</button>`;
+            if (startPage > 2) {
+                html += `<span class="px-2 text-muted">...</span>`;
+            }
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<button onclick="window.tablePaginators['${this.tableId}'].goToPage(${i})" 
+                        class="px-3 py-1 rounded ${i === this.currentPage ? 'bg-primary text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}">${i}</button>`;
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                html += `<span class="px-2 text-muted">...</span>`;
+            }
+            html += `<button onclick="window.tablePaginators['${this.tableId}'].goToPage(${totalPages})" 
+                        class="px-3 py-1 rounded bg-gray-700 text-white hover:bg-gray-600">${totalPages}</button>`;
+        }
+
+        // Next button
+        html += `<button onclick="window.tablePaginators['${this.tableId}'].goToPage(${this.currentPage + 1})" 
+                    class="px-3 py-1 rounded ${this.currentPage === totalPages ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-primary text-white hover:bg-primary-dark'}" 
+                    ${this.currentPage === totalPages ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-right"></i>
+                </button>`;
+
+        container.innerHTML = html;
+    }
+
+    goToPage(page) {
+        const visibleRows = this.getVisibleRows();
+        const totalPages = Math.ceil(visibleRows.length / this.rowsPerPage);
+        
+        if (page < 1 || page > totalPages) return;
+        
+        this.currentPage = page;
+        this.render();
+
+        // Scroll to top of table
+        this.table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+// Initialize paginators when DOM is ready
+window.tablePaginators = {};
+document.addEventListener('DOMContentLoaded', function() {
+    window.tablePaginators['deptTable'] = new TablePaginator('deptTable', 10);
+    window.tablePaginators['employeeTable'] = new TablePaginator('employeeTable', 20);
+    window.tablePaginators['dailyTable'] = new TablePaginator('dailyTable', 25);
+});
+</script>
 
 <script>
 const departmentChartData = <?= $departmentChartJson ?>;
