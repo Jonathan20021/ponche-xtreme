@@ -122,13 +122,17 @@ foreach ($dailyRowsBasic as $row) {
     $punchesStmt->execute([':user_id' => $userId, ':work_date' => $workDate]);
     $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Calcular productive_seconds sumando duraciones entre punches consecutivos donde el punch actual es pagado
+    // Calcular productive_seconds usando lógica de INTERVALOS (paid state periods)
     $productiveSeconds = 0;
     $firstEntry = null;
     $lastExit = null;
     $lunchCount = 0;
     $breakCount = 0;
     $meetingCount = 0;
+    
+    $inPaidState = false;
+    $paidStartTime = null;
+    $lastPaidPunchTime = null;
     
     for ($i = 0; $i < count($punches); $i++) {
         $currentPunch = $punches[$i];
@@ -149,14 +153,29 @@ foreach ($dailyRowsBasic as $row) {
         if ($currentType === 'Break') $breakCount++;
         if (in_array($currentType, ['Meeting', 'Coaching'])) $meetingCount++;
         
-        // Si el punch actual es pagado y hay un punch anterior, sumar duración
-        if ($isPaid && $i > 0) {
-            $previousTime = strtotime($punches[$i - 1]['timestamp']);
-            $duration = $currentTime - $previousTime;
-            if ($duration > 0) {
-                $productiveSeconds += $duration;
+        // Interval logic for paid periods
+        if ($isPaid) {
+            $lastPaidPunchTime = $currentTime;
+            
+            if (!$inPaidState) {
+                // Start of paid period
+                $paidStartTime = $currentTime;
+                $inPaidState = true;
             }
+        } elseif (!$isPaid && $inPaidState) {
+            // End of paid period
+            if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
+                $productiveSeconds += ($lastPaidPunchTime - $paidStartTime);
+            }
+            $inPaidState = false;
+            $paidStartTime = null;
+            $lastPaidPunchTime = null;
         }
+    }
+    
+    // If day ends in paid state, count until last paid punch
+    if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
+        $productiveSeconds += ($lastPaidPunchTime - $paidStartTime);
     }
     
     // Si no hay last_exit, usar hora de salida programada

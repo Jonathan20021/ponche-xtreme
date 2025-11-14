@@ -140,23 +140,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             foreach ($punchesByDate as $date => $dayPunches) {
                 $totalSecondsWorked = 0;
                 
-                // Calculate durations between consecutive punches
-                // Only count time when punch type is PAID (DISPONIBLE, WASAPI, DIGITACION)
+                // Calculate using INTERVAL logic (paid state periods)
                 $paidTypesUpper = array_map('strtoupper', $paidTypes);
+                $inPaidState = false;
+                $paidStartTime = null;
+                $lastPaidPunchTime = null;
                 
-                for ($i = 0; $i < count($dayPunches) - 1; $i++) {
-                    $currentPunch = $dayPunches[$i];
-                    $nextPunch = $dayPunches[$i + 1];
+                foreach ($dayPunches as $i => $punch) {
+                    $punchTime = strtotime($punch['timestamp']);
+                    $punchType = strtoupper($punch['type']);
+                    $isPaid = in_array($punchType, $paidTypesUpper);
                     
-                    $startTime = strtotime($currentPunch['timestamp']);
-                    $endTime = strtotime($nextPunch['timestamp']);
-                    $punchType = strtoupper($currentPunch['type']);
-                    
-                    // Only count duration if current punch is a PAID type
-                    if (in_array($punchType, $paidTypesUpper) && $endTime > $startTime) {
-                        $duration = $endTime - $startTime;
-                        $totalSecondsWorked += $duration;
+                    if ($isPaid) {
+                        $lastPaidPunchTime = $punchTime;
+                        
+                        if (!$inPaidState) {
+                            // Start of paid period
+                            $paidStartTime = $punchTime;
+                            $inPaidState = true;
+                        }
+                    } elseif (!$isPaid && $inPaidState) {
+                        // End of paid period
+                        if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
+                            $totalSecondsWorked += ($lastPaidPunchTime - $paidStartTime);
+                        }
+                        $inPaidState = false;
+                        $paidStartTime = null;
+                        $lastPaidPunchTime = null;
                     }
+                }
+                
+                // If day ends in paid state, count until last paid punch
+                if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
+                    $totalSecondsWorked += ($lastPaidPunchTime - $paidStartTime);
                 }
                 
                 // Convert to hours
