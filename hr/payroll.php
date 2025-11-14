@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 SELECT 
                     id,
                     timestamp,
-                    UPPER(type) as type,
+                    type,
                     DATE(timestamp) as work_date
                 FROM attendance
                 WHERE user_id = ?
@@ -140,13 +140,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             foreach ($punchesByDate as $date => $dayPunches) {
                 $totalSecondsWorked = 0;
                 
-                // Process punches in pairs (entrada -> salida)
-                for ($i = 0; $i < count($dayPunches) - 1; $i += 2) {
-                    $entryTime = strtotime($dayPunches[$i]['timestamp']);
-                    $exitTime = strtotime($dayPunches[$i + 1]['timestamp']);
+                // Calculate durations between consecutive punches
+                // Only count time when punch type is PAID (DISPONIBLE, WASAPI, DIGITACION)
+                $paidTypesUpper = array_map('strtoupper', $paidTypes);
+                
+                for ($i = 0; $i < count($dayPunches) - 1; $i++) {
+                    $currentPunch = $dayPunches[$i];
+                    $nextPunch = $dayPunches[$i + 1];
                     
-                    if ($exitTime > $entryTime) {
-                        $totalSecondsWorked += ($exitTime - $entryTime);
+                    $startTime = strtotime($currentPunch['timestamp']);
+                    $endTime = strtotime($nextPunch['timestamp']);
+                    $punchType = strtoupper($currentPunch['type']);
+                    
+                    // Only count duration if current punch is a PAID type
+                    if (in_array($punchType, $paidTypesUpper) && $endTime > $startTime) {
+                        $duration = $endTime - $startTime;
+                        $totalSecondsWorked += $duration;
                     }
                 }
                 

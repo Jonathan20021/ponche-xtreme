@@ -75,69 +75,18 @@ if ($currentPage > $totalPages) {
     $offset = ($currentPage - 1) * $recordsPerPage;
 }
 
+// Obtener tipos de punch pagados desde la base de datos
+$paidTypesStmt = $pdo->query("SELECT type FROM attendance_types WHERE is_paid = 1");
+$paidTypes = $paidTypesStmt->fetchAll(PDO::FETCH_COLUMN);
+
+// Query simplificado: obtener todas las combinaciones de usuario-fecha con attendance
 $dailySql = "
-    SELECT
+    SELECT DISTINCT
+        u.id AS user_id,
         u.full_name AS employee,
         u.username,
         d.name AS department_name,
-        DATE(a.timestamp) AS work_date,
-        (SELECT MIN(a2.timestamp) FROM attendance a2 
-         WHERE a2.user_id = a.user_id 
-         AND DATE(a2.timestamp) = DATE(a.timestamp) 
-         AND a2.type = 'Entry') AS first_entry,
-        IFNULL(
-            (SELECT MAX(a3.timestamp) FROM attendance a3 
-             WHERE a3.user_id = a.user_id 
-             AND DATE(a3.timestamp) = DATE(a.timestamp) 
-             AND a3.type = 'Exit'),
-            CONCAT(DATE(a.timestamp), ' ', :exit_time)
-        ) AS last_exit,
-        ((SELECT COUNT(*) FROM attendance a4 
-          WHERE a4.user_id = a.user_id 
-          AND DATE(a4.timestamp) = DATE(a.timestamp) 
-          AND a4.type = 'Lunch') * :lunch_seconds) AS lunch_seconds,
-        ((SELECT COUNT(*) FROM attendance a5 
-          WHERE a5.user_id = a.user_id 
-          AND DATE(a5.timestamp) = DATE(a.timestamp) 
-          AND a5.type = 'Break') * :break_seconds) AS break_seconds,
-        ((SELECT COUNT(*) FROM attendance a6 
-          WHERE a6.user_id = a.user_id 
-          AND DATE(a6.timestamp) = DATE(a.timestamp) 
-          AND a6.type IN ('Meeting', 'Coaching')) * :meeting_seconds) AS meeting_seconds,
-        GREATEST(
-            IF(
-                (SELECT MIN(a7.timestamp) FROM attendance a7 
-                 WHERE a7.user_id = a.user_id 
-                 AND DATE(a7.timestamp) = DATE(a.timestamp) 
-                 AND a7.type = 'Entry') IS NULL,
-                0,
-                IFNULL(
-                    TIMESTAMPDIFF(
-                        SECOND,
-                        (SELECT MIN(a8.timestamp) FROM attendance a8 
-                         WHERE a8.user_id = a.user_id 
-                         AND DATE(a8.timestamp) = DATE(a.timestamp) 
-                         AND a8.type = 'Entry'),
-                        IFNULL(
-                            (SELECT MAX(a9.timestamp) FROM attendance a9 
-                             WHERE a9.user_id = a.user_id 
-                             AND DATE(a9.timestamp) = DATE(a.timestamp) 
-                             AND a9.type = 'Exit'),
-                            CONCAT(DATE(a.timestamp), ' ', :exit_time)
-                        )
-                    ),
-                    0
-                )
-            ) - ((SELECT COUNT(*) FROM attendance a10 
-                  WHERE a10.user_id = a.user_id 
-                  AND DATE(a10.timestamp) = DATE(a.timestamp) 
-                  AND a10.type = 'Lunch') * :lunch_seconds)
-              - ((SELECT COUNT(*) FROM attendance a11 
-                  WHERE a11.user_id = a.user_id 
-                  AND DATE(a11.timestamp) = DATE(a.timestamp) 
-                  AND a11.type = 'Break') * :break_seconds),
-            0
-        ) AS productive_seconds
+        DATE(a.timestamp) AS work_date
     FROM attendance a
     JOIN users u ON u.id = a.user_id
     LEFT JOIN departments d ON d.id = u.department_id
@@ -150,14 +99,84 @@ $dailySql = "
 $dailyStmt = $pdo->prepare($dailySql);
 $dailyStmt->bindValue(':start', $startBound);
 $dailyStmt->bindValue(':end', $endBound);
-$dailyStmt->bindValue(':exit_time', $exitTime);
-$dailyStmt->bindValue(':lunch_seconds', $lunchSeconds, PDO::PARAM_INT);
-$dailyStmt->bindValue(':break_seconds', $breakSeconds, PDO::PARAM_INT);
-$dailyStmt->bindValue(':meeting_seconds', $meetingSeconds, PDO::PARAM_INT);
 $dailyStmt->bindValue(':offset', (int) $offset, PDO::PARAM_INT);
 $dailyStmt->bindValue(':limit', (int) $recordsPerPage, PDO::PARAM_INT);
 $dailyStmt->execute();
-$dailyRowsRaw = $dailyStmt->fetchAll(PDO::FETCH_ASSOC);
+$dailyRowsBasic = $dailyStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Calcular productive_seconds usando lógica de paid punches
+$dailyRowsRaw = [];
+foreach ($dailyRowsBasic as $row) {
+    $userId = $row['user_id'];
+    $workDate = $row['work_date'];
+    
+    // Obtener todos los punches del día ordenados cronológicamente
+    $punchesStmt = $pdo->prepare("
+        SELECT a.timestamp, a.type, at.is_paid
+        FROM attendance a
+        LEFT JOIN attendance_types at ON at.type = a.type
+        WHERE a.user_id = :user_id 
+        AND DATE(a.timestamp) = :work_date
+        ORDER BY a.timestamp ASC
+    ");
+    $punchesStmt->execute([':user_id' => $userId, ':work_date' => $workDate]);
+    $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Calcular productive_seconds sumando duraciones entre punches consecutivos donde el punch actual es pagado
+    $productiveSeconds = 0;
+    $firstEntry = null;
+    $lastExit = null;
+    $lunchCount = 0;
+    $breakCount = 0;
+    $meetingCount = 0;
+    
+    for ($i = 0; $i < count($punches); $i++) {
+        $currentPunch = $punches[$i];
+        $currentType = $currentPunch['type'];
+        $currentTime = strtotime($currentPunch['timestamp']);
+        $isPaid = (int)$currentPunch['is_paid'] === 1;
+        
+        // Track first entry and last exit for display
+        if ($currentType === 'Entry' && $firstEntry === null) {
+            $firstEntry = $currentPunch['timestamp'];
+        }
+        if ($currentType === 'Exit') {
+            $lastExit = $currentPunch['timestamp'];
+        }
+        
+        // Count lunch, break, meeting
+        if ($currentType === 'Lunch') $lunchCount++;
+        if ($currentType === 'Break') $breakCount++;
+        if (in_array($currentType, ['Meeting', 'Coaching'])) $meetingCount++;
+        
+        // Si el punch actual es pagado y hay un punch anterior, sumar duración
+        if ($isPaid && $i > 0) {
+            $previousTime = strtotime($punches[$i - 1]['timestamp']);
+            $duration = $currentTime - $previousTime;
+            if ($duration > 0) {
+                $productiveSeconds += $duration;
+            }
+        }
+    }
+    
+    // Si no hay last_exit, usar hora de salida programada
+    if ($lastExit === null && count($punches) > 0) {
+        $lastExit = $workDate . ' ' . $exitTime;
+    }
+    
+    $dailyRowsRaw[] = [
+        'employee' => $row['employee'],
+        'username' => $row['username'],
+        'department_name' => $row['department_name'],
+        'work_date' => $workDate,
+        'first_entry' => $firstEntry,
+        'last_exit' => $lastExit,
+        'lunch_seconds' => $lunchCount * $lunchSeconds,
+        'break_seconds' => $breakCount * $breakSeconds,
+        'meeting_seconds' => $meetingCount * $meetingSeconds,
+        'productive_seconds' => max(0, $productiveSeconds)
+    ];
+}
 
 $dailyRows = [];
 $monthlyAggregates = [];

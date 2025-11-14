@@ -65,66 +65,85 @@ $employees = $employeeStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 $departmentsList = getAllDepartments($pdo);
 
-$payrollSql = "
-    SELECT
-        u.id,
-        u.full_name,
-        u.username,
-        u.department_id,
-        d.name AS department_name,
-        COUNT(DISTINCT DATE(a.timestamp)) AS days_worked,
-        SUM(
-            GREATEST(
-                IFNULL(
-                    TIMESTAMPDIFF(
-                        SECOND,
-                        (SELECT MIN(a2.timestamp) FROM attendance a2 
-                         WHERE a2.user_id = a.user_id 
-                         AND DATE(a2.timestamp) = DATE(a.timestamp) 
-                         AND a2.type = 'Entry'),
-                        COALESCE(
-                            (SELECT MAX(a3.timestamp) FROM attendance a3 
-                             WHERE a3.user_id = a.user_id 
-                             AND DATE(a3.timestamp) = DATE(a.timestamp) 
-                             AND a3.type = 'Exit'),
-                            CONCAT(DATE(a.timestamp), ' ', :exit_time)
-                        )
-                    ),
-                    0
-                )
-                - ((SELECT COUNT(*) FROM attendance a4 
-                    WHERE a4.user_id = a.user_id 
-                    AND DATE(a4.timestamp) = DATE(a.timestamp) 
-                    AND a4.type = 'Lunch') * :lunch_seconds)
-                - ((SELECT COUNT(*) FROM attendance a5 
-                    WHERE a5.user_id = a.user_id 
-                    AND DATE(a5.timestamp) = DATE(a.timestamp) 
-                    AND a5.type = 'Break') * :break_seconds),
-                0
-            )
-        ) AS productive_seconds
-    FROM attendance a
-    JOIN users u ON u.id = a.user_id
-    LEFT JOIN departments d ON d.id = u.department_id
-    WHERE a.timestamp BETWEEN :start AND :end
-    " . ($employeeFilter !== 'all' ? "AND a.user_id = :employee_filter" : "") . "
-    GROUP BY u.id, u.full_name, u.username, u.department_id, d.name
-    ORDER BY u.full_name
-";
+// Get paid attendance types for accurate calculation
+$paidTypes = getPaidAttendanceTypeSlugs($pdo);
 
-$payrollStmt = $pdo->prepare($payrollSql);
-$payrollParams = [
-    ':start' => $startBound,
-    ':end' => $endBound,
-    ':exit_time' => $exitTime,
-    ':lunch_seconds' => $lunchSeconds,
-    ':break_seconds' => $breakSeconds,
-];
-if ($employeeFilter !== 'all') {
-    $payrollParams[':employee_filter'] = (int) $employeeFilter;
+// Calculate productive hours based on PAID punch types only (DISPONIBLE, WASAPI, DIGITACION)
+// This matches the payroll calculation logic
+$payrollRows = [];
+
+if (!empty($paidTypes)) {
+    $userQuery = "SELECT id, full_name, username, department_id FROM users";
+    if ($employeeFilter !== 'all') {
+        $userQuery .= " WHERE id = " . (int)$employeeFilter;
+    }
+    $userStmt = $pdo->query($userQuery);
+    $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    foreach ($users as $user) {
+        $userId = $user['id'];
+        
+        // Get department name
+        $deptStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
+        $deptStmt->execute([$user['department_id']]);
+        $deptName = $deptStmt->fetchColumn();
+        
+        // Get all punches for this user in the period
+        $punchesStmt = $pdo->prepare("
+            SELECT timestamp, type, DATE(timestamp) as work_date
+            FROM attendance
+            WHERE user_id = ?
+            AND timestamp BETWEEN ? AND ?
+            ORDER BY timestamp ASC
+        ");
+        $punchesStmt->execute([$userId, $startBound, $endBound]);
+        $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Group by date
+        $punchesByDate = [];
+        foreach ($punches as $punch) {
+            $date = $punch['work_date'];
+            if (!isset($punchesByDate[$date])) {
+                $punchesByDate[$date] = [];
+            }
+            $punchesByDate[$date][] = $punch;
+        }
+        
+        // Calculate productive seconds
+        $totalProductiveSeconds = 0;
+        $daysWorked = count($punchesByDate);
+        $paidTypesUpper = array_map('strtoupper', $paidTypes);
+        
+        foreach ($punchesByDate as $date => $dayPunches) {
+            // Calculate durations between consecutive punches, only counting PAID types
+            for ($i = 0; $i < count($dayPunches) - 1; $i++) {
+                $currentPunch = $dayPunches[$i];
+                $nextPunch = $dayPunches[$i + 1];
+                
+                $startTime = strtotime($currentPunch['timestamp']);
+                $endTime = strtotime($nextPunch['timestamp']);
+                $punchType = strtoupper($currentPunch['type']);
+                
+                // Only count duration if current punch is a PAID type
+                if (in_array($punchType, $paidTypesUpper) && $endTime > $startTime) {
+                    $totalProductiveSeconds += ($endTime - $startTime);
+                }
+            }
+        }
+        
+        if ($totalProductiveSeconds > 0 || $daysWorked > 0) {
+            $payrollRows[] = [
+                'id' => $userId,
+                'full_name' => $user['full_name'],
+                'username' => $user['username'],
+                'department_id' => $user['department_id'],
+                'department_name' => $deptName,
+                'days_worked' => $daysWorked,
+                'productive_seconds' => $totalProductiveSeconds
+            ];
+        }
+    }
 }
-$payrollStmt->execute($payrollParams);
-$payrollRows = $payrollStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $employeeSummaries = [];
 $departmentSummaries = [];
@@ -259,112 +278,118 @@ $employeeChartData = [
     'actual_dop' => array_map(static fn(array $row) => round($row['actual_pay_dop'], 2), $topEmployees),
 ];
 
-$dailySql = "
-    SELECT
-        u.full_name,
-        u.username,
-        d.name AS department_name,
-        DATE(a.timestamp) AS work_date,
-        (SELECT MIN(a2.timestamp) FROM attendance a2 
-         WHERE a2.user_id = a.user_id 
-         AND DATE(a2.timestamp) = DATE(a.timestamp) 
-         AND a2.type = 'Entry') AS first_entry,
-        COALESCE(
-            (SELECT MAX(a3.timestamp) FROM attendance a3 
-             WHERE a3.user_id = a.user_id 
-             AND DATE(a3.timestamp) = DATE(a.timestamp) 
-             AND a3.type = 'Exit'),
-            CONCAT(DATE(a.timestamp), ' ', :exit_time)
-        ) AS last_exit,
-        ((SELECT COUNT(*) FROM attendance a4 
-          WHERE a4.user_id = a.user_id 
-          AND DATE(a4.timestamp) = DATE(a.timestamp) 
-          AND a4.type = 'Lunch') * :lunch_seconds) AS lunch_seconds,
-        ((SELECT COUNT(*) FROM attendance a5 
-          WHERE a5.user_id = a.user_id 
-          AND DATE(a5.timestamp) = DATE(a.timestamp) 
-          AND a5.type = 'Break') * :break_seconds) AS break_seconds,
-        GREATEST(
-            IFNULL(
-                TIMESTAMPDIFF(
-                    SECOND,
-                    (SELECT MIN(a6.timestamp) FROM attendance a6 
-                     WHERE a6.user_id = a.user_id 
-                     AND DATE(a6.timestamp) = DATE(a.timestamp) 
-                     AND a6.type = 'Entry'),
-                    COALESCE(
-                        (SELECT MAX(a7.timestamp) FROM attendance a7 
-                         WHERE a7.user_id = a.user_id 
-                         AND DATE(a7.timestamp) = DATE(a.timestamp) 
-                         AND a7.type = 'Exit'),
-                        CONCAT(DATE(a.timestamp), ' ', :exit_time)
-                    )
-                ),
-                0
-            )
-            - ((SELECT COUNT(*) FROM attendance a8 
-                WHERE a8.user_id = a.user_id 
-                AND DATE(a8.timestamp) = DATE(a.timestamp) 
-                AND a8.type = 'Lunch') * :lunch_seconds)
-            - ((SELECT COUNT(*) FROM attendance a9 
-                WHERE a9.user_id = a.user_id 
-                AND DATE(a9.timestamp) = DATE(a.timestamp) 
-                AND a9.type = 'Break') * :break_seconds),
-            0
-        ) AS productive_seconds
-    FROM attendance a
-    JOIN users u ON u.id = a.user_id
-    LEFT JOIN departments d ON d.id = u.department_id
-    WHERE a.timestamp BETWEEN :start AND :end
-    " . ($employeeFilter !== 'all' ? "AND a.user_id = :employee_filter" : "") . "
-    GROUP BY u.id, u.full_name, u.username, d.name, DATE(a.timestamp)
-    ORDER BY DATE(a.timestamp) DESC, u.full_name
-";
-$dailyStmt = $pdo->prepare($dailySql);
-$dailyParams = [
-    ':start' => $startBound,
-    ':end' => $endBound,
-    ':exit_time' => $exitTime,
-    ':lunch_seconds' => $lunchSeconds,
-    ':break_seconds' => $breakSeconds,
-];
-if ($employeeFilter !== 'all') {
-    $dailyParams[':employee_filter'] = (int) $employeeFilter;
-}
-$dailyStmt->execute($dailyParams);
-$dailyRowsRaw = $dailyStmt->fetchAll(PDO::FETCH_ASSOC);
-
+// Calculate daily summaries using PAID punch types
 $dailySummaries = [];
 $dailyTotalHours = 0.0;
 $dailyTotalAmountUsd = 0.0;
 $dailyTotalAmountDop = 0.0;
 
-foreach ($dailyRowsRaw as $row) {
-    $username = $row['username'];
-    $comp = $compensation[$username] ?? [
-        'hourly_rate' => 0.0,
-        'hourly_rate_dop' => 0.0,
-    ];
-
-    $productiveSeconds = (int) $row['productive_seconds'];
-    $hours = $productiveSeconds > 0 ? ($productiveSeconds / 3600) : 0.0;
-    $amountUsd = calculateAmountFromSeconds($productiveSeconds, (float) $comp['hourly_rate']);
-    $amountDop = calculateAmountFromSeconds($productiveSeconds, (float) $comp['hourly_rate_dop']);
-
-    $dailySummaries[] = [
-        'full_name' => $row['full_name'],
-        'department' => $row['department_name'] ?? 'Sin departamento',
-        'work_date' => $row['work_date'],
-        'first_entry' => $row['first_entry'],
-        'last_exit' => $row['last_exit'],
-        'hours' => $hours,
-        'amount_usd' => $amountUsd,
-        'amount_dop' => $amountDop,
-    ];
-
-    $dailyTotalHours += $hours;
-    $dailyTotalAmountUsd += $amountUsd;
-    $dailyTotalAmountDop += $amountDop;
+if (!empty($paidTypes)) {
+    $userDailyQuery = "SELECT id, full_name, username, department_id FROM users";
+    if ($employeeFilter !== 'all') {
+        $userDailyQuery .= " WHERE id = " . (int)$employeeFilter;
+    }
+    $userDailyStmt = $pdo->query($userDailyQuery);
+    $usersDaily = $userDailyStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    foreach ($usersDaily as $user) {
+        $userId = $user['id'];
+        $username = $user['username'];
+        
+        // Get department name
+        $deptStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
+        $deptStmt->execute([$user['department_id']]);
+        $deptName = $deptStmt->fetchColumn();
+        
+        $comp = $compensation[$username] ?? [
+            'hourly_rate' => 0.0,
+            'hourly_rate_dop' => 0.0,
+        ];
+        
+        // Get all punches for this user in the period
+        $punchesStmt = $pdo->prepare("
+            SELECT timestamp, type, DATE(timestamp) as work_date
+            FROM attendance
+            WHERE user_id = ?
+            AND timestamp BETWEEN ? AND ?
+            ORDER BY timestamp ASC
+        ");
+        $punchesStmt->execute([$userId, $startBound, $endBound]);
+        $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Group by date
+        $punchesByDate = [];
+        foreach ($punches as $punch) {
+            $date = $punch['work_date'];
+            if (!isset($punchesByDate[$date])) {
+                $punchesByDate[$date] = [
+                    'punches' => [],
+                    'first_entry' => null,
+                    'last_exit' => null
+                ];
+            }
+            $punchesByDate[$date]['punches'][] = $punch;
+            
+            // Track first Entry and last Exit for display
+            $typeUpper = strtoupper($punch['type']);
+            if ($typeUpper === 'ENTRY' && $punchesByDate[$date]['first_entry'] === null) {
+                $punchesByDate[$date]['first_entry'] = $punch['timestamp'];
+            }
+            if ($typeUpper === 'EXIT') {
+                $punchesByDate[$date]['last_exit'] = $punch['timestamp'];
+            }
+        }
+        
+        $paidTypesUpper = array_map('strtoupper', $paidTypes);
+        
+        foreach ($punchesByDate as $date => $dayData) {
+            $dayPunches = $dayData['punches'];
+            $productiveSeconds = 0;
+            
+            // Calculate durations between consecutive punches, only counting PAID types
+            for ($i = 0; $i < count($dayPunches) - 1; $i++) {
+                $currentPunch = $dayPunches[$i];
+                $nextPunch = $dayPunches[$i + 1];
+                
+                $startTime = strtotime($currentPunch['timestamp']);
+                $endTime = strtotime($nextPunch['timestamp']);
+                $punchType = strtoupper($currentPunch['type']);
+                
+                // Only count duration if current punch is a PAID type
+                if (in_array($punchType, $paidTypesUpper) && $endTime > $startTime) {
+                    $productiveSeconds += ($endTime - $startTime);
+                }
+            }
+            
+            if ($productiveSeconds > 0) {
+                $hours = $productiveSeconds / 3600;
+                $amountUsd = calculateAmountFromSeconds($productiveSeconds, (float) $comp['hourly_rate']);
+                $amountDop = calculateAmountFromSeconds($productiveSeconds, (float) $comp['hourly_rate_dop']);
+                
+                $dailySummaries[] = [
+                    'full_name' => $user['full_name'],
+                    'department' => $deptName ?? 'Sin departamento',
+                    'work_date' => $date,
+                    'first_entry' => $dayData['first_entry'],
+                    'last_exit' => $dayData['last_exit'],
+                    'hours' => $hours,
+                    'amount_usd' => $amountUsd,
+                    'amount_dop' => $amountDop,
+                ];
+                
+                $dailyTotalHours += $hours;
+                $dailyTotalAmountUsd += $amountUsd;
+                $dailyTotalAmountDop += $amountDop;
+            }
+        }
+    }
+    
+    // Sort by date descending, then by name
+    usort($dailySummaries, function($a, $b) {
+        $dateComp = strcmp($b['work_date'], $a['work_date']);
+        if ($dateComp !== 0) return $dateComp;
+        return strcmp($a['full_name'], $b['full_name']);
+    });
 }
 
 $selectedEmployeeName = 'Todos los colaboradores';

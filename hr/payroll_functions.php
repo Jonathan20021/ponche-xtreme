@@ -173,7 +173,8 @@ function getEmployeeCustomDeductions($pdo, $employeeId) {
 function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
     // Obtener datos del empleado
     $empStmt = $pdo->prepare("
-        SELECT e.*, u.hourly_rate, u.monthly_salary, u.overtime_multiplier
+        SELECT e.*, u.hourly_rate, u.monthly_salary, u.hourly_rate_dop, u.monthly_salary_dop, 
+               u.preferred_currency, u.overtime_multiplier
         FROM employees e
         JOIN users u ON u.id = e.user_id
         WHERE e.id = ?
@@ -185,9 +186,15 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
         return null;
     }
     
-    // Calcular salario base
-    $hourlyRate = (float)$employee['hourly_rate'];
-    $monthlySalary = (float)$employee['monthly_salary'];
+    // Calcular salario base usando la moneda preferida del empleado
+    $preferredCurrency = $employee['preferred_currency'] ?? 'USD';
+    if ($preferredCurrency === 'DOP') {
+        $hourlyRate = (float)$employee['hourly_rate_dop'];
+        $monthlySalary = (float)$employee['monthly_salary_dop'];
+    } else {
+        $hourlyRate = (float)$employee['hourly_rate'];
+        $monthlySalary = (float)$employee['monthly_salary'];
+    }
     $overtimeMultiplier = (float)($employee['overtime_multiplier'] ?? 1.5);
     
     // Calcular ingresos
