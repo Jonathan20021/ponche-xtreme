@@ -262,6 +262,21 @@ $banks = getAllBanks($pdo);
 // Get schedule templates for form
 $scheduleTemplates = getAllScheduleTemplates($pdo);
 
+// Quick assign data sources
+$quickAssignCampaigns = $pdo->query("
+    SELECT id, name, code, color
+    FROM campaigns
+    WHERE is_active = 1
+    ORDER BY name ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$quickAssignSupervisors = $pdo->query("
+    SELECT id, full_name, role
+    FROM users
+    WHERE role IN ('Supervisor', 'Admin', 'HR', 'Manager') AND is_active = 1
+    ORDER BY full_name ASC
+")->fetchAll(PDO::FETCH_ASSOC);
+
 // Get statistics
 $stats = [
     'total' => $pdo->query("SELECT COUNT(*) FROM employees")->fetchColumn(),
@@ -801,6 +816,154 @@ $stats = [
                     console.error('Error:', error);
                 });
             };
+
+            function setQuickAssignMessage(type, text) {
+                const messageContainer = document.getElementById('quickAssignMessage');
+                if (!messageContainer) return;
+
+                const classMap = {
+                    loading: 'status-banner mb-4',
+                    success: 'status-banner success mb-4',
+                    error: 'status-banner error mb-4'
+                };
+                const iconMap = {
+                    loading: 'fas fa-spinner fa-spin mr-2',
+                    success: 'fas fa-check-circle mr-2',
+                    error: 'fas fa-exclamation-circle mr-2'
+                };
+
+                messageContainer.className = classMap[type] || 'status-banner mb-4';
+                messageContainer.innerHTML = '<i class="' + (iconMap[type] || 'fas fa-info-circle mr-2') + '"></i>' + text;
+                messageContainer.classList.remove('hidden');
+            }
+
+            function resetQuickAssignMessage() {
+                const messageContainer = document.getElementById('quickAssignMessage');
+                if (!messageContainer) return;
+                messageContainer.className = 'hidden';
+                messageContainer.innerHTML = '';
+            }
+
+            window.quickAssign = function(button) {
+                const modal = document.getElementById('quickAssignModal');
+                const form = document.getElementById('quickAssignForm');
+                const employeeIdInput = document.getElementById('quick_assign_employee_id');
+
+                if (!button || !modal || !form || !employeeIdInput) {
+                    console.warn('Quick assign modal elements are missing.');
+                    return;
+                }
+
+                const employee = JSON.parse(button.dataset.employee);
+                form.reset();
+                resetQuickAssignMessage();
+
+                const nameEl = document.getElementById('quick_assign_employee_name');
+                const metaEl = document.getElementById('quick_assign_employee_meta');
+                const campaignSelect = document.getElementById('quick_assign_campaign_id');
+                const supervisorSelect = document.getElementById('quick_assign_supervisor_id');
+                const submitBtn = document.getElementById('quickAssignSubmit');
+
+                const fullName = ((employee.first_name || '') + ' ' + (employee.last_name || '')).trim() || 'Empleado';
+                if (nameEl) {
+                    nameEl.textContent = fullName;
+                }
+
+                if (metaEl) {
+                    const bits = [];
+                    if (employee.employee_code) {
+                        bits.push('#' + employee.employee_code);
+                    }
+                    if (employee.department_name) {
+                        bits.push(employee.department_name);
+                    }
+                    metaEl.textContent = bits.join(' - ');
+                }
+
+                employeeIdInput.value = employee.id || '';
+
+                if (campaignSelect) {
+                    campaignSelect.value = employee.campaign_id ? String(employee.campaign_id) : '';
+                }
+
+                if (supervisorSelect) {
+                    supervisorSelect.value = employee.supervisor_id ? String(employee.supervisor_id) : '';
+                }
+
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
+                }
+
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            };
+
+            window.closeQuickAssignModal = function() {
+                const modal = document.getElementById('quickAssignModal');
+                if (!modal) return;
+                modal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            };
+
+            function handleQuickAssignSubmit(event) {
+                event.preventDefault();
+
+                const form = event.target;
+                const submitBtn = document.getElementById('quickAssignSubmit');
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando...';
+                }
+
+                setQuickAssignMessage('loading', 'Guardando asignaci&oacute;n...');
+
+                fetch('../api/employees.php?action=quick_assign', {
+                    method: 'POST',
+                    body: new FormData(form)
+                })
+                .then(async response => {
+                    const data = await response.json().catch(() => ({ success: false, error: 'Respuesta no valida del servidor' }));
+                    return { ok: response.ok, data };
+                })
+                .then(result => {
+                    if (result.ok && result.data.success) {
+                        setQuickAssignMessage('success', result.data.message || 'Asignaci&oacute;n actualizada correctamente');
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        setQuickAssignMessage('error', result.data.error || 'No se pudo actualizar la asignaci&oacute;n');
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Quick assign error:', error);
+                    setQuickAssignMessage('error', 'Error de comunicaci&oacute;n con el servidor');
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
+                    }
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                const modal = document.getElementById('quickAssignModal');
+                if (modal) {
+                    modal.addEventListener('click', function(e) {
+                        if (e.target === modal) {
+                            window.closeQuickAssignModal();
+                        }
+                    });
+                }
+
+                const form = document.getElementById('quickAssignForm');
+                if (form) {
+                    form.addEventListener('submit', handleQuickAssignSubmit);
+                }
+            });
         })();
         </script>
 
@@ -920,6 +1083,77 @@ $stats = [
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Quick Assign Modal -->
+    <div id="quickAssignModal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-xl relative">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-white">
+                    <i class="fas fa-user-tag text-indigo-400 mr-2"></i>
+                    Asignaci&oacute;n R&aacute;pida
+                </h3>
+                <button type="button" class="text-slate-400 hover:text-white" onclick="closeQuickAssignModal()">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+
+            <div id="quickAssignMessage" class="hidden"></div>
+
+            <form id="quickAssignForm" class="space-y-4">
+                <input type="hidden" id="quick_assign_employee_id" name="employee_id">
+
+                <div class="bg-slate-900/50 rounded-lg p-4">
+                    <p class="text-sm text-slate-400 uppercase tracking-wide mb-1">Empleado</p>
+                    <p id="quick_assign_employee_name" class="text-lg font-semibold text-white">Selecciona un empleado</p>
+                    <p id="quick_assign_employee_meta" class="text-slate-400 text-sm"></p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="quick_assign_campaign_id">Campa&ntilde;a</label>
+                        <select id="quick_assign_campaign_id" name="campaign_id">
+                            <option value="">Sin campa&ntilde;a</option>
+                            <?php foreach ($quickAssignCampaigns as $campaign): ?>
+                                <option value="<?= htmlspecialchars($campaign['id']) ?>">
+                                    <?= htmlspecialchars($campaign['name']) ?>
+                                    <?php if (!empty($campaign['code'])): ?>
+                                        (<?= htmlspecialchars($campaign['code']) ?>)
+                                    <?php endif; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="text-xs text-slate-400 mt-1">Selecciona la campa&ntilde;a que deseas asignar.</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="quick_assign_supervisor_id">Supervisor</label>
+                        <select id="quick_assign_supervisor_id" name="supervisor_id">
+                            <option value="">Sin supervisor</option>
+                            <?php foreach ($quickAssignSupervisors as $supervisor): ?>
+                                <option value="<?= htmlspecialchars($supervisor['id']) ?>">
+                                    <?= htmlspecialchars($supervisor['full_name']) ?>
+                                    <?php if (!empty($supervisor['role'])): ?>
+                                        (<?= htmlspecialchars($supervisor['role']) ?>)
+                                    <?php endif; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="text-xs text-slate-400 mt-1">Supervisor responsable del empleado.</p>
+                    </div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" class="btn-secondary flex-1" onclick="closeQuickAssignModal()">
+                        <i class="fas fa-times mr-2"></i>
+                        Cancelar
+                    </button>
+                    <button type="submit" id="quickAssignSubmit" class="btn-primary flex-1">
+                        <i class="fas fa-save mr-2"></i>
+                        Guardar
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
