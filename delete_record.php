@@ -11,6 +11,62 @@ require_once 'lib/authorization_functions.php';
 // Check permission
 ensurePermission('records');
 
+function getSupervisorAccessClause(PDO $pdo): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    $role = $_SESSION['role'] ?? '';
+
+    if ($role !== 'Supervisor' || $userId <= 0) {
+        $cache = ['', []];
+        return $cache;
+    }
+
+    $campaignStmt = $pdo->prepare("SELECT campaign_id FROM supervisor_campaigns WHERE supervisor_id = ?");
+    $campaignStmt->execute([$userId]);
+    $campaigns = array_map('intval', $campaignStmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+    $conditions = [
+        'users.id = ?',
+        'e.supervisor_id = ?'
+    ];
+    $params = [$userId, $userId];
+
+    if (!empty($campaigns)) {
+        $placeholders = implode(',', array_fill(0, count($campaigns), '?'));
+        $conditions[] = "e.campaign_id IN ($placeholders)";
+        $params = array_merge($params, $campaigns);
+    }
+
+    $cache = [' AND (' . implode(' OR ', $conditions) . ')', $params];
+    return $cache;
+}
+
+function fetchAttendanceRecord(PDO $pdo, int $recordId): ?array
+{
+    [$clause, $params] = getSupervisorAccessClause($pdo);
+    $sql = "
+        SELECT 
+            attendance.*,
+            users.full_name,
+            users.username
+        FROM attendance
+        JOIN users ON attendance.user_id = users.id
+        LEFT JOIN employees e ON e.user_id = users.id
+        WHERE attendance.id = ?
+    ";
+
+    $stmt = $pdo->prepare($sql . $clause);
+    $stmt->execute(array_merge([$recordId], $params));
+    $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $record ?: null;
+}
+
 // This file should only be accessed via POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     $_SESSION['error'] = "Acceso no válido. Este archivo solo puede ser llamado mediante POST.";
@@ -19,11 +75,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id = $_POST['id'];
+    $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
     $authorizationCode = $_POST['authorization_code'] ?? '';
 
     // Validar ID
-    if (!is_numeric($id)) {
+    if ($id <= 0) {
         $_SESSION['error'] = "ID de registro inválido.";
         header('Location: records.php');
         exit;
@@ -56,11 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $authCodeId = null;
     }
 
-    // Get record data before deleting for logging
-    $getQuery = "SELECT a.*, u.full_name FROM attendance a JOIN users u ON a.user_id = u.id WHERE a.id = ?";
-    $getStmt = $pdo->prepare($getQuery);
-    $getStmt->execute([$id]);
-    $recordData = $getStmt->fetch(PDO::FETCH_ASSOC);
+    // Get record data before deleting for logging and validate supervisor scope
+    $recordData = fetchAttendanceRecord($pdo, $id);
     
     if (!$recordData) {
         $_SESSION['error'] = "Registro no encontrado.";

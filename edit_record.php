@@ -7,13 +7,74 @@ require_once 'lib/authorization_functions.php';
 // Check permission
 ensurePermission('records');
 
+function getSupervisorAccessClause(PDO $pdo): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    $role = $_SESSION['role'] ?? '';
+
+    if ($role !== 'Supervisor' || $userId <= 0) {
+        $cache = ['', []];
+        return $cache;
+    }
+
+    $campaignStmt = $pdo->prepare("SELECT campaign_id FROM supervisor_campaigns WHERE supervisor_id = ?");
+    $campaignStmt->execute([$userId]);
+    $campaigns = array_map('intval', $campaignStmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+    $conditions = [
+        'users.id = ?',
+        'e.supervisor_id = ?'
+    ];
+    $params = [$userId, $userId];
+
+    if (!empty($campaigns)) {
+        $placeholders = implode(',', array_fill(0, count($campaigns), '?'));
+        $conditions[] = "e.campaign_id IN ($placeholders)";
+        $params = array_merge($params, $campaigns);
+    }
+
+    $cache = [' AND (' . implode(' OR ', $conditions) . ')', $params];
+    return $cache;
+}
+
+function fetchAttendanceRecord(PDO $pdo, int $recordId): ?array
+{
+    [$clause, $params] = getSupervisorAccessClause($pdo);
+    $sql = "
+        SELECT 
+            attendance.*,
+            users.full_name,
+            users.username
+        FROM attendance
+        JOIN users ON attendance.user_id = users.id
+        LEFT JOIN employees e ON e.user_id = users.id
+        WHERE attendance.id = ?
+    ";
+
+    $stmt = $pdo->prepare($sql . $clause);
+    $stmt->execute(array_merge([$recordId], $params));
+    $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $record ?: null;
+}
+
 // Obtener el ID del registro a editar
 if (!isset($_GET['id'])) {
     header('Location: records.php');
     exit;
 }
 
-$record_id = $_GET['id'];
+$record_id = (int) $_GET['id'];
+if ($record_id <= 0) {
+    header('Location: records.php');
+    exit;
+}
+
 $message = '';
 $authCodeValidated = false;
 $validatedAuthCodeId = null;
@@ -49,22 +110,8 @@ if (isset($_GET['auth_code']) && !empty($_GET['auth_code'])) {
     }
 }
 
-// Obtener los datos del registro para prellenar el formulario, incluyendo Full Name y Username
-$query = "
-    SELECT 
-        attendance.id, 
-        attendance.type, 
-        attendance.timestamp, 
-        attendance.ip_address, 
-        users.full_name, 
-        users.username 
-    FROM attendance 
-    JOIN users ON attendance.user_id = users.id 
-    WHERE attendance.id = ?
-";
-$stmt = $pdo->prepare($query);
-$stmt->execute([$record_id]);
-$record = $stmt->fetch(PDO::FETCH_ASSOC);
+// Obtener los datos del registro para prellenar el formulario, validando acceso del supervisor
+$record = fetchAttendanceRecord($pdo, $record_id);
 
 if (!$record) {
     header('Location: records.php');
@@ -85,11 +132,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $shouldUpdate = true;
         
         if (isset($shouldUpdate) && $shouldUpdate) {
-            // Get old values for logging
-            $oldValuesQuery = "SELECT type, timestamp, ip_address FROM attendance WHERE id = ?";
-            $oldStmt = $pdo->prepare($oldValuesQuery);
-            $oldStmt->execute([$record_id]);
-            $oldValues = $oldStmt->fetch(PDO::FETCH_ASSOC);
+            // Snapshot values before updating for logging
+            $oldValues = [
+                'type' => $record['type'],
+                'timestamp' => $record['timestamp'],
+                'ip_address' => $record['ip_address']
+            ];
             
             // Update record
             $update_query = "UPDATE attendance SET type = ?, timestamp = ?, ip_address = ? WHERE id = ?";

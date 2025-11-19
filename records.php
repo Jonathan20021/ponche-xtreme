@@ -242,6 +242,39 @@ if ($date_filter) {
     }
 }
 
+// Limit data for supervisors to only their agents/campaigns
+$currentUserId = (int) ($_SESSION['user_id'] ?? 0);
+$currentUserRole = $_SESSION['role'] ?? '';
+$supervisorFilterSql = '';
+$supervisorFilterParams = [];
+
+if ($currentUserRole === 'Supervisor' && $currentUserId > 0) {
+    $campaignStmt = $pdo->prepare("SELECT campaign_id FROM supervisor_campaigns WHERE supervisor_id = ?");
+    $campaignStmt->execute([$currentUserId]);
+    $supervisorCampaigns = array_map('intval', $campaignStmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+    $conditions = [
+        "users.id = ?",
+        "e.supervisor_id = ?"
+    ];
+    $supervisorFilterParams = [$currentUserId, $currentUserId];
+
+    if (!empty($supervisorCampaigns)) {
+        $campaignPlaceholders = implode(',', array_fill(0, count($supervisorCampaigns), '?'));
+        $conditions[] = "e.campaign_id IN ($campaignPlaceholders)";
+        $supervisorFilterParams = array_merge($supervisorFilterParams, $supervisorCampaigns);
+    }
+
+    $supervisorFilterSql = ' AND (' . implode(' OR ', $conditions) . ')';
+}
+
+$applySupervisorFilter = function (string &$sql, array &$params) use ($supervisorFilterSql, $supervisorFilterParams): void {
+    if ($supervisorFilterSql !== '') {
+        $sql .= $supervisorFilterSql;
+        $params = array_merge($params, $supervisorFilterParams);
+    }
+};
+
 // Consulta para registros
 
 $query = "
@@ -259,6 +292,7 @@ $query = "
         attendance.ip_address
     FROM attendance
     JOIN users ON attendance.user_id = users.id
+    LEFT JOIN employees e ON e.user_id = users.id
     LEFT JOIN attendance_types at 
         ON at.slug COLLATE utf8mb4_unicode_ci = UPPER(attendance.type COLLATE utf8mb4_unicode_ci)
     WHERE 1=1
@@ -291,6 +325,8 @@ if ($type_filter !== '') {
     $params[] = $type_filter;
 }
 
+$applySupervisorFilter($query, $params);
+
 $query .= " ORDER BY attendance.timestamp DESC";
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -313,7 +349,22 @@ foreach ($records as &$record) {
 unset($record);
 
 // Usuarios unicos para filtro
-$users = $pdo->query("SELECT DISTINCT username FROM users ORDER BY username")->fetchAll(PDO::FETCH_COLUMN);
+$usersQuery = "
+    SELECT DISTINCT users.username
+    FROM users
+    LEFT JOIN employees e ON e.user_id = users.id
+    WHERE 1=1
+";
+$usersParams = [];
+$applySupervisorFilter($usersQuery, $usersParams);
+$usersQuery .= " ORDER BY users.username";
+if (!empty($usersParams)) {
+    $usersStmt = $pdo->prepare($usersQuery);
+    $usersStmt->execute($usersParams);
+    $users = $usersStmt->fetchAll(PDO::FETCH_COLUMN);
+} else {
+    $users = $pdo->query($usersQuery)->fetchAll(PDO::FETCH_COLUMN);
+}
 
 $summary_query = "
     SELECT 
@@ -327,6 +378,7 @@ $summary_query = "
         attendance.ip_address
     FROM attendance 
     JOIN users ON attendance.user_id = users.id 
+    LEFT JOIN employees e ON e.user_id = users.id
     WHERE 1=1
 ";
 
@@ -353,6 +405,8 @@ if ($type_filter !== '') {
     $summary_query .= " AND UPPER(attendance.type COLLATE {$collation}) = ?";
     $summary_params[] = $type_filter;
 }
+
+$applySupervisorFilter($summary_query, $summary_params);
 
 $summary_query .= " ORDER BY users.username COLLATE {$collation}, record_date, attendance.timestamp";
 $summary_stmt = $pdo->prepare($summary_query);
@@ -573,6 +627,7 @@ $tardiness_query = "
         COUNT(*) AS total_entries
     FROM attendance 
     JOIN users ON attendance.user_id = users.id 
+    LEFT JOIN employees e ON e.user_id = users.id
     WHERE 1=1
 ";
 
@@ -585,6 +640,8 @@ if (!empty($dateValues)) {
     $tardiness_query .= " AND DATE(attendance.timestamp) IN ($datePlaceholders)";
     $tardiness_params = array_merge($tardiness_params, $dateValues);
 }
+
+$applySupervisorFilter($tardiness_query, $tardiness_params);
 
 $tardiness_query .= " GROUP BY users.full_name, users.username, record_date ORDER BY record_date DESC";
 $tardiness_stmt = $pdo->prepare($tardiness_query);
@@ -601,6 +658,7 @@ $missing_entry_query = "
         attendance.type AS first_type
     FROM attendance
     JOIN users ON attendance.user_id = users.id
+    LEFT JOIN employees e ON e.user_id = users.id
     WHERE DATE(attendance.timestamp) = ? 
     AND attendance.user_id NOT IN (
         SELECT DISTINCT user_id 
@@ -611,8 +669,10 @@ $missing_entry_query = "
     ORDER BY first_time ASC
 ";
 
+$missingEntryParams = [$referenceDate, $referenceDate];
+$applySupervisorFilter($missing_entry_query, $missingEntryParams);
 $stmt = $pdo->prepare($missing_entry_query);
-$stmt->execute([$referenceDate, $referenceDate]);
+$stmt->execute($missingEntryParams);
 $missing_entry_data = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 $missing_entry_data = array_map(function (array $row) use ($attendanceTypeMap): array {
     $slug = sanitizeAttendanceTypeSlug($row['first_type'] ?? '');
@@ -631,6 +691,7 @@ $missing_exit_query = "
         attendance.type AS first_type
     FROM attendance
     JOIN users ON attendance.user_id = users.id
+    LEFT JOIN employees e ON e.user_id = users.id
     WHERE DATE(attendance.timestamp) = ? 
     AND attendance.user_id NOT IN (
         SELECT DISTINCT user_id 
@@ -642,8 +703,10 @@ $missing_exit_query = "
 ";
 
 // Ejecutar la consulta con el filtro de fecha
+$missingExitParams = [$referenceDate, $referenceDate];
+$applySupervisorFilter($missing_exit_query, $missingExitParams);
 $stmt_missing_exit = $pdo->prepare($missing_exit_query);
-$stmt_missing_exit->execute([$referenceDate, $referenceDate]);
+$stmt_missing_exit->execute($missingExitParams);
 $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC) ?: [];
 $missing_exit_data = array_map(function (array $row) use ($attendanceTypeMap): array {
     $slug = sanitizeAttendanceTypeSlug($row['first_type'] ?? '');
@@ -663,6 +726,7 @@ $with_exit_query = "
         attendance.timestamp AS exit_timestamp
     FROM attendance
     JOIN users ON attendance.user_id = users.id
+    LEFT JOIN employees e ON e.user_id = users.id
     WHERE UPPER(attendance.type) = 'EXIT'
 ";
 
@@ -679,6 +743,8 @@ if (!empty($dateValues)) {
     $with_exit_query .= " AND DATE(attendance.timestamp) = ?";
     $with_exit_params[] = $referenceDate;
 }
+
+$applySupervisorFilter($with_exit_query, $with_exit_params);
 
 $with_exit_query .= " ORDER BY attendance.timestamp DESC";
 

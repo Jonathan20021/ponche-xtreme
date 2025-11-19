@@ -3,10 +3,42 @@ session_start();
 include 'db.php';
 date_default_timezone_set('America/Santo_Domingo');
 
-// Verificar permisos
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['IT', 'HR', 'Admin', 'Operations'])) {
-    header('Location: index.php');
-    exit;
+// Verificar permisos usando el mismo control que records.php
+ensurePermission('records');
+
+function getSupervisorAccessClause(PDO $pdo): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    $role = $_SESSION['role'] ?? '';
+
+    if ($role !== 'Supervisor' || $userId <= 0) {
+        $cache = ['', []];
+        return $cache;
+    }
+
+    $campaignStmt = $pdo->prepare("SELECT campaign_id FROM supervisor_campaigns WHERE supervisor_id = ?");
+    $campaignStmt->execute([$userId]);
+    $campaigns = array_map('intval', $campaignStmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+
+    $conditions = [
+        'users.id = ?',
+        'e.supervisor_id = ?'
+    ];
+    $params = [$userId, $userId];
+
+    if (!empty($campaigns)) {
+        $placeholders = implode(',', array_fill(0, count($campaigns), '?'));
+        $conditions[] = "e.campaign_id IN ($placeholders)";
+        $params = array_merge($params, $campaigns);
+    }
+
+    $cache = [' AND (' . implode(' OR ', $conditions) . ')', $params];
+    return $cache;
 }
 
 // Obtener filtros desde la URL (pasados desde records.php)
@@ -83,6 +115,7 @@ $summary_query = "
         attendance.timestamp
     FROM attendance 
     JOIN users ON attendance.user_id = users.id 
+    LEFT JOIN employees e ON e.user_id = users.id
     WHERE DATE(attendance.timestamp) IN ($datePlaceholders)
 ";
 
@@ -91,6 +124,12 @@ $summary_params = $dateValues;
 if ($user_filter !== '') {
     $summary_query .= " AND users.username = ?";
     $summary_params[] = $user_filter;
+}
+
+[$supervisorClause, $supervisorParams] = getSupervisorAccessClause($pdo);
+if ($supervisorClause !== '') {
+    $summary_query .= $supervisorClause;
+    $summary_params = array_merge($summary_params, $supervisorParams);
 }
 
 $summary_query .= " ORDER BY users.username, record_date, attendance.timestamp";
@@ -114,18 +153,30 @@ if (empty($raw_summary_rows)) {
     ];
     
     // Verificar si hay registros en la base de datos para estas fechas
-    $check_query = "SELECT COUNT(*) as total FROM attendance WHERE DATE(timestamp) IN ($datePlaceholders)";
-    $check_stmt = $pdo->prepare($check_query);
-    $check_stmt->execute($dateValues);
+    $check_query = "
+        SELECT COUNT(*) as total 
+        FROM attendance 
+        JOIN users ON attendance.user_id = users.id
+        LEFT JOIN employees e ON e.user_id = users.id
+        WHERE DATE(attendance.timestamp) IN ($datePlaceholders)
+    ";
+    $check_stmt = $pdo->prepare($check_query . $supervisorClause);
+    $check_stmt->execute(array_merge($dateValues, $supervisorParams));
     $total_records = $check_stmt->fetch(PDO::FETCH_ASSOC)['total'];
     
     $debug_info['Total Records in DB for dates'] = $total_records;
     
     // Si hay registros pero no se están obteniendo, hay un problema con el JOIN o filtros
     if ($total_records > 0) {
-        $check_query2 = "SELECT COUNT(*) as total FROM attendance JOIN users ON attendance.user_id = users.id WHERE DATE(attendance.timestamp) IN ($datePlaceholders)";
-        $check_stmt2 = $pdo->prepare($check_query2);
-        $check_stmt2->execute($dateValues);
+        $check_query2 = "
+            SELECT COUNT(*) as total 
+            FROM attendance 
+            JOIN users ON attendance.user_id = users.id 
+            LEFT JOIN employees e ON e.user_id = users.id
+            WHERE DATE(attendance.timestamp) IN ($datePlaceholders)
+        ";
+        $check_stmt2 = $pdo->prepare($check_query2 . $supervisorClause);
+        $check_stmt2->execute(array_merge($dateValues, $supervisorParams));
         $total_with_join = $check_stmt2->fetch(PDO::FETCH_ASSOC)['total'];
         $debug_info['Total with JOIN'] = $total_with_join;
     }
