@@ -66,7 +66,67 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 require_once '../header.php';
 ?>
 
+<!-- Bootstrap CSS for modal support -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/recruitment.css">
+<style>
+    /* Tema del modal adaptable a claro/oscuro */
+    .theme-dark .modal-content {
+        background: linear-gradient(180deg, #0f172a 0%, #0b1223 100%);
+        color: #e2e8f0;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .theme-light .modal-content {
+        background: #ffffff;
+        color: #0f172a;
+    }
+    .theme-dark .modal-header,
+    .theme-dark .modal-footer {
+        border-color: rgba(148, 163, 184, 0.1);
+    }
+    .theme-light .modal-header,
+    .theme-light .modal-footer {
+        border-color: #e2e8f0;
+    }
+    .theme-dark .modal-title { color: #e2e8f0; }
+    .theme-light .modal-title { color: #0f172a; }
+    .theme-dark .form-label { color: #cbd5e1; }
+    .theme-light .form-label { color: #475569; }
+    .theme-dark .form-control,
+    .theme-dark .form-select {
+        background: #0b1223;
+        border-color: #1e293b;
+        color: #e2e8f0;
+    }
+    .theme-dark .form-control:focus,
+    .theme-dark .form-select:focus {
+        box-shadow: 0 0 0 0.15rem rgba(79, 70, 229, 0.3);
+        border-color: #6366f1;
+    }
+    .theme-light .form-control:focus,
+    .theme-light .form-select:focus {
+        box-shadow: 0 0 0 0.15rem rgba(79, 70, 229, 0.25);
+        border-color: #6366f1;
+    }
+    .theme-dark .form-check-label { color: #e2e8f0; }
+    .theme-light .form-check-label { color: #0f172a; }
+    .theme-dark .btn-secondary {
+        background: #1e293b;
+        border: 1px solid #334155;
+        color: #e2e8f0;
+    }
+    .theme-dark .btn-secondary:hover {
+        background: #273449;
+    }
+    .theme-light .btn-secondary {
+        background: #e2e8f0;
+        border: 1px solid #cbd5e1;
+        color: #0f172a;
+    }
+    .modal-backdrop {
+        background-color: rgba(0, 0, 0, 0.6);
+    }
+</style>
 
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
@@ -310,6 +370,17 @@ require_once '../header.php';
                                                 <span class="badge-count"><?php echo $app['comment_count']; ?></span>
                                             <?php endif; ?>
                                         </a>
+                                        <button type="button" class="btn-action btn-secondary" title="Evaluar" onclick='openEvaluationModal(<?php echo json_encode([
+                                            'id' => $app['id'],
+                                            'name' => trim($app['first_name'] . ' ' . $app['last_name']),
+                                            'result' => $app['evaluation_result'] ?? '',
+                                            'datetime' => $app['evaluation_datetime'] ?? '',
+                                            'comments' => $app['evaluation_comments'] ?? '',
+                                            'interviewer' => $app['evaluation_interviewer'] ?? '',
+                                            'interview_date' => $app['evaluation_interview_date'] ?? ''
+                                        ]); ?>)'>
+                                            <i class="fas fa-clipboard-check"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -342,6 +413,106 @@ function exportToExcel() {
     const urlParams = new URLSearchParams(window.location.search);
     window.location.href = 'export_applications.php?' + urlParams.toString();
 }
+
+// Evaluation modal logic
+function openEvaluationModal(data) {
+    document.getElementById('eval_application_id').value = data.id;
+    document.getElementById('eval_candidate').innerText = data.name || 'Candidato';
+    // Set radios
+    const results = ['acceptable','rejected','consideration','interview'];
+    results.forEach(val => {
+        const radio = document.querySelector(`input[name="evaluation_result"][value="${val}"]`);
+        if (radio) {
+            radio.checked = (data.result === val);
+        }
+    });
+    document.getElementById('evaluation_datetime').value = data.datetime ? data.datetime.replace(' ', 'T') : '';
+    document.getElementById('evaluation_comments').value = data.comments || '';
+    document.getElementById('evaluation_interviewer').value = data.interviewer || '';
+    document.getElementById('evaluation_interview_date').value = data.interview_date || '';
+    const modal = new bootstrap.Modal(document.getElementById('evaluationModal'));
+    modal.show();
+}
+
+async function submitEvaluation(event) {
+    event.preventDefault();
+    const form = document.getElementById('evaluationForm');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const original = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Guardando...';
+    try {
+        const response = await fetch('update_evaluation.php', {
+            method: 'POST',
+            body: new FormData(form)
+        });
+        const result = await response.json();
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('evaluationModal')).hide();
+            window.location.reload();
+        } else {
+            alert(result.message || 'No se pudo guardar la evaluación');
+        }
+    } catch (err) {
+        alert('Error al guardar la evaluación');
+        console.error(err);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = original;
+    }
+}
 </script>
 
+<!-- Evaluation Modal -->
+<div class="modal fade" id="evaluationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="evaluationForm" onsubmit="submitEvaluation(event)">
+                <div class="modal-header">
+                    <h5 class="modal-title">Resultados de la evaluacion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body space-y-3">
+                    <input type="hidden" name="application_id" id="eval_application_id">
+                    <div class="mb-2 text-sm text-slate-500">Candidato: <span class="font-semibold text-slate-800" id="eval_candidate"></span></div>
+                    <div class="mb-3">
+                        <label class="form-label d-block">Resultado</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <label class="form-check-label"><input type="radio" name="evaluation_result" value="acceptable" required> Aceptable</label>
+                            <label class="form-check-label"><input type="radio" name="evaluation_result" value="rejected" required> Rechazado</label>
+                            <label class="form-check-label"><input type="radio" name="evaluation_result" value="consideration" required> En consideracion</label>
+                            <label class="form-check-label"><input type="radio" name="evaluation_result" value="interview" required> Citado a entrevista</label>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Fecha/Hora de evaluacion</label>
+                            <input type="datetime-local" class="form-control" name="evaluation_datetime" id="evaluation_datetime" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Fecha (entrevistador)</label>
+                            <input type="date" class="form-control" name="evaluation_interview_date" id="evaluation_interview_date">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Comentarios</label>
+                        <textarea class="form-control" rows="4" name="evaluation_comments" id="evaluation_comments"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Entrevistador</label>
+                        <input type="text" class="form-control" name="evaluation_interviewer" id="evaluation_interviewer">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <?php require_once '../footer.php'; ?>
+
+<!-- Bootstrap JS bundle (necesario para modales) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

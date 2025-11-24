@@ -268,6 +268,49 @@ require_once '../header.php';
                 <?php endif; ?>
             </div>
 
+            <!-- Resultados de la evaluacion -->
+            <div class="glass-card">
+                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-clipboard-check text-indigo-400"></i>
+                    Resultados de la evaluacion
+                </h3>
+                <?php
+                    $evalLabels = [
+                        'acceptable' => 'Aceptable',
+                        'rejected' => 'Rechazado',
+                        'consideration' => 'En consideracion',
+                        'interview' => 'Citado a entrevista'
+                    ];
+                    $evalResult = $application['evaluation_result'] ?? '';
+                    $evalDatetime = $application['evaluation_datetime'] ?? '';
+                    $evalComments = $application['evaluation_comments'] ?? '';
+                    $evalInterviewer = $application['evaluation_interviewer'] ?? '';
+                    $evalInterviewDate = $application['evaluation_interview_date'] ?? '';
+                ?>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-white">
+                    <div>
+                        <label class="text-sm text-slate-400">Resultado</label>
+                        <p class="font-medium"><?php echo $evalResult ? ($evalLabels[$evalResult] ?? $evalResult) : 'No registrado'; ?></p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-slate-400">Fecha/Hora de evaluacion</label>
+                        <p class="font-medium"><?php echo $evalDatetime ? date('d/m/Y H:i', strtotime($evalDatetime)) : 'No registrado'; ?></p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-slate-400">Comentarios</label>
+                        <p class="font-medium whitespace-pre-line"><?php echo $evalComments ? htmlspecialchars($evalComments) : 'No registrado'; ?></p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-slate-400">Entrevistador</label>
+                        <p class="font-medium"><?php echo $evalInterviewer ? htmlspecialchars($evalInterviewer) : 'No registrado'; ?></p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-slate-400">Fecha</label>
+                        <p class="font-medium"><?php echo $evalInterviewDate ? date('d/m/Y', strtotime($evalInterviewDate)) : 'No registrado'; ?></p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Detalle de Aplicacion -->
             <div class="glass-card">
                 <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
