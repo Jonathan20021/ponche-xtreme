@@ -75,7 +75,7 @@ $totalPunchesAnalyzed = 0;
 $totalPaidPunches = 0;
 
 if (!empty($paidTypes)) {
-    $userQuery = "SELECT id, full_name, username, department_id FROM users";
+    $userQuery = "SELECT id, full_name, username, department_id, role FROM users";
     if ($employeeFilter !== 'all') {
         $userQuery .= " WHERE id = " . (int)$employeeFilter;
     }
@@ -84,6 +84,7 @@ if (!empty($paidTypes)) {
     
     foreach ($users as $user) {
         $userId = $user['id'];
+        $userRole = strtoupper($user['role'] ?? 'UNKNOWN');
         
         // Get department name
         $deptStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
@@ -158,6 +159,7 @@ if (!empty($paidTypes)) {
                 'id' => $userId,
                 'full_name' => $user['full_name'],
                 'username' => $user['username'],
+                'role' => $userRole,
                 'department_id' => $user['department_id'],
                 'department_name' => $deptName,
                 'days_worked' => $daysWorked,
@@ -219,6 +221,7 @@ foreach ($payrollRows as $row) {
         'user_id' => (int) $row['id'],
         'full_name' => $row['full_name'],
         'username' => $username,
+        'role' => $row['role'] ?? 'UNKNOWN',
         'department' => $departmentName,
         'days_worked' => (int) $row['days_worked'],
         'hours' => $hours,
@@ -307,7 +310,7 @@ $dailyTotalAmountUsd = 0.0;
 $dailyTotalAmountDop = 0.0;
 
 if (!empty($paidTypes)) {
-    $userDailyQuery = "SELECT id, full_name, username, department_id FROM users";
+    $userDailyQuery = "SELECT id, full_name, username, department_id, role FROM users";
     if ($employeeFilter !== 'all') {
         $userDailyQuery .= " WHERE id = " . (int)$employeeFilter;
     }
@@ -317,6 +320,7 @@ if (!empty($paidTypes)) {
     foreach ($usersDaily as $user) {
         $userId = $user['id'];
         $username = $user['username'];
+        $userRole = strtoupper($user['role'] ?? 'UNKNOWN');
         
         // Get department name
         $deptStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
@@ -416,6 +420,7 @@ if (!empty($paidTypes)) {
                     'hours' => $hours,
                     'amount_usd' => $amountUsd,
                     'amount_dop' => $amountDop,
+                    'role' => $userRole,
                 ];
                 
                 $dailyTotalHours += $hours;
@@ -484,6 +489,96 @@ $hoursDrillDownPunches = [
     'daily_rows' => count($dailySummaries),
     'work_dates' => $workDatesCount,
 ];
+
+$adminEmployeeSummaries = array_values(array_filter($employeeSummaries, static function (array $row): bool {
+    return strtoupper($row['role'] ?? '') !== 'AGENT';
+}));
+
+$adminTotals = [
+    'hours' => 0.0,
+    'actual_pay_usd' => 0.0,
+    'actual_pay_dop' => 0.0,
+    'days_worked' => 0,
+    'employees' => count($adminEmployeeSummaries),
+    'sum_rates_usd' => 0.0,
+    'sum_rates_dop' => 0.0,
+    'monthly_base_usd' => 0.0,
+    'monthly_base_dop' => 0.0,
+];
+
+foreach ($adminEmployeeSummaries as $row) {
+    $adminTotals['hours'] += $row['hours'];
+    $adminTotals['actual_pay_usd'] += $row['actual_pay_usd'];
+    $adminTotals['actual_pay_dop'] += $row['actual_pay_dop'];
+    $adminTotals['days_worked'] += $row['days_worked'];
+    $adminTotals['monthly_base_usd'] += $row['monthly_salary_usd'];
+    $adminTotals['monthly_base_dop'] += $row['monthly_salary_dop'];
+    if ($row['hourly_rate_usd'] > 0) {
+        $adminTotals['sum_rates_usd'] += $row['hourly_rate_usd'];
+    }
+    if ($row['hourly_rate_dop'] > 0) {
+        $adminTotals['sum_rates_dop'] += $row['hourly_rate_dop'];
+    }
+}
+
+$adminTotals['average_hours'] = $adminTotals['employees'] > 0 ? $adminTotals['hours'] / $adminTotals['employees'] : 0.0;
+$adminTotals['average_rate_usd'] = $adminTotals['employees'] > 0 ? ($adminTotals['sum_rates_usd'] / $adminTotals['employees']) : 0.0;
+$adminTotals['average_rate_dop'] = $adminTotals['employees'] > 0 ? ($adminTotals['sum_rates_dop'] / $adminTotals['employees']) : 0.0;
+$adminTotals['variance_usd'] = $adminTotals['actual_pay_usd'] - $adminTotals['monthly_base_usd'];
+$adminTotals['variance_dop'] = $adminTotals['actual_pay_dop'] - $adminTotals['monthly_base_dop'];
+
+$adminDailySummaries = array_values(array_filter($dailySummaries, static function (array $row): bool {
+    return strtoupper($row['role'] ?? '') !== 'AGENT';
+}));
+
+$adminDailyTotals = [
+    'hours' => 0.0,
+    'amount_usd' => 0.0,
+    'amount_dop' => 0.0,
+];
+foreach ($adminDailySummaries as $row) {
+    $adminDailyTotals['hours'] += $row['hours'];
+    $adminDailyTotals['amount_usd'] += $row['amount_usd'];
+    $adminDailyTotals['amount_dop'] += $row['amount_dop'];
+}
+
+$adminHoursByDay = [];
+foreach ($adminDailySummaries as $row) {
+    $dateKey = $row['work_date'];
+    if (!isset($adminHoursByDay[$dateKey])) {
+        $adminHoursByDay[$dateKey] = [
+            'date' => $dateKey,
+            'hours' => 0.0,
+            'amount_usd' => 0.0,
+            'amount_dop' => 0.0,
+            'records' => 0,
+            'collaborators' => [],
+        ];
+    }
+    $adminHoursByDay[$dateKey]['hours'] += $row['hours'];
+    $adminHoursByDay[$dateKey]['amount_usd'] += $row['amount_usd'];
+    $adminHoursByDay[$dateKey]['amount_dop'] += $row['amount_dop'];
+    $adminHoursByDay[$dateKey]['records']++;
+    $adminHoursByDay[$dateKey]['collaborators'][$row['full_name']] = true;
+}
+
+foreach ($adminHoursByDay as &$dayRow) {
+    $dayRow['collaborators_count'] = count($dayRow['collaborators']);
+    unset($dayRow['collaborators']);
+}
+unset($dayRow);
+
+$adminDailyAggregates = array_values($adminHoursByDay);
+usort($adminDailyAggregates, static function ($a, $b): int {
+    return $b['hours'] <=> $a['hours'];
+});
+$topAdminDaysByHours = array_slice($adminDailyAggregates, 0, 5);
+
+$topAdminEmployees = $adminEmployeeSummaries;
+usort($topAdminEmployees, static function (array $a, array $b): int {
+    return $b['hours'] <=> $a['hours'];
+});
+$topAdminEmployees = array_slice($topAdminEmployees, 0, 8);
 
 $selectedEmployeeName = 'Todos los colaboradores';
 if ($employeeFilter !== 'all') {
@@ -682,6 +777,40 @@ include __DIR__ . '/header.php';
     color: var(--text-muted, #94a3b8);
     font-size: 0.9rem;
 }
+
+.report-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0 0.5rem;
+    flex-wrap: wrap;
+}
+.report-tab-button {
+    padding: 0.65rem 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary, #e2e8f0);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.report-tab-button.active {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.25), rgba(37, 99, 235, 0.3));
+    border-color: rgba(14, 165, 233, 0.45);
+    color: #e0f2fe;
+}
+.theme-light .report-tab-button {
+    background: rgba(255, 255, 255, 0.8);
+}
+.theme-light .report-tab-button.active {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(14, 165, 233, 0.15));
+    color: #0f172a;
+}
+.report-tab {
+    display: none;
+}
+.report-tab.active {
+    display: block;
+}
 </style>
 <section class="space-y-10">
     <div class="glass-card">
@@ -740,6 +869,16 @@ include __DIR__ . '/header.php';
         </div>
     </form>
 
+    <div class="report-tabs">
+        <button type="button" class="report-tab-button active" id="tabBtnAgents" onclick="switchReportTab('agents')">
+            <i class="fas fa-headset"></i> Reporte Agentes
+        </button>
+        <button type="button" class="report-tab-button" id="tabBtnAdmins" onclick="switchReportTab('admins')">
+            <i class="fas fa-user-tie"></i> Reporte Administrativos
+        </button>
+    </div>
+
+    <div id="agentsReport" class="report-tab active">
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
     <div class="metric-card">
         <span class="label">Colaboradores activos</span>
@@ -1255,6 +1394,208 @@ include __DIR__ . '/header.php';
             </div>
         </div>
     </div>
+    </div> <!-- end agentsReport -->
+
+    <div id="adminsReport" class="report-tab">
+        <div class="glass-card">
+            <div class="panel-heading">
+                <div>
+                    <span class="tag-pill">HR Admin</span>
+                    <h3 class="text-primary text-xl font-semibold">Resumen administrativos</h3>
+                    <p class="text-muted text-sm">Personal no AGENT en el intervalo seleccionado.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <a class="btn-secondary" href="admin_report_excel.php?payroll_start=<?= htmlspecialchars($payrollStart) ?>&payroll_end=<?= htmlspecialchars($payrollEnd) ?>">
+                        <i class="fas fa-file-excel"></i> Exportar Excel
+                    </a>
+                    <a class="btn-secondary" href="admin_report_pdf.php?payroll_start=<?= htmlspecialchars($payrollStart) ?>&payroll_end=<?= htmlspecialchars($payrollEnd) ?>">
+                        <i class="fas fa-file-pdf"></i> Exportar PDF
+                    </a>
+                    <a class="btn-secondary" href="admin_daily_excel.php?payroll_start=<?= htmlspecialchars($payrollStart) ?>&payroll_end=<?= htmlspecialchars($payrollEnd) ?>">
+                        <i class="fas fa-file-excel"></i> Diario Excel
+                    </a>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+                <div class="metric-card">
+                    <span class="label">Colaboradores admin</span>
+                    <span class="value"><?= number_format($adminTotals['employees']) ?></span>
+                    <span class="trend neutral"><i class="fas fa-user-tie"></i> Con horas en el periodo</span>
+                </div>
+                <div class="metric-card">
+                    <span class="label">Horas administrativas</span>
+                    <span class="value"><?= number_format($adminTotals['hours'], 1) ?> h</span>
+                    <span class="trend neutral"><i class="fas fa-clock"></i> Promedio <?= number_format($adminTotals['average_hours'], 1) ?> h</span>
+                </div>
+                <div class="metric-card">
+                    <span class="label">Pago horas (USD)</span>
+                    <span class="value">$<?= number_format($adminTotals['actual_pay_usd'], 2) ?></span>
+                    <span class="trend <?= $adminTotals['variance_usd'] >= 0 ? 'positive' : 'negative' ?>">
+                        <i class="fas fa-balance-scale"></i>
+                        Base $<?= number_format($adminTotals['monthly_base_usd'], 2) ?> (<?= $adminTotals['variance_usd'] >= 0 ? '+' : '' ?>$<?= number_format($adminTotals['variance_usd'], 2) ?>) · Tarifa prom. $<?= number_format($adminTotals['average_rate_usd'], 2) ?>
+                    </span>
+                </div>
+                <div class="metric-card">
+                    <span class="label">Pago horas (DOP)</span>
+                    <span class="value">RD$<?= number_format($adminTotals['actual_pay_dop'], 2) ?></span>
+                    <span class="trend <?= $adminTotals['variance_dop'] >= 0 ? 'positive' : 'negative' ?>">
+                        <i class="fas fa-coins"></i>
+                        Base RD$<?= number_format($adminTotals['monthly_base_dop'], 2) ?> (<?= $adminTotals['variance_dop'] >= 0 ? '+' : '' ?>RD$<?= number_format($adminTotals['variance_dop'], 2) ?>) · Tarifa prom. RD$<?= number_format($adminTotals['average_rate_dop'], 2) ?>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h3 class="text-primary text-xl font-semibold">Top administrativos por horas</h3>
+                    <p class="text-muted text-sm">Solo roles diferentes a AGENT.</p>
+                </div>
+            </div>
+            <?php if (empty($topAdminEmployees)): ?>
+                <p class="text-muted">No hay datos de administrativos en el periodo.</p>
+            <?php else: ?>
+                <div class="section-card p-0 overflow-hidden">
+                    <div class="overflow-auto">
+                        <table class="table-auto text-sm">
+                            <thead>
+                                <tr>
+                                    <th>Colaborador</th>
+                                    <th>Depto</th>
+                                    <th>Horas</th>
+                                    <th>Días</th>
+                                    <th>Pago USD</th>
+                                    <th>Pago DOP</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($topAdminEmployees as $row): ?>
+                                    <tr>
+                                        <td class="font-semibold text-primary"><?= htmlspecialchars($row['full_name']) ?></td>
+                                        <td><?= htmlspecialchars($row['department']) ?></td>
+                                        <td><?= number_format($row['hours'], 1) ?> h</td>
+                                        <td><?= number_format($row['days_worked']) ?></td>
+                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
+                                        <td>RD$<?= number_format($row['actual_pay_dop'], 2) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <div class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h3 class="text-primary text-xl font-semibold">Detalle administrativos</h3>
+                    <p class="text-muted text-sm">Incluye días trabajados, horas y pago.</p>
+                </div>
+            </div>
+            <div class="section-card p-0 overflow-hidden">
+                <div class="p-4 border-b border-gray-700">
+                    <input type="text" id="searchAdminEmployees" class="input-control" placeholder="Buscar colaborador o departamento..." onkeyup="filterTable('adminEmployeeTable', 'searchAdminEmployees', [0,1])">
+                </div>
+                <div class="overflow-auto">
+                    <table class="table-auto text-sm" id="adminEmployeeTable">
+                        <thead>
+                            <tr>
+                                <th>Colaborador</th>
+                                <th>Departamento</th>
+                                <th>Días</th>
+                                <th>Horas</th>
+                                <th>Tarifa USD</th>
+                                <th>Pago USD</th>
+                                <th>Tarifa DOP</th>
+                                <th>Pago DOP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php if (empty($adminEmployeeSummaries)): ?>
+                            <tr><td colspan="8" class="text-center text-muted py-6">No hay administrativos en el periodo.</td></tr>
+                        <?php else: ?>
+                            <?php foreach ($adminEmployeeSummaries as $row): ?>
+                                <tr>
+                                    <td class="font-semibold text-primary"><?= htmlspecialchars($row['full_name']) ?></td>
+                                    <td><?= htmlspecialchars($row['department']) ?></td>
+                                    <td><?= number_format($row['days_worked']) ?></td>
+                                    <td><?= number_format($row['hours'], 1) ?> h</td>
+                                    <td>$<?= number_format($row['hourly_rate_usd'], 2) ?></td>
+                                    <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
+                                    <td>RD$<?= number_format($row['hourly_rate_dop'], 2) ?></td>
+                                    <td>RD$<?= number_format($row['actual_pay_dop'], 2) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-4 border-t border-gray-700 flex justify-between items-center">
+                    <div class="text-sm text-muted">
+                        Mostrando <span id="adminEmployeeCount"><?= count($adminEmployeeSummaries) ?></span> de <?= count($adminEmployeeSummaries) ?> colaboradores
+                    </div>
+                    <div class="flex gap-2" id="adminEmployeePagination"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h3 class="text-primary text-xl font-semibold">Detalle diario administrativos</h3>
+                    <p class="text-muted text-sm">Entradas y salidas pagadas.</p>
+                </div>
+                <span class="chip"><i class="fas fa-clock"></i> <?= number_format($adminDailyTotals['hours'], 1) ?> h | USD $<?= number_format($adminDailyTotals['amount_usd'], 2) ?> | DOP RD$<?= number_format($adminDailyTotals['amount_dop'], 2) ?></span>
+            </div>
+            <div class="section-card p-0 overflow-hidden">
+                <div class="p-4 border-b border-gray-700">
+                    <input type="text" id="searchAdminDaily" class="input-control" placeholder="Buscar por fecha, colaborador o departamento..." onkeyup="filterTable('adminDailyTable', 'searchAdminDaily', [0,1,2])">
+                </div>
+                <div class="overflow-auto">
+                    <table class="table-auto text-sm" id="adminDailyTable">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Colaborador</th>
+                                <th>Departamento</th>
+                                <th>Entrada</th>
+                                <th>Salida</th>
+                                <th>Horas</th>
+                                <th>Pago USD</th>
+                                <th>Pago DOP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php if (empty($adminDailySummaries)): ?>
+                            <tr><td colspan="8" class="text-center text-muted py-6">Sin registros administrativos.</td></tr>
+                        <?php else: ?>
+                            <?php foreach ($adminDailySummaries as $row): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars(date('d/m/Y', strtotime($row['work_date']))) ?></td>
+                                    <td><?= htmlspecialchars($row['full_name']) ?></td>
+                                    <td><?= htmlspecialchars($row['department']) ?></td>
+                                    <td><?= $row['first_entry'] ? htmlspecialchars(date('H:i', strtotime($row['first_entry']))) : 'Sin registro' ?></td>
+                                    <td><?= $row['last_exit'] ? htmlspecialchars(date('H:i', strtotime($row['last_exit']))) : 'Sin registro' ?></td>
+                                    <td><?= number_format($row['hours'], 2) ?> h</td>
+                                    <td>$<?= number_format($row['amount_usd'], 2) ?></td>
+                                    <td>RD$<?= number_format($row['amount_dop'], 2) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-4 border-t border-gray-700 flex justify-between items-center">
+                    <div class="text-sm text-muted">
+                        Mostrando <span id="adminDailyCount"><?= count($adminDailySummaries) ?></span> de <?= count($adminDailySummaries) ?> registros
+                    </div>
+                    <div class="flex gap-2" id="adminDailyPagination"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 
 <script>
@@ -1283,6 +1624,30 @@ document.addEventListener('keydown', function(evt) {
         closeHoursModal();
     }
 });
+
+function switchReportTab(tab) {
+    const agentsPanel = document.getElementById('agentsReport');
+    const adminsPanel = document.getElementById('adminsReport');
+    const btnAgents = document.getElementById('tabBtnAgents');
+    const btnAdmins = document.getElementById('tabBtnAdmins');
+
+    if (tab === 'admins') {
+        agentsPanel?.classList.remove('active');
+        adminsPanel?.classList.add('active');
+        btnAgents?.classList.remove('active');
+        btnAdmins?.classList.add('active');
+    } else {
+        adminsPanel?.classList.remove('active');
+        agentsPanel?.classList.add('active');
+        btnAdmins?.classList.remove('active');
+        btnAgents?.classList.add('active');
+    }
+
+    // Reset pagination when switching
+    if (window.tablePaginators) {
+        Object.values(window.tablePaginators).forEach(p => { if (p) p.goToPage(1); });
+    }
+}
 </script>
 
 <script>
@@ -1465,6 +1830,8 @@ document.addEventListener('DOMContentLoaded', function() {
     window.tablePaginators['deptTable'] = new TablePaginator('deptTable', 10);
     window.tablePaginators['employeeTable'] = new TablePaginator('employeeTable', 20);
     window.tablePaginators['dailyTable'] = new TablePaginator('dailyTable', 25);
+    window.tablePaginators['adminEmployeeTable'] = new TablePaginator('adminEmployeeTable', 15);
+    window.tablePaginators['adminDailyTable'] = new TablePaginator('adminDailyTable', 20);
 });
 </script>
 
