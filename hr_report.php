@@ -71,6 +71,8 @@ $paidTypes = getPaidAttendanceTypeSlugs($pdo);
 // Calculate productive hours based on PAID punch types only (DISPONIBLE, WASAPI, DIGITACION)
 // This matches the payroll calculation logic
 $payrollRows = [];
+$totalPunchesAnalyzed = 0;
+$totalPaidPunches = 0;
 
 if (!empty($paidTypes)) {
     $userQuery = "SELECT id, full_name, username, department_id FROM users";
@@ -98,6 +100,7 @@ if (!empty($paidTypes)) {
         ");
         $punchesStmt->execute([$userId, $startBound, $endBound]);
         $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
+        $totalPunchesAnalyzed += count($punches);
         
         // Group by date
         $punchesByDate = [];
@@ -125,6 +128,7 @@ if (!empty($paidTypes)) {
                 $isPaid = in_array($punchType, $paidTypesUpper);
                 
                 if ($isPaid) {
+                    $totalPaidPunches++;
                     $lastPaidPunchTime = $punchTime;
                     
                     if (!$inPaidState) {
@@ -429,6 +433,58 @@ if (!empty($paidTypes)) {
     });
 }
 
+$hoursByDay = [];
+$workDates = [];
+foreach ($dailySummaries as $row) {
+    $dateKey = $row['work_date'];
+    $workDates[$dateKey] = true;
+    
+    if (!isset($hoursByDay[$dateKey])) {
+        $hoursByDay[$dateKey] = [
+            'date' => $dateKey,
+            'hours' => 0.0,
+            'amount_usd' => 0.0,
+            'amount_dop' => 0.0,
+            'records' => 0,
+            'collaborators' => [],
+        ];
+    }
+    
+    $hoursByDay[$dateKey]['hours'] += $row['hours'];
+    $hoursByDay[$dateKey]['amount_usd'] += $row['amount_usd'];
+    $hoursByDay[$dateKey]['amount_dop'] += $row['amount_dop'];
+    $hoursByDay[$dateKey]['records']++;
+    $hoursByDay[$dateKey]['collaborators'][$row['full_name']] = true;
+}
+
+$workDatesCount = count($workDates);
+
+foreach ($hoursByDay as &$dayRow) {
+    $dayRow['collaborators_count'] = count($dayRow['collaborators']);
+    unset($dayRow['collaborators']);
+}
+unset($dayRow);
+
+$dailyAggregates = array_values($hoursByDay);
+usort($dailyAggregates, static function ($a, $b): int {
+    return $b['hours'] <=> $a['hours'];
+});
+$topDaysByHours = array_slice($dailyAggregates, 0, 5);
+
+$topHoursEmployees = $employeeSummaries;
+usort($topHoursEmployees, static function (array $a, array $b): int {
+    return $b['hours'] <=> $a['hours'];
+});
+$topHoursEmployees = array_slice($topHoursEmployees, 0, 8);
+
+$paidTypeLabels = array_map('strtoupper', $paidTypes);
+$hoursDrillDownPunches = [
+    'total_punches' => $totalPunchesAnalyzed,
+    'paid_punches' => $totalPaidPunches,
+    'daily_rows' => count($dailySummaries),
+    'work_dates' => $workDatesCount,
+];
+
 $selectedEmployeeName = 'Todos los colaboradores';
 if ($employeeFilter !== 'all') {
     foreach ($employees as $employee) {
@@ -444,6 +500,189 @@ $employeeChartJson = json_encode($employeeChartData, JSON_HEX_TAG | JSON_HEX_APO
 
 include __DIR__ . '/header.php';
 ?>
+<style>
+.metric-card.actionable {
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+}
+.metric-card.actionable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.metric-card .hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--accent-cyan, #22d3ee);
+    font-size: 0.8rem;
+    margin-top: 0.35rem;
+}
+
+.hours-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 12, 24, 0.75);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    z-index: 9999;
+}
+.hours-modal {
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.92));
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 18px;
+    width: min(1100px, 100%);
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.theme-light .hours-modal {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.95));
+    border-color: rgba(148, 163, 184, 0.35);
+}
+.hours-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    gap: 1rem;
+}
+.hours-modal-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary, #e2e8f0);
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.hours-modal-subtitle {
+    color: var(--text-muted, #94a3b8);
+    margin-top: 0.25rem;
+    font-size: 0.95rem;
+}
+.hours-modal-close {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary, #e2e8f0);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.hours-modal-close:hover {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.35);
+}
+.hours-modal-body {
+    padding: 1.25rem 1.5rem 1.5rem;
+    overflow-y: auto;
+    max-height: 78vh;
+}
+.hours-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+}
+.hours-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(34, 211, 238, 0.1);
+    border: 1px solid rgba(34, 211, 238, 0.4);
+    color: var(--text-primary, #e2e8f0);
+    font-size: 0.85rem;
+}
+.theme-light .hours-chip {
+    background: rgba(14, 165, 233, 0.12);
+    border-color: rgba(14, 165, 233, 0.35);
+}
+.hours-mini-card {
+    padding: 0.95rem 1rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+}
+.theme-light .hours-mini-card {
+    background: rgba(255, 255, 255, 0.75);
+    border-color: rgba(148, 163, 184, 0.35);
+}
+.hours-mini-card .label {
+    font-size: 0.85rem;
+    color: var(--text-muted, #94a3b8);
+}
+.hours-mini-card .value {
+    display: block;
+    margin-top: 0.35rem;
+    font-weight: 700;
+    color: var(--text-primary, #e2e8f0);
+    font-size: 1.2rem;
+}
+.hours-section {
+    margin-top: 1rem;
+    padding: 1rem 0 0;
+    border-top: 1px dashed rgba(148, 163, 184, 0.25);
+}
+.hours-section h4 {
+    font-weight: 700;
+    color: var(--text-primary, #e2e8f0);
+    margin-bottom: 0.5rem;
+}
+.hours-section p,
+.hours-section li {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.95rem;
+}
+.hours-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    margin-top: 0.5rem;
+}
+.hours-table th,
+.hours-table td {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    text-align: left;
+}
+.hours-table th {
+    color: var(--text-muted, #94a3b8);
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.01em;
+}
+.hours-table td {
+    color: var(--text-primary, #e2e8f0);
+}
+.theme-light .hours-table th {
+    color: #64748b;
+}
+.theme-light .hours-table td {
+    color: #0f172a;
+}
+.hours-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(52, 211, 153, 0.12);
+    color: #34d399;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+.hours-muted {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.9rem;
+}
+</style>
 <section class="space-y-10">
     <div class="glass-card">
         <div class="panel-heading">
@@ -502,20 +741,21 @@ include __DIR__ . '/header.php';
     </form>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <div class="metric-card">
-            <span class="label">Colaboradores activos</span>
-            <span class="value"><?= number_format($totalEmployees) ?></span>
-            <span class="trend neutral"><i class="fas fa-users"></i> Con registros en el periodo</span>
-        </div>
-        <div class="metric-card">
-            <span class="label">Horas registradas</span>
-            <span class="value"><?= number_format($totalHours, 1) ?> h</span>
-            <span class="trend neutral"><i class="fas fa-clock"></i> Promedio <?= number_format($averageHoursPerEmployee, 1) ?> h</span>
-        </div>
-        <div class="metric-card">
-            <span class="label">Pago horas (USD)</span>
-            <span class="value">$<?= number_format($totalActualPayUsd, 2) ?></span>
-            <span class="trend <?= $payrollVarianceUsd >= 0 ? 'positive' : 'negative' ?>">
+    <div class="metric-card">
+        <span class="label">Colaboradores activos</span>
+        <span class="value"><?= number_format($totalEmployees) ?></span>
+        <span class="trend neutral"><i class="fas fa-users"></i> Con registros en el periodo</span>
+    </div>
+    <div class="metric-card actionable" role="button" tabindex="0" onclick="openHoursModal()" onkeydown="if(event.key === 'Enter' || event.key === ' ') { openHoursModal(); }">
+        <span class="label">Horas registradas</span>
+        <span class="value"><?= number_format($totalHours, 1) ?> h</span>
+        <span class="trend neutral"><i class="fas fa-clock"></i> Promedio <?= number_format($averageHoursPerEmployee, 1) ?> h</span>
+        <span class="hint"><i class="fas fa-eye"></i> Ver origen de las horas</span>
+    </div>
+    <div class="metric-card">
+        <span class="label">Pago horas (USD)</span>
+        <span class="value">$<?= number_format($totalActualPayUsd, 2) ?></span>
+        <span class="trend <?= $payrollVarianceUsd >= 0 ? 'positive' : 'negative' ?>">
                 <i class="fas fa-balance-scale"></i>
                 Base $<?= number_format($totalMonthlyBaseUsd, 2) ?> (<?= $payrollVarianceUsd >= 0 ? '+' : '' ?>$<?= number_format($payrollVarianceUsd, 2) ?>) · Tarifa prom. $<?= number_format($averageHourlyRateUsd, 2) ?>
             </span>
@@ -530,6 +770,284 @@ include __DIR__ . '/header.php';
         </div>
     </div>
 
+
+
+    <div id="hoursModal" class="hours-modal-overlay" onclick="closeHoursModal()" style="display: none;">
+        <div class="hours-modal" role="dialog" aria-modal="true" aria-labelledby="hoursModalTitle" onclick="event.stopPropagation();">
+            <div class="hours-modal-header">
+                <div>
+                    <div class="hours-modal-title" id="hoursModalTitle">
+                        <i class="fas fa-clipboard-list"></i>
+                        Detalle de horas registradas
+                    </div>
+                    <div class="hours-modal-subtitle">
+                        Periodo del <?= htmlspecialchars(date('d/m/Y', strtotime($payrollStart))) ?> al <?= htmlspecialchars(date('d/m/Y', strtotime($payrollEnd))) ?> | <?= htmlspecialchars($selectedEmployeeName) ?>
+                    </div>
+                </div>
+                <button type="button" class="hours-modal-close" aria-label="Cerrar" onclick="closeHoursModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="hours-modal-body">
+                <div class="hours-grid">
+                    <div class="hours-mini-card">
+                        <span class="label">Horas totales</span>
+                        <span class="value"><?= number_format($totalHours, 1) ?> h</span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Promedio por colaborador</span>
+                        <span class="value"><?= number_format($averageHoursPerEmployee, 1) ?> h</span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Colaboradores con horas</span>
+                        <span class="value"><?= number_format($totalEmployees) ?></span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Fechas con tiempo productivo</span>
+                        <span class="value"><?= number_format($workDatesCount) ?></span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Registros revisados</span>
+                        <span class="value"><?= number_format($hoursDrillDownPunches['total_punches']) ?> punches</span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Punches pagados</span>
+                        <span class="value"><?= number_format($hoursDrillDownPunches['paid_punches']) ?> eventos</span>
+                    </div>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Metodologia y fuentes</h4>
+                    <p class="hours-muted">Se suman unicamente los intervalos donde el estado del punch esta marcado como pagado.</p>
+                    <div class="flex flex-wrap gap-2 mt-3">
+                        <?php if (!empty($paidTypeLabels)): ?>
+                            <?php foreach ($paidTypeLabels as $label): ?>
+                                <span class="hours-chip"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($label) ?></span>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <span class="hours-muted text-sm">No hay tipos de asistencia pagados configurados.</span>
+                        <?php endif; ?>
+                    </div>
+                    <ul class="list-disc pl-5 space-y-1 mt-3">
+                        <li>Intervalo analizado: del <?= htmlspecialchars(date('d/m/Y', strtotime($payrollStart))) ?> al <?= htmlspecialchars(date('d/m/Y', strtotime($payrollEnd))) ?> (<?= htmlspecialchars($selectedEmployeeName) ?>).</li>
+                        <li><?= number_format($hoursDrillDownPunches['total_punches']) ?> registros de asistencia revisados (<?= number_format($hoursDrillDownPunches['paid_punches']) ?> pagados) generan <?= number_format($hoursDrillDownPunches['daily_rows']) ?> filas diarias.</li>
+                        <li>Sumatoria de <?= number_format($totalDaysWorked) ?> jornadas (por colaborador) distribuidas en <?= number_format($workDatesCount) ?> fechas con actividad productiva.</li>
+                    </ul>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Colaboradores con mas horas en el periodo</h4>
+                    <?php if (empty($topHoursEmployees)): ?>
+                        <p class="hours-muted">Aun no hay horas registradas en el intervalo seleccionado.</p>
+                    <?php else: ?>
+                        <table class="hours-table">
+                            <thead>
+                                <tr>
+                                    <th>Colaborador</th>
+                                    <th>Departamento</th>
+                                    <th>Horas</th>
+                                    <th>Dias</th>
+                                    <th>Pago USD</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($topHoursEmployees as $row): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($row['full_name']) ?></td>
+                                        <td><?= htmlspecialchars($row['department']) ?></td>
+                                        <td><?= number_format($row['hours'], 1) ?> h</td>
+                                        <td><?= number_format($row['days_worked']) ?></td>
+                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <p class="hours-muted mt-2">El resto de colaboradores se muestra en la tabla principal.</p>
+                    <?php endif; ?>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Fechas con mayor carga de horas</h4>
+                    <?php if (empty($topDaysByHours)): ?>
+                        <p class="hours-muted">No hay fechas con horas pagadas en el periodo.</p>
+                    <?php else: ?>
+                        <table class="hours-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Horas</th>
+                                    <th>Pago USD</th>
+                                    <th>Pago DOP</th>
+                                    <th>Registros</th>
+                                    <th>Colaboradores</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($topDaysByHours as $day): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars(date('d/m/Y', strtotime($day['date']))) ?></td>
+                                        <td><?= number_format($day['hours'], 2) ?> h</td>
+                                        <td>$<?= number_format($day['amount_usd'], 2) ?></td>
+                                        <td>RD$<?= number_format($day['amount_dop'], 2) ?></td>
+                                        <td><?= number_format($day['records']) ?></td>
+                                        <td><?= number_format($day['collaborators_count']) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Notas para auditoria rapida</h4>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>La sumatoria de horas coincide con la columna <strong>Horas</strong> de la tabla de detalle por colaborador.</li>
+                        <li>Los pagos reflejan las tarifas horarias configuradas; cualquier diferencia con la base mensual se muestra en la columna <strong>Dif</strong> del reporte.</li>
+                        <li>Si alguna fecha o colaborador no aparece aqui, no registro estados pagados en el intervalo seleccionado.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="hoursModal" class="hours-modal-overlay" onclick="closeHoursModal()" style="display: none;">
+        <div class="hours-modal" role="dialog" aria-modal="true" aria-labelledby="hoursModalTitle" onclick="event.stopPropagation();">
+            <div class="hours-modal-header">
+                <div>
+                    <div class="hours-modal-title" id="hoursModalTitle">
+                        <i class="fas fa-clipboard-list"></i>
+                        Detalle de horas registradas
+                    </div>
+                    <div class="hours-modal-subtitle">
+                        Periodo del <?= htmlspecialchars(date('d/m/Y', strtotime($payrollStart))) ?> al <?= htmlspecialchars(date('d/m/Y', strtotime($payrollEnd))) ?> | <?= htmlspecialchars($selectedEmployeeName) ?>
+                    </div>
+                </div>
+                <button type="button" class="hours-modal-close" aria-label="Cerrar" onclick="closeHoursModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="hours-modal-body">
+                <div class="hours-grid">
+                    <div class="hours-mini-card">
+                        <span class="label">Horas totales</span>
+                        <span class="value"><?= number_format($totalHours, 1) ?> h</span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Promedio por colaborador</span>
+                        <span class="value"><?= number_format($averageHoursPerEmployee, 1) ?> h</span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Colaboradores con horas</span>
+                        <span class="value"><?= number_format($totalEmployees) ?></span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Fechas con tiempo productivo</span>
+                        <span class="value"><?= number_format($workDatesCount) ?></span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Registros revisados</span>
+                        <span class="value"><?= number_format($hoursDrillDownPunches['total_punches']) ?> punches</span>
+                    </div>
+                    <div class="hours-mini-card">
+                        <span class="label">Punches pagados</span>
+                        <span class="value"><?= number_format($hoursDrillDownPunches['paid_punches']) ?> eventos</span>
+                    </div>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Metodologia y fuentes</h4>
+                    <p class="hours-muted">Se suman unicamente los intervalos donde el estado del punch esta marcado como pagado.</p>
+                    <div class="flex flex-wrap gap-2 mt-3">
+                        <?php if (!empty($paidTypeLabels)): ?>
+                            <?php foreach ($paidTypeLabels as $label): ?>
+                                <span class="hours-chip"><i class="fas fa-check-circle"></i> <?= htmlspecialchars($label) ?></span>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <span class="hours-muted text-sm">No hay tipos de asistencia pagados configurados.</span>
+                        <?php endif; ?>
+                    </div>
+                    <ul class="list-disc pl-5 space-y-1 mt-3">
+                        <li>Intervalo analizado: del <?= htmlspecialchars(date('d/m/Y', strtotime($payrollStart))) ?> al <?= htmlspecialchars(date('d/m/Y', strtotime($payrollEnd))) ?> (<?= htmlspecialchars($selectedEmployeeName) ?>).</li>
+                        <li><?= number_format($hoursDrillDownPunches['total_punches']) ?> registros de asistencia revisados (<?= number_format($hoursDrillDownPunches['paid_punches']) ?> pagados) generan <?= number_format($hoursDrillDownPunches['daily_rows']) ?> filas diarias.</li>
+                        <li>Sumatoria de <?= number_format($totalDaysWorked) ?> jornadas (por colaborador) distribuidas en <?= number_format($workDatesCount) ?> fechas con actividad productiva.</li>
+                    </ul>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Colaboradores con mas horas en el periodo</h4>
+                    <?php if (empty($topHoursEmployees)): ?>
+                        <p class="hours-muted">Aun no hay horas registradas en el intervalo seleccionado.</p>
+                    <?php else: ?>
+                        <table class="hours-table">
+                            <thead>
+                                <tr>
+                                    <th>Colaborador</th>
+                                    <th>Departamento</th>
+                                    <th>Horas</th>
+                                    <th>Dias</th>
+                                    <th>Pago USD</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($topHoursEmployees as $row): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars($row['full_name']) ?></td>
+                                        <td><?= htmlspecialchars($row['department']) ?></td>
+                                        <td><?= number_format($row['hours'], 1) ?> h</td>
+                                        <td><?= number_format($row['days_worked']) ?></td>
+                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <p class="hours-muted mt-2">El resto de colaboradores se muestra en la tabla principal.</p>
+                    <?php endif; ?>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Fechas con mayor carga de horas</h4>
+                    <?php if (empty($topDaysByHours)): ?>
+                        <p class="hours-muted">No hay fechas con horas pagadas en el periodo.</p>
+                    <?php else: ?>
+                        <table class="hours-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Horas</th>
+                                    <th>Pago USD</th>
+                                    <th>Pago DOP</th>
+                                    <th>Registros</th>
+                                    <th>Colaboradores</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($topDaysByHours as $day): ?>
+                                    <tr>
+                                        <td><?= htmlspecialchars(date('d/m/Y', strtotime($day['date']))) ?></td>
+                                        <td><?= number_format($day['hours'], 2) ?> h</td>
+                                        <td>$<?= number_format($day['amount_usd'], 2) ?></td>
+                                        <td>RD$<?= number_format($day['amount_dop'], 2) ?></td>
+                                        <td><?= number_format($day['records']) ?></td>
+                                        <td><?= number_format($day['collaborators_count']) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </div>
+
+                <div class="hours-section">
+                    <h4>Notas para auditoria rapida</h4>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>La sumatoria de horas coincide con la columna <strong>Horas</strong> de la tabla de detalle por colaborador.</li>
+                        <li>Los pagos reflejan las tarifas horarias configuradas; cualquier diferencia con la base mensual se muestra en la columna <strong>Dif</strong> del reporte.</li>
+                        <li>Si alguna fecha o colaborador no aparece aqui, no registro estados pagados en el intervalo seleccionado.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="glass-card space-y-6">
         <div class="panel-heading">
             <div>
@@ -738,6 +1256,34 @@ include __DIR__ . '/header.php';
         </div>
     </div>
 </section>
+
+<script>
+function openHoursModal() {
+    const modal = document.getElementById('hoursModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    document.body.dataset.prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+}
+
+function closeHoursModal() {
+    const modal = document.getElementById('hoursModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    if (document.body.dataset.prevOverflow !== undefined) {
+        document.body.style.overflow = document.body.dataset.prevOverflow;
+        delete document.body.dataset.prevOverflow;
+    } else {
+        document.body.style.overflow = '';
+    }
+}
+
+document.addEventListener('keydown', function(evt) {
+    if (evt.key === 'Escape') {
+        closeHoursModal();
+    }
+});
+</script>
 
 <script>
 // Función de búsqueda en tablas
