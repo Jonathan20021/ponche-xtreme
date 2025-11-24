@@ -65,6 +65,8 @@ foreach ($attendanceTypes as $typeRow) {
         $durationTypes[] = [
             'slug' => $slug,
             'label' => $typeRow['label'] ?? $slug,
+            'color_start' => sanitizeHexColorValue($typeRow['color_start'] ?? '#6366F1', '#6366F1'),
+            'color_end' => sanitizeHexColorValue($typeRow['color_end'] ?? ($typeRow['color_start'] ?? '#6366F1'), '#6366F1'),
         ];
     }
 }
@@ -201,15 +203,12 @@ $metricCards = [
 
 foreach ($durationTypes as $typeMeta) {
     $slug = $typeMeta['slug'];
-    $meta = $attendanceTypeMap[$slug] ?? null;
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#6366F1', '#6366F1');
-    $colorEnd = sanitizeHexColorValue($meta['color_end'] ?? $colorStart, $colorStart);
     $metricCards[] = [
         'label' => $typeMeta['label'],
         'value' => gmdate('H:i:s', max(0, $dailyDurations[$slug] ?? 0)),
         'description' => 'Duración registrada',
-        'color_start' => $colorStart,
-        'color_end' => $colorEnd,
+        'color_start' => $typeMeta['color_start'],
+        'color_end' => $typeMeta['color_end'],
     ];
 }
 

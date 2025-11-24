@@ -23,7 +23,31 @@ $job_postings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Get base URL for public links
 $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'];
-$base_url = $protocol . '://' . $host . dirname(dirname($_SERVER['PHP_SELF']));
+$base_path = rtrim(dirname(dirname($_SERVER['PHP_SELF'])), '/\\');
+$base_url = rtrim($protocol . '://' . $host . $base_path, '/');
+
+function getJobBannerUrl($jobId, $baseUrl)
+{
+    $bannerDir = realpath(__DIR__ . '/../uploads/job_banners');
+    if (!$bannerDir) {
+        return null;
+    }
+
+    $baseBannerUrl = rtrim($baseUrl, '/') . '/uploads/job_banners';
+    foreach (['jpg', 'jpeg', 'png', 'webp'] as $ext) {
+        $filePath = $bannerDir . DIRECTORY_SEPARATOR . "job_{$jobId}." . $ext;
+        if (file_exists($filePath)) {
+            return $baseBannerUrl . "/job_{$jobId}.{$ext}";
+        }
+    }
+
+    return null;
+}
+
+foreach ($job_postings as &$job) {
+    $job['banner_url'] = getJobBannerUrl($job['id'], $base_url);
+}
+unset($job);
 
 require_once '../header.php';
 ?>
@@ -52,6 +76,15 @@ require_once '../header.php';
             </button>
         </div>
     </div>
+
+    <?php if (!empty($_SESSION['success_message'])): ?>
+        <div class="status-banner success mb-6"><?php echo htmlspecialchars($_SESSION['success_message']); ?></div>
+        <?php unset($_SESSION['success_message']); ?>
+    <?php endif; ?>
+    <?php if (!empty($_SESSION['error_message'])): ?>
+        <div class="status-banner error mb-6"><?php echo htmlspecialchars($_SESSION['error_message']); ?></div>
+        <?php unset($_SESSION['error_message']); ?>
+    <?php endif; ?>
 
     <!-- Public Links Section -->
     <div class="glass-card mb-6" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); border-left: 4px solid #6366f1;">
@@ -99,6 +132,12 @@ require_once '../header.php';
                     <div class="flex flex-col lg:flex-row gap-6">
                         <!-- Left Column: Job Info -->
                         <div class="flex-1">
+                            <?php if (!empty($job['banner_url'])): ?>
+                                <div class="mb-4 rounded-lg overflow-hidden border border-slate-700">
+                                    <img src="<?php echo htmlspecialchars($job['banner_url']); ?>" alt="Banner de la vacante" class="w-full h-36 object-cover">
+                                </div>
+                            <?php endif; ?>
+
                             <div class="flex items-start justify-between mb-4">
                                 <div class="flex-1">
                                     <h3 class="text-2xl font-bold text-white mb-2"><?php echo htmlspecialchars($job['title']); ?></h3>
@@ -138,6 +177,12 @@ require_once '../header.php';
                                         Recibiendo solicitudes
                                     </span>
                                 <?php endif; ?>
+                                <?php if (!empty($job['banner_url'])): ?>
+                                    <span class="tag-pill" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                                        <i class="fas fa-image mr-1"></i>
+                                        Banner listo para compartir
+                                    </span>
+                                <?php endif; ?>
                             </div>
 
                             <!-- Public Link for this job -->
@@ -147,7 +192,7 @@ require_once '../header.php';
                                         <i class="fas fa-link mr-1"></i> Enlace público para esta vacante:
                                     </label>
                                     <div class="flex gap-2">
-                                        <input type="text" class="form-input flex-1 text-sm" id="jobUrl<?php echo $job['id']; ?>" value="<?php echo $base_url; ?>/careers.php#job-<?php echo $job['id']; ?>" readonly>
+                                        <input type="text" class="form-input flex-1 text-sm" id="jobUrl<?php echo $job['id']; ?>" value="<?php echo $base_url; ?>/careers.php?job=<?php echo $job['id']; ?>#job-<?php echo $job['id']; ?>" readonly>
                                         <button class="btn-sm btn-primary" onclick="copyToClipboard('jobUrl<?php echo $job['id']; ?>', event)">
                                             <i class="fas fa-copy"></i>
                                         </button>
@@ -184,7 +229,7 @@ require_once '../header.php';
 <!-- Add Job Modal -->
 <div id="addJobModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-2 sm:p-4" style="display: none;">
     <div class="glass-card w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mx-2 sm:mx-4">
-        <form action="save_job_posting.php" method="POST">
+        <form action="save_job_posting.php" method="POST" enctype="multipart/form-data">
             <div class="flex justify-between items-center mb-4 sm:mb-6 pb-3 sm:pb-4 border-b border-slate-700">
                 <h5 class="text-xl sm:text-2xl font-bold text-white">Nueva Vacante</h5>
                 <button type="button" class="text-slate-400 hover:text-white transition-colors p-1" onclick="closeJobModal()">
@@ -229,10 +274,15 @@ require_once '../header.php';
                     <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Responsabilidades</label>
                     <textarea class="form-input w-full text-sm sm:text-base" name="responsibilities" rows="3"></textarea>
                 </div>
+                <div class="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-800/30">
+                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-2">Banner de la Vacante</label>
+                    <input type="file" class="form-input w-full text-sm sm:text-base file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-indigo-600 file:text-white file:cursor-pointer" name="banner_image" accept="image/png, image/jpeg, image/webp">
+                    <p class="text-xs text-slate-400 mt-2">Se usar�� al compartir la vacante. Formatos: JPG, PNG o WebP. Tama��o m��x. 5MB.</p>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                     <div>
                         <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Rango Salarial</label>
-                        <input type="text" class="form-input w-full text-sm sm:text-base" name="salary_range" placeholder="$25,000 - $35,000 MXN">
+                        <input type="text" class="form-input w-full text-sm sm:text-base" name="salary_range" placeholder="RD$25,000 - RD$35,000 DOP">
                     </div>
                     <div>
                         <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Fecha de Cierre</label>

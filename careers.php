@@ -8,13 +8,68 @@ $stmt = $pdo->query("SELECT * FROM job_postings WHERE status = 'active' AND (clo
 $job_postings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Get company info
 $company_name = "Evallish BPO Control";
+
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$base_path = rtrim(dirname($_SERVER['PHP_SELF']), '/\\');
+$base_url = rtrim($protocol . '://' . $host . $base_path, '/');
+
+function getJobBannerUrl(int $jobId, string $baseUrl): ?string
+{
+    $bannerDir = realpath(__DIR__ . '/uploads/job_banners');
+    if (!$bannerDir) {
+        return null;
+    }
+
+    $baseBannerUrl = rtrim($baseUrl, '/') . '/uploads/job_banners';
+    foreach (['jpg', 'jpeg', 'png', 'webp'] as $ext) {
+        $filePath = $bannerDir . DIRECTORY_SEPARATOR . "job_{$jobId}.{$ext}";
+        if (file_exists($filePath)) {
+            return $baseBannerUrl . "/job_{$jobId}.{$ext}";
+        }
+    }
+
+    return null;
+}
+
+foreach ($job_postings as &$job) {
+    $job['banner_url'] = getJobBannerUrl((int)$job['id'], $base_url);
+}
+unset($job);
+
+$shareJobId = isset($_GET['job']) ? (int)$_GET['job'] : null;
+$shareJob = null;
+if ($shareJobId) {
+    foreach ($job_postings as $job) {
+        if ((int)$job['id'] === $shareJobId) {
+            $shareJob = $job;
+            break;
+        }
+    }
+}
+
+$shareTitle = $shareJob ? ($shareJob['title'] . " - " . $company_name) : "Carreras - " . $company_name;
+$shareDescription = $shareJob
+    ? substr(strip_tags(preg_replace('/\s+/', ' ', $shareJob['description'] ?? '')), 0, 180)
+    : "Descubre las vacantes disponibles y ��nete al equipo de {$company_name}.";
+$shareImage = $shareJob['banner_url'] ?? ($base_url . '/assets/logo.png');
+$shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : '');
 ?>
 <!DOCTYPE html>
 <html lang="es" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Carreras - <?php echo $company_name; ?></title>
+    <title><?php echo htmlspecialchars($shareTitle); ?></title>
+    <meta property="og:title" content="<?php echo htmlspecialchars($shareTitle); ?>">
+    <meta property="og:description" content="<?php echo htmlspecialchars($shareDescription); ?>">
+    <meta property="og:image" content="<?php echo htmlspecialchars($shareImage); ?>">
+    <meta property="og:url" content="<?php echo htmlspecialchars($shareUrl); ?>">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?php echo htmlspecialchars($shareTitle); ?>">
+    <meta name="twitter:description" content="<?php echo htmlspecialchars($shareDescription); ?>">
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($shareImage); ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -83,6 +138,11 @@ $company_name = "Evallish BPO Control";
                     ];
                 ?>
                     <div class="job-card bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-lg" id="job-<?php echo $job['id']; ?>">
+                        <?php if (!empty($job['banner_url'])): ?>
+                            <div class="mb-4 -mx-6 -mt-6 rounded-t-xl overflow-hidden border-b border-gray-200">
+                                <img src="<?php echo htmlspecialchars($job['banner_url']); ?>" alt="Banner de la vacante" class="w-full h-48 object-cover">
+                            </div>
+                        <?php endif; ?>
                         <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                             <!-- Left: Job Info -->
                             <div class="flex-1">
@@ -168,87 +228,198 @@ $company_name = "Evallish BPO Control";
                 <div class="modal-body p-6">
                     <form id="applicationForm" enctype="multipart/form-data">
                         <input type="hidden" name="job_posting_id" id="job_posting_id">
-                        
-                        <!-- Personal Information -->
-                        <div class="mb-6">
-                            <h6 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+
+                        <div class="mb-6 space-y-4">
+                            <h6 class="text-lg font-bold text-gray-900 flex items-center gap-2">
                                 <i class="fas fa-user text-indigo-600"></i>
-                                Información Personal
+                                Formulario de Solicitud - Evallish BPO
                             </h6>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Nombre(s) *</label>
-                                    <input type="text" name="first_name" required 
-                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Nombre del candidato *</label>
+                                    <input type="text" name="candidate_name" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Apellido(s) *</label>
-                                    <input type="text" name="last_name" required 
-                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Cedula dominicana *</label>
+                                    <input type="text" name="cedula" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                                    <input type="email" name="email" required 
-                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Numero(s) de telefono *</label>
+                                    <input type="text" name="phone_numbers" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Teléfono *</label>
-                                    <input type="tel" name="phone" required 
-                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Sector donde reside *</label>
+                                    <input type="text" name="sector_residencia" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Email (opcional)</label>
+                                    <input type="email" name="email" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Para enviarte confirmacion">
                                 </div>
                             </div>
                         </div>
 
-                        <hr class="my-6">
+                        <div class="mb-6 space-y-3">
+                            <h6 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <i class="fas fa-rotate-left text-indigo-600"></i>
+                                Aplicacion previa
+                            </h6>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿Ha aplicado con nosotros anteriormente? *</label>
+                                    <div class="flex items-center gap-4">
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="applied_before" value="SI" required> SI</label>
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="applied_before" value="NO" required> NO</label>
+                                    </div>
+                                </div>
+                                <div id="applied_before_details_group" style="display: none;">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Si su respuesta es si, especifique</label>
+                                    <input type="text" name="applied_before_details" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                </div>
+                            </div>
+                        </div>
 
-                        <!-- Professional Information -->
-                        <div class="mb-6">
-                            <h6 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <div class="mb-6 space-y-3">
+                            <h6 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <i class="fas fa-bullhorn text-indigo-600"></i>
+                                ¿Como se entero de la vacante?
+                            </h6>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="space-y-2">
+                                    <label class="flex items-center gap-2"><input type="radio" name="source" value="Instagram" required> Instagram</label>
+                                    <label class="flex items-center gap-2"><input type="radio" name="source" value="WhatsApp" required> WhatsApp</label>
+                                    <label class="flex items-center gap-2"><input type="radio" name="source" value="Facebook" required> Facebook</label>
+                                    <label class="flex items-center gap-2"><input type="radio" name="source" value="Un amigo" required> Un amigo</label>
+                                    <label class="flex items-center gap-2"><input type="radio" name="source" value="Otro" required> Otro</label>
+                                </div>
+                                <div id="source_other_group" style="display: none;">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Si selecciono "Otro", especifique</label>
+                                    <input type="text" name="source_other" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus-border-transparent">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-6 space-y-3">
+                            <h6 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <i class="fas fa-lightbulb text-indigo-600"></i>
+                                Conocimiento sobre la empresa
+                            </h6>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿Sabe a que se dedica Evallish BPO? *</label>
+                                    <div class="flex items-center gap-4">
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="knows_company" value="SI" required> SI</label>
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="knows_company" value="NO" required> NO</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿Por que esta interesado(a) en trabajar para esta empresa? *</label>
+                                    <textarea name="interest_reason" required rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-6 space-y-3">
+                            <h6 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                <i class="fas fa-language text-indigo-600"></i>
+                                Idioma y disponibilidad
+                            </h6>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿En cual idioma desea aplicar? *</label>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center gap-2"><input type="radio" name="application_language" value="Ingles" required> Ingles</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="application_language" value="Espanol" required> Espanol</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="application_language" value="Ambos" required> Ambos</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿Cual es su horario de trabajo disponible? *</label>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center gap-2"><input type="radio" name="availability_time" value="AM" required> AM</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="availability_time" value="PM" required> PM</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="availability_time" value="Horario abierto" required> Horario abierto</label>
+                                    </div>
+                                    <label class="block text-sm font-medium text-gray-700 mt-3 mb-2">Preferencia de horario</label>
+                                    <input type="text" name="availability_preference" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Ej: 9am-6pm">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿Cual es su horario de entrenamiento disponible? *</label>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center gap-2"><input type="radio" name="training_schedule" value="8:30-5:30 L-V" required> 8:30 a.m. - 5:30 p.m. Lunes a Viernes</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="training_schedule" value="2:30-10:30 L-D" required> 2:30 p.m. - 10:30 p.m. Lunes a Domingo</label>
+                                        <label class="flex items-center gap-2"><input type="radio" name="training_schedule" value="Horario abierto" required> Horario abierto</label>
+                                    </div>
+                                </div>
+                                <div class="space-y-3">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Rotamos los dias libres semanalmente. ¿Esta de acuerdo con esto? *</label>
+                                        <div class="flex items-center gap-4">
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="agrees_rotating_days" value="SI" required> SI</label>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="agrees_rotating_days" value="NO" required> NO</label>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">¿Esta disponible para trabajar fines de semana y dias feriados? *</label>
+                                        <div class="flex items-center gap-4">
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="weekend_holidays" value="SI" required> SI</label>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="weekend_holidays" value="NO" required> NO</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-6 space-y-3">
+                            <h6 class="text-lg font-bold text-gray-900 flex items-center gap-2">
                                 <i class="fas fa-briefcase text-indigo-600"></i>
-                                Información Profesional
+                                Experiencia laboral
                             </h6>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Nivel de Educación *</label>
-                                    <select name="education_level" required 
-                                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-                                        <option value="">Seleccionar...</option>
-                                        <option value="Secundaria">Secundaria</option>
-                                        <option value="Preparatoria">Preparatoria</option>
-                                        <option value="Técnico">Técnico</option>
-                                        <option value="Licenciatura">Licenciatura</option>
-                                        <option value="Maestría">Maestría</option>
-                                        <option value="Doctorado">Doctorado</option>
-                                    </select>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿Actualmente esta empleado? *</label>
+                                    <div class="flex items-center gap-4">
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="currently_employed" value="SI" required> SI</label>
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="currently_employed" value="NO" required> NO</label>
+                                    </div>
+                                    <div id="current_employment_details_group" style="display: none;">
+                                        <label class="block text-sm font-medium text-gray-700 mt-3 mb-2">Si respondio si, especifique</label>
+                                        <input type="text" name="current_employment_details" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    </div>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Años de Experiencia *</label>
-                                    <input type="number" name="years_of_experience" min="0" required 
-                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                <div class="space-y-2">
+                                    <label class="block text-sm font-medium text-gray-700">Experiencia laboral reciente</label>
+                                    <input type="text" name="recent_company" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Empresa">
+                                    <input type="text" name="recent_role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Puesto">
+                                    <input type="number" min="0" name="recent_years" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Años">
+                                    <input type="text" name="recent_last_salary" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus-border-transparent" placeholder="Ultimo salario devengado">
                                 </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Puesto Actual</label>
-                                    <input type="text" name="current_position" 
-                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">¿Ha trabajado en call center antes? *</label>
+                                    <div class="flex items-center gap-4">
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="has_call_center_experience" value="SI" required> SI</label>
+                                        <label class="inline-flex items-center gap-2"><input type="radio" name="has_call_center_experience" value="NO" required> NO</label>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Empresa Actual</label>
-                                    <input type="text" name="current_company" 
-                                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                <div id="call_center_details_group" class="space-y-2" style="display: none;">
+                                    <label class="block text-sm font-medium text-gray-700">Si respondio si, indique</label>
+                                    <input type="text" name="call_center_name" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus-border-transparent" placeholder="Nombre del ultimo call center">
+                                    <input type="text" name="call_center_role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus-border-transparent" placeholder="Puesto desempenado">
+                                    <input type="text" name="call_center_salary" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus-border-transparent" placeholder="Ultimo salario devengado">
                                 </div>
                             </div>
                         </div>
 
-                        <hr class="my-6">
-
-                        <!-- CV Upload -->
                         <div class="mb-6">
-                            <h6 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                <i class="fas fa-file-upload text-indigo-600"></i>
+                            <h6 class="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                <i class="fas fa-paperclip text-indigo-600"></i>
                                 Curriculum Vitae
                             </h6>
-                            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-500 transition-colors">
-                                <input type="file" id="cv_file" name="cv_file" accept=".pdf,.doc,.docx" required class="hidden">
+                            <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-indigo-400 transition-colors">
+                                <input type="file" name="cv_file" id="cv_file" accept=".pdf,.doc,.docx" required class="hidden">
                                 <label for="cv_file" class="cursor-pointer">
                                     <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
                                     <p class="text-sm text-gray-600">Haz clic para subir tu CV (PDF, DOC, DOCX - Max 5MB)</p>
@@ -259,7 +430,6 @@ $company_name = "Evallish BPO Control";
 
                         <hr class="my-6">
 
-                        <!-- Additional Positions -->
                         <div class="mb-6">
                             <h6 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                                 <i class="fas fa-list-check text-indigo-600"></i>
@@ -271,9 +441,7 @@ $company_name = "Evallish BPO Control";
                                     ¿Te interesan otras posiciones? Selecciona las vacantes adicionales a las que deseas aplicar con el mismo CV.
                                 </p>
                             </div>
-                            <div id="additional-positions-container" class="space-y-3">
-                                <!-- Additional positions will be loaded here dynamically -->
-                            </div>
+                            <div id="additional-positions-container" class="space-y-3"></div>
                         </div>
 
                         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -283,8 +451,7 @@ $company_name = "Evallish BPO Control";
                             </p>
                         </div>
 
-                        <button type="submit" 
-                                class="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200">
+                        <button type="submit" class="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200">
                             <i class="fas fa-paper-plane mr-2"></i>
                             Enviar Solicitud
                         </button>
@@ -293,7 +460,6 @@ $company_name = "Evallish BPO Control";
             </div>
         </div>
     </div>
-
     <!-- Job Details Modal -->
     <div class="modal fade" id="jobDetailsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -319,6 +485,49 @@ $company_name = "Evallish BPO Control";
         const jobPostings = <?php echo json_encode($job_postings); ?>;
         let currentJobId = null;
 
+        function toggleVisibility(id, show) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.style.display = show ? '' : 'none';
+        }
+
+        function updateConditionalFields() {
+            const appliedBefore = document.querySelector('input[name="applied_before"]:checked')?.value;
+            toggleVisibility('applied_before_details_group', appliedBefore === 'SI');
+
+            const source = document.querySelector('input[name="source"]:checked')?.value;
+            toggleVisibility('source_other_group', source === 'Otro');
+
+            const employed = document.querySelector('input[name="currently_employed"]:checked')?.value;
+            toggleVisibility('current_employment_details_group', employed === 'SI');
+
+            const callCenter = document.querySelector('input[name="has_call_center_experience"]:checked')?.value;
+            toggleVisibility('call_center_details_group', callCenter === 'SI');
+        }
+
+        function bindConditionalRadios() {
+            ['applied_before', 'source', 'currently_employed', 'has_call_center_experience'].forEach(name => {
+                document.querySelectorAll(`input[name=\"${name}\"]`).forEach(radio => {
+                    radio.addEventListener('change', updateConditionalFields);
+                });
+            });
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const sharedJobId = params.get('job');
+        if (sharedJobId) {
+            const target = document.getElementById(`job-${sharedJobId}`);
+            if (target) {
+                target.classList.add('ring-2', 'ring-indigo-200', 'ring-offset-2', 'ring-offset-gray-50');
+                setTimeout(() => {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 200);
+                setTimeout(() => {
+                    target.classList.remove('ring-2', 'ring-indigo-200', 'ring-offset-2', 'ring-offset-gray-50');
+                }, 4000);
+            }
+        }
+
         // File upload
         document.getElementById('cv_file').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -338,9 +547,11 @@ $company_name = "Evallish BPO Control";
 
         function openApplicationModal(jobId) {
             currentJobId = jobId;
-            document.getElementById('job_posting_id').value = jobId;
             document.getElementById('applicationForm').reset();
+            const jobField = document.getElementById('job_posting_id');
+            jobField.value = jobId;
             document.getElementById('file-name').textContent = '';
+            updateConditionalFields();
             
             // Load additional positions (exclude the current one)
             loadAdditionalPositions(jobId);
@@ -414,6 +625,11 @@ $company_name = "Evallish BPO Control";
 
             let detailsHTML = `
                 <div class="space-y-4">
+                    ${job.banner_url ? `
+                    <div class="rounded-lg overflow-hidden border border-gray-200">
+                        <img src="${job.banner_url}" alt="Banner de la vacante" class="w-full object-cover max-h-64">
+                    </div>
+                    ` : ''}
                     <div class="flex flex-wrap gap-4 text-sm text-gray-600 mb-4">
                         <span class="flex items-center gap-2">
                             <i class="fas fa-building text-indigo-600"></i>
@@ -465,11 +681,22 @@ $company_name = "Evallish BPO Control";
             setTimeout(() => openApplicationModal(currentJobId), 300);
         }
 
+        bindConditionalRadios();
+        updateConditionalFields();
+
         // Form submission
         document.getElementById('applicationForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const formData = new FormData(this);
+            // Ensure job_posting_id is always set
+            if (!formData.get('job_posting_id') && currentJobId) {
+                formData.set('job_posting_id', currentJobId);
+            }
+            if (!formData.get('job_posting_id')) {
+                alert('No se pudo identificar la vacante. Intenta abrir de nuevo el formulario.');
+                return;
+            }
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.innerHTML;
             

@@ -47,12 +47,49 @@ $status_history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $hr_users = $pdo->query("SELECT id, full_name as name FROM users WHERE role IN ('Admin', 'HR') ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
 
+$extraData = [
+    'cedula' => $application['cedula'] ?? '',
+    'telefonos' => $application['phone'] ?? '',
+    'sector' => $application['sector_residencia'] ?? '',
+    'aplicacion_previa' => $application['applied_before'] ?? '',
+    'aplicacion_previa_detalles' => $application['applied_before_details'] ?? '',
+    'fuente' => $application['source'] ?? '',
+    'fuente_otro' => $application['source_other'] ?? '',
+    'conoce_empresa' => $application['knows_company'] ?? '',
+    'motivo_interes' => $application['interest_reason'] ?? '',
+    'idioma' => $application['application_language'] ?? '',
+    'horario_disponible' => $application['availability_time'] ?? '',
+    'preferencia_horario' => $application['availability_preference'] ?? '',
+    'horario_entrenamiento' => $application['training_schedule'] ?? '',
+    'acepta_rotacion' => $application['agrees_rotating_days'] ?? '',
+    'fines_semana' => $application['weekend_holidays'] ?? '',
+    'empleado_actual' => $application['currently_employed'] ?? '',
+    'empleo_actual_detalle' => $application['current_employment_details'] ?? '',
+    'exp_reciente_empresa' => $application['recent_company'] ?? '',
+    'exp_reciente_puesto' => $application['recent_role'] ?? '',
+    'exp_reciente_anios' => $application['recent_years'] ?? '',
+    'exp_reciente_salario' => $application['recent_last_salary'] ?? '',
+    'exp_call_center' => $application['has_call_center_experience'] ?? '',
+    'call_center_nombre' => $application['call_center_name'] ?? '',
+    'call_center_puesto' => $application['call_center_role'] ?? '',
+    'call_center_salario' => $application['call_center_salary'] ?? '',
+];
+
+$displayName = trim(($application['first_name'] ?? '') . ' ' . ($application['last_name'] ?? ''));
+if ($displayName === '') {
+    $displayName = $application['candidate_name'] ?? 'N/A';
+}
+$displayPhone = !empty($application['phone']) ? $application['phone'] : 'N/A';
+$displayEmail = !empty($application['email']) ? $application['email'] : 'sin-correo@evallish.local';
+$displayEducation = !empty($application['education_level']) ? $application['education_level'] : 'N/A';
+$displayYears = !empty($application['years_of_experience']) ? $application['years_of_experience'] : ($application['recent_years'] ?? '');
+$displayYears = $displayYears !== '' ? $displayYears : 'N/A';
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
 $status_labels = [
     'new' => 'Nueva',
-    'reviewing' => 'En Revisi√≥n',
+    'reviewing' => 'En RevisiÛn',
     'shortlisted' => 'Preseleccionado',
     'interview_scheduled' => 'Entrevista Agendada',
     'interviewed' => 'Entrevistado',
@@ -93,7 +130,7 @@ require_once '../header.php';
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div>
                     <h1 class="text-3xl font-bold text-white mb-2">
-                        <?php echo htmlspecialchars($application['first_name'] . ' ' . $application['last_name']); ?>
+                        <?php echo htmlspecialchars($displayName); ?>
                     </h1>
                     <div class="flex flex-wrap gap-3 text-slate-300">
                         <span class="flex items-center gap-2">
@@ -132,7 +169,7 @@ require_once '../header.php';
                 <div class="bg-indigo-50/10 border border-indigo-500/30 rounded-lg p-4 mb-4">
                     <p class="text-sm text-indigo-300">
                         <i class="fas fa-info-circle mr-2"></i>
-                        Este candidato aplic√≥ a m√∫ltiples vacantes con el mismo CV usando el c√≥digo: <strong><?php echo htmlspecialchars($application['application_code']); ?></strong>
+                        Este candidato aplicÛ a m˙ltiples vacantes con el mismo CV usando el cÛdigo: <strong><?php echo htmlspecialchars($application['application_code']); ?></strong>
                     </p>
                 </div>
                 <div class="space-y-3">
@@ -141,7 +178,7 @@ require_once '../header.php';
                         'full_time' => 'Tiempo Completo',
                         'part_time' => 'Medio Tiempo',
                         'contract' => 'Contrato',
-                        'internship' => 'Pasant√≠a'
+                        'internship' => 'PasantÌa'
                     ];
                     foreach ($other_applications as $other_app): 
                     ?>
@@ -188,32 +225,32 @@ require_once '../header.php';
             <div class="glass-card">
                 <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                     <i class="fas fa-user text-indigo-400"></i>
-                    Informaci√≥n Personal
+                    Informacion Personal
                 </h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="text-sm text-slate-400">Email</label>
-                        <p class="text-white font-medium"><?php echo htmlspecialchars($application['email']); ?></p>
+                        <p class="text-white font-medium"><?php echo htmlspecialchars($displayEmail); ?></p>
                     </div>
                     <div>
-                        <label class="text-sm text-slate-400">Tel√©fono</label>
-                        <p class="text-white font-medium"><?php echo htmlspecialchars($application['phone']); ?></p>
+                        <label class="text-sm text-slate-400">Telefono</label>
+                        <p class="text-white font-medium"><?php echo htmlspecialchars($displayPhone); ?></p>
                     </div>
                     <div>
-                        <label class="text-sm text-slate-400">Nivel de Educaci√≥n</label>
-                        <p class="text-white font-medium"><?php echo htmlspecialchars($application['education_level']); ?></p>
+                        <label class="text-sm text-slate-400">Nivel de Educacion</label>
+                        <p class="text-white font-medium"><?php echo htmlspecialchars($displayEducation); ?></p>
                     </div>
                     <div>
-                        <label class="text-sm text-slate-400">A√±os de Experiencia</label>
-                        <p class="text-white font-medium"><?php echo $application['years_of_experience']; ?> a√±os</p>
+                        <label class="text-sm text-slate-400">Anios de Experiencia</label>
+                        <p class="text-white font-medium"><?php echo htmlspecialchars($displayYears); ?></p>
                     </div>
-                    <?php if ($application['current_position']): ?>
+                    <?php if (!empty($application['current_position'])): ?>
                     <div>
                         <label class="text-sm text-slate-400">Puesto Actual</label>
                         <p class="text-white font-medium"><?php echo htmlspecialchars($application['current_position']); ?></p>
                     </div>
                     <?php endif; ?>
-                    <?php if ($application['current_company']): ?>
+                    <?php if (!empty($application['current_company'])): ?>
                     <div>
                         <label class="text-sm text-slate-400">Empresa Actual</label>
                         <p class="text-white font-medium"><?php echo htmlspecialchars($application['current_company']); ?></p>
@@ -231,6 +268,67 @@ require_once '../header.php';
                 <?php endif; ?>
             </div>
 
+            <!-- Detalle de Aplicacion -->
+            <div class="glass-card">
+                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-list text-indigo-400"></i>
+                    Detalle de Aplicacion
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-white">
+                    <?php
+                        $formatYesNo = function($value) {
+                            $v = strtoupper(trim((string)$value));
+                            if ($v === 'SI' || $v === 'YES' || $v === '1') {
+                                return 'SI';
+                            }
+                            if ($v === 'NO' || $v === '0') {
+                                return 'NO';
+                            }
+                            return $value;
+                        };
+
+                        $source = $application['source'] ?? '';
+                        if (!empty($application['source_other']) && strtolower($source) === 'otro') {
+                            $source = 'Otro: ' . $application['source_other'];
+                        }
+
+                        $details = [
+                            'Cedula' => $application['cedula'] ?? '',
+                            'Telefono(s)' => $displayPhone,
+                            'Sector de residencia' => $application['sector_residencia'] ?? '',
+                            'Aplicacion previa' => $formatYesNo($application['applied_before'] ?? ''),
+                            'Detalle aplicacion previa' => $application['applied_before_details'] ?? '',
+                            'Como se entero' => $source,
+                            'Conoce la empresa' => $formatYesNo($application['knows_company'] ?? ''),
+                            'Motivo de interes' => $application['interest_reason'] ?? '',
+                            'Idioma de aplicacion' => $application['application_language'] ?? '',
+                            'Horario disponible' => $application['availability_time'] ?? '',
+                            'Preferencia de horario' => $application['availability_preference'] ?? '',
+                            'Horario de entrenamiento' => $application['training_schedule'] ?? '',
+                            'Acepta rotacion de libres' => $formatYesNo($application['agrees_rotating_days'] ?? ''),
+                            'Fines de semana/feriados' => $formatYesNo($application['weekend_holidays'] ?? ''),
+                            'Empleado actualmente' => $formatYesNo($application['currently_employed'] ?? ''),
+                            'Detalle empleo actual' => $application['current_employment_details'] ?? '',
+                            'Empresa reciente' => $application['recent_company'] ?? '',
+                            'Puesto reciente' => $application['recent_role'] ?? '',
+                            'Anios de experiencia reciente' => $application['recent_years'] ?? '',
+                            'Ultimo salario reciente' => $application['recent_last_salary'] ?? '',
+                            'Experiencia en call center' => $formatYesNo($application['has_call_center_experience'] ?? ''),
+                            'Ultimo call center' => $application['call_center_name'] ?? '',
+                            'Puesto en call center' => $application['call_center_role'] ?? '',
+                            'Salario en call center' => $application['call_center_salary'] ?? '',
+                        ];
+
+                        foreach ($details as $label => $value):
+                            $display = ($value !== '' && $value !== null) ? $value : 'N/A';
+                    ?>
+                        <div>
+                            <label class="text-sm text-slate-400"><?php echo htmlspecialchars($label); ?></label>
+                            <p class="font-medium"><?php echo htmlspecialchars($display); ?></p>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
             <!-- Comments -->
             <div class="glass-card">
                 <div class="flex justify-between items-center mb-4">
@@ -245,7 +343,7 @@ require_once '../header.php';
                 </div>
                 <div class="space-y-3">
                     <?php if (empty($comments)): ?>
-                        <p class="text-slate-400 text-center py-4">No hay comentarios a√∫n</p>
+                        <p class="text-slate-400 text-center py-4">No hay comentarios a˙n</p>
                     <?php else: ?>
                         <?php foreach ($comments as $comment): ?>
                             <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
@@ -317,7 +415,7 @@ require_once '../header.php';
                                     <span class="font-medium"><?php echo $status_labels[$history['new_status']]; ?></span>
                                 </p>
                                 <p class="text-slate-400 text-xs mt-1">
-                                    <?php echo htmlspecialchars($history['changed_by_name']); ?> ‚Ä¢ 
+                                    <?php echo htmlspecialchars($history['changed_by_name']); ?>
                                     <?php echo date('d/m/Y H:i', strtotime($history['changed_at'])); ?>
                                 </p>
                             </div>
@@ -332,7 +430,7 @@ require_once '../header.php';
         <div class="space-y-6">
             <!-- Quick Actions -->
             <div class="glass-card">
-                <h3 class="text-lg font-semibold text-white mb-4">Acciones R√°pidas</h3>
+                <h3 class="text-lg font-semibold text-white mb-4">Acciones R·pidas</h3>
                 <div class="space-y-2">
                     <button type="button" class="btn-primary w-full justify-center" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
                         <i class="fas fa-exchange-alt"></i>
@@ -352,7 +450,7 @@ require_once '../header.php';
             <!-- Rating -->
             <?php if ($application['overall_rating']): ?>
             <div class="glass-card">
-                <h3 class="text-lg font-semibold text-white mb-3">Calificaci√≥n</h3>
+                <h3 class="text-lg font-semibold text-white mb-3">CalificaciÛn</h3>
                 <div class="flex gap-1 text-2xl">
                     <?php for ($i = 1; $i <= 5; $i++): ?>
                         <i class="fas fa-star <?php echo $i <= $application['overall_rating'] ? 'text-yellow-400' : 'text-slate-600'; ?>"></i>
@@ -394,7 +492,7 @@ require_once '../header.php';
                     <input type="hidden" name="application_id" value="<?php echo $application_id; ?>">
                     <select class="form-select mb-3" name="new_status" required>
                         <option value="new">Nueva</option>
-                        <option value="reviewing">En Revisi√≥n</option>
+                        <option value="reviewing">En RevisiÛn</option>
                         <option value="shortlisted">Preseleccionado</option>
                         <option value="interview_scheduled">Entrevista Agendada</option>
                         <option value="interviewed">Entrevistado</option>
@@ -450,7 +548,7 @@ require_once '../header.php';
                         <label>Tipo</label>
                         <select class="form-select" name="interview_type" required>
                             <option value="phone_screening">Llamada de Filtro</option>
-                            <option value="technical">T√©cnica</option>
+                            <option value="technical">TÈcnica</option>
                             <option value="hr">RRHH</option>
                             <option value="manager">Gerente</option>
                             <option value="final">Final</option>
@@ -461,11 +559,11 @@ require_once '../header.php';
                         <input type="datetime-local" class="form-control" name="interview_date" required>
                     </div>
                     <div class="mb-3">
-                        <label>Duraci√≥n (minutos)</label>
+                        <label>DuraciÛn (minutos)</label>
                         <input type="number" class="form-control" name="duration_minutes" value="60">
                     </div>
                     <div class="mb-3">
-                        <label>Ubicaci√≥n / Link</label>
+                        <label>UbicaciÛn / Link</label>
                         <input type="text" class="form-control" name="location">
                     </div>
                     <div class="mb-3">
@@ -480,3 +578,6 @@ require_once '../header.php';
         </div>
     </div>
 </div>
+
+
+

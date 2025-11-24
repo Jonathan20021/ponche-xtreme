@@ -137,16 +137,16 @@ INSERT INTO job_postings (title, department, location, employment_type, descript
 'Buscamos un desarrollador full stack con experiencia en PHP, JavaScript y bases de datos MySQL para unirse a nuestro equipo de desarrollo.',
 '- 3+ años de experiencia en desarrollo web\n- Dominio de PHP, JavaScript, HTML, CSS\n- Experiencia con MySQL\n- Conocimiento de Git\n- Inglés intermedio',
 '- Desarrollar y mantener aplicaciones web\n- Colaborar con el equipo de diseño\n- Optimizar el rendimiento de las aplicaciones\n- Participar en revisiones de código',
-'$25,000 - $35,000 MXN', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 30 DAY)),
+'RD$25,000 - RD$35,000 DOP', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 30 DAY)),
 
 ('Especialista en Recursos Humanos', 'Recursos Humanos', 'Ciudad de México', 'full_time',
 'Buscamos un especialista en RRHH para gestionar el proceso de reclutamiento y desarrollo del personal.',
 '- Licenciatura en Recursos Humanos o afín\n- 2+ años de experiencia en reclutamiento\n- Excelentes habilidades de comunicación\n- Conocimiento de leyes laborales mexicanas',
 '- Gestionar procesos de reclutamiento\n- Realizar entrevistas\n- Coordinar capacitaciones\n- Administrar expedientes de personal',
-'$20,000 - $28,000 MXN', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 45 DAY)),
+'RD$20,000 - RD$28,000 DOP', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 45 DAY)),
 
 ('Analista de Datos', 'Operaciones', 'Remoto', 'full_time',
 'Buscamos un analista de datos para transformar datos en insights accionables.',
 '- Licenciatura en Matemáticas, Estadística o afín\n- Experiencia con SQL y Excel avanzado\n- Conocimiento de herramientas de visualización\n- Pensamiento analítico',
 '- Analizar datos operacionales\n- Crear reportes y dashboards\n- Identificar tendencias y patrones\n- Presentar hallazgos a la gerencia',
-'$22,000 - $30,000 MXN', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 30 DAY));
+'RD$22,000 - RD$30,000 DOP', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 30 DAY));
