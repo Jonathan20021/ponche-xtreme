@@ -219,13 +219,13 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
 
     <!-- Application Modal -->
     <div class="modal fade" id="applicationModal" tabindex="-1">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-sm-down modal-dialog-centered">
             <div class="modal-content rounded-xl border-0 shadow-2xl">
                 <div class="modal-header bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-0 rounded-t-xl">
                     <h5 class="modal-title font-bold"><i class="fas fa-file-alt mr-2"></i>Solicitud de Empleo</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body p-6">
+                <div class="modal-body p-4 md:p-6">
                     <form id="applicationForm" enctype="multipart/form-data">
                         <input type="hidden" name="job_posting_id" id="job_posting_id">
 

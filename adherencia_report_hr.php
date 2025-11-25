@@ -75,8 +75,8 @@ if ($currentPage > $totalPages) {
     $offset = ($currentPage - 1) * $recordsPerPage;
 }
 
-// Obtener tipos de punch pagados desde la base de datos
-$paidTypesStmt = $pdo->query("SELECT type FROM attendance_types WHERE is_paid = 1");
+// Obtener tipos de punch pagados (slug) desde la base de datos
+$paidTypesStmt = $pdo->query("SELECT slug FROM attendance_types WHERE is_paid = 1");
 $paidTypes = $paidTypesStmt->fetchAll(PDO::FETCH_COLUMN);
 
 // Query simplificado: obtener todas las combinaciones de usuario-fecha con attendance
@@ -93,14 +93,11 @@ $dailySql = "
     WHERE a.timestamp BETWEEN :start AND :end
     GROUP BY u.id, u.full_name, u.username, d.name, DATE(a.timestamp)
     ORDER BY u.full_name, DATE(a.timestamp)
-    LIMIT :offset, :limit
 ";
 
 $dailyStmt = $pdo->prepare($dailySql);
 $dailyStmt->bindValue(':start', $startBound);
 $dailyStmt->bindValue(':end', $endBound);
-$dailyStmt->bindValue(':offset', (int) $offset, PDO::PARAM_INT);
-$dailyStmt->bindValue(':limit', (int) $recordsPerPage, PDO::PARAM_INT);
 $dailyStmt->execute();
 $dailyRowsBasic = $dailyStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -114,7 +111,7 @@ foreach ($dailyRowsBasic as $row) {
     $punchesStmt = $pdo->prepare("
         SELECT a.timestamp, a.type, at.is_paid
         FROM attendance a
-        LEFT JOIN attendance_types at ON at.type = a.type
+        LEFT JOIN attendance_types at ON CAST(at.slug AS CHAR) = CAST(a.type AS CHAR)
         WHERE a.user_id = :user_id 
         AND DATE(a.timestamp) = :work_date
         ORDER BY a.timestamp ASC
@@ -301,6 +298,7 @@ foreach ($dailyRowsRaw as $row) {
     $totalEarnedDop += $amountDop;
     $totalProductiveSeconds += $productive;
 }
+$dailyRowsPage = array_slice($dailyRows, $offset, $recordsPerPage);
 $monthlySummary = array_values($monthlyAggregates);
 usort($monthlySummary, static function (array $a, array $b): int {
     return strcasecmp($a['employee'], $b['employee']);
@@ -364,6 +362,12 @@ foreach ($departmentSummaryList as $dept) {
 
 $payrollVarianceUsd = $totalEarnedUsd - $totalMonthlyBaseUsd;
 $payrollVarianceDop = $totalEarnedDop - $totalMonthlyBaseDop;
+$usdEarnedFmt = number_format($totalEarnedUsd, 2, '.', ',');
+$usdBaseFmt = number_format($totalMonthlyBaseUsd, 2, '.', ',');
+$usdVarFmt = number_format($payrollVarianceUsd, 2, '.', ',');
+$dopEarnedFmt = number_format($totalEarnedDop, 2, '.', ',');
+$dopBaseFmt = number_format($totalMonthlyBaseDop, 2, '.', ',');
+$dopVarFmt = number_format($payrollVarianceDop, 2, '.', ',');
 
 $averageAdherence = $adherenceSamples > 0 ? round($adherenceAccumulator / $adherenceSamples, 1) : 0;
 $totalEmployees = count($monthlySummary);
@@ -433,6 +437,13 @@ $departmentChartJson = json_encode($departmentChartData, JSON_HEX_TAG | JSON_HEX
 
 include __DIR__ . '/header.php';
 ?>
+<style>
+/* Ajustes rapidos para legibilidad de metricas */
+.metric-card { min-height: 150px; min-width: 230px; }
+.metric-card .trend { white-space: normal; line-height: 1.4; }
+.metric-card .value { font-size: clamp(1.4rem, 2vw, 2.2rem); overflow-wrap: anywhere; }
+.metric-card .trend i { flex-shrink: 0; }
+</style>
 <link rel="stylesheet" href="css/pagination-styles.css">
 <section class="space-y-10">
     <div class="glass-card">
@@ -457,7 +468,7 @@ include __DIR__ . '/header.php';
         </p>
     </div>
 
-    <div class="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-5">
+    <div class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         <div class="metric-card">
             <span class="label">Colaboradores activos</span>
             <span class="value"><?= number_format($totalEmployees) ?></span>
@@ -477,18 +488,18 @@ include __DIR__ . '/header.php';
         </div>
         <div class="metric-card">
             <span class="label">Pago horas (USD)</span>
-            <span class="value">$<?= number_format($totalEarnedUsd, 2) ?></span>
+            <span class="value">$<?= $usdEarnedFmt ?></span>
             <span class="trend <?= $payrollVarianceUsd >= 0 ? 'positive' : 'negative' ?>">
                 <i class="fas fa-balance-scale"></i>
-                Base $<?= number_format($totalMonthlyBaseUsd, 2) ?> (<?= $payrollVarianceUsd >= 0 ? '+' : '' ?>$<?= number_format($payrollVarianceUsd, 2) ?>)
+                Base $<?= $usdBaseFmt ?> (<?= $payrollVarianceUsd >= 0 ? '+' : '' ?>$<?= $usdVarFmt ?>)
             </span>
         </div>
         <div class="metric-card">
             <span class="label">Pago horas (DOP)</span>
-            <span class="value">RD$<?= number_format($totalEarnedDop, 2) ?></span>
+            <span class="value">RD$<?= $dopEarnedFmt ?></span>
             <span class="trend <?= $payrollVarianceDop >= 0 ? 'positive' : 'negative' ?>">
                 <i class="fas fa-coins"></i>
-                Base RD$<?= number_format($totalMonthlyBaseDop, 2) ?> (<?= $payrollVarianceDop >= 0 ? '+' : '' ?>RD$<?= number_format($payrollVarianceDop, 2) ?>)
+                Base RD$<?= $dopBaseFmt ?> (<?= $payrollVarianceDop >= 0 ? '+' : '' ?>RD$<?= $dopVarFmt ?>)
             </span>
         </div>
     </div>
@@ -504,11 +515,12 @@ include __DIR__ . '/header.php';
             <div class="section-card p-6">
                 <canvas id="departmentChart" class="w-full h-72"></canvas>
             </div>
-            <div class="section-card p-0 overflow-hidden">
-                <table class="table-auto w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th>Departamento</th>
+            <div class="section-card p-0">
+                <div class="overflow-x-auto">
+                    <table class="table-auto w-full text-sm min-w-[720px]">
+                        <thead>
+                            <tr>
+                                <th>Departamento</th>
                             <th>Integrantes</th>
                             <th>Horas</th>
                             <th>Pago USD</th>
@@ -547,8 +559,9 @@ include __DIR__ . '/header.php';
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -592,12 +605,12 @@ include __DIR__ . '/header.php';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (empty($dailyRows)): ?>
+                    <?php if (empty($dailyRowsPage)): ?>
                         <tr>
                             <td colspan="10" class="text-center py-6 text-slate-400">No se encontraron registros para el mes seleccionado.</td>
                         </tr>
                     <?php else: ?>
-                        <?php foreach ($dailyRows as $row): ?>
+                        <?php foreach ($dailyRowsPage as $row): ?>
                             <tr>
                                 <td>
                                     <div class="font-semibold"><?= htmlspecialchars($row['employee']) ?></div>
