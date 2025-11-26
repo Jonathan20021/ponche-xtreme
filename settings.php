@@ -115,7 +115,7 @@ try {
 
         switch ($action) {
             case 'create_role':
-                $roleKey = sanitize_role_name(trim($_POST['role_key'] ?? ''));
+                    $roleKey = strtoupper(sanitize_role_name(trim($_POST['role_key'] ?? '')));
                 $roleLabel = trim($_POST['role_label'] ?? '');
                 $roleDescription = trim($_POST['role_description'] ?? '');
 
@@ -164,7 +164,7 @@ try {
                 $email = trim($_POST['email'] ?? '');
                 $password = trim($_POST['password'] ?? '');
                 $roleInput = trim($_POST['role'] ?? '');
-                $role = sanitize_role_name($roleInput);
+                $role = strtoupper(sanitize_role_name($roleInput));
                 $departmentIdRaw = $_POST['department_id'] ?? '';
 
                 if ($username === '' || $fullName === '' || $password === '' || $role === '') {
@@ -244,6 +244,11 @@ try {
                     $firstName = $nameParts[0];
                     $lastName = isset($nameParts[1]) ? $nameParts[1] : '';
                     
+                    $campaignIdInput = $_POST['campaign_id'] ?? '';
+                    $campaignId = (is_numeric($campaignIdInput) && (int)$campaignIdInput > 0) ? (int)$campaignIdInput : null;
+                    $supervisorInput = $_POST['supervisor_id'] ?? '';
+                    $supervisorId = (is_numeric($supervisorInput) && (int)$supervisorInput > 0) ? (int)$supervisorInput : null;
+
                     $createEmployeeStmt = $pdo->prepare("
                         INSERT INTO employees (
                             user_id, 
@@ -254,8 +259,10 @@ try {
                             department_id, 
                             hire_date, 
                             employment_status, 
-                            employment_type
-                        ) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), 'TRIAL', 'FULL_TIME')
+                            employment_type,
+                            campaign_id,
+                            supervisor_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, CURDATE(), 'TRIAL', 'FULL_TIME', ?, ?)
                     ");
                     $createEmployeeStmt->execute([
                         $newUserId,
@@ -263,7 +270,9 @@ try {
                         $firstName,
                         $lastName,
                         $email ?: null,
-                        $departmentId
+                        $departmentId,
+                        $campaignId,
+                        $supervisorId
                     ]);
                     
                     $pdo->commit();
@@ -349,7 +358,7 @@ try {
                     $preferredInput = strtoupper(trim($preferredCurrencies[$userId] ?? 'USD'));
                     $preferredCurrency = in_array($preferredInput, ['USD', 'DOP'], true) ? $preferredInput : 'USD';
 
-                    $newRole = sanitize_role_name($roles[$userId] ?? '');
+                    $newRole = strtoupper(sanitize_role_name($roles[$userId] ?? ''));
                     $newPassword = trim($passwords[$userId] ?? '');
 
                     $departmentValue = $departmentSelections[$userId] ?? '';
@@ -986,6 +995,14 @@ $departmentMap = [];
 foreach ($departments as $department) {
     $departmentMap[(int) $department['id']] = $department['name'];
 }
+$campaigns = $pdo->query("SELECT id, name FROM campaigns WHERE is_active = 1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+$supervisorsList = $pdo->query("
+    SELECT e.id, u.full_name
+    FROM employees e
+    JOIN users u ON u.id = e.user_id
+    WHERE u.is_active = 1 AND UPPER(u.role) LIKE '%SUPERVISOR%'
+    ORDER BY u.full_name
+")->fetchAll(PDO::FETCH_ASSOC);
 
 $userStmt = $pdo->query("
     SELECT 
@@ -1165,6 +1182,32 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <?php if (empty($departments)): ?>
                                 <p class="text-muted text-xs mt-1">Crea un departamento antes de registrar usuarios.</p>
                             <?php endif; ?>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label class="form-label">Campaña</label>
+                                <select name="campaign_id" class="select-control" <?= empty($campaigns) ? 'disabled' : '' ?>>
+                                    <option value="">Sin asignar</option>
+                                    <?php foreach ($campaigns as $campaign): ?>
+                                        <option value="<?= (int) $campaign['id'] ?>"><?= htmlspecialchars($campaign['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php if (empty($campaigns)): ?>
+                                    <p class="text-muted text-xs mt-1">Crea campañas en Configuración &gt; Campañas.</p>
+                                <?php endif; ?>
+                            </div>
+                            <div>
+                                <label class="form-label">Supervisor</label>
+                                <select name="supervisor_id" class="select-control" <?= empty($supervisorsList) ? 'disabled' : '' ?>>
+                                    <option value="">Sin asignar</option>
+                                    <?php foreach ($supervisorsList as $sup): ?>
+                                        <option value="<?= (int) $sup['id'] ?>"><?= htmlspecialchars($sup['full_name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php if (empty($supervisorsList)): ?>
+                                    <p class="text-muted text-xs mt-1">No hay supervisores activos registrados.</p>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                     <button type="submit" class="btn-primary w-full justify-center" <?= empty($departments) ? 'disabled' : '' ?>>

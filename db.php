@@ -146,12 +146,15 @@ if (!function_exists('userHasPermission')) {
             return false;
         }
 
+        $roleUpper = strtoupper($role);
+
         // Query database directly without caching to ensure real-time permission checks
         $stmt = $pdo->prepare("SELECT role FROM section_permissions WHERE section_key = ?");
         $stmt->execute([$sectionKey]);
         $allowedRoles = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $allowedUpper = array_map('strtoupper', $allowedRoles);
 
-        return in_array($role, $allowedRoles, true);
+        return in_array($roleUpper, $allowedUpper, true);
     }
 }
 
