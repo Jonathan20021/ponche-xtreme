@@ -933,7 +933,7 @@ try {
 
                 // Send password reset email
                 $emailData = [
-                    'email' => $userData['email'],
+                    'email' => $email,
                     'full_name' => $userData['full_name'],
                     'username' => $userData['username'],
                     'reset_token' => $resetToken
@@ -942,7 +942,7 @@ try {
                 $emailResult = sendPasswordResetEmail($emailData);
 
                 if ($emailResult['success']) {
-                    $successMessages[] = "Se ha enviado un correo de reseteo de contraseña a {$userData['email']}";
+                    $successMessages[] = "Se ha enviado un correo de reseteo de contraseña a {$email}";
                 } else {
                     $errorMessages[] = "No se pudo enviar el correo: " . $emailResult['message'];
                 }
