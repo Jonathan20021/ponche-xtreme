@@ -34,12 +34,12 @@ try {
     }
     
     // Determinar si el usuario es supervisor y obtener sus campañas
-    $userRole = $_SESSION['role'] ?? '';
+    $userRole = strtoupper($_SESSION['role'] ?? '');
     $userId = $_SESSION['user_id'];
     $supervisorCampaigns = [];
     
-    // Si es supervisor (no Admin ni HR), filtrar por campañas asignadas
-    if ($userRole === 'Supervisor') {
+    // Si el rol contiene SUPERVISOR (acepta variantes como TEAM_SUPERVISOR)
+    if (strpos($userRole, 'SUPERVISOR') !== false) {
         $campaignStmt = $pdo->prepare("
             SELECT campaign_id 
             FROM supervisor_campaigns 
@@ -77,11 +77,11 @@ try {
             LIMIT 1
         )
         WHERE u.is_active = 1
-        AND u.role = 'agent'
+        AND UPPER(u.role) LIKE '%AGENT%'
     ";
     
     // Si es supervisor, agregar filtro de campañas O supervisor asignado
-    if ($userRole === 'Supervisor') {
+    if (strpos($userRole, 'SUPERVISOR') !== false) {
         if (count($supervisorCampaigns) > 0) {
             $placeholders = implode(',', array_fill(0, count($supervisorCampaigns), '?'));
             // Mostrar empleados que están en las campañas del supervisor O tienen al supervisor asignado directamente
@@ -105,7 +105,7 @@ try {
     ";
     
     // Ejecutar consulta
-    if ($userRole === 'Supervisor') {
+    if (strpos($userRole, 'SUPERVISOR') !== false) {
         $stmt = $pdo->prepare($baseQuery);
         if (count($supervisorCampaigns) > 0) {
             // Agregar supervisor_id al final de los parámetros de campañas
