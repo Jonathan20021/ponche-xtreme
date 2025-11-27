@@ -111,7 +111,8 @@ try {
             $_POST['action'] = 'delete_department';
             $_POST['department_id'] = $_POST['delete_department_id'];
         }
-        $action = $_POST['action'] ?? '';
+        // Prefer subaction (used by nested row-level action forms) over the main action
+        $action = $_POST['subaction'] ?? ($_POST['action'] ?? '');
 
         switch ($action) {
             case 'create_role':
@@ -383,6 +384,10 @@ try {
                     if ($newRole !== '') {
                         ensureRoleExists($pdo, $newRole, $newRole);
                         $updateWithRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $newRole, $userId]);
+                        // If the current logged-in user's role changed, update the session immediately
+                        if ((int)$userId === (int)($_SESSION['user_id'] ?? 0)) {
+                            $_SESSION['role'] = $newRole;
+                        }
                     } else {
                         $updateWithoutRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $userId]);
                     }
@@ -884,6 +889,10 @@ try {
                 break;
 
             case 'send_password_reset':
+                // Process only if triggered via row-action helper
+                if (!isset($_POST['from_row_action'])) {
+                    break;
+                }
                 $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
                 
                 if ($userId <= 0) {
@@ -933,7 +942,7 @@ try {
 
                 // Send password reset email
                 $emailData = [
-                    'email' => $email,
+                    'email' => $userData['email'],
                     'full_name' => $userData['full_name'],
                     'username' => $userData['username'],
                     'reset_token' => $resetToken
@@ -942,7 +951,7 @@ try {
                 $emailResult = sendPasswordResetEmail($emailData);
 
                 if ($emailResult['success']) {
-                    $successMessages[] = "Se ha enviado un correo de reseteo de contraseña a {$email}";
+                    $successMessages[] = "Se ha enviado un correo de reseteo de contraseña a {$userData['email']}";
                 } else {
                     $errorMessages[] = "No se pudo enviar el correo: " . $emailResult['message'];
                 }
@@ -1132,6 +1141,33 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         <?php foreach ($errorMessages as $message): ?>
             <div class="status-banner error"><?= htmlspecialchars($message) ?></div>
         <?php endforeach; ?>
+
+        <!-- Hidden form + JS helper for row-level actions to avoid nested forms -->
+        <form id="row-action-form" method="POST" style="display:none">
+            <input type="hidden" name="subaction" id="row-action-subaction">
+            <input type="hidden" name="user_id" id="row-action-user-id">
+            <input type="hidden" name="new_status" id="row-action-new-status">
+            <input type="hidden" name="from_row_action" value="1">
+        </form>
+        <script>
+            function submitRowAction(action, userId, extra) {
+                try {
+                    var form = document.getElementById('row-action-form');
+                    if (!form) return;
+                    document.getElementById('row-action-subaction').value = action;
+                    document.getElementById('row-action-user-id').value = userId;
+                    var nsEl = document.getElementById('row-action-new-status');
+                    if (extra && typeof extra.new_status !== 'undefined') {
+                        nsEl.value = String(extra.new_status);
+                    } else {
+                        nsEl.value = '';
+                    }
+                    form.submit();
+                } catch (e) {
+                    console.error('Row action submit failed', e);
+                }
+            }
+        </script>
 
         <div id="quick-actions-grid" class="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <article id="create-user-card" class="glass-card space-y-5">
@@ -1999,44 +2035,31 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <td>
                                     <div class="flex flex-col gap-2">
                                         <?php if (!$isCurrentUser): ?>
-                                            <!-- Send Password Reset Email -->
-                                            <form method="POST" class="inline" onsubmit="return confirm('¿Enviar email de reseteo de contraseña a este usuario?');">
-                                                <input type="hidden" name="action" value="send_password_reset">
-                                                <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
-                                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 hover:bg-blue-500/25 transition-colors w-full justify-center" title="Enviar email de reseteo de contraseña">
-                                                    <i class="fas fa-envelope"></i>
-                                                    Reset Password
-                                                </button>
-                                            </form>
-                                            
+                                            <!-- Send Password Reset Email (non-nested action) -->
+                                            <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 hover:bg-blue-500/25 transition-colors w-full justify-center" title="Enviar email de reseteo de contraseña" onclick="if(confirm('¿Enviar email de reseteo de contraseña a este usuario?')) submitRowAction('send_password_reset', <?= (int) $user['id'] ?>)">
+                                                <i class="fas fa-envelope"></i>
+                                                Reset Password
+                                            </button>
+
                                             <div class="flex items-center gap-2">
-                                                <!-- Toggle Active/Inactive -->
-                                                <form method="POST" class="inline flex-1" onsubmit="return confirm('¿Estás seguro de <?= $isActive === 1 ? 'desactivar' : 'activar' ?> este usuario?');">
-                                                    <input type="hidden" name="action" value="toggle_user_status">
-                                                    <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
-                                                    <input type="hidden" name="new_status" value="<?= $isActive === 1 ? 0 : 1 ?>">
-                                                    <?php if ($isActive === 1): ?>
-                                                        <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors w-full justify-center" title="Desactivar usuario">
-                                                            <i class="fas fa-ban"></i>
-                                                            Desactivar
-                                                        </button>
-                                                    <?php else: ?>
-                                                        <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors w-full justify-center" title="Activar usuario">
-                                                            <i class="fas fa-check"></i>
-                                                            Activar
-                                                        </button>
-                                                    <?php endif; ?>
-                                                </form>
-                                                
-                                                <!-- Delete User -->
-                                                <form method="POST" class="inline flex-1" onsubmit="return confirm('¿ADVERTENCIA! ¿Estás seguro de eliminar permanentemente al usuario <?= htmlspecialchars($user['username']) ?>? Esta acción no se puede deshacer.');">
-                                                    <input type="hidden" name="action" value="delete_user">
-                                                    <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
-                                                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors w-full justify-center" title="Eliminar usuario">
-                                                        <i class="fas fa-trash-alt"></i>
-                                                        Eliminar
+                                                <!-- Toggle Active/Inactive (non-nested action) -->
+                                                <?php if ($isActive === 1): ?>
+                                                    <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors w-full justify-center" title="Desactivar usuario" onclick="if(confirm('¿Estás seguro de desactivar este usuario?')) submitRowAction('toggle_user_status', <?= (int) $user['id'] ?>, { new_status: 0 })">
+                                                        <i class="fas fa-ban"></i>
+                                                        Desactivar
                                                     </button>
-                                                </form>
+                                                <?php else: ?>
+                                                    <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors w-full justify-center" title="Activar usuario" onclick="if(confirm('¿Estás seguro de activar este usuario?')) submitRowAction('toggle_user_status', <?= (int) $user['id'] ?>, { new_status: 1 })">
+                                                        <i class="fas fa-check"></i>
+                                                        Activar
+                                                    </button>
+                                                <?php endif; ?>
+
+                                                <!-- Delete User (non-nested action) -->
+                                                <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors w-full justify-center" title="Eliminar usuario" onclick="if(confirm('¿ADVERTENCIA! ¿Estás seguro de eliminar permanentemente al usuario <?= htmlspecialchars($user['username']) ?>? Esta acción no se puede deshacer.')) submitRowAction('delete_user', <?= (int) $user['id'] ?>)">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                    Eliminar
+                                                </button>
                                             </div>
                                         <?php else: ?>
                                             <span class="text-muted text-xs italic">Tu cuenta</span>
