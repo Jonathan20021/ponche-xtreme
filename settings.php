@@ -56,7 +56,8 @@ $sections = [
     'manager_dashboard' => ['label' => 'Monitor Administrativos', 'category' => 'Gerencia', 'icon' => 'fa-user-tie', 'description' => 'Monitor en tiempo real del personal administrativo (todos los roles excepto agentes)'],
     
     // Chat
-    'chat_admin' => ['label' => 'Administración de Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comments', 'description' => 'Gestión de permisos y monitoreo de conversaciones de chat']
+    'chat_admin' => ['label' => 'Administración de Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comments', 'description' => 'Gestión de permisos y monitoreo de conversaciones de chat'],
+    'chat_mass_message' => ['label' => 'Mensajes Masivos', 'category' => 'Comunicaciones', 'icon' => 'fa-bullhorn', 'description' => 'Enviar mensajes masivos a todos los usuarios del sistema']
 ];
 
 function sanitize_role_name(string $value): string

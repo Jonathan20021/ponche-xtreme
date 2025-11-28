@@ -123,6 +123,24 @@ $navItems = [
     ],
     'supervisor_dashboard' => ['label' => 'Monitor en Tiempo Real', 'href' => $baseHref . 'supervisor_dashboard.php', 'icon' => 'fa-users-cog'],
     'manager_dashboard' => ['label' => 'Monitor Administrativos', 'href' => $baseHref . 'manager_dashboard.php', 'icon' => 'fa-user-tie'],
+    'chat' => [
+        'label' => 'Comunicaciones',
+        'icon' => 'fa-comments',
+        'children' => [
+            [
+                'section' => 'chat_admin',
+                'label' => 'Administración Chat',
+                'href' => $baseHref . 'chat/admin.php',
+                'icon' => 'fa-comments-alt',
+            ],
+            [
+                'section' => 'chat_mass_message',
+                'label' => 'Mensajes Masivos',
+                'href' => $baseHref . 'chat/mass_message.php',
+                'icon' => 'fa-bullhorn',
+            ],
+        ],
+    ],
     'tickets' => [
         'label' => 'Tickets',
         'icon' => 'fa-ticket-alt',
@@ -153,7 +171,6 @@ $navItems = [
             ],
         ],
     ],
-    'chat_admin' => ['label' => 'Administración de Chat', 'href' => $baseHref . 'chat/admin.php', 'icon' => 'fa-comments-alt'],
     'activity_logs' => ['label' => 'Logs de Actividad', 'href' => $baseHref . 'hr/activity_logs.php', 'icon' => 'fa-history'],
     'login_logs' => ['label' => 'Registros de Acceso', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
     'settings' => ['label' => 'Configuración', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],

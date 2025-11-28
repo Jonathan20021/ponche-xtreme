@@ -149,9 +149,18 @@ try {
             updateTypingStatus($pdo, $userId, $conversationId);
             break;
             
-        case 'get_typing':
+        case 'get_typing_users':
             $conversationId = (int)($_GET['conversation_id'] ?? 0);
             getTypingUsers($pdo, $conversationId, $userId);
+            break;
+            
+        case 'send_mass_message':
+            if ($jsonData === null) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Invalid JSON']);
+                break;
+            }
+            sendMassMessage($pdo, $userId, $jsonData);
             break;
             
         default:
@@ -673,6 +682,159 @@ function getTypingUsers(PDO $pdo, int $conversationId, int $userId): void {
     }
     
     echo json_encode(['success' => true, 'typing_users' => $typingUsers]);
+}
+
+function sendMassMessage(PDO $pdo, int $userId, array $data): void {
+    $messageText = trim($data['message_text'] ?? '');
+    
+    if (empty($messageText)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'El mensaje no puede estar vacío']);
+        return;
+    }
+    
+    // Verificar permiso de mensajes masivos
+    require_once __DIR__ . '/../lib/authorization_functions.php';
+    if (!userHasPermission('chat_mass_message')) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'No tienes permiso para enviar mensajes masivos']);
+        return;
+    }
+    
+    if (mb_strlen($messageText) > CHAT_MAX_MESSAGE_LENGTH) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'El mensaje es demasiado largo']);
+        return;
+    }
+    
+    try {
+        $pdo->beginTransaction();
+        
+        // Obtener todos los usuarios activos excepto el remitente
+        $stmt = $pdo->prepare("
+            SELECT id, full_name, username 
+            FROM users 
+            WHERE id != ? AND is_active = 1
+            ORDER BY full_name
+        ");
+        $stmt->execute([$userId]);
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        if (empty($users)) {
+            $pdo->rollBack();
+            echo json_encode(['success' => false, 'error' => 'No hay usuarios disponibles para enviar el mensaje']);
+            return;
+        }
+        
+        $sentCount = 0;
+        $errors = [];
+        
+        // Crear conversación individual con cada usuario y enviar mensaje
+        foreach ($users as $user) {
+            try {
+                // Verificar si ya existe una conversación directa entre estos usuarios
+                $conversationStmt = $pdo->prepare("
+                    SELECT c.id 
+                    FROM chat_conversations c
+                    JOIN chat_participants p1 ON p1.conversation_id = c.id AND p1.user_id = ?
+                    JOIN chat_participants p2 ON p2.conversation_id = c.id AND p2.user_id = ?
+                    WHERE c.type = 'direct' AND c.is_active = 1
+                    LIMIT 1
+                ");
+                $conversationStmt->execute([$userId, $user['id']]);
+                $conversation = $conversationStmt->fetch();
+                
+                $conversationId = null;
+                
+                if ($conversation) {
+                    $conversationId = $conversation['id'];
+                } else {
+                    // Crear nueva conversación directa
+                    $createConvStmt = $pdo->prepare("
+                        INSERT INTO chat_conversations (name, type, created_by) 
+                        VALUES (?, 'direct', ?)
+                    ");
+                    $createConvStmt->execute([null, $userId]);
+                    $conversationId = $pdo->lastInsertId();
+                    
+                    // Agregar participantes
+                    $addParticipantStmt = $pdo->prepare("
+                        INSERT INTO chat_participants (conversation_id, user_id, joined_at) 
+                        VALUES (?, ?, NOW())
+                    ");
+                    $addParticipantStmt->execute([$conversationId, $userId]);
+                    $addParticipantStmt->execute([$conversationId, $user['id']]);
+                }
+                
+                // Enviar mensaje
+                $messageStmt = $pdo->prepare("
+                    INSERT INTO chat_messages (conversation_id, user_id, message_text, message_type) 
+                    VALUES (?, ?, ?, 'mass_message')
+                ");
+                $messageStmt->execute([$conversationId, $userId, $messageText]);
+                $messageId = $pdo->lastInsertId();
+                
+                // Crear notificación
+                $notificationStmt = $pdo->prepare("
+                    INSERT INTO chat_notifications (user_id, conversation_id, message_id, notification_type) 
+                    VALUES (?, ?, ?, 'mass_message')
+                ");
+                $notificationStmt->execute([$user['id'], $conversationId, $messageId]);
+                
+                // Actualizar timestamp de la conversación
+                $updateConvStmt = $pdo->prepare("
+                    UPDATE chat_conversations 
+                    SET last_message_at = NOW() 
+                    WHERE id = ?
+                ");
+                $updateConvStmt->execute([$conversationId]);
+                
+                $sentCount++;
+                
+            } catch (Exception $e) {
+                $errors[] = "Error enviando a {$user['full_name']}: " . $e->getMessage();
+                error_log("Mass message error for user {$user['id']}: " . $e->getMessage());
+            }
+        }
+        
+        $pdo->commit();
+        
+        // Registrar la actividad de mensaje masivo
+        try {
+            $logStmt = $pdo->prepare("
+                INSERT INTO activity_logs (user_id, action, details, ip_address) 
+                VALUES (?, 'mass_message_sent', ?, ?)
+            ");
+            $logDetails = json_encode([
+                'message_preview' => mb_substr($messageText, 0, 100),
+                'recipients_count' => $sentCount,
+                'total_users' => count($users),
+                'errors_count' => count($errors)
+            ]);
+            $logStmt->execute([$userId, $logDetails, $_SERVER['REMOTE_ADDR'] ?? 'unknown']);
+        } catch (Exception $e) {
+            error_log("Failed to log mass message activity: " . $e->getMessage());
+        }
+        
+        $response = [
+            'success' => true,
+            'message' => "Mensaje enviado exitosamente a {$sentCount} usuarios",
+            'sent_count' => $sentCount,
+            'total_users' => count($users)
+        ];
+        
+        if (!empty($errors)) {
+            $response['warnings'] = $errors;
+        }
+        
+        echo json_encode($response);
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log("Mass message transaction error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Error interno del servidor al enviar mensajes masivos']);
+    }
 }
 
 function checkChatPermission(PDO $pdo, int $userId, string $permission): bool {
