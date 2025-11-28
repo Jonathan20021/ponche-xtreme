@@ -280,8 +280,8 @@ if ($isAuthenticated) {
                                         break;
                                     }
                                 }
-                                // También marcar como activo si estamos en cualquier página de helpdesk
-                                if (!$isActiveDropdown && strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false) {
+                                // También marcar como activo si estamos en cualquier página de helpdesk o hr
+                                if (!$isActiveDropdown && (strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false)) {
                                     $isActiveDropdown = true;
                                 }
                                 $dropdownButtonClasses = $isActiveDropdown
