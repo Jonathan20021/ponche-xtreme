@@ -288,6 +288,8 @@ if ($isAuthenticated) {
                                 }
                                 // También marcar como activo si estamos en cualquier página de helpdesk o hr
                                 if (!$isActiveDropdown && (strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false)) {
+                                    $isActiveDropdown = true;
+                                }
                             ?>
                             <div class="nav-dropdown" data-nav-dropdown>
                                 <button class="nav-dropdown-trigger group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
