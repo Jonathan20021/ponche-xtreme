@@ -288,22 +288,16 @@ if ($isAuthenticated) {
                                 }
                                 // También marcar como activo si estamos en cualquier página de helpdesk o hr
                                 if (!$isActiveDropdown && (strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false)) {
-                                    $isActiveDropdown = true;
-                                }
-                                $dropdownButtonClasses = $isActiveDropdown
-                                    ? 'nav-dropdown-button group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors'
-                                    : 'nav-dropdown-button group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors';
                             ?>
                             <div class="nav-dropdown" data-nav-dropdown>
-                                <button type="button"
-                                        class="<?= $dropdownButtonClasses ?>"
-                                        data-nav-dropdown-trigger
-                                        aria-expanded="<?= $isActiveDropdown ? 'true' : 'false' ?>">
-                                    <i class="fas <?= htmlspecialchars($item['icon'] ?? 'fa-layer-group') ?> text-xs"></i>
-                                    <span><?= htmlspecialchars($item['label']) ?></span>
-                                    <i class="fas fa-chevron-down text-xs opacity-70 transition-transform" data-nav-dropdown-icon style="font-size: 0.65rem;"></i>
-                                </button>
-                                <div class="nav-dropdown-menu" data-nav-dropdown-menu <?= $isActiveDropdown ? '' : 'hidden' ?>>
+                                <button class="nav-dropdown-trigger group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
+                                         data-nav-dropdown-trigger
+                                         aria-expanded="false">
+                                     <i class="fas <?= htmlspecialchars($item['icon'] ?? 'fa-layer-group') ?> text-xs"></i>
+                                     <span><?= htmlspecialchars($item['label']) ?></span>
+                                     <i class="fas fa-chevron-down text-xs opacity-70 transition-transform" data-nav-dropdown-icon style="font-size: 0.65rem;"></i>
+                                 </button>
+                                 <div class="nav-dropdown-menu" data-nav-dropdown-menu hidden>
                                     <?php foreach ($childLinks as $child): ?>
                                         <?php
                                             $childActive = $currentPath === basename($child['href']);
