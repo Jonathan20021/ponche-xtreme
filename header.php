@@ -54,6 +54,12 @@ $navItems = [
                 'icon' => 'fa-money-bill-wave',
             ],
             [
+                'section' => 'hr_payroll',
+                'label' => 'Volantes de Nómina',
+                'href' => $baseHref . 'hr/payroll_slip_email.php',
+                'icon' => 'fa-envelope-open-text',
+            ],
+            [
                 'section' => 'hr_birthdays',
                 'label' => 'Cumpleaños',
                 'href' => $baseHref . 'hr/birthdays.php',
