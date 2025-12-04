@@ -1132,7 +1132,23 @@ $terminatedEmployees = $pdo->query("
                                 </p>
                                 <p class="text-slate-300">
                                     <i class="fas fa-dollar-sign text-green-400 mr-2 w-4"></i>
-                                    $<?= number_format($employee['hourly_rate'], 2) ?>/hr
+                                    <?php
+                                    // Display salary based on preferred currency and compensation type
+                                    $currency = $employee['preferred_currency'] ?? 'USD';
+                                    $compensationType = $employee['compensation_type'] ?? 'hourly';
+                                    $currencySymbol = $currency === 'DOP' ? 'RD$' : '$';
+                                    
+                                    if ($compensationType === 'hourly') {
+                                        $rate = $currency === 'DOP' ? $employee['hourly_rate_dop'] : $employee['hourly_rate'];
+                                        echo $currencySymbol . number_format($rate, 2) . '/hr';
+                                    } elseif ($compensationType === 'fixed') {
+                                        $salary = $currency === 'DOP' ? $employee['monthly_salary_dop'] : $employee['monthly_salary'];
+                                        echo $currencySymbol . number_format($salary, 2) . '/mes';
+                                    } elseif ($compensationType === 'daily') {
+                                        $salary = $currency === 'DOP' ? $employee['daily_salary_dop'] : $employee['daily_salary_usd'];
+                                        echo $currencySymbol . number_format($salary, 2) . '/día';
+                                    }
+                                    ?>
                                 </p>
                             </div>
 
