@@ -117,6 +117,90 @@ $recentVacations = $pdo->query("
         .theme-light .module-card:hover {
             background: rgba(255, 255, 255, 1);
         }
+        .monitor-summary-card {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 16px;
+            padding: 1.25rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        .monitor-summary-card:hover {
+            background: rgba(30, 41, 59, 0.9);
+            border-color: rgba(99, 102, 241, 0.3);
+            transform: translateY(-2px);
+        }
+        .summary-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        .employee-monitor-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 16px;
+            padding: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .employee-monitor-card:hover {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: rgba(99, 102, 241, 0.4);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        .employee-monitor-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--campaign-color, #6b7280);
+            opacity: 0.8;
+        }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #4ade80;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+        .status-badge {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .status-active { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+        .status-pause { background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+        .status-offline { background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+        .status-completed { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+        
+        .theme-light .monitor-summary-card, 
+        .theme-light .employee-monitor-card {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(148, 163, 184, 0.2);
+        }
+        .theme-light .monitor-summary-card:hover,
+        .theme-light .employee-monitor-card:hover {
+            background: #ffffff;
+        }
+        .theme-light h2, .theme-light h3 { color: #1e293b; }
+        .theme-light p { color: #64748b; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -189,7 +273,116 @@ $recentVacations = $pdo->query("
             </div>
         </div>
 
+        <!-- Real-Time Employee Monitor -->
+        <div class="monitor-summary-card mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-white flex items-center">
+                    <i class="fas fa-users-viewfinder mr-3 text-green-400"></i>
+                    Monitor en Tiempo Real
+                    <span class="ml-3 px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full" id="live-indicator">
+                        <i class="fas fa-circle animate-pulse mr-1"></i>
+                        EN VIVO
+                    </span>
+                </h2>
+                <div class="text-sm text-slate-400" id="last-update">
+                    Actualizado: <span id="update-time">--:--:--</span>
+                </div>
+            </div>
+            
+            <!-- Search and Filter Controls -->
+            <div class="mb-6">
+                <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                    <div class="flex-1 max-w-md">
+                        <div class="relative">
+                            <input type="text" 
+                                   id="employee-search" 
+                                   placeholder="Buscar empleados por nombre, posición o campaña..." 
+                                   class="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-2 pl-10 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="text-sm text-slate-400">
+                            <span id="showing-count">0</span> de <span id="total-count">0</span> empleados
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm text-slate-400">Por página:</label>
+                            <select id="items-per-page" class="bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500">
+                                <option value="12">12</option>
+                                <option value="24" selected>24</option>
+                                <option value="48">48</option>
+                                <option value="all">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="summary-stats">
+                <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-400 text-sm">Empleados Activos</p>
+                            <p class="text-2xl font-bold text-white" id="active-employees">--</p>
+                        </div>
+                        <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-users text-blue-400"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-400 text-sm">Horas Trabajadas Hoy</p>
+                            <p class="text-2xl font-bold text-white" id="total-hours">--</p>
+                            <p class="text-xs text-slate-500 mt-1" title="Suma de horas pagadas de todos los empleados activos hoy">Solo tiempo pagado</p>
+                        </div>
+                        <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-clock text-purple-400"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-400 text-sm">Ingresos USD</p>
+                            <p class="text-2xl font-bold text-white" id="earnings-usd">$0.00</p>
+                        </div>
+                        <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-dollar-sign text-green-400"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-400 text-sm">Ingresos DOP</p>
+                            <p class="text-2xl font-bold text-white" id="earnings-dop">RD$0.00</p>
+                        </div>
+                        <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-peso-sign text-orange-400"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="employees-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <!-- Employee cards will be populated here -->
+            </div>
+            
+            <!-- Pagination -->
+            <div id="pagination-container" class="mt-6 flex justify-center">
+                <div class="flex items-center gap-2" id="pagination">
+                    <!-- Pagination buttons will be populated here -->
+                </div>
+            </div>
+        </div>
+
         <!-- Module Cards -->
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <div class="module-card" onclick="window.location.href='employees.php'">
                 <div class="flex items-center mb-3">
@@ -373,5 +566,321 @@ $recentVacations = $pdo->query("
     </div>
 
     <?php include '../footer.php'; ?>
+    <script>
+        let lastData = null;
+        let allEmployees = [];
+        let filteredEmployees = [];
+        let currentPage = 1;
+        let itemsPerPage = 24;
+        let searchTerm = '';
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initial load
+            updateMonitor();
+            
+            // Auto-refresh every 5 seconds
+            setInterval(updateMonitor, 5000);
+            
+            // Update durations every second locally to make it smooth
+            setInterval(updateDurations, 1000);
+            
+            // Setup search functionality
+            const searchInput = document.getElementById('employee-search');
+            searchInput.addEventListener('input', function(e) {
+                searchTerm = e.target.value.toLowerCase();
+                filterAndPaginateEmployees();
+            });
+            
+            // Setup items per page selector
+            const itemsPerPageSelect = document.getElementById('items-per-page');
+            itemsPerPageSelect.addEventListener('change', function(e) {
+                itemsPerPage = e.target.value === 'all' ? 999999 : parseInt(e.target.value);
+                currentPage = 1;
+                filterAndPaginateEmployees();
+            });
+        });
+
+        function updateMonitor() {
+            fetch('realtime_monitor_api.php')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        lastData = data;
+                        allEmployees = data.employees;
+                        updateSummaryCards(data.summary);
+                        filterAndPaginateEmployees();
+                        
+                        const now = new Date();
+                        document.getElementById('update-time').textContent = now.toLocaleTimeString();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching monitor data:', error);
+                    // Show error state
+                    const grid = document.getElementById('employees-grid');
+                    grid.innerHTML = `
+                        <div class="col-span-full text-center py-12">
+                            <i class="fas fa-exclamation-triangle text-4xl text-red-400 mb-4"></i>
+                            <p class="text-slate-400">Error al cargar datos. Reintentando...</p>
+                        </div>
+                    `;
+                });
+        }
+
+        function updateSummaryCards(summary) {
+            document.getElementById('active-employees').textContent = summary.active_now + ' / ' + summary.total_employees;
+            
+            // Calculate total hours (USD + DOP)
+            const totalHours = summary.total_hours_usd + summary.total_hours_dop;
+            document.getElementById('total-hours').textContent = formatHours(totalHours);
+            
+            document.getElementById('earnings-usd').textContent = summary.total_earnings_usd_formatted;
+            document.getElementById('earnings-dop').textContent = summary.total_earnings_dop_formatted;
+        }
+
+        function filterAndPaginateEmployees() {
+            if (!allEmployees) return;
+            
+            // Filter employees based on search term
+            filteredEmployees = allEmployees.filter(emp => {
+                if (!searchTerm) return true;
+                
+                const searchableText = [
+                    emp.first_name,
+                    emp.last_name,
+                    emp.full_name,
+                    emp.position,
+                    emp.campaign.name,
+                    emp.status_label
+                ].join(' ').toLowerCase();
+                
+                return searchableText.includes(searchTerm);
+            });
+            
+            // Update counts
+            document.getElementById('total-count').textContent = filteredEmployees.length;
+            
+            // Calculate pagination
+            const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, filteredEmployees.length);
+            const currentPageEmployees = filteredEmployees.slice(startIndex, endIndex);
+            
+            // Update showing count
+            document.getElementById('showing-count').textContent = currentPageEmployees.length;
+            
+            // Update employee grid
+            updateEmployeeGrid(currentPageEmployees);
+            
+            // Update pagination
+            updatePagination(totalPages);
+        }
+
+        function updateEmployeeGrid(employees) {
+            const grid = document.getElementById('employees-grid');
+            
+            if (employees.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full text-center py-12">
+                        <i class="fas fa-search text-4xl text-slate-400 mb-4"></i>
+                        <p class="text-slate-400">No se encontraron empleados${searchTerm ? ' que coincidan con "' + searchTerm + '"' : ''}.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            grid.innerHTML = '';
+            
+            employees.forEach(emp => {
+                const card = document.createElement('div');
+                card.className = 'employee-monitor-card';
+                card.style.setProperty('--campaign-color', emp.campaign.color);
+                
+                // Determine status class
+                let statusClass = 'status-offline';
+                if (emp.status === 'active') statusClass = 'status-active';
+                else if (emp.status === 'completed') statusClass = 'status-completed';
+                else if (emp.current_punch.type === 'PAUSA' || emp.current_punch.type === 'BREAK' || emp.current_punch.type === 'LUNCH') statusClass = 'status-pause';
+                
+                // Handle photo display with fallback to initials (same as employees.php)
+                let photoHTML = '';
+                if (emp.photo_path && emp.photo_path.trim() !== '') {
+                    photoHTML = `
+                        <img src="../${emp.photo_path}" 
+                             alt="${emp.first_name}" 
+                             class="w-10 h-10 rounded-full object-cover border-2 border-slate-700"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
+                             style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); display: none;">
+                            ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
+                        </div>
+                    `;
+                } else {
+                    photoHTML = `
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
+                             style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                            ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
+                        </div>
+                    `;
+                }
+                
+                card.innerHTML = `
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex items-center">
+                            <div class="relative">
+                                ${photoHTML}
+                                <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-800 ${emp.status === 'active' ? 'bg-green-500' : (emp.status === 'offline' ? 'bg-slate-500' : 'bg-yellow-500')}"></div>
+                            </div>
+                            <div class="ml-3">
+                                <h4 class="text-white font-medium text-sm truncate w-32" title="${emp.full_name}">${emp.first_name} ${emp.last_name}</h4>
+                                <p class="text-slate-400 text-xs truncate w-32">${emp.position || 'Sin posición'}</p>
+                            </div>
+                        </div>
+                        <span class="status-badge ${statusClass}">
+                            ${emp.status_label}
+                        </span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Campaña</span>
+                            <span class="text-white" style="color: ${emp.campaign.color}">${emp.campaign.name || 'Sin campaña'}</span>
+                        </div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Estado Actual</span>
+                            <span class="text-white flex items-center">
+                                <i class="${emp.current_punch.icon} mr-1" style="color: ${emp.current_punch.color_start}"></i>
+                                ${emp.current_punch.label}
+                            </span>
+                        </div>
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-400">Tiempo en Estado</span>
+                            <span class="text-white font-mono duration-counter" data-timestamp="${emp.current_punch.timestamp}" data-active="${emp.status === 'active' || emp.status === 'pause' ? 'true' : 'false'}">
+                                ${emp.current_punch.duration_formatted}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="pt-3 border-t border-slate-700/50">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <p class="text-slate-500 text-[10px] uppercase tracking-wider">Horas Hoy</p>
+                                <p class="text-white font-bold">${emp.hours_formatted}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-slate-500 text-[10px] uppercase tracking-wider">Generado</p>
+                                <p class="text-green-400 font-bold">${emp.earnings_formatted}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+        }
+
+        function updatePagination(totalPages) {
+            const paginationContainer = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                paginationContainer.innerHTML = '';
+                return;
+            }
+            
+            let paginationHTML = '';
+            
+            // Previous button
+            if (currentPage > 1) {
+                paginationHTML += `
+                    <button onclick="changePage(${currentPage - 1})" class="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white hover:bg-slate-700/50 transition-colors">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                `;
+            }
+            
+            // Page numbers
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+            
+            if (startPage > 1) {
+                paginationHTML += `
+                    <button onclick="changePage(1)" class="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white hover:bg-slate-700/50 transition-colors">1</button>
+                `;
+                if (startPage > 2) {
+                    paginationHTML += '<span class="px-2 text-slate-400">...</span>';
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const isActive = i === currentPage;
+                paginationHTML += `
+                    <button onclick="changePage(${i})" class="px-3 py-2 ${isActive ? 'bg-blue-600 border-blue-500' : 'bg-slate-800/50 border-slate-700/50'} border rounded-lg text-white hover:bg-${isActive ? 'blue-700' : 'slate-700/50'} transition-colors">
+                        ${i}
+                    </button>
+                `;
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    paginationHTML += '<span class="px-2 text-slate-400">...</span>';
+                }
+                paginationHTML += `
+                    <button onclick="changePage(${totalPages})" class="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white hover:bg-slate-700/50 transition-colors">${totalPages}</button>
+                `;
+            }
+            
+            // Next button
+            if (currentPage < totalPages) {
+                paginationHTML += `
+                    <button onclick="changePage(${currentPage + 1})" class="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white hover:bg-slate-700/50 transition-colors">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                `;
+            }
+            
+            paginationContainer.innerHTML = paginationHTML;
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            filterAndPaginateEmployees();
+        }
+
+        function updateDurations() {
+            if (!lastData) return;
+            
+            document.querySelectorAll('.duration-counter').forEach(el => {
+                if (el.dataset.active === 'true' && el.dataset.timestamp) {
+                    const startTime = new Date(el.dataset.timestamp).getTime();
+                    const now = new Date().getTime();
+                    const diff = Math.floor((now - startTime) / 1000);
+                    
+                    if (diff >= 0) {
+                        el.textContent = formatDuration(diff);
+                    }
+                }
+            });
+        }
+
+        function formatDuration(seconds) {
+            if (seconds < 60) return seconds + 's';
+            if (seconds < 3600) {
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                return `${m}m ${s}s`;
+            }
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return `${h}h ${m}m`;
+        }
+
+        function formatHours(hours) {
+            if (hours === 0) return '0h';
+            const h = Math.floor(hours);
+            const m = Math.round((hours - h) * 60);
+            if (m === 0) return h + 'h';
+            return `${h}h ${m}m`;
+        }
+    </script>
 </body>
 </html>
