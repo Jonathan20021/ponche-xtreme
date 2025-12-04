@@ -394,6 +394,19 @@ $recentVacations = $pdo->query("
                 </div>
             </div>
             
+            <!-- Campaign Summary (only shown in campaign view) -->
+            <div id="campaign-summary" class="mb-6 hidden">
+                <div class="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
+                    <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                        <i class="fas fa-chart-pie mr-2 text-blue-400"></i>
+                        Resumen de Ingresos por Campaña
+                    </h3>
+                    <div id="campaign-summary-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <!-- Campaign summary cards will be populated here -->
+                    </div>
+                </div>
+            </div>
+            
             <div id="employees-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 <!-- Employee cards will be populated here -->
             </div>
@@ -750,6 +763,117 @@ $recentVacations = $pdo->query("
                 campaignBtn.className = 'px-3 py-2 bg-blue-600 border border-blue-500 rounded-lg text-white hover:bg-blue-700 transition-colors';
             }
         }
+        
+        function calculateCampaignStats(employees) {
+            let totalHours = 0;
+            let totalEarningsUSD = 0;
+            let totalEarningsDOP = 0;
+            
+            employees.forEach(emp => {
+                // Add hours worked today
+                totalHours += emp.hours_worked_today || 0;
+                
+                // Add earnings based on currency
+                if (emp.currency === 'DOP') {
+                    totalEarningsDOP += emp.earnings_today || 0;
+                } else {
+                    totalEarningsUSD += emp.earnings_today || 0;
+                }
+            });
+            
+            return {
+                totalHours: totalHours,
+                totalHoursFormatted: formatHours(totalHours),
+                totalEarningsUSD: totalEarningsUSD,
+                totalEarningsUSDFormatted: formatMoney(totalEarningsUSD, 'USD'),
+                totalEarningsDOP: totalEarningsDOP,
+                totalEarningsDOPFormatted: formatMoney(totalEarningsDOP, 'DOP')
+            };
+        }
+        
+        function formatMoney(amount, currency) {
+            if (currency === 'DOP') {
+                return 'RD$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+            return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        
+        function updateCampaignSummary() {
+            const summarySection = document.getElementById('campaign-summary');
+            const summaryGrid = document.getElementById('campaign-summary-grid');
+            
+            // Show the summary section
+            summarySection.classList.remove('hidden');
+            
+            // Group employees by campaign and calculate stats
+            const campaignStats = {};
+            filteredEmployees.forEach(emp => {
+                const campaignName = emp.campaign?.name || 'Sin Campaña';
+                if (!campaignStats[campaignName]) {
+                    campaignStats[campaignName] = {
+                        campaign: emp.campaign || { name: 'Sin Campaña', color: '#6b7280' },
+                        employees: [],
+                        totalHours: 0,
+                        totalEarningsUSD: 0,
+                        totalEarningsDOP: 0
+                    };
+                }
+                
+                campaignStats[campaignName].employees.push(emp);
+                campaignStats[campaignName].totalHours += emp.hours_worked_today || 0;
+                
+                if (emp.currency === 'DOP') {
+                    campaignStats[campaignName].totalEarningsDOP += emp.earnings_today || 0;
+                } else {
+                    campaignStats[campaignName].totalEarningsUSD += emp.earnings_today || 0;
+                }
+            });
+            
+            // Clear existing summary cards
+            summaryGrid.innerHTML = '';
+            
+            // Create summary cards for each campaign
+            Object.keys(campaignStats).sort().forEach(campaignName => {
+                const stats = campaignStats[campaignName];
+                const campaign = stats.campaign;
+                const activeEmployees = stats.employees.filter(emp => emp.status === 'active').length;
+                
+                const summaryCard = document.createElement('div');
+                summaryCard.className = 'bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-blue-500/50 transition-all';
+                summaryCard.innerHTML = `
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-3 h-3 rounded-full" style="background-color: ${campaign.color}"></div>
+                        <h4 class="font-semibold text-white truncate">${campaign.name}</h4>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <p class="text-slate-500 text-xs uppercase tracking-wider">Empleados</p>
+                            <p class="text-white font-semibold">${stats.employees.length} <span class="text-green-400">(${activeEmployees} activos)</span></p>
+                        </div>
+                        <div>
+                            <p class="text-slate-500 text-xs uppercase tracking-wider">Horas</p>
+                            <p class="text-blue-400 font-semibold">${formatHours(stats.totalHours)}</p>
+                        </div>
+                        <div>
+                            <p class="text-slate-500 text-xs uppercase tracking-wider">USD</p>
+                            <p class="text-green-400 font-semibold">${formatMoney(stats.totalEarningsUSD, 'USD')}</p>
+                        </div>
+                        <div>
+                            <p class="text-slate-500 text-xs uppercase tracking-wider">DOP</p>
+                            <p class="text-orange-400 font-semibold">${formatMoney(stats.totalEarningsDOP, 'DOP')}</p>
+                        </div>
+                    </div>
+                `;
+                
+                summaryGrid.appendChild(summaryCard);
+            });
+        }
+        
+        function hideCampaignSummary() {
+            const summarySection = document.getElementById('campaign-summary');
+            summarySection.classList.add('hidden');
+        }
 
         function filterAndPaginateEmployees() {
             if (!allEmployees) return;
@@ -783,8 +907,10 @@ $recentVacations = $pdo->query("
             document.getElementById('total-count').textContent = filteredEmployees.length;
             
             if (viewMode === 'campaign') {
+                updateCampaignSummary();
                 updateEmployeeGridByCampaign();
             } else {
+                hideCampaignSummary();
                 // Calculate pagination for list view
                 const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
                 const startIndex = (currentPage - 1) * itemsPerPage;
@@ -847,6 +973,9 @@ $recentVacations = $pdo->query("
                 const campaignSection = document.createElement('div');
                 campaignSection.className = 'bg-slate-800/30 rounded-lg p-4 border border-slate-700/50';
                 
+                // Calculate campaign earnings and hours
+                const campaignStats = calculateCampaignStats(employees);
+                
                 // Campaign header
                 const campaignHeader = document.createElement('div');
                 campaignHeader.className = 'flex items-center justify-between mb-4 pb-3 border-b border-slate-700/50';
@@ -858,8 +987,23 @@ $recentVacations = $pdo->query("
                             ${employees.length} empleado${employees.length !== 1 ? 's' : ''}
                         </span>
                     </div>
-                    <div class="text-sm text-slate-400">
-                        ${employees.filter(emp => emp.status === 'active').length} activos
+                    <div class="flex items-center gap-6">
+                        <div class="text-center">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Activos</p>
+                            <p class="text-sm font-semibold text-green-400">${employees.filter(emp => emp.status === 'active').length}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Horas Hoy</p>
+                            <p class="text-sm font-semibold text-blue-400">${campaignStats.totalHoursFormatted}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Generado USD</p>
+                            <p class="text-sm font-semibold text-green-400">${campaignStats.totalEarningsUSDFormatted}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Generado DOP</p>
+                            <p class="text-sm font-semibold text-orange-400">${campaignStats.totalEarningsDOPFormatted}</p>
+                        </div>
                     </div>
                 `;
                 
