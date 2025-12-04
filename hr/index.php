@@ -399,7 +399,7 @@ $recentVacations = $pdo->query("
                 <div class="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
                     <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
                         <i class="fas fa-chart-pie mr-2 text-blue-400"></i>
-                        Resumen de Ingresos por Campaña
+                        Resumen de Costos por Campaña
                     </h3>
                     <div id="campaign-summary-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         <!-- Campaign summary cards will be populated here -->
@@ -997,11 +997,11 @@ $recentVacations = $pdo->query("
                             <p class="text-sm font-semibold text-blue-400">${campaignStats.totalHoursFormatted}</p>
                         </div>
                         <div class="text-center">
-                            <p class="text-xs text-slate-500 uppercase tracking-wider">Generado USD</p>
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Costo USD</p>
                             <p class="text-sm font-semibold text-green-400">${campaignStats.totalEarningsUSDFormatted}</p>
                         </div>
                         <div class="text-center">
-                            <p class="text-xs text-slate-500 uppercase tracking-wider">Generado DOP</p>
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Costo DOP</p>
                             <p class="text-sm font-semibold text-orange-400">${campaignStats.totalEarningsDOPFormatted}</p>
                         </div>
                     </div>
