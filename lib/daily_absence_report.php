@@ -401,7 +401,7 @@ function generateReportHTML(array $reportData): string {
         <div class='footer'>
             <p><strong>Reporte generado automáticamente</strong></p>
             <p>" . date('Y-m-d H:i:s') . "</p>
-            <p>Sistema de Control de Asistencia - Ponche Xtreme</p>
+            <p>Sistema de Control de Asistencia - Ponche Evallish BPO</p>
         </div>
     </div>
 </body>

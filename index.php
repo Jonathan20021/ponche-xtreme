@@ -2,6 +2,11 @@
 session_start();
 include 'db.php';
 
+// Auto-trigger cron jobs (absence report)
+if (file_exists(__DIR__ . '/lib/auto_cron_trigger.php')) {
+    include_once __DIR__ . '/lib/auto_cron_trigger.php';
+}
+
 if (isset($_POST['login'])) {
     $username = $_POST['username'];
     $password = $_POST['password'];
