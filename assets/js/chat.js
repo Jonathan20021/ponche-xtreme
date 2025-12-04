@@ -17,21 +17,21 @@ class ChatApp {
         this.audioContext = null; // Para el sonido de notificación
         this.emojisLoaded = false;
         this.stickersLoaded = false;
-        
+
         // Detección de dispositivo móvil y características
         this.isMobile = this.detectMobile();
         this.isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         this.screenWidth = window.innerWidth;
-        
+
         this.init();
         this.setupResponsiveHandlers();
     }
-    
+
     detectMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
             || window.innerWidth <= 640;
     }
-    
+
     setupResponsiveHandlers() {
         // Manejar cambios de orientación y tamaño de pantalla
         let resizeTimer;
@@ -41,14 +41,14 @@ class ChatApp {
                 this.handleResize();
             }, 250);
         });
-        
+
         // Manejar cambios de orientación
         window.addEventListener('orientationchange', () => {
             setTimeout(() => {
                 this.handleResize();
             }, 100);
         });
-        
+
         // Prevenir zoom en inputs en iOS
         if (this.isMobile && /iPhone|iPad|iPod/i.test(navigator.userAgent)) {
             const viewport = document.querySelector('meta[name=viewport]');
@@ -57,25 +57,25 @@ class ChatApp {
             }
         }
     }
-    
+
     handleResize() {
         const newWidth = window.innerWidth;
         const wasMobile = this.isMobile;
         this.isMobile = this.detectMobile();
         this.screenWidth = newWidth;
-        
+
         // Si cambió de móvil a desktop o viceversa
         if (wasMobile !== this.isMobile) {
             console.log(`📱 Cambio de dispositivo detectado: ${this.isMobile ? 'Móvil' : 'Desktop'}`);
             this.adjustForDevice();
         }
-        
+
         // Ajustar altura del contenedor de mensajes en móviles
         if (this.isMobile) {
             this.adjustMobileLayout();
         }
     }
-    
+
     adjustForDevice() {
         const chatWindow = document.getElementById('chatWindow');
         if (chatWindow && chatWindow.classList.contains('open')) {
@@ -83,63 +83,63 @@ class ChatApp {
             this.scrollToBottom();
         }
     }
-    
+
     adjustMobileLayout() {
         // Ajustar altura considerando teclado virtual
         const vh = window.innerHeight * 0.01;
         document.documentElement.style.setProperty('--vh', `${vh}px`);
     }
-    
+
     init() {
         console.log('🔧 Iniciando ChatApp.init()...');
         this.createChatWidget();
         console.log('📦 Widget creado');
         this.attachEventListeners();
         console.log('🔗 Event listeners adjuntados');
-        
+
         // Agregar soporte para gestos táctiles en móviles
         if (this.isTouch) {
             this.setupTouchGestures();
         }
-        
+
         this.startPolling();
         console.log('🔄 Polling iniciado');
         this.updateUserStatus('online');
         console.log('🟢 Estado actualizado a online');
-        
+
         // Actualizar estado al cerrar/salir
         window.addEventListener('beforeunload', () => {
             this.updateUserStatus('offline');
         });
     }
-    
+
     setupTouchGestures() {
         const chatWindow = document.getElementById('chatWindow');
         if (!chatWindow) return;
-        
+
         let touchStartY = 0;
         let touchEndY = 0;
-        
+
         // Gesto de deslizar hacia abajo para cerrar (solo en móviles)
         chatWindow.addEventListener('touchstart', (e) => {
             if (!this.isMobile) return;
             touchStartY = e.touches[0].clientY;
         }, { passive: true });
-        
+
         chatWindow.addEventListener('touchend', (e) => {
             if (!this.isMobile) return;
             touchEndY = e.changedTouches[0].clientY;
-            
+
             // Si deslizó hacia abajo más de 100px desde el header
             const header = chatWindow.querySelector('.chat-header');
             const headerRect = header ? header.getBoundingClientRect() : null;
-            
+
             if (headerRect && touchStartY < headerRect.bottom && touchEndY - touchStartY > 100) {
                 this.toggleChat();
             }
         }, { passive: true });
     }
-    
+
     createChatWidget() {
         const widget = document.createElement('div');
         widget.className = 'chat-widget';
@@ -285,82 +285,82 @@ class ChatApp {
             
             <input type="file" id="fileInput" style="display: none;" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar">
         `;
-        
+
         // Esperar a que el body esté completamente cargado
         const appendWidget = () => {
             // Remover cualquier instancia anterior
             const oldWidget = document.querySelector('.chat-widget');
             if (oldWidget) oldWidget.remove();
-            
+
             // Crear un contenedor portal independiente con atributos inline
             const portal = document.createElement('div');
             portal.id = 'chat-portal';
             portal.setAttribute('style', 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; pointer-events: none !important; z-index: 2147483647 !important; transform: none !important; overflow: visible !important;');
-            
+
             // Agregar estilos al widget con setAttribute para máxima prioridad
             widget.setAttribute('style', widget.getAttribute('style') + '; position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 2147483647 !important; visibility: visible !important; display: block !important; pointer-events: auto !important;');
-            
+
             // Agregar widget al portal
             portal.appendChild(widget);
-            
+
             // SOLUCIÓN DEFINITIVA: Agregar portal al <html> en lugar del <body>
             // Esto escapa completamente de cualquier limitación del body
             document.documentElement.appendChild(portal);
-            
+
             console.log('✅ Portal agregado directamente al <html>');
-            
+
             // Forzar que el portal esté siempre al final del HTML
             setInterval(() => {
                 if (portal.parentElement === document.documentElement && portal !== document.documentElement.lastElementChild) {
                     document.documentElement.appendChild(portal);
                 }
             }, 1000);
-            
+
             console.log('✅ Widget agregado al portal independiente');
         };
-        
+
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', appendWidget);
         } else {
             appendWidget();
         }
     }
-    
+
     attachEventListeners() {
         // Toggle chat
         document.getElementById('chatToggle').addEventListener('click', () => {
             this.toggleChat();
         });
-        
+
         document.getElementById('chatMinimize').addEventListener('click', () => {
             this.toggleChat();
         });
-        
+
         // Nueva conversación
         document.getElementById('newChatBtn').addEventListener('click', () => {
             this.openNewConversationModal();
         });
-        
+
         document.getElementById('closeModalBtn').addEventListener('click', () => {
             this.closeNewConversationModal();
         });
-        
+
         document.getElementById('cancelModalBtn').addEventListener('click', () => {
             this.closeNewConversationModal();
         });
-        
+
         document.getElementById('startChatBtn').addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this.startNewConversation();
         });
-        
+
         // Toggle tipo de conversación (directo o grupo)
         document.getElementById('isGroupChat').addEventListener('change', (e) => {
             const isGroup = e.target.checked;
             const groupNameContainer = document.getElementById('groupNameContainer');
             const selectedCountDiv = document.getElementById('selectedUsersCount');
-            
+
             if (isGroup) {
                 groupNameContainer.style.display = 'block';
                 selectedCountDiv.style.display = 'block';
@@ -370,55 +370,55 @@ class ChatApp {
                 selectedCountDiv.style.display = 'none';
             }
         });
-        
+
         // Buscar usuarios en tiempo real con debounce
         document.getElementById('userSearchInput').addEventListener('input', (e) => {
             // Cancelar búsqueda anterior si existe
             if (this.searchTimeout) {
                 clearTimeout(this.searchTimeout);
             }
-            
+
             const value = e.target.value.trim();
-            
+
             // Si está vacío, mostrar lista vacía
             if (value.length === 0) {
                 this.renderUserList([]);
                 return;
             }
-            
+
             // Esperar 300ms antes de buscar (debounce)
             this.searchTimeout = setTimeout(() => {
                 this.searchUsers(value);
             }, 300);
         });
-        
+
         // Enviar mensaje
         document.getElementById('sendBtn').addEventListener('click', () => {
             this.sendMessage();
         });
-        
+
         document.getElementById('messageInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
         });
-        
+
         // Indicador de escritura
         document.getElementById('messageInput').addEventListener('input', () => {
             this.handleTyping();
         });
-        
+
         // Volver a conversaciones
         document.getElementById('backToConversations').addEventListener('click', () => {
             this.showConversations();
         });
-        
+
         // Emoji picker
         document.getElementById('emojiBtn').addEventListener('click', () => {
             this.toggleEmojiPicker();
         });
-        
+
         // Tabs del emoji picker
         document.querySelectorAll('.emoji-tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
@@ -426,7 +426,7 @@ class ChatApp {
                 this.switchEmojiTab(tabName);
             });
         });
-        
+
         // Cerrar emoji picker al hacer clic fuera
         document.addEventListener('click', (e) => {
             const emojiPicker = document.getElementById('emojiPicker');
@@ -435,28 +435,28 @@ class ChatApp {
                 emojiPicker.style.display = 'none';
             }
         });
-        
+
         // Adjuntar archivo
         document.getElementById('attachBtn').addEventListener('click', () => {
             document.getElementById('fileInput').click();
         });
-        
+
         document.getElementById('fileInput').addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.uploadFile(e.target.files[0]);
             }
         });
-        
+
         // Tabs
         document.querySelectorAll('.chat-tab').forEach(tab => {
             tab.addEventListener('click', () => {
                 this.switchTab(tab.dataset.tab);
             });
         });
-        
+
         // Auto-resize textarea
         const textarea = document.getElementById('messageInput');
-        textarea.addEventListener('input', function() {
+        textarea.addEventListener('input', function () {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 100) + 'px';
         });
@@ -482,14 +482,14 @@ class ChatApp {
             if (this.searchTimeout) {
                 clearTimeout(this.searchTimeout);
             }
-            
+
             const value = e.target.value.trim();
-            
+
             if (value.length === 0) {
                 document.getElementById('addMemberUserList').innerHTML = '';
                 return;
             }
-            
+
             this.searchTimeout = setTimeout(() => {
                 this.searchUsersToAdd(value);
             }, 300);
@@ -513,7 +513,7 @@ class ChatApp {
             const basePath = this.getBasePath();
             const response = await fetch(`${basePath}api.php?action=search_users&q=${encodeURIComponent(query)}`);
             const data = await response.json();
-            
+
             if (data.success) {
                 this.renderAddMemberUserList(data.users);
             }
@@ -524,12 +524,12 @@ class ChatApp {
 
     renderAddMemberUserList(users) {
         const container = document.getElementById('addMemberUserList');
-        
+
         if (users.length === 0) {
             container.innerHTML = '<div class="chat-user-item" style="justify-content:center;color:#94a3b8;">No se encontraron usuarios</div>';
             return;
         }
-        
+
         container.innerHTML = users.map(user => `
             <div class="chat-user-item" onclick="chatApp.addMemberToGroup(${user.id}, '${this.escapeHtml(user.full_name)}')">
                 <div class="chat-avatar">${this.getInitials(user.full_name)}</div>
@@ -562,9 +562,9 @@ class ChatApp {
                     user_id: userId
                 })
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 alert(`${userName} ha sido agregado al grupo exitosamente.`);
                 this.closeAddMemberModal();
@@ -578,23 +578,23 @@ class ChatApp {
             alert('Error de conexión al agregar miembro.');
         }
     }
-    
+
     toggleChat() {
         const chatWindow = document.getElementById('chatWindow');
         const isOpening = !chatWindow.classList.contains('open');
-        
+
         chatWindow.classList.toggle('open');
-        
+
         if (isOpening) {
             this.loadConversations();
             this.updateUnreadCount();
-            
+
             // En móviles, prevenir scroll del body cuando el chat está abierto
             if (this.isMobile) {
                 document.body.style.overflow = 'hidden';
                 this.adjustMobileLayout();
             }
-            
+
             // Focus en el input si hay una conversación abierta
             if (this.currentConversationId && !this.isMobile) {
                 setTimeout(() => {
@@ -609,21 +609,21 @@ class ChatApp {
             }
         }
     }
-    
+
     switchTab(tab) {
         document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
         document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-        
+
         // Actualizar pestaña actual
         this.currentTab = tab;
-        
+
         if (tab === 'conversations') {
             this.loadConversations();
         } else if (tab === 'online') {
             this.loadOnlineUsers();
         }
     }
-    
+
     async loadConversations() {
         try {
             const basePath = this.getBasePath();
@@ -647,7 +647,7 @@ class ChatApp {
                 }
                 return;
             }
-            
+
             if (data.success) {
                 this.renderConversations(data.conversations);
             } else {
@@ -675,10 +675,10 @@ class ChatApp {
             }
         }
     }
-    
+
     renderConversations(conversations) {
         const container = document.getElementById('conversationsTab');
-        
+
         if (conversations.length === 0) {
             container.innerHTML = `
                 <div class="chat-empty-state">
@@ -688,7 +688,7 @@ class ChatApp {
             `;
             return;
         }
-        
+
         container.innerHTML = conversations.map(conv => `
             <div class="chat-conversation-item ${conv.unread_count > 0 ? 'unread' : ''}" data-id="${conv.id}">
                 <div class="chat-avatar">
@@ -709,7 +709,7 @@ class ChatApp {
                 </div>
             </div>
         `).join('');
-        
+
         // Agregar listeners
         container.querySelectorAll('.chat-conversation-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -717,31 +717,38 @@ class ChatApp {
             });
         });
     }
-    
+
     async openConversation(conversationId) {
         console.log('📖 Abriendo conversación:', conversationId);
-        
+
         // IMPORTANTE: Limpiar estado anterior
         this.currentConversationId = conversationId;
         this.lastMessageId = 0;
-        
+
         // Limpiar contenedor de mensajes INMEDIATAMENTE
         const messagesContainer = document.getElementById('messagesContainer');
         messagesContainer.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;">Cargando mensajes...</div>';
-        
+
         // Obtener info de la conversación
         const conversations = await this.fetchConversations();
-        const conversation = conversations.find(c => c.id === conversationId);
-        
-        console.log('Conversación encontrada:', conversation);
-        
+        const conversation = conversations.find(c => c.id == conversationId); // Usar == en lugar de ===
+
+        console.log('📋 Total conversaciones:', conversations.length);
+        console.log('🔍 Buscando ID:', conversationId, 'Tipo:', typeof conversationId);
+        console.log('📝 Conversación encontrada:', conversation);
+
         if (conversation) {
-            const displayName = conversation.display_name || 'Chat';
+            // Asegurar que display_name no sea null o undefined
+            const displayName = conversation.display_name || conversation.name || 'Chat';
             const isGroup = conversation.type === 'group';
-            console.log('Display name:', displayName);
+
+            console.log('✅ Display name:', displayName);
+            console.log('✅ Tipo:', conversation.type);
+            console.log('✅ Es grupo:', isGroup);
+
             document.getElementById('currentChatName').textContent = displayName;
             document.getElementById('currentChatAvatar').textContent = this.getInitials(displayName);
-            
+
             // Mostrar tipo de conversación
             const typeDiv = document.getElementById('currentChatType');
             if (isGroup) {
@@ -752,80 +759,82 @@ class ChatApp {
                 groupOptionsBtn.style.display = 'block';
                 groupOptionsBtn.innerHTML = '<i class="fas fa-user-plus"></i>';
                 groupOptionsBtn.title = "Agregar miembro";
+                console.log('✅ Botón de agregar miembro mostrado');
             } else {
                 typeDiv.textContent = '';
                 typeDiv.style.display = 'none';
                 document.getElementById('groupOptionsBtn').style.display = 'none';
             }
-            
+
             // Guardar datos de la conversación actual
             this.currentConversation = conversation;
         } else {
             console.warn('⚠️ Conversación no encontrada en la lista');
+            console.warn('IDs disponibles:', conversations.map(c => `${c.id} (${typeof c.id})`));
             document.getElementById('currentChatName').textContent = 'Chat';
             document.getElementById('currentChatAvatar').textContent = '?';
             document.getElementById('currentChatType').textContent = '';
             document.getElementById('groupOptionsBtn').style.display = 'none';
             this.currentConversation = null;
         }
-        
+
         // Mostrar vista de mensajes
         document.getElementById('conversationsTab').style.display = 'none';
         document.getElementById('messagesView').classList.add('active');
-        
+
         // Limpiar mensajes antiguos antes de cargar nuevos
         messagesContainer.innerHTML = '';
-        
+
         // Cargar mensajes de esta conversación
         await this.loadMessages();
-        
+
         // Marcar como leído
         this.markAsRead(conversationId);
     }
-    
+
     async loadMessages() {
         if (!this.currentConversationId) {
             console.warn('⚠️ No hay conversación actual seleccionada');
             return;
         }
-        
+
         try {
             const basePath = this.getBasePath();
-            
+
             // Si lastMessageId es 0, cargamos TODOS los mensajes (primera carga)
             // Si lastMessageId > 0, solo cargamos mensajes nuevos (polling)
             const isInitialLoad = this.lastMessageId === 0;
             const url = `${basePath}api.php?action=get_messages&conversation_id=${this.currentConversationId}&last_message_id=${this.lastMessageId}`;
-            
+
             console.log('📥 Cargando mensajes:', {
                 conversationId: this.currentConversationId,
                 lastMessageId: this.lastMessageId,
                 isInitialLoad: isInitialLoad
             });
-            
+
             const response = await fetch(url);
             const data = await response.json();
-            
+
             if (data.success) {
                 if (data.messages && data.messages.length > 0) {
                     // Verificar si hay mensajes nuevos de otros usuarios (solo para sonido)
                     const currentUserId = this.getCurrentUserId();
                     const hasNewMessagesFromOthers = data.messages.some(msg => msg.user_id != currentUserId);
-                    
+
                     // Renderizar mensajes (append solo si no es carga inicial)
                     this.renderMessages(data.messages, !isInitialLoad);
-                    
+
                     // Actualizar último ID
                     this.lastMessageId = Math.max(...data.messages.map(m => m.id));
-                    
+
                     // Scroll al final
                     this.scrollToBottom();
-                    
+
                     // Reproducir sonido solo si hay mensajes de otros usuarios Y no es carga inicial
                     if (hasNewMessagesFromOthers && !isInitialLoad) {
                         this.playNotificationSound();
                     }
-                    
+
                     console.log('✅ Mensajes cargados:', data.messages.length, 'último ID:', this.lastMessageId);
                 } else if (isInitialLoad) {
                     // No hay mensajes en esta conversación
@@ -839,25 +848,25 @@ class ChatApp {
             console.error('❌ Error de red al cargar mensajes:', error);
         }
     }
-    
+
     renderMessages(messages, append = true) {
         const container = document.getElementById('messagesContainer');
-        
+
         if (!append) {
             container.innerHTML = '';
         }
-        
+
         messages.forEach(msg => {
             // No agregar si ya existe
             if (container.querySelector(`[data-id="${msg.id}"]`)) {
                 return;
             }
-            
+
             const isOwn = msg.user_id == this.getCurrentUserId();
             const messageEl = document.createElement('div');
             messageEl.className = `chat-message ${isOwn ? 'own' : ''}`;
             messageEl.dataset.id = msg.id;
-            
+
             let attachmentsHtml = '';
             if (msg.attachments && msg.attachments.length > 0) {
                 attachmentsHtml = msg.attachments.map(att => {
@@ -884,7 +893,7 @@ class ChatApp {
                     }
                 }).join('');
             }
-            
+
             let reactionsHtml = '';
             if (msg.reactions && msg.reactions.length > 0) {
                 const groupedReactions = {};
@@ -894,15 +903,15 @@ class ChatApp {
                     }
                     groupedReactions[r.reaction].push(r);
                 });
-                
-                reactionsHtml = '<div class="chat-reactions">' + 
+
+                reactionsHtml = '<div class="chat-reactions">' +
                     Object.entries(groupedReactions).map(([emoji, users]) => {
                         const isOwn = users.some(u => u.user_id == this.getCurrentUserId());
                         return `<div class="chat-reaction ${isOwn ? 'own' : ''}">${emoji} ${users.length}</div>`;
-                    }).join('') + 
-                '</div>';
+                    }).join('') +
+                    '</div>';
             }
-            
+
             messageEl.innerHTML = `
                 ${!isOwn ? `<div class="chat-message-avatar">${this.getInitials(msg.full_name)}</div>` : ''}
                 <div class="chat-message-content">
@@ -919,17 +928,17 @@ class ChatApp {
                 </div>
                 ${isOwn ? `<div class="chat-message-avatar">${this.getInitials(msg.full_name)}</div>` : ''}
             `;
-            
+
             container.appendChild(messageEl);
         });
     }
-    
+
     async sendMessage() {
         const input = document.getElementById('messageInput');
         const text = input.value.trim();
-        
+
         if (!text || !this.currentConversationId) return;
-        
+
         try {
             const basePath = this.getBasePath();
             const response = await fetch(`${basePath}api.php`, {
@@ -943,9 +952,9 @@ class ChatApp {
                     message_text: text
                 })
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 input.value = '';
                 input.style.height = 'auto';
@@ -956,24 +965,24 @@ class ChatApp {
             console.error('Error sending message:', error);
         }
     }
-    
+
     async uploadFile(file) {
         if (!this.currentConversationId) return;
-        
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('conversation_id', this.currentConversationId);
         formData.append('message_text', '');
-        
+
         try {
             const basePath = this.getBasePath();
             const response = await fetch(`${basePath}upload.php`, {
                 method: 'POST',
                 body: formData
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 await this.loadMessages();
                 this.scrollToBottom();
@@ -986,16 +995,16 @@ class ChatApp {
             alert('Error al subir archivo');
         }
     }
-    
+
     showConversations() {
         document.getElementById('messagesView').classList.remove('active');
         document.getElementById('conversationsTab').style.display = 'block';
         this.currentConversationId = null;
         this.lastMessageId = 0;
-        
+
         // Recargar la lista de conversaciones para actualizar los badges
         this.loadConversations();
-        
+
         // Restaurar scroll suave en móviles
         if (this.isMobile) {
             const conversationsTab = document.getElementById('conversationsTab');
@@ -1004,7 +1013,7 @@ class ChatApp {
             }
         }
     }
-    
+
     async openNewConversationModal() {
         document.getElementById('newConversationModal').classList.add('open');
         this.selectedUsers = [];
@@ -1013,14 +1022,14 @@ class ChatApp {
         document.getElementById('groupNameInput').value = '';
         document.getElementById('groupNameContainer').style.display = 'none';
         document.getElementById('selectedUsersCount').style.display = 'none';
-        
+
         // Ocultar opción de grupo si el usuario no tiene permisos
         const groupOption = document.querySelector('.chat-conversation-type');
         const userCanCreateGroups = typeof canCreateGroups !== 'undefined' ? canCreateGroups : true;
         if (groupOption) {
             groupOption.style.display = userCanCreateGroups ? 'block' : 'none';
         }
-        
+
         // Mostrar mensaje inicial
         const container = document.getElementById('userList');
         container.innerHTML = `
@@ -1030,15 +1039,15 @@ class ChatApp {
             </div>
         `;
     }
-    
+
     closeNewConversationModal() {
         document.getElementById('newConversationModal').classList.remove('open');
         document.getElementById('userSearchInput').value = '';
     }
-    
+
     async searchUsers(query) {
         const container = document.getElementById('userList');
-        
+
         try {
             // Mostrar indicador de carga
             container.innerHTML = `
@@ -1047,20 +1056,20 @@ class ChatApp {
                     <p style="margin-top: 10px;">Buscando usuarios...</p>
                 </div>
             `;
-            
+
             const basePath = this.getBasePath();
             const url = `${basePath}api.php?action=search_users&q=${encodeURIComponent(query)}`;
             console.log('Buscando usuarios en:', url);
-            
+
             const response = await fetch(url);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            
+
             const data = await response.json();
             console.log('Respuesta de búsqueda:', data);
-            
+
             if (data.success) {
                 if (data.users.length === 0) {
                     container.innerHTML = `
@@ -1086,10 +1095,10 @@ class ChatApp {
             `;
         }
     }
-    
+
     renderUserList(users) {
         const container = document.getElementById('userList');
-        
+
         container.innerHTML = users.map(user => `
             <div class="chat-user-item" data-id="${user.id}">
                 <div class="chat-avatar">
@@ -1101,7 +1110,7 @@ class ChatApp {
                 </div>
             </div>
         `).join('');
-        
+
         // Agregar listeners
         container.querySelectorAll('.chat-user-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -1110,11 +1119,11 @@ class ChatApp {
             });
         });
     }
-    
+
     toggleUserSelection(userId, element) {
         const index = this.selectedUsers.indexOf(userId);
         const isGroup = document.getElementById('isGroupChat').checked;
-        
+
         if (index > -1) {
             this.selectedUsers.splice(index, 1);
             element.classList.remove('selected');
@@ -1129,15 +1138,15 @@ class ChatApp {
             this.selectedUsers.push(userId);
             element.classList.add('selected');
         }
-        
+
         // Actualizar contador
         this.updateSelectedUsersCount();
     }
-    
+
     updateSelectedUsersCount() {
         const countDiv = document.getElementById('selectedUsersCount');
         const isGroup = document.getElementById('isGroupChat').checked;
-        
+
         if (isGroup && this.selectedUsers.length > 0) {
             countDiv.textContent = `${this.selectedUsers.length} usuario(s) seleccionado(s)`;
             countDiv.style.display = 'block';
@@ -1145,16 +1154,16 @@ class ChatApp {
             countDiv.style.display = 'none';
         }
     }
-    
+
     async startNewConversation() {
         if (this.selectedUsers.length === 0) {
             alert('Selecciona al menos un usuario');
             return;
         }
-        
+
         const isGroup = document.getElementById('isGroupChat').checked;
         const groupName = document.getElementById('groupNameInput').value.trim();
-        
+
         // Validar nombre del grupo si es necesario
         if (isGroup) {
             if (!groupName) {
@@ -1167,7 +1176,7 @@ class ChatApp {
                 return;
             }
         }
-        
+
         try {
             const basePath = this.getBasePath();
             const url = `${basePath}api.php`;
@@ -1177,12 +1186,12 @@ class ChatApp {
                 participants: this.selectedUsers,
                 name: isGroup ? groupName : null
             };
-            
+
             console.log('🚀 Creando conversación...');
             console.log('URL:', url);
             console.log('Method: POST');
             console.log('Payload:', payload);
-            
+
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -1190,11 +1199,11 @@ class ChatApp {
                 },
                 body: JSON.stringify(payload)
             });
-            
+
             // Mostrar respuesta completa si hay error
             const text = await response.text();
             console.log('📩 Respuesta del servidor:', text);
-            
+
             let data;
             try {
                 data = JSON.parse(text);
@@ -1203,7 +1212,7 @@ class ChatApp {
                 alert('Error del servidor. Revisa la consola para más detalles.');
                 return;
             }
-            
+
             if (data.success) {
                 this.closeNewConversationModal();
                 await this.loadConversations();
@@ -1216,7 +1225,7 @@ class ChatApp {
             alert('Error de conexión: ' + error.message);
         }
     }
-    
+
     async markAsRead(conversationId) {
         try {
             const basePath = this.getBasePath();
@@ -1227,10 +1236,10 @@ class ChatApp {
                 },
                 body: `conversation_id=${conversationId}`
             });
-            
+
             // Actualizar el badge global y recargar conversaciones
             this.updateUnreadCount();
-            
+
             // Si estamos en la vista de conversaciones, actualizarlas también
             const conversationsTab = document.getElementById('conversationsTab');
             if (conversationsTab && conversationsTab.children.length > 0) {
@@ -1240,7 +1249,7 @@ class ChatApp {
             console.error('Error marking as read:', error);
         }
     }
-    
+
     async updateUnreadCount() {
         try {
             const basePath = this.getBasePath();
@@ -1257,11 +1266,11 @@ class ChatApp {
                 if (badge) badge.style.display = 'none';
                 return;
             }
-            
+
             if (data.success) {
                 this.unreadCount = data.unread_count;
                 const badge = document.getElementById('unreadBadge');
-                
+
                 if (this.unreadCount > 0) {
                     badge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
                     badge.style.display = 'flex';
@@ -1273,7 +1282,7 @@ class ChatApp {
             console.error('Error updating unread count:', error);
         }
     }
-    
+
     async updateUserStatus(status) {
         try {
             const basePath = this.getBasePath();
@@ -1288,7 +1297,7 @@ class ChatApp {
             console.error('Error updating status:', error);
         }
     }
-    
+
     async loadOnlineUsers() {
         try {
             const basePath = this.getBasePath();
@@ -1312,10 +1321,10 @@ class ChatApp {
                 }
                 return;
             }
-            
+
             if (data.success) {
                 const container = document.getElementById('conversationsTab');
-                
+
                 if (data.users.length === 0) {
                     container.innerHTML = `
                         <div class="chat-empty-state">
@@ -1325,12 +1334,12 @@ class ChatApp {
                     `;
                     return;
                 }
-                
+
                 container.innerHTML = data.users.map(user => {
                     const isOnline = user.is_online || false;
                     const statusClass = isOnline ? 'online' : 'offline';
                     const statusIcon = isOnline ? '<i class="fas fa-circle" style="color: #10b981; font-size: 8px;"></i>' : '';
-                    
+
                     return `
                         <div class="chat-conversation-item" data-user-id="${user.id}">
                             <div class="chat-avatar ${statusClass}">
@@ -1349,7 +1358,7 @@ class ChatApp {
                         </div>
                     `;
                 }).join('');
-                
+
                 // Agregar listeners para iniciar chat
                 container.querySelectorAll('.chat-conversation-item').forEach(item => {
                     item.addEventListener('click', async () => {
@@ -1387,10 +1396,10 @@ class ChatApp {
             }
         }
     }
-    
+
     handleTyping() {
         if (!this.currentConversationId) return;
-        
+
         // Enviar indicador de escritura
         const basePath = this.getBasePath();
         fetch(`${basePath}api.php?action=typing`, {
@@ -1401,15 +1410,15 @@ class ChatApp {
             body: `conversation_id=${this.currentConversationId}`
         });
     }
-    
+
     async checkTyping() {
         if (!this.currentConversationId) return;
-        
+
         try {
             const basePath = this.getBasePath();
             const response = await fetch(`${basePath}api.php?action=get_typing_users&conversation_id=${this.currentConversationId}`);
             const data = await response.json();
-            
+
             if (data.success && data.typing_users.length > 0) {
                 const indicator = document.getElementById('typingIndicator');
                 indicator.textContent = `${data.typing_users.join(', ')} está escribiendo...`;
@@ -1421,7 +1430,7 @@ class ChatApp {
             console.error('Error checking typing:', error);
         }
     }
-    
+
     startPolling() {
         // Polling cada 2 segundos para nuevos mensajes
         this.pollInterval = setInterval(() => {
@@ -1444,13 +1453,13 @@ class ChatApp {
             this.updateUnreadCount();
         }, 2000);
     }
-    
+
     async fetchConversations() {
         try {
             const basePath = this.getBasePath();
             const response = await fetch(`${basePath}api.php?action=get_conversations`);
             const data = await response.json();
-            
+
             if (data.success) {
                 console.log('📋 Conversaciones obtenidas:', data.conversations.length);
                 return data.conversations;
@@ -1463,11 +1472,11 @@ class ChatApp {
             return [];
         }
     }
-    
+
     scrollToBottom(smooth = false) {
         const container = document.getElementById('messagesContainer');
         if (!container) return;
-        
+
         if (smooth && 'scrollBehavior' in document.documentElement.style) {
             container.scrollTo({
                 top: container.scrollHeight,
@@ -1476,7 +1485,7 @@ class ChatApp {
         } else {
             container.scrollTop = container.scrollHeight;
         }
-        
+
         // En móviles, asegurar que el input sea visible
         if (this.isMobile && this.currentConversationId) {
             setTimeout(() => {
@@ -1487,7 +1496,7 @@ class ChatApp {
             }, 100);
         }
     }
-    
+
     // Reproducir sonido de notificación
     playNotificationSound() {
         try {
@@ -1495,28 +1504,28 @@ class ChatApp {
             if (!this.audioContext) {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
-            
+
             const ctx = this.audioContext;
             const currentTime = ctx.currentTime;
-            
+
             // Crear oscilador para el sonido
             const oscillator = ctx.createOscillator();
             const gainNode = ctx.createGain();
-            
+
             // Conectar nodos
             oscillator.connect(gainNode);
             gainNode.connect(ctx.destination);
-            
+
             // Configurar sonido tipo "ding" (dos tonos)
             oscillator.type = 'sine';
             oscillator.frequency.setValueAtTime(800, currentTime); // Primera nota
             oscillator.frequency.setValueAtTime(1000, currentTime + 0.1); // Segunda nota más alta
-            
+
             // Envolvente de volumen
             gainNode.gain.setValueAtTime(0, currentTime);
             gainNode.gain.linearRampToValueAtTime(0.3, currentTime + 0.01);
             gainNode.gain.exponentialRampToValueAtTime(0.01, currentTime + 0.3);
-            
+
             // Reproducir
             oscillator.start(currentTime);
             oscillator.stop(currentTime + 0.3);
@@ -1524,7 +1533,7 @@ class ChatApp {
             console.warn('No se pudo reproducir el sonido de notificación:', error);
         }
     }
-    
+
     // Utilidades
     getInitials(name) {
         if (!name) return '?';
@@ -1534,16 +1543,16 @@ class ChatApp {
             .join('')
             .toUpperCase();
     }
-    
+
     escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
     }
-    
+
     formatTime(timestamp) {
         if (!timestamp) return '';
-        
+
         // Si el timestamp viene de MySQL (formato 'YYYY-MM-DD HH:mm:ss'), 
         // lo tratamos como hora local, no UTC
         let date;
@@ -1553,18 +1562,18 @@ class ChatApp {
         } else {
             date = new Date(timestamp);
         }
-        
+
         const now = new Date();
         const diff = now - date;
-        
+
         if (diff < 60000) return 'Ahora';
         if (diff < 3600000) return Math.floor(diff / 60000) + 'm';
         if (diff < 86400000) return Math.floor(diff / 3600000) + 'h';
         if (diff < 604800000) return Math.floor(diff / 86400000) + 'd';
-        
+
         return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
     }
-    
+
     formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
@@ -1572,7 +1581,7 @@ class ChatApp {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
     }
-    
+
     getCurrentUserId() {
         // Obtiene el ID del usuario actual desde variables globales
         if (typeof currentUserId !== 'undefined' && currentUserId) {
@@ -1580,33 +1589,33 @@ class ChatApp {
         }
         return window.currentUserId || null;
     }
-    
+
     getBasePath() {
         // Detectar si estamos en un subdirectorio y devolver la ruta correcta al API del chat
         const path = window.location.pathname;
         console.log('🔍 Ruta actual:', path);
-        
+
         // Si estamos DENTRO de /chat/, usar ruta relativa simple
         if (path.includes('/chat/')) {
             console.log('✅ Dentro de /chat/, usando ruta: ""');
             return '';  // api.php está en el mismo directorio
         }
-        
+
         // Si estamos en otros subdirectorios (agents, hr, helpdesk), volver al root y entrar a chat
         if (path.includes('/agents/') || path.includes('/hr/') || path.includes('/helpdesk/')) {
             console.log('✅ En subdirectorio, usando ruta: ../chat/');
             return '../chat/';
         }
-        
+
         // Si estamos en el root
         console.log('✅ En root, usando ruta: chat/');
         return 'chat/';
     }
-    
+
     toggleEmojiPicker() {
         const picker = document.getElementById('emojiPicker');
         const isVisible = picker.style.display === 'block';
-        
+
         if (!isVisible) {
             // Cargar emojis si no se han cargado
             if (!this.emojisLoaded) {
@@ -1618,19 +1627,19 @@ class ChatApp {
             picker.style.display = 'none';
         }
     }
-    
+
     switchEmojiTab(tabName) {
         // Actualizar tabs
         document.querySelectorAll('.emoji-tab').forEach(tab => {
             tab.classList.remove('active');
         });
         document.querySelector(`[data-emoji-tab="${tabName}"]`).classList.add('active');
-        
+
         // Actualizar contenido
         document.querySelectorAll('.emoji-content').forEach(content => {
             content.style.display = 'none';
         });
-        
+
         if (tabName === 'emojis') {
             document.getElementById('emojisTab').style.display = 'grid';
         } else if (tabName === 'stickers') {
@@ -1641,7 +1650,7 @@ class ChatApp {
             }
         }
     }
-    
+
     loadEmojis() {
         const emojis = [
             // Caras y emociones
@@ -1662,12 +1671,12 @@ class ChatApp {
             '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱', '🎮', '🎯', '🎲', '🎰', '🎺', '🎸', '🎹', '🥁',
             '💯', '✨', '🎉', '🎊', '🎈', '🎁', '🏆', '🥇', '🥈', '🥉', '⭐', '🌟', '💫', '✅', '❌', '⚠️'
         ];
-        
+
         const container = document.getElementById('emojisTab');
         container.innerHTML = emojis.map(emoji => `
             <button class="emoji-item" data-emoji="${emoji}">${emoji}</button>
         `).join('');
-        
+
         // Agregar eventos
         container.querySelectorAll('.emoji-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -1675,7 +1684,7 @@ class ChatApp {
             });
         });
     }
-    
+
     loadStickers() {
         const stickers = [
             '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎵', '🎶', '🎯', '🎲',
@@ -1683,12 +1692,12 @@ class ChatApp {
             '🎈', '🎆', '🎇', '🧨', '✨', '🎄', '🎃', '🎑', '🎐', '🎏',
             '🔥', '💥', '💫', '💯', '💢', '💬', '💭', '💤', '💨', '💦'
         ];
-        
+
         const container = document.getElementById('stickersTab');
         container.innerHTML = stickers.map(sticker => `
             <button class="sticker-item" data-sticker="${sticker}">${sticker}</button>
         `).join('');
-        
+
         // Agregar eventos
         container.querySelectorAll('.sticker-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -1696,24 +1705,24 @@ class ChatApp {
             });
         });
     }
-    
+
     insertEmoji(emoji) {
         const input = document.getElementById('messageInput');
         const start = input.selectionStart;
         const end = input.selectionEnd;
         const text = input.value;
-        
+
         // Insertar emoji en la posición del cursor
         input.value = text.substring(0, start) + emoji + text.substring(end);
-        
+
         // Mover cursor después del emoji
         const newPosition = start + emoji.length;
         input.selectionStart = newPosition;
         input.selectionEnd = newPosition;
-        
+
         // Focus en el input
         input.focus();
-        
+
         // Cerrar el picker
         document.getElementById('emojiPicker').style.display = 'none';
     }
@@ -1723,46 +1732,46 @@ class ChatApp {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Chat JS cargado');
     console.log('👤 currentUserId:', typeof currentUserId !== 'undefined' ? currentUserId : 'NO DEFINIDO');
-    
+
     // Verificar que el usuario esté autenticado
     if (typeof currentUserId !== 'undefined' && currentUserId) {
         console.log('✅ Inicializando ChatApp...');
         window.chatApp = new ChatApp();
         console.log('✅ ChatApp inicializado correctamente');
-        
+
         // Forzar que el widget esté visible inmediatamente y verificar múltiples veces
         const ensureWidgetPosition = () => {
             const portal = document.getElementById('chat-portal');
             const widget = document.querySelector('.chat-widget');
-            
+
             if (!portal || !widget) {
                 console.log('❌ Portal o widget no encontrado');
                 return;
             }
-            
+
             console.log('📌 Verificando posición del portal y widget...');
-            
+
             // Verificar que el portal esté en el <html>, no en el <body>
             if (portal.parentElement !== document.documentElement) {
                 console.log('⚠️ Portal no está en <html>, moviendo...');
                 document.documentElement.appendChild(portal);
             }
-            
+
             // Verificar que el widget esté en el portal
             if (widget.parentElement !== portal) {
                 console.log('⚠️ Widget no está en portal, moviendo...');
                 portal.appendChild(widget);
             }
-            
+
             // Forzar estilos del portal con setAttribute (máxima prioridad)
             portal.setAttribute('style', 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; pointer-events: none !important; z-index: 2147483647 !important; transform: none !important;');
-            
+
             // Forzar estilos del widget con setAttribute (máxima prioridad)
             widget.setAttribute('style', 'position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 2147483647 !important; visibility: visible !important; display: block !important; pointer-events: auto !important; transform: none !important;');
-            
+
             console.log('✅ Portal en <html> y widget verificados correctamente');
         };
-        
+
         // Verificar múltiples veces para asegurar
         setTimeout(ensureWidgetPosition, 100);
         setTimeout(ensureWidgetPosition, 500);
