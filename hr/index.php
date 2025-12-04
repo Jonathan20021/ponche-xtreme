@@ -291,16 +291,41 @@ $recentVacations = $pdo->query("
             
             <!-- Search and Filter Controls -->
             <div class="mb-6">
-                <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div class="flex-1 max-w-md">
-                        <div class="relative">
-                            <input type="text" 
-                                   id="employee-search" 
-                                   placeholder="Buscar empleados por nombre, posición o campaña..." 
-                                   class="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-2 pl-10 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                <div class="flex flex-col lg:flex-row gap-4 items-center justify-between">
+                    <div class="flex flex-col md:flex-row gap-4 flex-1">
+                        <!-- Search Input -->
+                        <div class="flex-1 max-w-md">
+                            <div class="relative">
+                                <input type="text" 
+                                       id="employee-search" 
+                                       placeholder="Buscar empleados por nombre, posición..." 
+                                       class="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-2 pl-10 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- Campaign Filter -->
+                        <div class="min-w-[200px]">
+                            <div class="relative">
+                                <select id="campaign-filter" class="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-2 pr-10 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 appearance-none">
+                                    <option value="all">Todas las Campañas</option>
+                                    <!-- Campaign options will be populated dynamically -->
+                                </select>
+                                <i class="fas fa-chevron-down absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                            </div>
+                        </div>
+                        
+                        <!-- View Mode Toggle -->
+                        <div class="flex items-center gap-2">
+                            <button id="view-mode-list" class="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white hover:bg-slate-700/50 transition-colors" title="Vista Lista">
+                                <i class="fas fa-list"></i>
+                            </button>
+                            <button id="view-mode-campaign" class="px-3 py-2 bg-blue-600 border border-blue-500 rounded-lg text-white hover:bg-blue-700 transition-colors" title="Vista por Campaña">
+                                <i class="fas fa-layer-group"></i>
+                            </button>
                         </div>
                     </div>
+                    
                     <div class="flex items-center gap-4">
                         <div class="text-sm text-slate-400">
                             <span id="showing-count">0</span> de <span id="total-count">0</span> empleados
@@ -570,9 +595,12 @@ $recentVacations = $pdo->query("
         let lastData = null;
         let allEmployees = [];
         let filteredEmployees = [];
+        let allCampaigns = [];
         let currentPage = 1;
         let itemsPerPage = 24;
         let searchTerm = '';
+        let selectedCampaign = 'all';
+        let viewMode = 'campaign'; // 'list' or 'campaign'
 
         document.addEventListener('DOMContentLoaded', function() {
             // Initial load
@@ -588,6 +616,33 @@ $recentVacations = $pdo->query("
             const searchInput = document.getElementById('employee-search');
             searchInput.addEventListener('input', function(e) {
                 searchTerm = e.target.value.toLowerCase();
+                currentPage = 1;
+                filterAndPaginateEmployees();
+            });
+            
+            // Setup campaign filter
+            const campaignFilter = document.getElementById('campaign-filter');
+            campaignFilter.addEventListener('change', function(e) {
+                selectedCampaign = e.target.value;
+                currentPage = 1;
+                filterAndPaginateEmployees();
+            });
+            
+            // Setup view mode toggles
+            const viewModeList = document.getElementById('view-mode-list');
+            const viewModeCampaign = document.getElementById('view-mode-campaign');
+            
+            viewModeList.addEventListener('click', function() {
+                viewMode = 'list';
+                updateViewModeButtons();
+                currentPage = 1;
+                filterAndPaginateEmployees();
+            });
+            
+            viewModeCampaign.addEventListener('click', function() {
+                viewMode = 'campaign';
+                updateViewModeButtons();
+                currentPage = 1;
                 filterAndPaginateEmployees();
             });
             
@@ -598,6 +653,9 @@ $recentVacations = $pdo->query("
                 currentPage = 1;
                 filterAndPaginateEmployees();
             });
+            
+            // Initialize view mode
+            updateViewModeButtons();
         });
 
         function updateMonitor() {
@@ -607,6 +665,10 @@ $recentVacations = $pdo->query("
                     if (data.success) {
                         lastData = data;
                         allEmployees = data.employees;
+                        
+                        // Extract unique campaigns
+                        extractCampaigns(data.employees);
+                        
                         updateSummaryCards(data.summary);
                         filterAndPaginateEmployees();
                         
@@ -638,42 +700,272 @@ $recentVacations = $pdo->query("
             document.getElementById('earnings-dop').textContent = summary.total_earnings_dop_formatted;
         }
 
+        function extractCampaigns(employees) {
+            const campaignMap = new Map();
+            
+            employees.forEach(emp => {
+                if (emp.campaign && emp.campaign.name) {
+                    campaignMap.set(emp.campaign.name, {
+                        name: emp.campaign.name,
+                        color: emp.campaign.color,
+                        code: emp.campaign.code
+                    });
+                }
+            });
+            
+            allCampaigns = Array.from(campaignMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+            updateCampaignFilter();
+        }
+        
+        function updateCampaignFilter() {
+            const campaignFilter = document.getElementById('campaign-filter');
+            const currentValue = campaignFilter.value;
+            
+            // Clear existing options except "All"
+            campaignFilter.innerHTML = '<option value="all">Todas las Campañas</option>';
+            
+            // Add campaign options
+            allCampaigns.forEach(campaign => {
+                const option = document.createElement('option');
+                option.value = campaign.name;
+                option.textContent = campaign.name;
+                campaignFilter.appendChild(option);
+            });
+            
+            // Restore previous selection if it still exists
+            if (currentValue && [...campaignFilter.options].some(opt => opt.value === currentValue)) {
+                campaignFilter.value = currentValue;
+            }
+        }
+        
+        function updateViewModeButtons() {
+            const listBtn = document.getElementById('view-mode-list');
+            const campaignBtn = document.getElementById('view-mode-campaign');
+            
+            if (viewMode === 'list') {
+                listBtn.className = 'px-3 py-2 bg-blue-600 border border-blue-500 rounded-lg text-white hover:bg-blue-700 transition-colors';
+                campaignBtn.className = 'px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white hover:bg-slate-700/50 transition-colors';
+            } else {
+                listBtn.className = 'px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white hover:bg-slate-700/50 transition-colors';
+                campaignBtn.className = 'px-3 py-2 bg-blue-600 border border-blue-500 rounded-lg text-white hover:bg-blue-700 transition-colors';
+            }
+        }
+
         function filterAndPaginateEmployees() {
             if (!allEmployees) return;
             
-            // Filter employees based on search term
+            // Filter employees based on search term and campaign
             filteredEmployees = allEmployees.filter(emp => {
-                if (!searchTerm) return true;
+                // Search term filter
+                let matchesSearch = true;
+                if (searchTerm) {
+                    const searchableText = [
+                        emp.first_name,
+                        emp.last_name,
+                        emp.full_name,
+                        emp.position,
+                        emp.status_label
+                    ].join(' ').toLowerCase();
+                    
+                    matchesSearch = searchableText.includes(searchTerm);
+                }
                 
-                const searchableText = [
-                    emp.first_name,
-                    emp.last_name,
-                    emp.full_name,
-                    emp.position,
-                    emp.campaign.name,
-                    emp.status_label
-                ].join(' ').toLowerCase();
+                // Campaign filter
+                let matchesCampaign = true;
+                if (selectedCampaign !== 'all') {
+                    matchesCampaign = emp.campaign && emp.campaign.name === selectedCampaign;
+                }
                 
-                return searchableText.includes(searchTerm);
+                return matchesSearch && matchesCampaign;
             });
             
             // Update counts
             document.getElementById('total-count').textContent = filteredEmployees.length;
             
-            // Calculate pagination
-            const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            const endIndex = Math.min(startIndex + itemsPerPage, filteredEmployees.length);
-            const currentPageEmployees = filteredEmployees.slice(startIndex, endIndex);
+            if (viewMode === 'campaign') {
+                updateEmployeeGridByCampaign();
+            } else {
+                // Calculate pagination for list view
+                const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = Math.min(startIndex + itemsPerPage, filteredEmployees.length);
+                const currentPageEmployees = filteredEmployees.slice(startIndex, endIndex);
+                
+                // Update showing count
+                document.getElementById('showing-count').textContent = currentPageEmployees.length;
+                
+                // Update employee grid
+                updateEmployeeGrid(currentPageEmployees);
+                
+                // Update pagination
+                updatePagination(totalPages);
+            }
+        }
+
+        function updateEmployeeGridByCampaign() {
+            const grid = document.getElementById('employees-grid');
+            
+            if (filteredEmployees.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full text-center py-12">
+                        <i class="fas fa-search text-4xl text-slate-400 mb-4"></i>
+                        <p class="text-slate-400">No se encontraron empleados${searchTerm || selectedCampaign !== 'all' ? ' con los filtros aplicados' : ''}.</p>
+                    </div>
+                `;
+                document.getElementById('showing-count').textContent = '0';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+            
+            // Group employees by campaign
+            const employeesByCampaign = {};
+            filteredEmployees.forEach(emp => {
+                const campaignName = emp.campaign?.name || 'Sin Campaña';
+                if (!employeesByCampaign[campaignName]) {
+                    employeesByCampaign[campaignName] = {
+                        campaign: emp.campaign || { name: 'Sin Campaña', color: '#6b7280' },
+                        employees: []
+                    };
+                }
+                employeesByCampaign[campaignName].employees.push(emp);
+            });
+            
+            // Sort campaigns by name
+            const sortedCampaigns = Object.keys(employeesByCampaign).sort();
+            
+            grid.innerHTML = '';
+            grid.className = 'space-y-6'; // Change grid layout for campaign view
+            
+            let totalShowing = 0;
+            
+            sortedCampaigns.forEach(campaignName => {
+                const campaignData = employeesByCampaign[campaignName];
+                const campaign = campaignData.campaign;
+                const employees = campaignData.employees;
+                
+                // Create campaign section
+                const campaignSection = document.createElement('div');
+                campaignSection.className = 'bg-slate-800/30 rounded-lg p-4 border border-slate-700/50';
+                
+                // Campaign header
+                const campaignHeader = document.createElement('div');
+                campaignHeader.className = 'flex items-center justify-between mb-4 pb-3 border-b border-slate-700/50';
+                campaignHeader.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-4 h-4 rounded-full" style="background-color: ${campaign.color}"></div>
+                        <h3 class="text-lg font-semibold text-white">${campaign.name}</h3>
+                        <span class="px-2 py-1 bg-slate-700/50 rounded-full text-xs text-slate-300">
+                            ${employees.length} empleado${employees.length !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+                    <div class="text-sm text-slate-400">
+                        ${employees.filter(emp => emp.status === 'active').length} activos
+                    </div>
+                `;
+                
+                // Campaign employees grid
+                const campaignGrid = document.createElement('div');
+                campaignGrid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+                
+                employees.forEach(emp => {
+                    const card = createEmployeeCard(emp);
+                    campaignGrid.appendChild(card);
+                    totalShowing++;
+                });
+                
+                campaignSection.appendChild(campaignHeader);
+                campaignSection.appendChild(campaignGrid);
+                grid.appendChild(campaignSection);
+            });
             
             // Update showing count
-            document.getElementById('showing-count').textContent = currentPageEmployees.length;
+            document.getElementById('showing-count').textContent = totalShowing;
             
-            // Update employee grid
-            updateEmployeeGrid(currentPageEmployees);
+            // Hide pagination in campaign view
+            document.getElementById('pagination').innerHTML = '';
+        }
+        
+        function createEmployeeCard(emp) {
+            const card = document.createElement('div');
+            card.className = 'employee-monitor-card';
+            card.style.setProperty('--campaign-color', emp.campaign?.color || '#6b7280');
             
-            // Update pagination
-            updatePagination(totalPages);
+            // Determine status class
+            let statusClass = 'status-offline';
+            if (emp.status === 'active') statusClass = 'status-active';
+            else if (emp.status === 'completed') statusClass = 'status-completed';
+            else if (emp.current_punch.type === 'PAUSA' || emp.current_punch.type === 'BREAK' || emp.current_punch.type === 'LUNCH') statusClass = 'status-pause';
+            
+            // Handle photo display with fallback to initials (same as employees.php)
+            let photoHTML = '';
+            if (emp.photo_path && emp.photo_path.trim() !== '') {
+                photoHTML = `
+                    <img src="../${emp.photo_path}" 
+                         alt="${emp.first_name}" 
+                         class="w-10 h-10 rounded-full object-cover border-2 border-slate-700"
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
+                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); display: none;">
+                        ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
+                    </div>
+                `;
+            } else {
+                photoHTML = `
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
+                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                        ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
+                    </div>
+                `;
+            }
+            
+            card.innerHTML = `
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex items-center">
+                        <div class="relative">
+                            ${photoHTML}
+                            <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-800 ${emp.status === 'active' ? 'bg-green-500' : (emp.status === 'offline' ? 'bg-slate-500' : 'bg-yellow-500')}"></div>
+                        </div>
+                        <div class="ml-3">
+                            <h4 class="text-white font-medium text-sm truncate w-32" title="${emp.full_name}">${emp.first_name} ${emp.last_name}</h4>
+                            <p class="text-slate-400 text-xs truncate w-32">${emp.position || 'Sin posición'}</p>
+                        </div>
+                    </div>
+                    <span class="status-badge ${statusClass}">
+                        ${emp.status_label}
+                    </span>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-400">Estado Actual</span>
+                        <span class="text-white flex items-center">
+                            <i class="${emp.current_punch.icon} mr-1" style="color: ${emp.current_punch.color_start}"></i>
+                            ${emp.current_punch.label}
+                        </span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-400">Tiempo en Estado</span>
+                        <span class="text-white font-mono duration-counter" data-timestamp="${emp.current_punch.timestamp}" data-active="${emp.status === 'active' || emp.status === 'pause' ? 'true' : 'false'}">
+                            ${emp.current_punch.duration_formatted}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="pt-3 border-t border-slate-700/50">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <p class="text-slate-500 text-[10px] uppercase tracking-wider">Horas Hoy</p>
+                            <p class="text-white font-bold">${emp.hours_formatted}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-slate-500 text-[10px] uppercase tracking-wider">Generado</p>
+                            <p class="text-green-400 font-bold">${emp.earnings_formatted}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return card;
         }
 
         function updateEmployeeGrid(employees) {
@@ -690,6 +982,7 @@ $recentVacations = $pdo->query("
             }
             
             grid.innerHTML = '';
+            grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'; // Reset grid layout for list view
             
             employees.forEach(emp => {
                 const card = document.createElement('div');
