@@ -260,6 +260,28 @@ class ChatApp {
                     </div>
                 </div>
             </div>
+
+            <!-- Modal de agregar miembro -->
+            <div class="chat-new-conversation-modal" id="addMemberModal">
+                <div class="chat-modal-content">
+                    <div class="chat-modal-header">
+                        <h3 class="chat-modal-title">Agregar Miembro</h3>
+                        <button class="chat-modal-close" id="closeAddMemberModalBtn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="chat-modal-body">
+                        <p style="margin-bottom: 15px; color: #64748b; font-size: 14px;">Selecciona un usuario para agregar al grupo.</p>
+                        
+                        <!-- Búsqueda de usuarios -->
+                        <input type="text" class="chat-search-input" id="addMemberSearchInput" placeholder="Buscar usuarios...">
+                        <div class="chat-user-list" id="addMemberUserList"></div>
+                    </div>
+                    <div class="chat-modal-footer">
+                        <button class="chat-modal-btn chat-modal-btn-secondary" id="cancelAddMemberModalBtn">Cancelar</button>
+                    </div>
+                </div>
+            </div>
             
             <input type="file" id="fileInput" style="display: none;" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar">
         `;
@@ -438,6 +460,123 @@ class ChatApp {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 100) + 'px';
         });
+
+        // Event listeners para agregar miembros
+        const groupOptionsBtn = document.getElementById('groupOptionsBtn');
+        if (groupOptionsBtn) {
+            groupOptionsBtn.addEventListener('click', () => {
+                this.openAddMemberModal();
+            });
+        }
+
+        document.getElementById('closeAddMemberModalBtn').addEventListener('click', () => {
+            this.closeAddMemberModal();
+        });
+
+        document.getElementById('cancelAddMemberModalBtn').addEventListener('click', () => {
+            this.closeAddMemberModal();
+        });
+
+        // Buscar usuarios para agregar (debounce)
+        document.getElementById('addMemberSearchInput').addEventListener('input', (e) => {
+            if (this.searchTimeout) {
+                clearTimeout(this.searchTimeout);
+            }
+            
+            const value = e.target.value.trim();
+            
+            if (value.length === 0) {
+                document.getElementById('addMemberUserList').innerHTML = '';
+                return;
+            }
+            
+            this.searchTimeout = setTimeout(() => {
+                this.searchUsersToAdd(value);
+            }, 300);
+        });
+    }
+
+    openAddMemberModal() {
+        const modal = document.getElementById('addMemberModal');
+        modal.classList.add('open');
+        document.getElementById('addMemberSearchInput').value = '';
+        document.getElementById('addMemberUserList').innerHTML = '';
+        document.getElementById('addMemberSearchInput').focus();
+    }
+
+    closeAddMemberModal() {
+        document.getElementById('addMemberModal').classList.remove('open');
+    }
+
+    async searchUsersToAdd(query) {
+        try {
+            const basePath = this.getBasePath();
+            const response = await fetch(`${basePath}api.php?action=search_users&q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                this.renderAddMemberUserList(data.users);
+            }
+        } catch (error) {
+            console.error('Error searching users:', error);
+        }
+    }
+
+    renderAddMemberUserList(users) {
+        const container = document.getElementById('addMemberUserList');
+        
+        if (users.length === 0) {
+            container.innerHTML = '<div class="chat-user-item" style="justify-content:center;color:#94a3b8;">No se encontraron usuarios</div>';
+            return;
+        }
+        
+        container.innerHTML = users.map(user => `
+            <div class="chat-user-item" onclick="chatApp.addMemberToGroup(${user.id}, '${this.escapeHtml(user.full_name)}')">
+                <div class="chat-avatar">${this.getInitials(user.full_name)}</div>
+                <div class="chat-user-info">
+                    <div class="chat-user-name">${this.escapeHtml(user.full_name)}</div>
+                    <div class="chat-user-role">${this.escapeHtml(user.role)}</div>
+                </div>
+                <div class="chat-user-status">
+                    <i class="fas fa-plus-circle" style="color: #4f46e5;"></i>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async addMemberToGroup(userId, userName) {
+        if (!confirm(`¿Estás seguro de que quieres agregar a ${userName} a este grupo?`)) {
+            return;
+        }
+
+        try {
+            const basePath = this.getBasePath();
+            const response = await fetch(`${basePath}api.php`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'add_group_member',
+                    conversation_id: this.currentConversationId,
+                    user_id: userId
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert(`${userName} ha sido agregado al grupo exitosamente.`);
+                this.closeAddMemberModal();
+                // Recargar mensajes para ver el mensaje del sistema
+                this.loadMessages();
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error('Error adding member:', error);
+            alert('Error de conexión al agregar miembro.');
+        }
     }
     
     toggleChat() {
@@ -488,14 +627,52 @@ class ChatApp {
     async loadConversations() {
         try {
             const basePath = this.getBasePath();
-            const response = await fetch(`${basePath}api.php?action=get_conversations`);
-            const data = await response.json();
+            const response = await fetch(`${basePath}api.php?action=get_conversations`, { cache: 'no-cache' });
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            let data;
+
+            if (contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                console.error('get_conversations devolvió contenido no-JSON:', text.slice(0, 500));
+                const container = document.getElementById('conversationsTab');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="chat-empty-state">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error al cargar conversaciones: respuesta no válida (no-JSON)</p>
+                        </div>
+                    `;
+                }
+                return;
+            }
             
             if (data.success) {
                 this.renderConversations(data.conversations);
+            } else {
+                const container = document.getElementById('conversationsTab');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="chat-empty-state">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error al cargar conversaciones${data.error ? `: ${this.escapeHtml(data.error)}` : ''}</p>
+                        </div>
+                    `;
+                }
+                console.error('Error loading conversations:', data.error);
             }
         } catch (error) {
             console.error('Error loading conversations:', error);
+            const container = document.getElementById('conversationsTab');
+            if (container) {
+                container.innerHTML = `
+                    <div class="chat-empty-state">
+                        <i class="fas fa-wifi"></i>
+                        <p>No se pudieron cargar las conversaciones. Verifica tu conexión.</p>
+                    </div>
+                `;
+            }
         }
     }
     
@@ -570,7 +747,11 @@ class ChatApp {
             if (isGroup) {
                 typeDiv.textContent = 'Grupo';
                 typeDiv.style.display = 'block';
-                document.getElementById('groupOptionsBtn').style.display = 'block';
+                // Mostrar botón de opciones (agregar miembro)
+                const groupOptionsBtn = document.getElementById('groupOptionsBtn');
+                groupOptionsBtn.style.display = 'block';
+                groupOptionsBtn.innerHTML = '<i class="fas fa-user-plus"></i>';
+                groupOptionsBtn.title = "Agregar miembro";
             } else {
                 typeDiv.textContent = '';
                 typeDiv.style.display = 'none';
@@ -1063,8 +1244,19 @@ class ChatApp {
     async updateUnreadCount() {
         try {
             const basePath = this.getBasePath();
-            const response = await fetch(`${basePath}api.php?action=get_unread_count`);
-            const data = await response.json();
+            const response = await fetch(`${basePath}api.php?action=get_unread_count`, { cache: 'no-cache' });
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            let data;
+
+            if (contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                console.error('get_unread_count devolvió contenido no-JSON:', text.slice(0, 300));
+                const badge = document.getElementById('unreadBadge');
+                if (badge) badge.style.display = 'none';
+                return;
+            }
             
             if (data.success) {
                 this.unreadCount = data.unread_count;
@@ -1100,8 +1292,26 @@ class ChatApp {
     async loadOnlineUsers() {
         try {
             const basePath = this.getBasePath();
-            const response = await fetch(`${basePath}api.php?action=get_online_users`);
-            const data = await response.json();
+            const response = await fetch(`${basePath}api.php?action=get_online_users`, { cache: 'no-cache' });
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            let data;
+
+            if (contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                console.error('get_online_users devolvió contenido no-JSON:', text.slice(0, 500));
+                const container = document.getElementById('conversationsTab');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="chat-empty-state">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error al cargar usuarios: respuesta no válida (no-JSON)</p>
+                        </div>
+                    `;
+                }
+                return;
+            }
             
             if (data.success) {
                 const container = document.getElementById('conversationsTab');
@@ -1152,9 +1362,29 @@ class ChatApp {
                         await this.startNewConversation();
                     });
                 });
+            } else {
+                const container = document.getElementById('conversationsTab');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="chat-empty-state">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error al cargar usuarios${data.error ? `: ${this.escapeHtml(data.error)}` : ''}</p>
+                        </div>
+                    `;
+                }
+                console.error('Error loading online users:', data.error);
             }
         } catch (error) {
             console.error('Error loading online users:', error);
+            const container = document.getElementById('conversationsTab');
+            if (container) {
+                container.innerHTML = `
+                    <div class="chat-empty-state">
+                        <i class="fas fa-wifi"></i>
+                        <p>No se pudieron cargar los usuarios. Verifica tu conexión.</p>
+                    </div>
+                `;
+            }
         }
     }
     
@@ -1177,7 +1407,7 @@ class ChatApp {
         
         try {
             const basePath = this.getBasePath();
-            const response = await fetch(`${basePath}api.php?action=get_typing&conversation_id=${this.currentConversationId}`);
+            const response = await fetch(`${basePath}api.php?action=get_typing_users&conversation_id=${this.currentConversationId}`);
             const data = await response.json();
             
             if (data.success && data.typing_users.length > 0) {
@@ -1344,8 +1574,10 @@ class ChatApp {
     }
     
     getCurrentUserId() {
-        // Esta función debe obtener el ID del usuario actual de la sesión
-        // Puede ser inyectado desde PHP o almacenado en una variable global
+        // Obtiene el ID del usuario actual desde variables globales
+        if (typeof currentUserId !== 'undefined' && currentUserId) {
+            return currentUserId;
+        }
         return window.currentUserId || null;
     }
     

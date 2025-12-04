@@ -232,6 +232,10 @@ if ($isAuthenticated) {
         $canCreateGroups = $chatPerms ? (bool)$chatPerms['can_create_groups'] : true;
         ?>
         const canCreateGroups = <?= json_encode($canCreateGroups) ?>;
+        // Exponer en window para clientes que leen window.currentUserId/canCreateGroups
+        window.currentUserId = currentUserId;
+        window.currentUserRole = currentUserRole;
+        window.canCreateGroups = canCreateGroups;
     </script>
     <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js?v=<?= time() ?>" defer></script>
     <?php endif; ?>

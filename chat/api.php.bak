@@ -184,7 +184,45 @@ try {
 // ==================== FUNCIONES ====================
 
 function getConversations(PDO $pdo, int $userId): void {
-    $stmt = $pdo->prepare("\n        SELECT \n            c.id,\n            c.name,\n            c.type,\n            c.last_message_at,\n            (SELECT COUNT(*) FROM chat_messages cm \n             WHERE cm.conversation_id = c.id \n             AND cm.created_at > COALESCE(p.last_read_at, '1970-01-01')\n             AND cm.user_id != ?\n            ) as unread_count,\n            (SELECT cm.message_text FROM chat_messages cm \n             WHERE cm.conversation_id = c.id \n             ORDER BY cm.created_at DESC LIMIT 1\n            ) as last_message,\n            (SELECT u.username FROM chat_messages cm \n             JOIN users u ON u.id = cm.user_id\n             WHERE cm.conversation_id = c.id \n             ORDER BY cm.created_at DESC LIMIT 1\n            ) as last_sender,\n            CASE \n                WHEN c.type = 'direct' THEN\n                    (SELECT u.full_name FROM chat_participants cp2\n                     JOIN users u ON u.id = cp2.user_id\n                     WHERE cp2.conversation_id = c.id AND cp2.user_id != ? LIMIT 1)\n                ELSE c.name\n            END as display_name,\n            CASE \n                WHEN c.type = 'direct' THEN\n                    (SELECT u.id FROM chat_participants cp2\n                     JOIN users u ON u.id = cp2.user_id\n                     WHERE cp2.conversation_id = c.id AND cp2.user_id != ? LIMIT 1)\n                ELSE NULL\n            END as other_user_id\n        FROM chat_conversations c\n        JOIN chat_participants p ON p.conversation_id = c.id\n        WHERE p.user_id = ? AND p.is_active = 1 AND c.is_active = 1\n        ORDER BY c.last_message_at DESC\n    ");
+    $stmt = $pdo->prepare("
+        SELECT 
+            c.id,
+            c.name,
+            c.type,
+            c.last_message_at,
+            (SELECT COUNT(*) FROM chat_messages cm 
+             WHERE cm.conversation_id = c.id 
+             AND cm.created_at > COALESCE(p.last_read_at, '1970-01-01')
+             AND cm.user_id != ?
+            ) as unread_count,
+            (SELECT cm.message_text FROM chat_messages cm 
+             WHERE cm.conversation_id = c.id 
+             ORDER BY cm.created_at DESC LIMIT 1
+            ) as last_message,
+            (SELECT u.username FROM chat_messages cm 
+             JOIN users u ON u.id = cm.user_id
+             WHERE cm.conversation_id = c.id 
+             ORDER BY cm.created_at DESC LIMIT 1
+            ) as last_sender,
+            CASE 
+                WHEN c.type = 'direct' THEN
+                    (SELECT u.full_name FROM chat_participants cp2
+                     JOIN users u ON u.id = cp2.user_id
+                     WHERE cp2.conversation_id = c.id AND cp2.user_id != ? LIMIT 1)
+                ELSE c.name
+            END as display_name,
+            CASE 
+                WHEN c.type = 'direct' THEN
+                    (SELECT u.id FROM chat_participants cp2
+                     JOIN users u ON u.id = cp2.user_id
+                     WHERE cp2.conversation_id = c.id AND cp2.user_id != ? LIMIT 1)
+                ELSE NULL
+            END as other_user_id
+        FROM chat_conversations c
+        JOIN chat_participants p ON p.conversation_id = c.id
+        WHERE p.user_id = ? AND p.is_active = 1 AND c.is_active = 1
+        ORDER BY c.last_message_at DESC
+    ");
     
     $stmt->execute([$userId, $userId, $userId, $userId]);
     $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -194,7 +232,10 @@ function getConversations(PDO $pdo, int $userId): void {
 
 function getMessages(PDO $pdo, int $userId, int $conversationId, int $lastMessageId = 0): void {
     // Verificar que el usuario es participante
-    $stmt = $pdo->prepare("\n        SELECT id FROM chat_participants \n        WHERE conversation_id = ? AND user_id = ? AND is_active = 1\n    ");
+    $stmt = $pdo->prepare("
+        SELECT id FROM chat_participants 
+        WHERE conversation_id = ? AND user_id = ? AND is_active = 1
+    ");
     $stmt->execute([$conversationId, $userId]);
     
     if (!$stmt->fetch()) {
@@ -204,7 +245,42 @@ function getMessages(PDO $pdo, int $userId, int $conversationId, int $lastMessag
     }
     
     // Obtener mensajes
-    $query = "\n        SELECT \n            m.id,\n            m.user_id,\n            m.message_text,\n            m.message_type,\n            m.is_edited,\n            m.is_deleted,\n            m.created_at,\n            m.parent_message_id,\n            u.username,\n            u.full_name,\n            (SELECT JSON_ARRAYAGG(\n                JSON_OBJECT(\n                    'id', a.id,\n                    'file_name', a.file_name,\n                    'file_original_name', a.file_original_name,\n                    'file_type', a.file_type,\n                    'file_size', a.file_size,\n                    'mime_type', a.mime_type,\n                    'thumbnail_path', a.thumbnail_path\n                )\n            ) FROM chat_attachments a WHERE a.message_id = m.id) as attachments,\n            (SELECT JSON_ARRAYAGG(\n                JSON_OBJECT(\n                    'reaction', r.reaction,\n                    'user_id', r.user_id,\n                    'username', ru.username\n                )\n            ) FROM chat_reactions r \n            JOIN users ru ON ru.id = r.user_id \n            WHERE r.message_id = m.id) as reactions\n        FROM chat_messages m\n        JOIN users u ON u.id = m.user_id\n        WHERE m.conversation_id = ? AND m.is_deleted = 0\n    ";
+    $query = "
+        SELECT 
+            m.id,
+            m.user_id,
+            m.message_text,
+            m.message_type,
+            m.is_edited,
+            m.is_deleted,
+            m.created_at,
+            m.parent_message_id,
+            u.username,
+            u.full_name,
+            (SELECT JSON_ARRAYAGG(
+                JSON_OBJECT(
+                    'id', a.id,
+                    'file_name', a.file_name,
+                    'file_original_name', a.file_original_name,
+                    'file_type', a.file_type,
+                    'file_size', a.file_size,
+                    'mime_type', a.mime_type,
+                    'thumbnail_path', a.thumbnail_path
+                )
+            ) FROM chat_attachments a WHERE a.message_id = m.id) as attachments,
+            (SELECT JSON_ARRAYAGG(
+                JSON_OBJECT(
+                    'reaction', r.reaction,
+                    'user_id', r.user_id,
+                    'username', ru.username
+                )
+            ) FROM chat_reactions r 
+            JOIN users ru ON ru.id = r.user_id 
+            WHERE r.message_id = m.id) as reactions
+        FROM chat_messages m
+        JOIN users u ON u.id = m.user_id
+        WHERE m.conversation_id = ? AND m.is_deleted = 0
+    ";
     
     $params = [$conversationId];
     
@@ -247,7 +323,10 @@ function sendMessage(PDO $pdo, int $userId, array $data): void {
     }
     
     // Verificar que es participante
-    $stmt = $pdo->prepare("\n        SELECT id FROM chat_participants \n        WHERE conversation_id = ? AND user_id = ? AND is_active = 1\n    ");
+    $stmt = $pdo->prepare("
+        SELECT id FROM chat_participants 
+        WHERE conversation_id = ? AND user_id = ? AND is_active = 1
+    ");
     $stmt->execute([$conversationId, $userId]);
     
     if (!$stmt->fetch()) {
@@ -269,12 +348,20 @@ function sendMessage(PDO $pdo, int $userId, array $data): void {
     }
     
     // Insertar mensaje
-    $stmt = $pdo->prepare("\n        INSERT INTO chat_messages (conversation_id, user_id, message_text, parent_message_id)\n        VALUES (?, ?, ?, ?)\n    ");
+    $stmt = $pdo->prepare("
+        INSERT INTO chat_messages (conversation_id, user_id, message_text, parent_message_id)
+        VALUES (?, ?, ?, ?)
+    ");
     $stmt->execute([$conversationId, $userId, $messageText, $parentMessageId]);
     $messageId = $pdo->lastInsertId();
     
     // Crear notificaciones para otros participantes
-    $stmt = $pdo->prepare("\n        INSERT INTO chat_notifications (user_id, conversation_id, message_id, notification_type)\n        SELECT user_id, ?, ?, 'new_message'\n        FROM chat_participants\n        WHERE conversation_id = ? AND user_id != ? AND is_active = 1\n    ");
+    $stmt = $pdo->prepare("
+        INSERT INTO chat_notifications (user_id, conversation_id, message_id, notification_type)
+        SELECT user_id, ?, ?, 'new_message'
+        FROM chat_participants
+        WHERE conversation_id = ? AND user_id != ? AND is_active = 1
+    ");
     $stmt->execute([$conversationId, $messageId, $conversationId, $userId]);
     
     // Obtener el timestamp exacto del mensaje recién creado
@@ -326,7 +413,17 @@ function createConversation(PDO $pdo, int $userId, array $data): void {
         if ($type === 'direct' && count($participantIds) === 1) {
             $otherUserId = (int)$participantIds[0];
             
-            $stmt = $pdo->prepare("\n                SELECT c.id \n                FROM chat_conversations c\n                JOIN chat_participants p1 ON p1.conversation_id = c.id\n                JOIN chat_participants p2 ON p2.conversation_id = c.id\n                WHERE c.type = 'direct' \n                AND p1.user_id = ? \n                AND p2.user_id = ?\n                AND c.is_active = 1\n                LIMIT 1\n            ");
+            $stmt = $pdo->prepare("
+                SELECT c.id 
+                FROM chat_conversations c
+                JOIN chat_participants p1 ON p1.conversation_id = c.id
+                JOIN chat_participants p2 ON p2.conversation_id = c.id
+                WHERE c.type = 'direct' 
+                AND p1.user_id = ? 
+                AND p2.user_id = ?
+                AND c.is_active = 1
+                LIMIT 1
+            ");
             $stmt->execute([$userId, $otherUserId]);
             $existing = $stmt->fetch();
             
@@ -338,16 +435,25 @@ function createConversation(PDO $pdo, int $userId, array $data): void {
         }
         
         // Crear conversación
-        $stmt = $pdo->prepare("\n            INSERT INTO chat_conversations (type, name, created_by)\n            VALUES (?, ?, ?)\n        ");
+        $stmt = $pdo->prepare("
+            INSERT INTO chat_conversations (type, name, created_by)
+            VALUES (?, ?, ?)
+        ");
         $stmt->execute([$type, $name ?: null, $userId]);
         $conversationId = $pdo->lastInsertId();
         
         // Agregar creador como admin
-        $stmt = $pdo->prepare("\n            INSERT INTO chat_participants (conversation_id, user_id, role)\n            VALUES (?, ?, 'admin')\n        ");
+        $stmt = $pdo->prepare("
+            INSERT INTO chat_participants (conversation_id, user_id, role)
+            VALUES (?, ?, 'admin')
+        ");
         $stmt->execute([$conversationId, $userId]);
         
         // Agregar otros participantes
-        $stmt = $pdo->prepare("\n            INSERT INTO chat_participants (conversation_id, user_id, role)\n            VALUES (?, ?, 'member')\n        ");
+        $stmt = $pdo->prepare("
+            INSERT INTO chat_participants (conversation_id, user_id, role)
+            VALUES (?, ?, 'member')
+        ");
         
         foreach ($participantIds as $participantId) {
             $participantId = (int)$participantId;
@@ -367,7 +473,11 @@ function createConversation(PDO $pdo, int $userId, array $data): void {
 }
 
 function markConversationAsRead(PDO $pdo, int $userId, int $conversationId): void {
-    $stmt = $pdo->prepare("\n        UPDATE chat_participants\n        SET last_read_at = NOW()\n        WHERE conversation_id = ? AND user_id = ?\n    ");
+    $stmt = $pdo->prepare("
+        UPDATE chat_participants
+        SET last_read_at = NOW()
+        WHERE conversation_id = ? AND user_id = ?
+    ");
     $stmt->execute([$conversationId, $userId]);
     
     echo json_encode(['success' => true]);
@@ -375,7 +485,16 @@ function markConversationAsRead(PDO $pdo, int $userId, int $conversationId): voi
 
 function getUnreadCount(PDO $pdo, int $userId): void {
     // Contar mensajes no leídos de todas las conversaciones del usuario
-    $stmt = $pdo->prepare("\n        SELECT COUNT(*) as count\n        FROM chat_messages cm\n        JOIN chat_participants p ON p.conversation_id = cm.conversation_id\n        WHERE p.user_id = ? \n        AND p.is_active = 1\n        AND cm.user_id != ?\n        AND cm.created_at > COALESCE(p.last_read_at, '1970-01-01')\n        AND cm.is_deleted = 0\n    ");
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as count
+        FROM chat_messages cm
+        JOIN chat_participants p ON p.conversation_id = cm.conversation_id
+        WHERE p.user_id = ? 
+        AND p.is_active = 1
+        AND cm.user_id != ?
+        AND cm.created_at > COALESCE(p.last_read_at, '1970-01-01')
+        AND cm.is_deleted = 0
+    ");
     $stmt->execute([$userId, $userId]);
     $result = $stmt->fetch();
     
@@ -387,14 +506,36 @@ function updateUserStatus(PDO $pdo, int $userId, string $status): void {
         $status = 'online';
     }
     
-    $stmt = $pdo->prepare("\n        INSERT INTO chat_user_status (user_id, status, last_seen)\n        VALUES (?, ?, NOW())\n        ON DUPLICATE KEY UPDATE status = ?, last_seen = NOW()\n    ");
+    $stmt = $pdo->prepare("
+        INSERT INTO chat_user_status (user_id, status, last_seen)
+        VALUES (?, ?, NOW())
+        ON DUPLICATE KEY UPDATE status = ?, last_seen = NOW()
+    ");
     $stmt->execute([$userId, $status, $status]);
     
     echo json_encode(['success' => true]);
 }
 
 function getOnlineUsers(PDO $pdo): void {
-    $stmt = $pdo->query("\n        SELECT \n            u.id,\n            u.username,\n            u.full_name,\n            u.role,\n            COALESCE(s.status, 'offline') as status,\n            s.last_seen\n        FROM users u\n        LEFT JOIN chat_user_status s ON s.user_id = u.id\n        WHERE u.is_active = 1\n        ORDER BY \n            CASE \n                WHEN s.status = 'online' THEN 1\n                WHEN s.last_seen > DATE_SUB(NOW(), INTERVAL " . CHAT_ONLINE_THRESHOLD . " SECOND) THEN 2\n                ELSE 3\n            END,\n            u.full_name\n    ");
+    $stmt = $pdo->query("
+        SELECT 
+            u.id,
+            u.username,
+            u.full_name,
+            u.role,
+            COALESCE(s.status, 'offline') as status,
+            s.last_seen
+        FROM users u
+        LEFT JOIN chat_user_status s ON s.user_id = u.id
+        WHERE u.is_active = 1
+        ORDER BY 
+            CASE 
+                WHEN s.status = 'online' THEN 1
+                WHEN s.last_seen > DATE_SUB(NOW(), INTERVAL " . CHAT_ONLINE_THRESHOLD . " SECOND) THEN 2
+                ELSE 3
+            END,
+            u.full_name
+    ");
     
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
@@ -413,7 +554,14 @@ function getOnlineUsers(PDO $pdo): void {
 function searchUsers(PDO $pdo, string $query): void {
     $query = '%' . $query . '%';
     
-    $stmt = $pdo->prepare("\n        SELECT id, username, full_name, role\n        FROM users\n        WHERE (username LIKE ? OR full_name LIKE ?)\n        AND is_active = 1\n        ORDER BY full_name\n        LIMIT 20\n    ");
+    $stmt = $pdo->prepare("
+        SELECT id, username, full_name, role
+        FROM users
+        WHERE (username LIKE ? OR full_name LIKE ?)
+        AND is_active = 1
+        ORDER BY full_name
+        LIMIT 20
+    ");
     $stmt->execute([$query, $query]);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
@@ -441,7 +589,11 @@ function editMessage(PDO $pdo, int $userId, array $data): void {
         return;
     }
     
-    $stmt = $pdo->prepare("\n        UPDATE chat_messages\n        SET message_text = ?, is_edited = 1, edited_at = NOW()\n        WHERE id = ?\n    ");
+    $stmt = $pdo->prepare("
+        UPDATE chat_messages
+        SET message_text = ?, is_edited = 1, edited_at = NOW()
+        WHERE id = ?
+    ");
     $stmt->execute([$newText, $messageId]);
     
     echo json_encode(['success' => true]);
@@ -459,7 +611,11 @@ function deleteMessage(PDO $pdo, int $userId, int $messageId): void {
         return;
     }
     
-    $stmt = $pdo->prepare("\n        UPDATE chat_messages\n        SET is_deleted = 1, deleted_at = NOW(), message_text = '[Mensaje eliminado]'\n        WHERE id = ?\n    ");
+    $stmt = $pdo->prepare("
+        UPDATE chat_messages
+        SET is_deleted = 1, deleted_at = NOW(), message_text = '[Mensaje eliminado]'
+        WHERE id = ?
+    ");
     $stmt->execute([$messageId]);
     
     echo json_encode(['success' => true]);
@@ -476,13 +632,20 @@ function addReaction(PDO $pdo, int $userId, array $data): void {
     }
     
     try {
-        $stmt = $pdo->prepare("\n            INSERT INTO chat_reactions (message_id, user_id, reaction)\n            VALUES (?, ?, ?)\n            ON DUPLICATE KEY UPDATE reaction = ?\n        ");
+        $stmt = $pdo->prepare("
+            INSERT INTO chat_reactions (message_id, user_id, reaction)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE reaction = ?
+        ");
         $stmt->execute([$messageId, $userId, $reaction, $reaction]);
         
         echo json_encode(['success' => true]);
     } catch (PDOException $e) {
         // Si ya existe, eliminar la reacción
-        $stmt = $pdo->prepare("\n            DELETE FROM chat_reactions\n            WHERE message_id = ? AND user_id = ? AND reaction = ?\n        ");
+        $stmt = $pdo->prepare("
+            DELETE FROM chat_reactions
+            WHERE message_id = ? AND user_id = ? AND reaction = ?
+        ");
         $stmt->execute([$messageId, $userId, $reaction]);
         
         echo json_encode(['success' => true, 'removed' => true]);
@@ -557,7 +720,12 @@ function sendMassMessage(PDO $pdo, int $userId, array $data): void {
         $pdo->beginTransaction();
         
         // Obtener todos los usuarios activos excepto el remitente
-        $stmt = $pdo->prepare("\n            SELECT id, full_name, username \n            FROM users \n            WHERE id != ? AND is_active = 1\n            ORDER BY full_name\n        ");
+        $stmt = $pdo->prepare("
+            SELECT id, full_name, username 
+            FROM users 
+            WHERE id != ? AND is_active = 1
+            ORDER BY full_name
+        ");
         $stmt->execute([$userId]);
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
@@ -574,7 +742,14 @@ function sendMassMessage(PDO $pdo, int $userId, array $data): void {
         foreach ($users as $user) {
             try {
                 // Verificar si ya existe una conversación directa entre estos usuarios
-                $conversationStmt = $pdo->prepare("\n                    SELECT c.id \n                    FROM chat_conversations c\n                    JOIN chat_participants p1 ON p1.conversation_id = c.id AND p1.user_id = ?\n                    JOIN chat_participants p2 ON p2.conversation_id = c.id AND p2.user_id = ?\n                    WHERE c.type = 'direct' AND c.is_active = 1\n                    LIMIT 1\n                ");
+                $conversationStmt = $pdo->prepare("
+                    SELECT c.id 
+                    FROM chat_conversations c
+                    JOIN chat_participants p1 ON p1.conversation_id = c.id AND p1.user_id = ?
+                    JOIN chat_participants p2 ON p2.conversation_id = c.id AND p2.user_id = ?
+                    WHERE c.type = 'direct' AND c.is_active = 1
+                    LIMIT 1
+                ");
                 $conversationStmt->execute([$userId, $user['id']]);
                 $conversation = $conversationStmt->fetch();
                 
@@ -584,27 +759,43 @@ function sendMassMessage(PDO $pdo, int $userId, array $data): void {
                     $conversationId = $conversation['id'];
                 } else {
                     // Crear nueva conversación directa
-                    $createConvStmt = $pdo->prepare("\n                        INSERT INTO chat_conversations (name, type, created_by) \n                        VALUES (?, 'direct', ?)\n                    ");
+                    $createConvStmt = $pdo->prepare("
+                        INSERT INTO chat_conversations (name, type, created_by) 
+                        VALUES (?, 'direct', ?)
+                    ");
                     $createConvStmt->execute([null, $userId]);
                     $conversationId = $pdo->lastInsertId();
                     
                     // Agregar participantes
-                    $addParticipantStmt = $pdo->prepare("\n                        INSERT INTO chat_participants (conversation_id, user_id, joined_at) \n                        VALUES (?, ?, NOW())\n                    ");
+                    $addParticipantStmt = $pdo->prepare("
+                        INSERT INTO chat_participants (conversation_id, user_id, joined_at) 
+                        VALUES (?, ?, NOW())
+                    ");
                     $addParticipantStmt->execute([$conversationId, $userId]);
                     $addParticipantStmt->execute([$conversationId, $user['id']]);
                 }
                 
                 // Enviar mensaje
-                $messageStmt = $pdo->prepare("\n                    INSERT INTO chat_messages (conversation_id, user_id, message_text, message_type) \n                    VALUES (?, ?, ?, 'mass_message')\n                ");
+                $messageStmt = $pdo->prepare("
+                    INSERT INTO chat_messages (conversation_id, user_id, message_text, message_type) 
+                    VALUES (?, ?, ?, 'mass_message')
+                ");
                 $messageStmt->execute([$conversationId, $userId, $messageText]);
                 $messageId = $pdo->lastInsertId();
                 
                 // Crear notificación
-                $notificationStmt = $pdo->prepare("\n                    INSERT INTO chat_notifications (user_id, conversation_id, message_id, notification_type) \n                    VALUES (?, ?, ?, 'mass_message')\n                ");
+                $notificationStmt = $pdo->prepare("
+                    INSERT INTO chat_notifications (user_id, conversation_id, message_id, notification_type) 
+                    VALUES (?, ?, ?, 'mass_message')
+                ");
                 $notificationStmt->execute([$user['id'], $conversationId, $messageId]);
                 
                 // Actualizar timestamp de la conversación
-                $updateConvStmt = $pdo->prepare("\n                    UPDATE chat_conversations \n                    SET last_message_at = NOW() \n                    WHERE id = ?\n                ");
+                $updateConvStmt = $pdo->prepare("
+                    UPDATE chat_conversations 
+                    SET last_message_at = NOW() 
+                    WHERE id = ?
+                ");
                 $updateConvStmt->execute([$conversationId]);
                 
                 $sentCount++;
@@ -619,7 +810,10 @@ function sendMassMessage(PDO $pdo, int $userId, array $data): void {
         
         // Registrar la actividad de mensaje masivo
         try {
-            $logStmt = $pdo->prepare("\n                INSERT INTO activity_logs (user_id, action, details, ip_address) \n                VALUES (?, 'mass_message_sent', ?, ?)\n            ");
+            $logStmt = $pdo->prepare("
+                INSERT INTO activity_logs (user_id, action, details, ip_address) 
+                VALUES (?, 'mass_message_sent', ?, ?)
+            ");
             $logDetails = json_encode([
                 'message_preview' => mb_substr($messageText, 0, 100),
                 'recipients_count' => $sentCount,
@@ -654,7 +848,11 @@ function sendMassMessage(PDO $pdo, int $userId, array $data): void {
 
 function checkChatPermission(PDO $pdo, int $userId, string $permission): bool {
     try {
-        $stmt = $pdo->prepare("\n            SELECT {$permission}, is_restricted, restricted_until\n            FROM chat_permissions\n            WHERE user_id = ?\n        ");
+        $stmt = $pdo->prepare("
+            SELECT {$permission}, is_restricted, restricted_until
+            FROM chat_permissions
+            WHERE user_id = ?
+        ");
         $stmt->execute([$userId]);
         $perms = $stmt->fetch();
         
@@ -757,3 +955,219 @@ function addGroupMemberFixed(PDO $pdo, int $userId, array $data): void {
     }
 }
 
+ 
+ f u n c t i o n   a d d G r o u p M e m b e r ( P D O   $ p d o ,   i n t   $ u s e r I d ,   a r r a y   $ d a t a ) :   v o i d   { 
+ 
+         $ c o n v e r s a t i o n I d   =   ( i n t ) ( $ d a t a [ ' c o n v e r s a t i o n _ i d ' ]   ? ?   0 ) ; 
+ 
+         $ n e w M e m b e r I d   =   ( i n t ) ( $ d a t a [ ' u s e r _ i d ' ]   ? ?   0 ) ; 
+ 
+ 
+ 
+         i f   ( $ c o n v e r s a t i o n I d   < =   0   | |   $ n e w M e m b e r I d   < =   0 )   { 
+ 
+                 h t t p _ r e s p o n s e _ c o d e ( 4 0 0 ) ; 
+ 
+                 e c h o   j s o n _ e n c o d e ( [ ' s u c c e s s '   = >   f a l s e ,   ' e r r o r '   = >   ' D a t o s   i n v � � l i d o s ' ] ) ; 
+ 
+                 r e t u r n ; 
+ 
+         } 
+ 
+ 
+ 
+         t r y   { 
+ 
+                 $ p d o - > b e g i n T r a n s a c t i o n ( ) ; 
+ 
+ 
+ 
+                 / /   1 .   V e r i f i c a r   q u e   l a   c o n v e r s a c i � � n   e x i s t e   y   e s   u n   g r u p o 
+ 
+                 $ s t m t   =   $ p d o - > p r e p a r e ( " 
+ 
+                         S E L E C T   t y p e ,   n a m e   
+ 
+                         F R O M   c h a t _ c o n v e r s a t i o n s   
+ 
+                         W H E R E   i d   =   ?   A N D   i s _ a c t i v e   =   1 
+ 
+                 " ) ; 
+ 
+                 $ s t m t - > e x e c u t e ( [ $ c o n v e r s a t i o n I d ] ) ; 
+ 
+                 $ c o n v e r s a t i o n   =   $ s t m t - > f e t c h ( ) ; 
+ 
+ 
+ 
+                 i f   ( ! $ c o n v e r s a t i o n   | |   $ c o n v e r s a t i o n [ ' t y p e ' ]   ! = =   ' g r o u p ' )   { 
+ 
+                         t h r o w   n e w   E x c e p t i o n ( ' C o n v e r s a c i � � n   n o   v � � l i d a   o   n o   e s   u n   g r u p o ' ) ; 
+ 
+                 } 
+ 
+ 
+ 
+                 / /   2 .   V e r i f i c a r   p e r m i s o s   d e l   s o l i c i t a n t e   ( d e b e   s e r   a d m i n   d e l   g r u p o   o   s u p e r a d m i n ) 
+ 
+                 / /   P r i m e r o   v e r i f i c a m o s   s i   e s   p a r t i c i p a n t e   y   s u   r o l 
+ 
+                 $ s t m t   =   $ p d o - > p r e p a r e ( " 
+ 
+                         S E L E C T   r o l e   
+ 
+                         F R O M   c h a t _ p a r t i c i p a n t s   
+ 
+                         W H E R E   c o n v e r s a t i o n _ i d   =   ?   A N D   u s e r _ i d   =   ?   A N D   i s _ a c t i v e   =   1 
+ 
+                 " ) ; 
+ 
+                 $ s t m t - > e x e c u t e ( [ $ c o n v e r s a t i o n I d ,   $ u s e r I d ] ) ; 
+ 
+                 $ p a r t i c i p a n t   =   $ s t m t - > f e t c h ( ) ; 
+ 
+ 
+ 
+                 / /   S i   n o   e s   p a r t i c i p a n t e   a c t i v o ,   v e r i f i c a r   s i   e s   s u p e r a d m i n   d e l   s i s t e m a   ( o p c i o n a l ,   p o r   a h o r a   r e s t r i n g i m o s   a   p a r t i c i p a n t e s ) 
+ 
+                 i f   ( ! $ p a r t i c i p a n t )   { 
+ 
+                         t h r o w   n e w   E x c e p t i o n ( ' N o   e r e s   m i e m b r o   d e   e s t e   g r u p o ' ) ; 
+ 
+                 } 
+ 
+ 
+ 
+                 / /   V e r i f i c a r   s i   e s   a d m i n   d e l   g r u p o 
+ 
+                 i f   ( $ p a r t i c i p a n t [ ' r o l e ' ]   ! = =   ' a d m i n ' )   { 
+ 
+                         / /   A q u � �   p o d r � � a s   a g r e g a r   l � � g i c a   p a r a   p e r m i t i r   a   c u a l q u i e r   m i e m b r o   a g r e g a r   s i   a s � �   s e   d e s e a 
+ 
+                         / /   P o r   a h o r a ,   s o l o   a d m i n s   d e l   g r u p o 
+ 
+                         t h r o w   n e w   E x c e p t i o n ( ' S o l o   l o s   a d m i n i s t r a d o r e s   d e l   g r u p o   p u e d e n   a g r e g a r   m i e m b r o s ' ) ; 
+ 
+                 } 
+ 
+ 
+ 
+                 / /   3 .   V e r i f i c a r   s i   e l   n u e v o   m i e m b r o   y a   e s t � �   e n   e l   g r u p o 
+ 
+                 $ s t m t   =   $ p d o - > p r e p a r e ( " 
+ 
+                         S E L E C T   i d ,   i s _ a c t i v e   
+ 
+                         F R O M   c h a t _ p a r t i c i p a n t s   
+ 
+                         W H E R E   c o n v e r s a t i o n _ i d   =   ?   A N D   u s e r _ i d   =   ? 
+ 
+                 " ) ; 
+ 
+                 $ s t m t - > e x e c u t e ( [ $ c o n v e r s a t i o n I d ,   $ n e w M e m b e r I d ] ) ; 
+ 
+                 $ e x i s t i n g M e m b e r   =   $ s t m t - > f e t c h ( ) ; 
+ 
+ 
+ 
+                 i f   ( $ e x i s t i n g M e m b e r   & &   $ e x i s t i n g M e m b e r [ ' i s _ a c t i v e ' ] )   { 
+ 
+                         t h r o w   n e w   E x c e p t i o n ( ' E l   u s u a r i o   y a   e s   m i e m b r o   d e l   g r u p o ' ) ; 
+ 
+                 } 
+ 
+ 
+ 
+                 / /   4 .   A g r e g a r   o   r e a c t i v a r   m i e m b r o 
+ 
+                 i f   ( $ e x i s t i n g M e m b e r )   { 
+ 
+                         / /   R e a c t i v a r 
+ 
+                         $ s t m t   =   $ p d o - > p r e p a r e ( " 
+ 
+                                 U P D A T E   c h a t _ p a r t i c i p a n t s   
+ 
+                                 S E T   i s _ a c t i v e   =   1 ,   j o i n e d _ a t   =   N O W ( ) ,   r o l e   =   ' m e m b e r ' 
+ 
+                                 W H E R E   i d   =   ? 
+ 
+                         " ) ; 
+ 
+                         $ s t m t - > e x e c u t e ( [ $ e x i s t i n g M e m b e r [ ' i d ' ] ] ) ; 
+ 
+                 }   e l s e   { 
+ 
+                         / /   I n s e r t a r   n u e v o 
+ 
+                         $ s t m t   =   $ p d o - > p r e p a r e ( " 
+ 
+                                 I N S E R T   I N T O   c h a t _ p a r t i c i p a n t s   ( c o n v e r s a t i o n _ i d ,   u s e r _ i d ,   r o l e ,   j o i n e d _ a t ) 
+ 
+                                 V A L U E S   ( ? ,   ? ,   ' m e m b e r ' ,   N O W ( ) ) 
+ 
+                         " ) ; 
+ 
+                         $ s t m t - > e x e c u t e ( [ $ c o n v e r s a t i o n I d ,   $ n e w M e m b e r I d ] ) ; 
+ 
+                 } 
+ 
+ 
+ 
+                 / /   5 .   O b t e n e r   n o m b r e   d e l   n u e v o   m i e m b r o   p a r a   e l   m e n s a j e   d e l   s i s t e m a 
+ 
+                 $ s t m t   =   $ p d o - > p r e p a r e ( " S E L E C T   f u l l _ n a m e   F R O M   u s e r s   W H E R E   i d   =   ? " ) ; 
+ 
+                 $ s t m t - > e x e c u t e ( [ $ n e w M e m b e r I d ] ) ; 
+ 
+                 $ n e w M e m b e r N a m e   =   $ s t m t - > f e t c h C o l u m n ( ) ; 
+ 
+ 
+ 
+                 / /   6 .   I n s e r t a r   m e n s a j e   d e l   s i s t e m a 
+ 
+                 $ s y s t e m M e s s a g e   =   " a � � a d i � �   a   { $ n e w M e m b e r N a m e }   a l   g r u p o " ; 
+ 
+                 $ s t m t   =   $ p d o - > p r e p a r e ( " 
+ 
+                         I N S E R T   I N T O   c h a t _ m e s s a g e s   ( c o n v e r s a t i o n _ i d ,   u s e r _ i d ,   m e s s a g e _ t e x t ,   m e s s a g e _ t y p e ) 
+ 
+                         V A L U E S   ( ? ,   ? ,   ? ,   ' s y s t e m ' ) 
+ 
+                 " ) ; 
+ 
+                 $ s t m t - > e x e c u t e ( [ $ c o n v e r s a t i o n I d ,   $ u s e r I d ,   $ s y s t e m M e s s a g e ] ) ; 
+ 
+                 $ m e s s a g e I d   =   $ p d o - > l a s t I n s e r t I d ( ) ; 
+ 
+ 
+ 
+                 / /   7 .   N o t i f i c a r   a   t o d o s   l o s   m i e m b r o s   ( i n c l u y e n d o   a l   n u e v o ) 
+ 
+                 / /   ( L a   l � � g i c a   d e   n o t i f i c a c i o n e s   p o d r � � a   s e r   m � � s   c o m p l e j a ,   p e r o   e s t o   e s   b � � s i c o ) 
+ 
+                 / /   P o d r � � a m o s   r e u t i l i z a r   l a   l � � g i c a   d e   s e n d M e s s a g e   o   h a c e r l o   a q u � � 
+ 
+                 
+ 
+                 $ p d o - > c o m m i t ( ) ; 
+ 
+ 
+ 
+                 e c h o   j s o n _ e n c o d e ( [ ' s u c c e s s '   = >   t r u e ] ) ; 
+ 
+ 
+ 
+         }   c a t c h   ( E x c e p t i o n   $ e )   { 
+ 
+                 $ p d o - > r o l l B a c k ( ) ; 
+ 
+                 h t t p _ r e s p o n s e _ c o d e ( 4 0 0 ) ; 
+ 
+                 e c h o   j s o n _ e n c o d e ( [ ' s u c c e s s '   = >   f a l s e ,   ' e r r o r '   = >   $ e - > g e t M e s s a g e ( ) ] ) ; 
+ 
+         } 
+ 
+ } 
+ 
+ 

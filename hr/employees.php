@@ -200,6 +200,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
     }
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reinstate_employee'])) {
+    $employeeId = (int)($_POST['employee_id'] ?? 0);
+    try {
+        $stmt = $pdo->prepare("UPDATE employees SET employment_status = 'ACTIVE', termination_date = NULL, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$employeeId]);
+        $successMsg = "Empleado reinstalado correctamente.";
+    } catch (Exception $e) {
+        $errorMsg = "Error al reinstalar empleado: " . $e->getMessage();
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_employee'])) {
+    $employeeId = (int)($_POST['employee_id'] ?? 0);
+    try {
+        $stmt = $pdo->prepare("DELETE FROM employees WHERE id = ?");
+        $stmt->execute([$employeeId]);
+        $successMsg = "Empleado eliminado correctamente.";
+    } catch (Exception $e) {
+        $errorMsg = "No se pudo eliminar el empleado.";
+    }
+}
+
 // Get filter parameters
 $statusFilter = $_GET['status'] ?? 'all';
 $departmentFilter = $_GET['department'] ?? 'all';
@@ -231,6 +253,8 @@ $params = [];
 if ($statusFilter !== 'all') {
     $query .= " AND e.employment_status = ?";
     $params[] = strtoupper($statusFilter);
+} else {
+    $query .= " AND e.employment_status <> 'TERMINATED'";
 }
 
 if ($departmentFilter !== 'all') {
@@ -284,6 +308,27 @@ $stats = [
     'trial' => $pdo->query("SELECT COUNT(*) FROM employees WHERE employment_status = 'TRIAL'")->fetchColumn(),
     'terminated' => $pdo->query("SELECT COUNT(*) FROM employees WHERE employment_status = 'TERMINATED'")->fetchColumn(),
 ];
+
+$terminatedEmployees = $pdo->query("
+    SELECT e.*, 
+           CONCAT(e.first_name, ' ', e.last_name) as full_name,
+           u.username, u.compensation_type, u.hourly_rate, u.hourly_rate_dop, 
+           u.monthly_salary, u.monthly_salary_dop, u.daily_salary_usd, u.daily_salary_dop,
+           u.preferred_currency, u.role, d.name as department_name,
+           b.name as bank_name,
+           c.name as campaign_name, c.code as campaign_code, c.color as campaign_color,
+           s.full_name as supervisor_name,
+           DATEDIFF(CURDATE(), e.hire_date) as days_employed,
+           YEAR(CURDATE()) - YEAR(e.birth_date) as age
+    FROM employees e
+    JOIN users u ON u.id = e.user_id
+    LEFT JOIN departments d ON d.id = e.department_id
+    LEFT JOIN banks b ON b.id = e.bank_id
+    LEFT JOIN campaigns c ON c.id = e.campaign_id
+    LEFT JOIN users s ON s.id = e.supervisor_id
+    WHERE e.employment_status = 'TERMINATED'
+    ORDER BY e.termination_date DESC, e.last_name, e.first_name
+")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -316,6 +361,10 @@ $stats = [
                     <i class="fas fa-user-plus"></i>
                     Nuevo Empleado
                 </a>
+                <button type="button" class="btn-secondary" onclick="openTerminatedEmployees()">
+                    <i class="fas fa-user-times"></i>
+                    Terminados (<?= $stats['terminated'] ?>)
+                </button>
                 <a href="index.php" class="btn-secondary">
                     <i class="fas fa-arrow-left"></i>
                     Volver a HR
@@ -967,6 +1016,33 @@ $stats = [
         })();
         </script>
 
+        <script>
+        function openTerminatedEmployees() {
+            const modal = document.getElementById('terminatedEmployeesModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+        function closeTerminatedEmployees() {
+            const modal = document.getElementById('terminatedEmployeesModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('terminatedEmployeesModal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeTerminatedEmployees();
+                    }
+                });
+            }
+        });
+        </script>
+
         <!-- Employees Grid -->
         <div class="glass-card">
             <h2 class="text-xl font-semibold text-white mb-4">
@@ -1083,6 +1159,80 @@ $stats = [
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <div id="terminatedEmployeesModal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="glass-card w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl relative max-h-[85vh] flex flex-col rounded-2xl border border-white/10 shadow-2xl">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 sticky top-0 bg-slate-900/70 backdrop-blur z-10">
+                <h3 class="text-xl font-semibold text-white">
+                    <i class="fas fa-user-times text-red-400 mr-2"></i>
+                    Empleados Terminados
+                </h3>
+                <button type="button" class="text-slate-400 hover:text-white" onclick="closeTerminatedEmployees()">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+            <?php if (empty($terminatedEmployees)): ?>
+                <p class="text-slate-400 text-center py-8">No hay empleados terminados.</p>
+            <?php else: ?>
+                <div class="overflow-x-auto">
+                    <table class="table-auto text-sm w-full min-w-[750px]">
+                        <thead class="sticky top-0 bg-slate-900/80 backdrop-blur border-b border-white/10">
+                            <tr>
+                                <th class="text-left p-3 text-slate-300 font-medium">Colaborador</th>
+                                <th class="text-left p-3 text-slate-300 font-medium">Código</th>
+                                <th class="text-left p-3 text-slate-300 font-medium">Departamento</th>
+                                <th class="text-left p-3 text-slate-300 font-medium">Fecha Terminación</th>
+                                <th class="text-left p-3 text-slate-300 font-medium">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($terminatedEmployees as $emp): ?>
+                                <tr class="border-b border-slate-800/60 hover:bg-slate-800/40">
+                                    <td class="p-3 text-white">
+                                        <?= htmlspecialchars(($emp['first_name'] ?? '') . ' ' . ($emp['last_name'] ?? '')) ?>
+                                    </td>
+                                    <td class="p-3 text-slate-300">
+                                        <?= htmlspecialchars($emp['employee_code'] ?? '') ?>
+                                    </td>
+                                    <td class="p-3 text-slate-300">
+                                        <?= htmlspecialchars($emp['department_name'] ?? '') ?>
+                                    </td>
+                                    <td class="p-3 text-slate-300">
+                                        <?= !empty($emp['termination_date']) ? date('d/m/Y', strtotime($emp['termination_date'])) : '—' ?>
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="flex flex-wrap gap-2 items-center">
+                                            <a href="employee_profile.php?id=<?= (int)$emp['id'] ?>" class="btn-secondary text-xs px-2 py-1">
+                                                <i class="fas fa-eye"></i> Ver
+                                            </a>
+                                            <button type="button" onclick="editEmployee(this)" data-employee='<?= json_encode($emp) ?>' class="btn-primary text-xs px-2 py-1">
+                                                <i class="fas fa-edit"></i> Editar
+                                            </button>
+                                            <form method="POST" onsubmit="return confirm('¿Reintegrar este empleado?')">
+                                                <input type="hidden" name="employee_id" value="<?= (int)$emp['id'] ?>">
+                                                <button type="submit" name="reinstate_employee" value="1" class="btn-secondary text-xs px-2 py-1">
+                                                    <i class="fas fa-undo"></i> Reintegrar
+                                                </button>
+                                            </form>
+                                            <form method="POST" onsubmit="return confirm('¿Eliminar permanentemente este empleado?')">
+                                                <input type="hidden" name="employee_id" value="<?= (int)$emp['id'] ?>">
+                                                <button type="submit" name="delete_employee" value="1" class="btn-secondary text-xs text-red-400 px-2 py-1">
+                                                    <i class="fas fa-trash"></i> Eliminar
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+            </div>
         </div>
     </div>
 

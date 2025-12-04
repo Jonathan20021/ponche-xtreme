@@ -33,6 +33,14 @@ if (!$employee) {
     exit;
 }
 
+$prevStmt = $pdo->prepare("SELECT id FROM employees WHERE id < ? ORDER BY id DESC LIMIT 1");
+$prevStmt->execute([$employeeId]);
+$prevId = $prevStmt->fetchColumn();
+
+$nextStmt = $pdo->prepare("SELECT id FROM employees WHERE id > ? ORDER BY id ASC LIMIT 1");
+$nextStmt->execute([$employeeId]);
+$nextId = $nextStmt->fetchColumn();
+
 // Get vacation balance
 $vacBalance = $pdo->prepare("SELECT * FROM vacation_balances WHERE employee_id = ? AND year = YEAR(CURDATE())");
 $vacBalance->execute([$employeeId]);
@@ -74,6 +82,30 @@ $documentCount = $docCount->fetchColumn();
                     <h1 class="text-3xl font-bold text-white">Perfil de Empleado</h1>
                     <p class="text-slate-400"><?= htmlspecialchars($employee['employee_code']) ?></p>
                 </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <?php if (!empty($prevId)): ?>
+                    <a href="employee_profile.php?id=<?= (int)$prevId ?>" 
+                       class="h-10 w-10 rounded-md bg-slate-700/40 border border-white/20 text-white flex items-center justify-center hover:bg-slate-600/50 hover:border-white/30 hover:shadow-md transition transform hover:scale-105" 
+                       title="Anterior">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                <?php else: ?>
+                    <span class="h-10 w-10 rounded-md bg-slate-700/20 border border-white/10 text-slate-300 flex items-center justify-center opacity-50 cursor-not-allowed" aria-disabled="true" title="Anterior">
+                        <i class="fas fa-chevron-left"></i>
+                    </span>
+                <?php endif; ?>
+                <?php if (!empty($nextId)): ?>
+                    <a href="employee_profile.php?id=<?= (int)$nextId ?>" 
+                       class="h-10 w-10 rounded-md bg-slate-700/40 border border-white/20 text-white flex items-center justify-center hover:bg-slate-600/50 hover:border-white/30 hover:shadow-md transition transform hover:scale-105" 
+                       title="Siguiente">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                <?php else: ?>
+                    <span class="h-10 w-10 rounded-md bg-slate-700/20 border border-white/10 text-slate-300 flex items-center justify-center opacity-50 cursor-not-allowed" aria-disabled="true" title="Siguiente">
+                        <i class="fas fa-chevron-right"></i>
+                    </span>
+                <?php endif; ?>
             </div>
         </div>
 
