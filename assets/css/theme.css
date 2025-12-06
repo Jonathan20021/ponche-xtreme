@@ -385,9 +385,14 @@ button:hover,
 }
 
 .metric-card .value {
-    font-size: clamp(1.8rem, 3vw, 2.6rem);
+    font-size: clamp(1.4rem, 2.2vw, 2rem);
     font-weight: 700;
     color: var(--text-primary);
+    line-height: 1.05;
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .badge {
@@ -932,7 +937,7 @@ form .form-group + .form-group {
     border-radius: var(--radius-lg);
     background: rgba(15, 23, 42, 0.78);
     border: 1px solid rgba(148, 163, 184, 0.18);
-    overflow: hidden;
+    overflow: visible;
 }
 
 .metric-card::before {

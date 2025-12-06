@@ -54,6 +54,7 @@ $sections = [
     
     // Manager
     'manager_dashboard' => ['label' => 'Monitor Administrativos', 'category' => 'Gerencia', 'icon' => 'fa-user-tie', 'description' => 'Monitor en tiempo real del personal administrativo (todos los roles excepto agentes)'],
+    'executive_dashboard' => ['label' => 'Dashboard Ejecutivo', 'category' => 'Gerencia', 'icon' => 'fa-chart-pie', 'description' => 'Dashboard completo para gerencia general con vista de nómina, costos por campaña y monitor en tiempo real'],
     
     // Chat
     'chat_admin' => ['label' => 'Administración de Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comments', 'description' => 'Gestión de permisos y monitoreo de conversaciones de chat'],
