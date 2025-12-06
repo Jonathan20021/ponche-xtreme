@@ -273,6 +273,7 @@ $recentVacations = $pdo->query("
             </div>
         </div>
 
+        <?php /* ?>
         <!-- Real-Time Employee Monitor -->
         <div class="monitor-summary-card mb-6">
             <div class="flex items-center justify-between mb-4">
@@ -418,6 +419,7 @@ $recentVacations = $pdo->query("
                 </div>
             </div>
         </div>
+        <?php */ ?>
 
         <!-- Module Cards -->
 
@@ -604,6 +606,7 @@ $recentVacations = $pdo->query("
     </div>
 
     <?php include '../footer.php'; ?>
+    <?php /* ?>
     <script>
         let lastData = null;
         let allEmployees = [];
@@ -1319,5 +1322,6 @@ $recentVacations = $pdo->query("
             return `${h}h ${m}m`;
         }
     </script>
+    <?php */ ?>
 </body>
 </html>
