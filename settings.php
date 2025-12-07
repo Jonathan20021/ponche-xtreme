@@ -14,6 +14,7 @@ $sections = [
     // Core System
     'dashboard' => ['label' => 'Dashboard', 'category' => 'Sistema Principal', 'icon' => 'fa-gauge', 'description' => 'Panel principal del sistema'],
     'settings' => ['label' => 'Configuración', 'category' => 'Sistema Principal', 'icon' => 'fa-sliders-h', 'description' => 'Configuración general del sistema'],
+    'system_settings' => ['label' => 'Configuracion del Sistema', 'category' => 'Sistema Principal', 'icon' => 'fa-cog', 'description' => 'Opciones globales y parametros avanzados del sistema'],
     'activity_logs' => ['label' => 'Logs de Actividad', 'category' => 'Sistema Principal', 'icon' => 'fa-history', 'description' => 'Registro completo de todas las acciones del sistema'],
     'login_logs' => ['label' => 'Logs de Acceso', 'category' => 'Sistema Principal', 'icon' => 'fa-shield-alt', 'description' => 'Historial de inicios de sesión'],
     
@@ -45,6 +46,11 @@ $sections = [
     'hr_job_postings' => ['label' => 'Gestión de Vacantes', 'category' => 'Recursos Humanos', 'icon' => 'fa-briefcase', 'description' => 'Crear y administrar vacantes de empleo'],
     'manage_campaigns' => ['label' => 'Gestión de Campañas', 'category' => 'Recursos Humanos', 'icon' => 'fa-bullhorn', 'description' => 'Crear, editar y gestionar campañas de agentes y supervisores'],
     
+    // Helpdesk
+    'helpdesk' => ['label' => 'Dashboard Helpdesk', 'category' => 'Helpdesk', 'icon' => 'fa-headset', 'description' => 'Panel de tickets y asignaciones'],
+    'helpdesk_tickets' => ['label' => 'Tickets', 'category' => 'Helpdesk', 'icon' => 'fa-ticket-alt', 'description' => 'CreaciИn y seguimiento de tickets'],
+    'helpdesk_suggestions' => ['label' => 'Buzon de Sugerencias', 'category' => 'Helpdesk', 'icon' => 'fa-lightbulb', 'description' => 'Envio y gestiИn de sugerencias'],
+
     // Agents
     'agent_dashboard' => ['label' => 'Dashboard de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-chart-bar', 'description' => 'Panel para agentes'],
     'agent_records' => ['label' => 'Registros de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-list', 'description' => 'Registros de agentes'],
@@ -57,7 +63,8 @@ $sections = [
     'executive_dashboard' => ['label' => 'Dashboard Ejecutivo', 'category' => 'Gerencia', 'icon' => 'fa-chart-pie', 'description' => 'Dashboard completo para gerencia general con vista de nómina, costos por campaña y monitor en tiempo real'],
     
     // Chat
-    'chat_admin' => ['label' => 'Administración de Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comments', 'description' => 'Gestión de permisos y monitoreo de conversaciones de chat'],
+    'chat' => ['label' => 'Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comment-dots', 'description' => 'Acceso general al modulo de chat'],
+    'chat_admin' => ['label' => 'Administraci?n de Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comments', 'description' => 'Gesti?n de permisos y monitoreo de conversaciones de chat'],
     'chat_mass_message' => ['label' => 'Mensajes Masivos', 'category' => 'Comunicaciones', 'icon' => 'fa-bullhorn', 'description' => 'Enviar mensajes masivos a todos los usuarios del sistema']
 ];
 

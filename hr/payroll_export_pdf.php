@@ -26,7 +26,11 @@ if (!$period) {
 }
 
 // Get deduction rates
-$deductionRates = $pdo->query("SELECT code, employee_percentage, employer_percentage FROM payroll_deduction_config")->fetchAll(PDO::FETCH_KEY_PAIR);
+$ratesStmt = $pdo->query("SELECT code, employee_percentage, employer_percentage FROM payroll_deduction_config");
+$deductionRates = [];
+while ($row = $ratesStmt->fetch(PDO::FETCH_ASSOC)) {
+    $deductionRates[$row['code']] = $row;
+}
 
 // Get payroll records
 $recordsStmt = $pdo->prepare("
@@ -205,8 +209,8 @@ ob_start();
                 <th>Empleado</th>
                 <th>Cédula</th>
                 <th class="text-right">Salario Bruto</th>
-                <th class="text-right">AFP (<?= number_format($deductionRates['AFP'], 2) ?>%)</th>
-                <th class="text-right">SFS (<?= number_format($deductionRates['SFS'], 2) ?>%)</th>
+                <th class="text-right">AFP (<?= number_format($deductionRates['AFP']['employee_percentage'], 2) ?>%)</th>
+                <th class="text-right">SFS (<?= number_format($deductionRates['SFS']['employee_percentage'], 2) ?>%)</th>
                 <th class="text-right">ISR</th>
                 <th class="text-right">Otros</th>
                 <th class="text-right">Total Desc.</th>
@@ -254,22 +258,22 @@ ob_start();
         <tbody>
             <tr>
                 <td>AFP Patronal</td>
-                <td class="text-right"><?= number_format($deductionRates['AFP'], 2) ?>%</td>
+                <td class="text-right"><?= number_format($deductionRates['AFP']['employer_percentage'], 2) ?>%</td>
                 <td class="text-right"><?= formatDOP($totals['afp_employer']) ?></td>
             </tr>
             <tr>
                 <td>SFS Patronal</td>
-                <td class="text-right"><?= number_format($deductionRates['SFS'], 2) ?>%</td>
+                <td class="text-right"><?= number_format($deductionRates['SFS']['employer_percentage'], 2) ?>%</td>
                 <td class="text-right"><?= formatDOP($totals['sfs_employer']) ?></td>
             </tr>
             <tr>
                 <td>Seguro de Riesgos Laborales (SRL)</td>
-                <td class="text-right"><?= number_format($deductionRates['SRL'], 2) ?>%</td>
+                <td class="text-right"><?= number_format($deductionRates['SRL']['employer_percentage'], 2) ?>%</td>
                 <td class="text-right"><?= formatDOP($totals['srl_employer']) ?></td>
             </tr>
             <tr>
                 <td>INFOTEP</td>
-                <td class="text-right"><?= number_format($deductionRates['INFOTEP'], 2) ?>%</td>
+                <td class="text-right"><?= number_format($deductionRates['INFOTEP']['employer_percentage'], 2) ?>%</td>
                 <td class="text-right"><?= formatDOP($totals['infotep_employer']) ?></td>
             </tr>
             <tr class="totals-row">
