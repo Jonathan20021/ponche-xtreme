@@ -78,6 +78,7 @@ try {
         )
         WHERE u.is_active = 1
         AND UPPER(u.role) LIKE '%AGENT%'
+        AND e.employment_status IN ('ACTIVE', 'TRIAL')
     ";
     
     // Si es supervisor, agregar filtro de campañas O supervisor asignado
