@@ -3,6 +3,7 @@ session_start();
 require_once '../db.php';
 require_once 'payroll_functions.php';
 require_once '../lib/logging_functions.php';
+require_once '../lib/work_hours_calculator.php';
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
@@ -95,17 +96,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $userId = $emp['user_id'];
             $employeeId = $emp['id'];
             
-            // Calculate hours from attendance - only count paid punch types
-            // Build the IN clause for paid types
+            // Calculate hours from attendance.
+            // NOTE: For precision consistency with /records and the Daily Attendance Report,
+            // we must fetch ALL punch types (paid and non-paid) to correctly close paid intervals.
             if (empty($paidTypes)) {
                 // Si no hay tipos pagados configurados, saltar este empleado
                 continue;
             }
-            
-            $paidTypesPlaceholders = implode(',', array_fill(0, count($paidTypes), '?'));
-            $paidTypesUpper = array_map('strtoupper', $paidTypes);
-            
-            // Get all punches for the period (only paid types)
+
+            $paidTypeSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', $paidTypes)));
+
+            // Get all punches for the period (ALL types)
             $punchesStmt = $pdo->prepare("
                 SELECT 
                     id,
@@ -115,12 +116,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 FROM attendance
                 WHERE user_id = ?
                 AND DATE(timestamp) BETWEEN ? AND ?
-                AND UPPER(type) IN ($paidTypesPlaceholders)
                 ORDER BY timestamp ASC
             ");
-            
-            $params = array_merge([$userId, $period['start_date'], $period['end_date']], $paidTypesUpper);
-            $punchesStmt->execute($params);
+
+            $punchesStmt->execute([$userId, $period['start_date'], $period['end_date']]);
             $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
             
             $totalRegularHours = 0;
@@ -138,42 +137,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             
             // Calculate hours for each day
             foreach ($punchesByDate as $date => $dayPunches) {
-                $totalSecondsWorked = 0;
-                
-                // Calculate using INTERVAL logic (paid state periods)
-                $paidTypesUpper = array_map('strtoupper', $paidTypes);
-                $inPaidState = false;
-                $paidStartTime = null;
-                $lastPaidPunchTime = null;
-                
-                foreach ($dayPunches as $i => $punch) {
-                    $punchTime = strtotime($punch['timestamp']);
-                    $punchType = strtoupper($punch['type']);
-                    $isPaid = in_array($punchType, $paidTypesUpper);
-                    
-                    if ($isPaid) {
-                        $lastPaidPunchTime = $punchTime;
-                        
-                        if (!$inPaidState) {
-                            // Start of paid period
-                            $paidStartTime = $punchTime;
-                            $inPaidState = true;
-                        }
-                    } elseif (!$isPaid && $inPaidState) {
-                        // End of paid period
-                        if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
-                            $totalSecondsWorked += ($lastPaidPunchTime - $paidStartTime);
-                        }
-                        $inPaidState = false;
-                        $paidStartTime = null;
-                        $lastPaidPunchTime = null;
-                    }
-                }
-                
-                // If day ends in paid state, count until last paid punch
-                if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
-                    $totalSecondsWorked += ($lastPaidPunchTime - $paidStartTime);
-                }
+                $calc = calculateWorkSecondsFromPunches($dayPunches, $paidTypeSlugs);
+                $totalSecondsWorked = (int) ($calc['work_seconds'] ?? 0);
                 
                 // Convert to hours
                 if ($totalSecondsWorked > 0) {

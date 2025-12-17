@@ -34,10 +34,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permission']))
     } else {
         try {
             $insertStmt = $pdo->prepare("
-                INSERT INTO permission_requests (employee_id, permission_type, start_date, end_date, reason, status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'PENDING', NOW())
+                INSERT INTO permission_requests (employee_id, user_id, request_type, start_date, end_date, total_days, reason, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', NOW())
             ");
-            $insertStmt->execute([$employeeId, $permissionType, $startDate, $endDate, $reason]);
+
+            $start = new DateTime($startDate);
+            $end = new DateTime($endDate);
+            $totalDays = $start->diff($end)->days + 1;
+
+            $insertStmt->execute([$employeeId, $user_id, strtoupper($permissionType), $startDate, $endDate, $totalDays, $reason]);
             $successMsg = "Solicitud de permiso enviada correctamente. Será revisada por Recursos Humanos.";
         } catch (Exception $e) {
             $errorMsg = "Error al enviar la solicitud: " . $e->getMessage();
@@ -142,7 +147,7 @@ include '../header_agent.php';
                         <tr class="border-b border-slate-800 hover:bg-slate-800/50">
                             <td class="py-3 px-4">
                                 <span class="px-2 py-1 rounded text-xs bg-blue-500/20 text-blue-300">
-                                    <?= htmlspecialchars($req['permission_type']) ?>
+                                    <?= htmlspecialchars($req['request_type'] ?? '') ?>
                                 </span>
                             </td>
                             <td class="py-3 px-4 text-sm">

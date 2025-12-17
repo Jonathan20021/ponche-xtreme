@@ -169,6 +169,12 @@ $html .= <<<HTML
         <p style="margin-top: 30px;">Colaborador: <strong>$employeeName</strong></p>
         <p>Cédula: <strong>$idCard</strong></p>
         <p>Fecha: <strong>$day de $month de $year</strong></p>
+
+        <div style="margin-top: 35px;">
+            <p style="margin-bottom: 8px;"><strong>Firma del empleado:</strong></p>
+            <div class="signature-line"></div>
+            <p style="margin-top: 0;">$employeeName</p>
+        </div>
         
         <p style="margin-top: 40px;">Por Evallish SRL: <strong>Hugo Antonio Hidalgo Núñez</strong></p>
         <p>Cargo: <strong>Gerente General</strong></p>
