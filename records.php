@@ -228,6 +228,15 @@ $user_filter = trim($_GET['user'] ?? '');
 $date_filter = $_GET['dates'] ?? '';
 $type_filter_input = $_GET['type'] ?? '';
 $type_filter = $type_filter_input !== '' ? sanitizeAttendanceTypeSlug($type_filter_input) : '';
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = (int)($_GET['per_page'] ?? 200);
+if ($perPage <= 0) {
+    $perPage = 200;
+}
+if ($perPage > 1000) {
+    $perPage = 1000;
+}
+$offset = ($page - 1) * $perPage;
 $dateValues = [];
 $datePlaceholders = '';
 
@@ -236,7 +245,30 @@ if ($type_filter !== '' && !isset($attendanceTypeMap[$type_filter])) {
 }
 
 if ($date_filter) {
-    $dateValues = array_values(array_filter(array_map('trim', explode(',', $date_filter))));
+    // daterangepicker usually sends "YYYY-MM-DD - YYYY-MM-DD"
+    if (strpos($date_filter, ' - ') !== false) {
+        $parts = explode(' - ', $date_filter);
+        if (count($parts) === 2) {
+            $startDate = trim($parts[0]);
+            $endDate = trim($parts[1]);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate)) {
+                if ($endDate < $startDate) {
+                    $endDate = $startDate;
+                }
+                $start = new DateTime($startDate);
+                $end = (new DateTime($endDate))->modify('+1 day');
+                $interval = new DateInterval('P1D');
+                $period = new DatePeriod($start, $interval, $end);
+                foreach ($period as $dt) {
+                    $dateValues[] = $dt->format('Y-m-d');
+                }
+            }
+        }
+    } else {
+        // fallback: comma-separated list or single date
+        $dateValues = array_values(array_filter(array_map('trim', explode(',', $date_filter))));
+    }
+
     if (!empty($dateValues)) {
         $datePlaceholders = implode(',', array_fill(0, count($dateValues), '?'));
     }
@@ -327,7 +359,7 @@ if ($type_filter !== '') {
 
 $applySupervisorFilter($query, $params);
 
-$query .= " ORDER BY attendance.timestamp DESC";
+$query .= " ORDER BY attendance.timestamp DESC LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $records = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -409,9 +441,13 @@ if ($type_filter !== '') {
 $applySupervisorFilter($summary_query, $summary_params);
 
 $summary_query .= " ORDER BY users.username COLLATE {$collation}, record_date, attendance.timestamp";
-$summary_stmt = $pdo->prepare($summary_query);
-$summary_stmt->execute($summary_params);
-$raw_summary_rows = $summary_stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+$shouldComputeSummary = (!empty($dateValues) || isset($_GET['compute_summary']));
+$raw_summary_rows = [];
+if ($shouldComputeSummary) {
+    $summary_stmt = $pdo->prepare($summary_query);
+    $summary_stmt->execute($summary_params);
+    $raw_summary_rows = $summary_stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
 
 $work_summary = [];
 $currentGroup = null;
@@ -573,6 +609,18 @@ foreach ($raw_summary_rows as $row) {
 }
 
 $finalizeSummaryGroup($currentGroup);
+
+// Si no estamos computando el resumen, mantener estructuras vacías para evitar bloquear la UI.
+if (!$shouldComputeSummary) {
+    $work_summary = [];
+    $agent_payments = [];
+    $agentPaymentsTotal = 0;
+    $workSummaryTotal = 0;
+    $paymentTotals = [
+        'USD' => ['work_seconds' => 0, 'overtime_seconds' => 0, 'overtime_payment' => 0.0, 'total_payment' => 0.0, 'count' => 0],
+        'DOP' => ['work_seconds' => 0, 'overtime_seconds' => 0, 'overtime_payment' => 0.0, 'total_payment' => 0.0, 'count' => 0],
+    ];
+}
 
 // Calculate agent payment summary (grouped by agent and date)
 $agent_payments = [];
