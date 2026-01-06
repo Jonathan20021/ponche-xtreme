@@ -19,19 +19,26 @@ try {
     die("Error de conexión a la base de datos: " . $e->getMessage());
 }
 
-// MySQLi connection for helpdesk and other modules
-$conn = new mysqli($host, $username, $password, $dbname);
-if ($conn->connect_error) {
-    die("Error de conexión MySQLi: " . $conn->connect_error);
+// MySQLi connection - Lazy loaded
+if (!function_exists('getMysqli')) {
+    function getMysqli() {
+        global $host, $username, $password, $dbname;
+        static $mysqli = null;
+        
+        if ($mysqli === null) {
+            $mysqli = new mysqli($host, $username, $password, $dbname);
+            if ($mysqli->connect_error) {
+                die("Error de conexión MySQLi: " . $mysqli->connect_error);
+            }
+            $mysqli->set_charset("utf8mb4");
+            $mysqli->query("SET time_zone = '-04:00'");
+        }
+        
+        return $mysqli;
+    }
 }
-$conn->set_charset("utf8mb4");
-// Configurar zona horaria de MySQL para coincidir con PHP
-$conn->query("SET time_zone = '-04:00'");
 
 if (!function_exists('getScheduleConfig')) {
-    /**
-     * Returns the active schedule configuration.
-     */
     function getScheduleConfig(PDO $pdo): array
     {
         $stmt = $pdo->prepare("SELECT * FROM schedule_config WHERE id = 1");
@@ -66,6 +73,7 @@ if (!function_exists('getScheduleConfig')) {
         return $config;
     }
 }
+
 
 if (!function_exists('getUserExitTimes')) {
     /**
