@@ -1432,7 +1432,7 @@ class ChatApp {
     }
 
     startPolling() {
-        // Polling cada 2 segundos para nuevos mensajes
+        // Polling cada 5 segundos para nuevos mensajes (aumentado para evitar error 429)
         this.pollInterval = setInterval(() => {
             if (this.currentConversationId) {
                 this.loadMessages();
@@ -1451,7 +1451,7 @@ class ChatApp {
                 }
             }
             this.updateUnreadCount();
-        }, 2000);
+        }, 5000);
     }
 
     async fetchConversations() {
