@@ -622,8 +622,8 @@ $recentVacations = $pdo->query("
             // Initial load
             updateMonitor();
             
-            // Auto-refresh every 5 seconds
-            setInterval(updateMonitor, 5000);
+            // Auto-refresh every 30 seconds (reducido para evitar rate limiting)
+            setInterval(updateMonitor, 30000);
             
             // Update durations every second locally to make it smooth
             setInterval(updateDurations, 1000);

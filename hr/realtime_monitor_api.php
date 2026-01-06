@@ -7,6 +7,10 @@ session_start();
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, must-revalidate');
 
+// Rate limiting para evitar sobrecarga
+require_once __DIR__ . '/../lib/rate_limiter.php';
+enforceRateLimit(120, 60); // 120 requests por minuto máximo
+
 require_once '../db.php';
 
 // Verificar permisos de HR

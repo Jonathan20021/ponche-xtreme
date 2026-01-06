@@ -9,9 +9,13 @@ $username = 'hhempeos_ponche';
 $password = 'Hugo##2025#';
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    // Usar conexión persistente para reducir overhead de conexiones
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password, [
+        PDO::ATTR_PERSISTENT => true,
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false
+    ]);
     $pdo->exec("SET NAMES utf8mb4");
     // Configurar zona horaria de MySQL para coincidir con PHP
     $pdo->exec("SET time_zone = '-04:00'");

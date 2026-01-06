@@ -1217,8 +1217,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function startAutoRefresh() {
-    // Actualizar cada 5 segundos
-    refreshInterval = setInterval(refreshData, 5000);
+    // Actualizar cada 30 segundos (reducido para evitar rate limiting)
+    refreshInterval = setInterval(refreshData, 30000);
 }
 
 function stopAutoRefresh() {
