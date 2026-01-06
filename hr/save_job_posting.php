@@ -11,29 +11,56 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
-    // Insert job posting first
-    $stmt = $pdo->prepare("
-        INSERT INTO job_postings 
-        (title, department, location, employment_type, description, requirements, 
-         responsibilities, salary_range, closing_date, posted_date, created_by, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, 'active')
-    ");
+    if (isset($_POST['id']) && !empty($_POST['id'])) {
+        // Update existing job posting
+        $jobId = $_POST['id'];
+        $stmt = $pdo->prepare("
+            UPDATE job_postings 
+            SET title = ?, department = ?, location = ?, employment_type = ?, 
+                description = ?, requirements = ?, responsibilities = ?, 
+                salary_range = ?, closing_date = ?
+            WHERE id = ?
+        ");
+        
+        $stmt->execute([
+            $_POST['title'],
+            $_POST['department'],
+            $_POST['location'],
+            $_POST['employment_type'],
+            $_POST['description'],
+            $_POST['requirements'] ?? null,
+            $_POST['responsibilities'] ?? null,
+            $_POST['salary_range'] ?? null,
+            !empty($_POST['closing_date']) ? $_POST['closing_date'] : null,
+            $jobId
+        ]);
+        
+        $_SESSION['success_message'] = "Vacante actualizada exitosamente";
+    } else {
+        // Insert new job posting
+        $stmt = $pdo->prepare("
+            INSERT INTO job_postings 
+            (title, department, location, employment_type, description, requirements, 
+             responsibilities, salary_range, closing_date, posted_date, created_by, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, 'active')
+        ");
+        
+        $stmt->execute([
+            $_POST['title'],
+            $_POST['department'],
+            $_POST['location'],
+            $_POST['employment_type'],
+            $_POST['description'],
+            $_POST['requirements'] ?? null,
+            $_POST['responsibilities'] ?? null,
+            $_POST['salary_range'] ?? null,
+            !empty($_POST['closing_date']) ? $_POST['closing_date'] : null,
+            $_SESSION['user_id']
+        ]);
     
-    $stmt->execute([
-        $_POST['title'],
-        $_POST['department'],
-        $_POST['location'],
-        $_POST['employment_type'],
-        $_POST['description'],
-        $_POST['requirements'] ?? null,
-        $_POST['responsibilities'] ?? null,
-        $_POST['salary_range'] ?? null,
-        !empty($_POST['closing_date']) ? $_POST['closing_date'] : null,
-        $_SESSION['user_id']
-    ]);
-
-    $jobId = $pdo->lastInsertId();
-    $_SESSION['success_message'] = "Vacante publicada exitosamente";
+        $jobId = $pdo->lastInsertId();
+        $_SESSION['success_message'] = "Vacante publicada exitosamente";
+    }
 
     // Handle optional banner upload
     if (isset($_FILES['banner_image']) && $_FILES['banner_image']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -82,7 +109,7 @@ try {
         }
     }
 } catch (PDOException $e) {
-    $_SESSION['error_message'] = "Error al publicar la vacante";
+    $_SESSION['error_message'] = "Error al guardar la vacante";
     error_log($e->getMessage());
 } catch (RuntimeException $e) {
     $_SESSION['error_message'] = "Vacante publicada, pero el banner no se pudo guardar: " . $e->getMessage();

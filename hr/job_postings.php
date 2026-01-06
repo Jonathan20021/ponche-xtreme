@@ -228,33 +228,34 @@ require_once '../header.php';
 
 <!-- Add Job Modal -->
 <div id="addJobModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-2 sm:p-4" style="display: none;">
-    <div class="glass-card w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mx-2 sm:mx-4">
-        <form action="save_job_posting.php" method="POST" enctype="multipart/form-data">
-            <div class="flex justify-between items-center mb-4 sm:mb-6 pb-3 sm:pb-4 border-b border-slate-700">
-                <h5 class="text-xl sm:text-2xl font-bold text-white">Nueva Vacante</h5>
+    <div class="glass-card w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-4 flex flex-col">
+        <form action="save_job_posting.php" method="POST" enctype="multipart/form-data" class="flex flex-col h-full">
+            <div class="flex justify-between items-center mb-2 px-4 py-3 border-b border-slate-700 shrink-0">
+                <h5 class="text-xl font-bold text-white">Nueva Vacante</h5>
                 <button type="button" class="text-slate-400 hover:text-white transition-colors p-1" onclick="closeJobModal()">
-                    <i class="fas fa-times text-xl sm:text-2xl"></i>
+                    <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-            <div class="space-y-3 sm:space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            
+            <div class="overflow-y-auto p-4 space-y-3 flex-1">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Título del Puesto *</label>
-                        <input type="text" class="form-input w-full text-sm sm:text-base" name="title" required>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Título del Puesto *</label>
+                        <input type="text" class="form-input w-full text-sm" name="title" required>
                     </div>
                     <div>
-                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Departamento *</label>
-                        <input type="text" class="form-input w-full text-sm sm:text-base" name="department" required>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Departamento *</label>
+                        <input type="text" class="form-input w-full text-sm" name="department" required>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Ubicación *</label>
-                        <input type="text" class="form-input w-full text-sm sm:text-base" name="location" required>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Ubicación *</label>
+                        <input type="text" class="form-input w-full text-sm" name="location" required>
                     </div>
                     <div>
-                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Tipo de Empleo *</label>
-                        <select class="form-input w-full text-sm sm:text-base" name="employment_type" required>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Tipo de Empleo *</label>
+                        <select class="form-input w-full text-sm" name="employment_type" required>
                             <option value="full_time">Tiempo Completo</option>
                             <option value="part_time">Medio Tiempo</option>
                             <option value="contract">Contrato</option>
@@ -263,36 +264,39 @@ require_once '../header.php';
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Descripción *</label>
-                    <textarea class="form-input w-full text-sm sm:text-base" name="description" rows="3" required></textarea>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Descripción *</label>
+                    <textarea class="form-input w-full text-sm" name="description" rows="2" required></textarea>
                 </div>
-                <div>
-                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Requisitos</label>
-                    <textarea class="form-input w-full text-sm sm:text-base" name="requirements" rows="3"></textarea>
-                </div>
-                <div>
-                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Responsabilidades</label>
-                    <textarea class="form-input w-full text-sm sm:text-base" name="responsibilities" rows="3"></textarea>
-                </div>
-                <div class="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-800/30">
-                    <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-2">Banner de la Vacante</label>
-                    <input type="file" class="form-input w-full text-sm sm:text-base file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-indigo-600 file:text-white file:cursor-pointer" name="banner_image" accept="image/png, image/jpeg, image/webp">
-                    <p class="text-xs text-slate-400 mt-2">Se usar�� al compartir la vacante. Formatos: JPG, PNG o WebP. Tama��o m��x. 5MB.</p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Rango Salarial</label>
-                        <input type="text" class="form-input w-full text-sm sm:text-base" name="salary_range" placeholder="RD$25,000 - RD$35,000 DOP">
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Requisitos</label>
+                        <textarea class="form-input w-full text-sm" name="requirements" rows="2"></textarea>
                     </div>
                     <div>
-                        <label class="block text-xs sm:text-sm font-medium text-slate-300 mb-1 sm:mb-2">Fecha de Cierre</label>
-                        <input type="date" class="form-input w-full text-sm sm:text-base" name="closing_date">
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Responsabilidades</label>
+                        <textarea class="form-input w-full text-sm" name="responsibilities" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="border border-slate-700 rounded-lg p-3 bg-slate-800/30">
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Banner de la Vacante</label>
+                    <input type="file" class="form-input w-full text-sm file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-indigo-600 file:text-white file:cursor-pointer" name="banner_image" accept="image/png, image/jpeg, image/webp">
+                    <p class="text-[10px] text-slate-400 mt-1">Formatos: JPG, PNG o WebP. Máx. 5MB.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Rango Salarial</label>
+                        <input type="text" class="form-input w-full text-sm" name="salary_range" placeholder="RD$25,000 - RD$35,000 DOP">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Fecha de Cierre</label>
+                        <input type="date" class="form-input w-full text-sm" name="closing_date">
                     </div>
                 </div>
             </div>
-            <div class="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-700">
-                <button type="button" class="btn-secondary w-full sm:w-auto text-sm sm:text-base py-2" onclick="closeJobModal()">Cancelar</button>
-                <button type="submit" class="btn-primary w-full sm:w-auto text-sm sm:text-base py-2">Publicar Vacante</button>
+
+            <div class="flex justify-end gap-2 px-4 py-3 border-t border-slate-700 shrink-0 bg-slate-800/50">
+                <button type="button" class="btn-secondary text-sm py-1.5" onclick="closeJobModal()">Cancelar</button>
+                <button type="submit" class="btn-primary text-sm py-1.5">Publicar Vacante</button>
             </div>
         </form>
     </div>
