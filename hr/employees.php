@@ -251,8 +251,12 @@ $query = "
 $params = [];
 
 if ($statusFilter !== 'all') {
-    $query .= " AND e.employment_status = ?";
-    $params[] = strtoupper($statusFilter);
+    if ($statusFilter === 'terminated') {
+        $query .= " AND e.employment_status = 'TERMINATED'";
+    } else {
+        $query .= " AND e.employment_status = ?";
+        $params[] = strtoupper($statusFilter);
+    }
 } else {
     $query .= " AND e.employment_status <> 'TERMINATED'";
 }
@@ -363,7 +367,7 @@ $terminatedEmployees = $pdo->query("
                 </a>
                 <button type="button" class="btn-secondary" onclick="openTerminatedEmployees()">
                     <i class="fas fa-user-times"></i>
-                    Terminados (<?= $stats['terminated'] ?>)
+                    Terminados/Eliminados (<?= $stats['terminated'] ?>)
                 </button>
                 <a href="index.php" class="btn-secondary">
                     <i class="fas fa-arrow-left"></i>
@@ -417,7 +421,7 @@ $terminatedEmployees = $pdo->query("
             <div class="glass-card">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-slate-400 text-sm mb-1">Terminados</p>
+                        <p class="text-slate-400 text-sm mb-1">Terminados/Eliminados</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['terminated'] ?></h3>
                     </div>
                     <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
@@ -441,7 +445,7 @@ $terminatedEmployees = $pdo->query("
                         <option value="active" <?= $statusFilter === 'active' ? 'selected' : '' ?>>Activos</option>
                         <option value="trial" <?= $statusFilter === 'trial' ? 'selected' : '' ?>>En Prueba</option>
                         <option value="suspended" <?= $statusFilter === 'suspended' ? 'selected' : '' ?>>Suspendidos</option>
-                        <option value="terminated" <?= $statusFilter === 'terminated' ? 'selected' : '' ?>>Terminados</option>
+                        <option value="terminated" <?= $statusFilter === 'terminated' ? 'selected' : '' ?>>Terminados/Eliminados</option>
                     </select>
                 </div>
                 <div class="form-group flex-1 min-w-[150px]">
@@ -1178,12 +1182,12 @@ $terminatedEmployees = $pdo->query("
         </div>
     </div>
 
-    <div id="terminatedEmployeesModal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="glass-card w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl relative max-h-[85vh] flex flex-col rounded-2xl border border-white/10 shadow-2xl">
+    <div id="terminatedEmployeesModal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
+        <div class="glass-card w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl relative max-h-[85vh] flex flex-col rounded-2xl border border-white/10 shadow-2xl my-6">
             <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 sticky top-0 bg-slate-900/70 backdrop-blur z-10">
                 <h3 class="text-xl font-semibold text-white">
                     <i class="fas fa-user-times text-red-400 mr-2"></i>
-                    Empleados Terminados
+                    Empleados Terminados/Eliminados
                 </h3>
                 <button type="button" class="text-slate-400 hover:text-white" onclick="closeTerminatedEmployees()">
                     <i class="fas fa-times text-lg"></i>
@@ -1192,7 +1196,7 @@ $terminatedEmployees = $pdo->query("
 
             <div class="flex-1 overflow-y-auto">
             <?php if (empty($terminatedEmployees)): ?>
-                <p class="text-slate-400 text-center py-8">No hay empleados terminados.</p>
+                <p class="text-slate-400 text-center py-8">No hay empleados terminados o eliminados.</p>
             <?php else: ?>
                 <div class="overflow-x-auto">
                     <table class="table-auto text-sm w-full min-w-[750px]">

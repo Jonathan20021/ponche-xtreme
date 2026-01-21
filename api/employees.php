@@ -27,8 +27,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Check manage_campaigns permission for quick assign
-if (!userHasPermission('manage_campaigns')) {
+// Check permissions for quick assign
+if (!userHasPermission('hr_employees') && !userHasPermission('manage_campaigns')) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'No tiene permiso para asignar campañas']);
     ob_end_flush();
@@ -50,26 +50,40 @@ try {
             }
             
             // Verify employee exists
-            $checkQuery = $conn->prepare("SELECT id FROM employees WHERE id = ?");
-            $checkQuery->bind_param("i", $employeeId);
-            $checkQuery->execute();
-            if ($checkQuery->get_result()->num_rows === 0) {
+            $checkStmt = $pdo->prepare("SELECT id FROM employees WHERE id = ?");
+            $checkStmt->execute([$employeeId]);
+            if (!$checkStmt->fetchColumn()) {
                 throw new Exception('Empleado no encontrado');
             }
-            
+
             // Update employee
-            $stmt = $conn->prepare("UPDATE employees SET campaign_id = ?, supervisor_id = ?, updated_at = NOW() WHERE id = ?");
-            $stmt->bind_param("iii", $campaignId, $supervisorId, $employeeId);
-            
-            if (!$stmt->execute()) {
-                throw new Exception('Error al actualizar empleado: ' . $conn->error);
+            $updateStmt = $pdo->prepare("
+                UPDATE employees
+                SET campaign_id = :campaign_id,
+                    supervisor_id = :supervisor_id,
+                    updated_at = NOW()
+                WHERE id = :employee_id
+            ");
+            $updateStmt->bindValue(':campaign_id', $campaignId, $campaignId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $updateStmt->bindValue(':supervisor_id', $supervisorId, $supervisorId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $updateStmt->bindValue(':employee_id', $employeeId, PDO::PARAM_INT);
+
+            if (!$updateStmt->execute()) {
+                throw new Exception('Error al actualizar empleado');
             }
-            
+
             // Log the action
-            $logStmt = $conn->prepare("INSERT INTO activity_logs (user_id, action, description, created_at) VALUES (?, 'employee_assign', ?, NOW())");
-            $description = "Asignación rápida para empleado ID: $employeeId";
-            $logStmt->bind_param("is", $userId, $description);
-            $logStmt->execute();
+            $description = "Asignación rápida para empleado ID: {$employeeId}";
+            $logStmt = $pdo->prepare("
+                INSERT INTO activity_logs (user_id, user_name, user_role, module, action, description, created_at)
+                VALUES (?, ?, ?, 'employees', 'employee_assign', ?, NOW())
+            ");
+            $logStmt->execute([
+                $userId,
+                $_SESSION['full_name'] ?? ($_SESSION['username'] ?? 'Usuario'),
+                $_SESSION['role'] ?? 'Desconocido',
+                $description
+            ]);
             
             echo json_encode([
                 'success' => true,

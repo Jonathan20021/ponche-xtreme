@@ -53,6 +53,7 @@ try {
              AND DATE(a2.timestamp) = CURDATE()) as punches_today
         FROM users u
         LEFT JOIN departments d ON d.id = u.department_id
+        LEFT JOIN employees e ON e.user_id = u.id
         LEFT JOIN attendance a ON a.id = (
             SELECT a3.id 
             FROM attendance a3 
@@ -62,6 +63,7 @@ try {
         )
         WHERE u.is_active = 1
         AND u.role != 'agent'
+        AND (e.employment_status IS NULL OR e.employment_status <> 'TERMINATED')
         ORDER BY 
             CASE 
                 WHEN a.timestamp IS NULL THEN 1

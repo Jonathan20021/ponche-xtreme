@@ -37,7 +37,15 @@ if ($job_filter !== 'all') {
 }
 
 if (!empty($search)) {
-    $query .= " AND (a.first_name LIKE :search OR a.last_name LIKE :search OR a.email LIKE :search OR a.application_code LIKE :search)";
+    $query .= " AND (
+        a.first_name LIKE :search
+        OR a.last_name LIKE :search
+        OR CONCAT(a.first_name, ' ', a.last_name) LIKE :search
+        OR CONCAT(a.last_name, ' ', a.first_name) LIKE :search
+        OR a.email LIKE :search
+        OR a.phone LIKE :search
+        OR a.application_code LIKE :search
+    )";
     $params['search'] = "%$search%";
 }
 
