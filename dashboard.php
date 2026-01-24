@@ -5,7 +5,7 @@ include 'db.php';
 ensurePermission('dashboard');
 
 // Consulta para estadisticas generales
-$total_users = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
+$total_users = $pdo->query("SELECT COUNT(*) FROM users WHERE is_active = 1")->fetchColumn();
 $entries_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND DATE(timestamp) = CURDATE()")->fetchColumn();
 $exits_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Exit' AND DATE(timestamp) = CURDATE()")->fetchColumn();
 $active_users = $pdo->query("
