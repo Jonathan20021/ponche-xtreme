@@ -1022,7 +1022,24 @@ $supervisorsList = $pdo->query("
     ORDER BY u.full_name
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-$userStmt = $pdo->query("
+$usersPerPage = 25;
+$usersPage = isset($_GET['users_page']) ? max(1, (int) $_GET['users_page']) : 1;
+$usersTotal = (int) $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
+$usersTotalPages = max(1, (int) ceil($usersTotal / $usersPerPage));
+if ($usersPage > $usersTotalPages) {
+    $usersPage = $usersTotalPages;
+}
+$usersOffset = ($usersPage - 1) * $usersPerPage;
+$usersPageParams = $_GET;
+
+function buildUsersPageUrl(int $page, array $params): string
+{
+    $params['users_page'] = $page;
+    $query = http_build_query($params);
+    return ($query !== '' ? ('?' . $query) : ('?users_page=' . $page)) . '#manage-users-section';
+}
+
+$userStmt = $pdo->prepare("
     SELECT 
         u.id,
         u.username,
@@ -1044,8 +1061,14 @@ $userStmt = $pdo->query("
     LEFT JOIN roles r ON r.name = u.role
     LEFT JOIN departments d ON d.id = u.department_id
     ORDER BY u.is_active DESC, u.username
+    LIMIT :limit OFFSET :offset
 ");
+$userStmt->bindValue(':limit', $usersPerPage, PDO::PARAM_INT);
+$userStmt->bindValue(':offset', $usersOffset, PDO::PARAM_INT);
+$userStmt->execute();
 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+$usersRangeStart = $usersTotal > 0 ? $usersOffset + 1 : 0;
+$usersRangeEnd = $usersOffset + count($users);
 $departmentUsage = [];
 foreach ($users as $userRow) {
     $deptId = isset($userRow['department_id']) ? (int) $userRow['department_id'] : 0;
@@ -1936,8 +1959,39 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
             <form method="POST" class="space-y-4">
                 <input type="hidden" name="action" value="update_users">
-                <div class="responsive-scroll">
-                    <table class="data-table manage-users-table">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p class="text-muted text-xs">
+                        Mostrando <?= (int) $usersRangeStart ?>-<?= (int) $usersRangeEnd ?> de <?= (int) $usersTotal ?> usuarios.
+                    </p>
+                    <?php if ($usersTotalPages > 1): ?>
+                        <nav class="manage-users-pagination" aria-label="Paginacion de usuarios">
+                            <a class="pagination-link <?= $usersPage <= 1 ? 'is-disabled' : '' ?>" href="<?= $usersPage <= 1 ? '#' : buildUsersPageUrl($usersPage - 1, $usersPageParams) ?>" aria-disabled="<?= $usersPage <= 1 ? 'true' : 'false' ?>">
+                                <i class="fas fa-chevron-left"></i>
+                                Anterior
+                            </a>
+                            <?php
+                                $usersPageWindow = 2;
+                                $usersPageStart = max(1, $usersPage - $usersPageWindow);
+                                $usersPageEnd = min($usersTotalPages, $usersPage + $usersPageWindow);
+                            ?>
+                            <?php for ($page = $usersPageStart; $page <= $usersPageEnd; $page++): ?>
+                                <a class="pagination-link <?= $page === $usersPage ? 'is-active' : '' ?>" href="<?= buildUsersPageUrl($page, $usersPageParams) ?>">
+                                    <?= $page ?>
+                                </a>
+                            <?php endfor; ?>
+                            <a class="pagination-link <?= $usersPage >= $usersTotalPages ? 'is-disabled' : '' ?>" href="<?= $usersPage >= $usersTotalPages ? '#' : buildUsersPageUrl($usersPage + 1, $usersPageParams) ?>" aria-disabled="<?= $usersPage >= $usersTotalPages ? 'true' : 'false' ?>">
+                                Siguiente
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </nav>
+                    <?php endif; ?>
+                </div>
+                <div class="table-scroll-shell" data-scroll-shell="manage-users">
+                    <div class="table-scrollbar" data-scrollbar="manage-users" aria-hidden="true">
+                        <div class="table-scrollbar-inner"></div>
+                    </div>
+                    <div class="responsive-scroll" data-scroll-target="manage-users">
+                        <table class="data-table manage-users-table">
                         <thead>
                             <tr>
                                 <th>Estado</th>
@@ -2084,6 +2138,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <?php endif; ?>
                         </tbody>
                     </table>
+                    </div>
                 </div>
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <p class="text-muted text-xs">Actualiza multiples usuarios y luego guarda para aplicar los cambios.</p>
@@ -2619,6 +2674,43 @@ document.addEventListener('DOMContentLoaded', function () {
             selectors: ['#schedule-card']
         }
     ];
+
+    function initTableScrollSync() {
+        const shells = document.querySelectorAll('.table-scroll-shell');
+        shells.forEach(shell => {
+            const scroller = shell.querySelector('.responsive-scroll');
+            const bar = shell.querySelector('.table-scrollbar');
+            const inner = shell.querySelector('.table-scrollbar-inner');
+            if (!scroller || !bar || !inner) {
+                return;
+            }
+
+            const syncWidths = () => {
+                inner.style.width = `${scroller.scrollWidth}px`;
+                bar.scrollLeft = scroller.scrollLeft;
+            };
+
+            syncWidths();
+            scroller.addEventListener('scroll', () => {
+                bar.scrollLeft = scroller.scrollLeft;
+            });
+            bar.addEventListener('scroll', () => {
+                scroller.scrollLeft = bar.scrollLeft;
+            });
+
+            if ('ResizeObserver' in window) {
+                const observer = new ResizeObserver(syncWidths);
+                observer.observe(scroller);
+                if (scroller.firstElementChild) {
+                    observer.observe(scroller.firstElementChild);
+                }
+            } else {
+                window.addEventListener('resize', syncWidths);
+            }
+        });
+    }
+
+    initTableScrollSync();
 
     const firstTarget = document.querySelector(tabConfig[0]?.selectors[0] || '');
     if (!firstTarget) {
@@ -3288,6 +3380,99 @@ document.addEventListener('DOMContentLoaded', function () {
     
     .editable-field:not(:disabled) {
         background-color: rgba(59, 130, 246, 0.15) !important;
+    }
+}
+
+.manage-users-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: flex-end;
+}
+
+.pagination-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(14, 116, 144, 0.12);
+    color: #0f172a;
+    border: 1px solid rgba(14, 116, 144, 0.2);
+    transition: all 0.2s ease;
+}
+
+.pagination-link:hover {
+    background: rgba(14, 116, 144, 0.2);
+}
+
+.pagination-link.is-active {
+    background: #0ea5e9;
+    border-color: #0ea5e9;
+    color: #fff;
+}
+
+.pagination-link.is-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+.table-scroll-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.table-scrollbar {
+    height: 14px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.08);
+    scrollbar-color: rgba(14, 116, 144, 0.6) transparent;
+    scrollbar-width: thin;
+    position: sticky;
+    top: 0.75rem;
+    z-index: 5;
+}
+
+.table-scrollbar-inner {
+    height: 1px;
+}
+
+.table-scrollbar::-webkit-scrollbar {
+    height: 10px;
+}
+
+.table-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(14, 116, 144, 0.6);
+    border-radius: 999px;
+}
+
+.table-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+    .pagination-link {
+        color: #e2e8f0;
+        background: rgba(14, 116, 144, 0.2);
+        border-color: rgba(14, 116, 144, 0.35);
+    }
+
+    .pagination-link.is-active {
+        color: #f8fafc;
+    }
+
+    .table-scrollbar {
+        background: rgba(148, 163, 184, 0.15);
+        scrollbar-color: rgba(56, 189, 248, 0.6) transparent;
+    }
+
+    .table-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(56, 189, 248, 0.6);
     }
 }
 </style>
