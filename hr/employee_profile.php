@@ -84,6 +84,14 @@ $documentCount = $docCount->fetchColumn();
                 </div>
             </div>
             <div class="flex items-center gap-3">
+                <a href="inventory.php?employee_id=<?= (int) $employeeId ?>" class="btn-secondary">
+                    <i class="fas fa-boxes"></i>
+                    Inventario
+                </a>
+                <a href="inventory_assign.php?employee_id=<?= (int) $employeeId ?>" class="btn-secondary">
+                    <i class="fas fa-plus-circle"></i>
+                    Asignar Artículo
+                </a>
                 <?php if (!empty($prevId)): ?>
                     <a href="employee_profile.php?id=<?= (int)$prevId ?>" 
                        class="h-10 w-10 rounded-md bg-slate-700/40 border border-white/20 text-white flex items-center justify-center hover:bg-slate-600/50 hover:border-white/30 hover:shadow-md transition transform hover:scale-105" 

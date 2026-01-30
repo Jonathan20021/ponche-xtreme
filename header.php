@@ -73,6 +73,12 @@ $navItems = [
                 'icon' => 'fa-clipboard-list',
             ],
             [
+                'section' => 'hr_employees',
+                'label' => 'Inventario',
+                'href' => $baseHref . 'hr/inventory.php',
+                'icon' => 'fa-boxes',
+            ],
+            [
                 'section' => 'hr_vacations',
                 'label' => 'Vacaciones',
                 'href' => $baseHref . 'hr/vacations.php',
