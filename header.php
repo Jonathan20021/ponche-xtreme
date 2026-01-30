@@ -6,10 +6,10 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/db.php';
 
 // Detect if we're in a subdirectory first
-$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || 
-               strpos($_SERVER['PHP_SELF'], '/hr/') !== false || 
-               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false ||
-               strpos($_SERVER['PHP_SELF'], '/chat/') !== false);
+$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false ||
+    strpos($_SERVER['PHP_SELF'], '/hr/') !== false ||
+    strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false ||
+    strpos($_SERVER['PHP_SELF'], '/chat/') !== false);
 $baseHref = $isInSubdir ? '../' : '';
 
 $navItems = [
@@ -18,6 +18,7 @@ $navItems = [
     'view_admin_hours' => ['label' => 'Horas Admin', 'href' => $baseHref . 'view_admin_hours.php', 'icon' => 'fa-user-clock'],
     'hr_report' => ['label' => 'Reporte RH', 'href' => $baseHref . 'hr_report.php', 'icon' => 'fa-briefcase'],
     'adherence_report' => ['label' => 'Adherencia', 'href' => $baseHref . 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
+    'wfm_report' => ['label' => 'Reporte WFM', 'href' => $baseHref . 'wfm_report.php', 'icon' => 'fa-chart-area'],
     'operations_dashboard' => ['label' => 'Operaciones', 'href' => $baseHref . 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
     'hr_module' => [
         'label' => 'Recursos Humanos',
@@ -191,10 +192,10 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 
 // Detect if we're in a subdirectory
-$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false || 
-               strpos($_SERVER['PHP_SELF'], '/hr/') !== false || 
-               strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false ||
-               strpos($_SERVER['PHP_SELF'], '/chat/') !== false);
+$isInSubdir = (strpos($_SERVER['PHP_SELF'], '/agents/') !== false ||
+    strpos($_SERVER['PHP_SELF'], '/hr/') !== false ||
+    strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false ||
+    strpos($_SERVER['PHP_SELF'], '/chat/') !== false);
 $assetBase = $isInSubdir ? '../assets' : 'assets';
 $baseHref = $isInSubdir ? '../' : '';
 
@@ -207,12 +208,14 @@ if ($isAuthenticated) {
 ?>
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
@@ -222,95 +225,96 @@ if ($isAuthenticated) {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
     <?php if ($isAuthenticated && userHasPermission('chat')): ?>
-    <script>
-        const currentUserId = <?= (int)$_SESSION['user_id'] ?>;
-        const currentUserRole = <?= json_encode($_SESSION['role'] ?? 'agent') ?>;
-        <?php 
-        // Obtener permisos de chat del usuario
-        $chatPermsStmt = $pdo->prepare("SELECT can_create_groups FROM chat_permissions WHERE user_id = ?");
-        $chatPermsStmt->execute([$_SESSION['user_id']]);
-        $chatPerms = $chatPermsStmt->fetch();
-        $canCreateGroups = $chatPerms ? (bool)$chatPerms['can_create_groups'] : true;
-        ?>
-        const canCreateGroups = <?= json_encode($canCreateGroups) ?>;
-        // Exponer en window para clientes que leen window.currentUserId/canCreateGroups
-        window.currentUserId = currentUserId;
-        window.currentUserRole = currentUserRole;
-        window.canCreateGroups = canCreateGroups;
-    </script>
-    <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js?v=<?= time() ?>" defer></script>
+        <script>
+            const currentUserId = <?= (int) $_SESSION['user_id'] ?>;
+            const currentUserRole = <?= json_encode($_SESSION['role'] ?? 'agent') ?>;
+            <?php
+            // Obtener permisos de chat del usuario
+            $chatPermsStmt = $pdo->prepare("SELECT can_create_groups FROM chat_permissions WHERE user_id = ?");
+            $chatPermsStmt->execute([$_SESSION['user_id']]);
+            $chatPerms = $chatPermsStmt->fetch();
+            $canCreateGroups = $chatPerms ? (bool) $chatPerms['can_create_groups'] : true;
+            ?>
+            const canCreateGroups = <?= json_encode($canCreateGroups) ?>;
+            // Exponer en window para clientes que leen window.currentUserId/canCreateGroups
+            window.currentUserId = currentUserId;
+            window.currentUserRole = currentUserRole;
+            window.canCreateGroups = canCreateGroups;
+        </script>
+        <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js?v=<?= time() ?>" defer></script>
     <?php endif; ?>
     <title>Evallish BPO Control</title>
 </head>
 
 <body class="<?= htmlspecialchars($bodyClass) ?>">
-    <header class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
+    <header
+        class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 border-b border-slate-800 shadow-lg shadow-black/40">
         <div class="max-w-full mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center gap-4">
             <div class="flex items-center justify-between w-full md:w-auto md:flex-shrink-0">
                 <div class="flex items-center gap-2">
-                    <img src="<?= htmlspecialchars($assetBase) ?>/logo.png" 
-                         alt="Evallish BPO Control" 
-                         class="h-8 md:h-9 w-auto object-contain flex-shrink-0"
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                    <div class="h-8 md:h-9 w-8 md:w-9 rounded-xl bg-cyan-500/20 border border-cyan-500/40 items-center justify-center text-cyan-300 hidden flex-shrink-0">
+                    <img src="<?= htmlspecialchars($assetBase) ?>/logo.png" alt="Evallish BPO Control"
+                        class="h-8 md:h-9 w-auto object-contain flex-shrink-0"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                    <div
+                        class="h-8 md:h-9 w-8 md:w-9 rounded-xl bg-cyan-500/20 border border-cyan-500/40 items-center justify-center text-cyan-300 hidden flex-shrink-0">
                         <i class="fas fa-bolt text-base"></i>
                     </div>
                     <h1 class="brand-title text-sm md:text-base font-semibold whitespace-nowrap">Evallish BPO</h1>
                 </div>
                 <button type="button"
-                        class="mobile-nav-toggle md:hidden ml-4 px-3 py-2 rounded-lg bg-slate-800 text-slate-200"
-                        data-nav-toggle
-                        data-nav-target="primary-nav"
-                        aria-controls="primary-nav"
-                        aria-expanded="false">
+                    class="mobile-nav-toggle md:hidden ml-4 px-3 py-2 rounded-lg bg-slate-800 text-slate-200"
+                    data-nav-toggle data-nav-target="primary-nav" aria-controls="primary-nav" aria-expanded="false">
                     <i class="fas fa-bars mr-2"></i>
                     Menú
                 </button>
             </div>
 
-            <nav id="primary-nav" class="main-nav w-full md:w-auto md:flex-1 flex flex-col md:flex-row flex-wrap items-stretch md:items-center justify-start md:justify-end gap-2" data-open="false" data-nav>
+            <nav id="primary-nav"
+                class="main-nav w-full md:w-auto md:flex-1 flex flex-col md:flex-row flex-wrap items-stretch md:items-center justify-start md:justify-end gap-2"
+                data-open="false" data-nav>
                 <?php if ($isAuthenticated): ?>
                     <?php foreach ($navItems as $sectionKey => $item): ?>
                         <?php if (isset($item['children']) && is_array($item['children'])): ?>
                             <?php
-                                $childLinks = [];
-                                foreach ($item['children'] as $child) {
-                                    $childSection = $child['section'] ?? null;
-                                    if ($childSection && !userHasPermission($childSection)) {
-                                        continue;
-                                    }
-                                    $childLinks[] = $child;
-                                }
-                                if (empty($childLinks)) {
+                            $childLinks = [];
+                            foreach ($item['children'] as $child) {
+                                $childSection = $child['section'] ?? null;
+                                if ($childSection && !userHasPermission($childSection)) {
                                     continue;
                                 }
-                                $isActiveDropdown = false;
-                                foreach ($childLinks as $child) {
-                                    if ($currentPath === basename($child['href'])) {
-                                        $isActiveDropdown = true;
-                                        break;
-                                    }
-                                }
-                                // También marcar como activo si estamos en cualquier página de helpdesk o hr
-                                if (!$isActiveDropdown && (strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false)) {
+                                $childLinks[] = $child;
+                            }
+                            if (empty($childLinks)) {
+                                continue;
+                            }
+                            $isActiveDropdown = false;
+                            foreach ($childLinks as $child) {
+                                if ($currentPath === basename($child['href'])) {
                                     $isActiveDropdown = true;
+                                    break;
                                 }
+                            }
+                            // También marcar como activo si estamos en cualquier página de helpdesk o hr
+                            if (!$isActiveDropdown && (strpos($_SERVER['PHP_SELF'], '/helpdesk/') !== false || strpos($_SERVER['PHP_SELF'], '/hr/') !== false)) {
+                                $isActiveDropdown = true;
+                            }
                             ?>
                             <div class="nav-dropdown" data-nav-dropdown>
-                                <button class="nav-dropdown-trigger group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
-                                         data-nav-dropdown-trigger
-                                         aria-expanded="false">
-                                     <i class="fas <?= htmlspecialchars($item['icon'] ?? 'fa-layer-group') ?> text-xs"></i>
-                                     <span><?= htmlspecialchars($item['label']) ?></span>
-                                     <i class="fas fa-chevron-down text-xs opacity-70 transition-transform" data-nav-dropdown-icon style="font-size: 0.65rem;"></i>
-                                 </button>
-                                 <div class="nav-dropdown-menu" data-nav-dropdown-menu hidden>
+                                <button
+                                    class="nav-dropdown-trigger group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
+                                    data-nav-dropdown-trigger aria-expanded="false">
+                                    <i class="fas <?= htmlspecialchars($item['icon'] ?? 'fa-layer-group') ?> text-xs"></i>
+                                    <span><?= htmlspecialchars($item['label']) ?></span>
+                                    <i class="fas fa-chevron-down text-xs opacity-70 transition-transform" data-nav-dropdown-icon
+                                        style="font-size: 0.65rem;"></i>
+                                </button>
+                                <div class="nav-dropdown-menu" data-nav-dropdown-menu hidden>
                                     <?php foreach ($childLinks as $child): ?>
                                         <?php
-                                            $childActive = $currentPath === basename($child['href']);
-                                            $childClasses = $childActive
-                                                ? 'nav-dropdown-link inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold bg-cyan-500/20 text-cyan-100 transition-colors'
-                                                : 'nav-dropdown-link inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-200 hover:text-white hover:bg-slate-700/70 transition-colors';
+                                        $childActive = $currentPath === basename($child['href']);
+                                        $childClasses = $childActive
+                                            ? 'nav-dropdown-link inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-semibold bg-cyan-500/20 text-cyan-100 transition-colors'
+                                            : 'nav-dropdown-link inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-200 hover:text-white hover:bg-slate-700/70 transition-colors';
                                         ?>
                                         <a href="<?= htmlspecialchars($child['href']) ?>" class="<?= $childClasses ?>">
                                             <i class="fas <?= htmlspecialchars($child['icon'] ?? 'fa-circle') ?> text-xs"></i>
@@ -321,10 +325,10 @@ if ($isAuthenticated) {
                             </div>
                         <?php elseif (userHasPermission($sectionKey)): ?>
                             <?php
-                                $isActive = $currentPath === basename($item['href']);
-                                $classes = $isActive
-                                    ? 'group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors'
-                                    : 'group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors';
+                            $isActive = $currentPath === basename($item['href']);
+                            $classes = $isActive
+                                ? 'group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 transition-colors'
+                                : 'group inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors';
                             ?>
                             <a href="<?= htmlspecialchars($item['href']) ?>" class="<?= $classes ?>">
                                 <i class="fas <?= htmlspecialchars($item['icon']) ?> text-xs"></i>
@@ -332,19 +336,22 @@ if ($isAuthenticated) {
                             </a>
                         <?php endif; ?>
                     <?php endforeach; ?>
-                    <a href="<?= $baseHref ?>logout.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
+                    <a href="<?= $baseHref ?>logout.php"
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
                         <i class="fas fa-sign-out-alt text-xs"></i>
                         <span>Cerrar Sesión</span>
                     </a>
                 <?php else: ?>
-                    <a href="<?= $baseHref ?>index.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
+                    <a href="<?= $baseHref ?>index.php"
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors">
                         <i class="fas fa-sign-in-alt text-xs"></i>
                         <span>Iniciar Sesión</span>
                     </a>
                 <?php endif; ?>
                 <form action="<?= $baseHref ?>theme_toggle.php" method="post" class="inline-flex">
                     <input type="hidden" name="return_url" value="<?= htmlspecialchars($_SERVER['REQUEST_URI']) ?>">
-                    <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-800/70 text-slate-200 hover:bg-slate-700 transition-colors border border-slate-700/70">
+                    <button type="submit"
+                        class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-800/70 text-slate-200 hover:bg-slate-700 transition-colors border border-slate-700/70">
                         <i class="fas fa-adjust text-xs"></i>
                         <span><?= htmlspecialchars($themeLabel) ?></span>
                     </button>

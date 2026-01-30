@@ -115,8 +115,8 @@ function submitDelete() { ... }
 **Cambios en el backend:**
 ```php
 case 'toggle_auth_system':
-    $requireForEdit = isset($_POST['authorization_require_for_edit_records']) ? 1 : 0;
-    $requireForDelete = isset($_POST['authorization_require_for_delete_records']) ? 1 : 0;
+    $requireForEdit = isset($_POST['authorization_require_for_edit_records'])  1 : 0;
+    $requireForDelete = isset($_POST['authorization_require_for_delete_records'])  1 : 0;
     $stmt->execute(['authorization_require_for_edit_records', $requireForEdit]);
     $stmt->execute(['authorization_require_for_delete_records', $requireForDelete]);
 ```

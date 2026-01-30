@@ -94,15 +94,15 @@ Move-Item employees.php.fixed employees.php -Force
 
 **POST/GET Variables:**
 Se analizaron todos los accesos a `$_POST`, `$_GET`, `$_REQUEST`:
-- ✅ La mayoría usan validación con `isset()` o `??` (null coalescing)
+- ✅ La mayoría usan validación con `isset()` o `?` (null coalescing)
 - ✅ Conversión de tipos apropiada: `(int)`, `(float)`, `trim()`
 - ✅ htmlspecialchars() usado en salidas HTML
 
 **Ejemplos de código correcto encontrado:**
 ```php
 $employeeId = (int)$_POST['employee_id'];
-$searchQuery = $_GET['search'] ?? '';
-$hourlyRate = !empty($_POST['hourly_rate']) ? (float)$_POST['hourly_rate'] : 0.00;
+$searchQuery = $_GET['search']  '';
+$hourlyRate = !empty($_POST['hourly_rate'])  (float)$_POST['hourly_rate'] : 0.00;
 ```
 
 ### 3. **Sesiones y Autenticación** ✅
@@ -110,7 +110,7 @@ $hourlyRate = !empty($_POST['hourly_rate']) ? (float)$_POST['hourly_rate'] : 0.0
 **Archivos analizados:**
 - `session_start()` llamado correctamente en archivos necesarios
 - ✅ No se encontraron llamadas duplicadas de `session_start()`
-- ✅ Variables de sesión accedidas con null coalescing (`??`)
+- ✅ Variables de sesión accedidas con null coalescing (`?`)
 - ✅ Sistema de permisos implementado con `ensurePermission()`
 
 **Seguridad de Sesión:**
@@ -217,7 +217,7 @@ catch (Exception $e) {
 SELECT * FROM employees  // Puede ser pesado
 
 // Implementar paginación:
-SELECT * FROM employees LIMIT ? OFFSET ?
+SELECT * FROM employees LIMIT  OFFSET ?
 ```
 
 ---

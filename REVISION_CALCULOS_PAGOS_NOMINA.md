@@ -93,9 +93,9 @@ if ($workedHours > $scheduledHours) {
 ```php
 $regularPay = $hoursData['regular_hours'] * $hourlyRate;
 $overtimePay = $hoursData['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
-$bonuses = $hoursData['bonuses'] ?? 0;
-$commissions = $hoursData['commissions'] ?? 0;
-$otherIncome = $hoursData['other_income'] ?? 0;
+$bonuses = $hoursData['bonuses']  0;
+$commissions = $hoursData['commissions']  0;
+$otherIncome = $hoursData['other_income']  0;
 
 $grossSalary = $regularPay + $overtimePay + $bonuses + $commissions + $otherIncome;
 ```
@@ -115,7 +115,7 @@ $grossSalary = $regularPay + $overtimePay + $bonuses + $commissions + $otherInco
 #### 1.4 Soporte Multi-Moneda (USD/DOP)
 
 ```php
-$preferredCurrency = $employee['preferred_currency'] ?? 'USD';
+$preferredCurrency = $employee['preferred_currency']  'USD';
 if ($preferredCurrency === 'DOP') {
     $hourlyRate = (float)$employee['hourly_rate_dop'];
     $monthlySalary = (float)$employee['monthly_salary_dop'];
@@ -141,7 +141,7 @@ if ($preferredCurrency === 'DOP') {
 ```php
 function calculateAFP($pdo, $grossSalary, $isEmployer = false) {
     $rates = getDeductionRates($pdo);
-    $rate = $isEmployer ? $rates['AFP']['employer_percentage'] : 
+    $rate = $isEmployer  $rates['AFP']['employer_percentage'] : 
                           $rates['AFP']['employee_percentage'];
     return round($grossSalary * ($rate / 100), 2);
 }
@@ -158,7 +158,7 @@ function calculateAFP($pdo, $grossSalary, $isEmployer = false) {
 ```php
 function calculateSFS($pdo, $grossSalary, $isEmployer = false) {
     $rates = getDeductionRates($pdo);
-    $rate = $isEmployer ? $rates['SFS']['employer_percentage'] : 
+    $rate = $isEmployer  $rates['SFS']['employer_percentage'] : 
                           $rates['SFS']['employee_percentage'];
     return round($grossSalary * ($rate / 100), 2);
 }
@@ -366,8 +366,8 @@ if ($hourlyRate > 0 && $workSeconds > 0) {
         $overtimeHours = $overtimeSeconds / 3600;
         
         // Get overtime multiplier
-        $overtimeMultiplier = $overtimeMultipliers[$username] ?? 
-                             (float)($scheduleConfig['overtime_multiplier'] ?? 1.5);
+        $overtimeMultiplier = $overtimeMultipliers[$username]  
+                             (float)($scheduleConfig['overtime_multiplier']  1.5);
         
         $overtimePayment = $overtimeHours * $hourlyRate * $overtimeMultiplier;
     }

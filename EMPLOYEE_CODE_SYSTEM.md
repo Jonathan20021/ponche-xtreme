@@ -45,7 +45,7 @@ El código se genera automáticamente en dos puntos del sistema:
 ```php
 // Ejemplo de código de generación
 $currentYear = date('Y');
-$codeStmt = $pdo->prepare("SELECT employee_code FROM users WHERE employee_code LIKE ? ORDER BY employee_code DESC LIMIT 1");
+$codeStmt = $pdo->prepare("SELECT employee_code FROM users WHERE employee_code LIKE  ORDER BY employee_code DESC LIMIT 1");
 $codeStmt->execute(["EMP-{$currentYear}-%"]);
 $lastCode = $codeStmt->fetch();
 

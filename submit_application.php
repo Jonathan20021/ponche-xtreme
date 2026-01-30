@@ -45,50 +45,140 @@ try {
     @file_put_contents(__DIR__ . '/logs/submit_application_debug.log', json_encode($debugSnapshot, JSON_PRETTY_PRINT) . PHP_EOL, FILE_APPEND);
 
     // Normalizar campos base
-    $candidateName = trim($_POST['candidate_name'] ?? '');
+    $puestoAplicado = trim($_POST['puesto_aplicado'] ?? '');
+    $serie = trim($_POST['serie'] ?? '');
     $cedula = trim($_POST['cedula'] ?? '');
-    $phoneNumbers = trim($_POST['phone_numbers'] ?? '');
-    $sectorResidencia = trim($_POST['sector_residencia'] ?? '');
-    $appliedBefore = $_POST['applied_before'] ?? '';
-    $appliedBeforeDetails = trim($_POST['applied_before_details'] ?? '');
-    $source = $_POST['source'] ?? '';
-    $sourceOther = trim($_POST['source_other'] ?? '');
-    $knowsCompany = $_POST['knows_company'] ?? '';
-    $interestReason = trim($_POST['interest_reason'] ?? '');
-    $applicationLanguage = $_POST['application_language'] ?? '';
-    $availabilityTime = $_POST['availability_time'] ?? '';
-    $availabilityPreference = trim($_POST['availability_preference'] ?? '');
-    $trainingSchedule = $_POST['training_schedule'] ?? '';
-    $agreesRotatingDays = $_POST['agrees_rotating_days'] ?? '';
-    $weekendHolidays = $_POST['weekend_holidays'] ?? '';
-    $currentlyEmployed = $_POST['currently_employed'] ?? '';
-    $currentEmploymentDetails = trim($_POST['current_employment_details'] ?? '');
-    $recentCompany = trim($_POST['recent_company'] ?? '');
-    $recentRole = trim($_POST['recent_role'] ?? '');
-    $recentYears = trim($_POST['recent_years'] ?? '');
-    $recentLastSalary = trim($_POST['recent_last_salary'] ?? '');
-    $hasCallCenterExperience = $_POST['has_call_center_experience'] ?? '';
-    $callCenterName = trim($_POST['call_center_name'] ?? '');
-    $callCenterRole = trim($_POST['call_center_role'] ?? '');
-    $callCenterSalary = trim($_POST['call_center_salary'] ?? '');
+    $direccion = trim($_POST['direccion'] ?? '');
+    $telefono = trim($_POST['telefono'] ?? '');
+    $apellidoPaterno = trim($_POST['apellido_paterno'] ?? '');
+    $apellidoMaterno = trim($_POST['apellido_materno'] ?? '');
+    $nombres = trim($_POST['nombres'] ?? '');
+    $apodo = trim($_POST['apodo'] ?? '');
+    $fechaNacimiento = trim($_POST['fecha_nacimiento'] ?? '');
+    $edad = trim($_POST['edad'] ?? '');
+    $lugarNacimiento = trim($_POST['lugar_nacimiento'] ?? '');
+    $paisNacimiento = trim($_POST['pais_nacimiento'] ?? '');
+    $nacionalidad = trim($_POST['nacionalidad'] ?? '');
+    $sexo = $_POST['sexo'] ?? '';
+    $estadoCivil = $_POST['estado_civil'] ?? '';
+    $tipoSangre = trim($_POST['tipo_sangre'] ?? '');
+    $estatura = trim($_POST['estatura'] ?? '');
+    $peso = trim($_POST['peso'] ?? '');
+    $viveCon = trim($_POST['vive_con'] ?? '');
+    $personasDependen = trim($_POST['personas_dependen'] ?? '');
+    $tieneHijos = $_POST['tiene_hijos'] ?? '';
+    $edadHijos = trim($_POST['edad_hijos'] ?? '');
+    $casaPropia = $_POST['casa_propia'] ?? '';
+    $personasVive = trim($_POST['personas_vive'] ?? '');
+
+    $disponibilidadTurno = !empty($_POST['disponibilidad_turno_rotativo']) ? 'SI' : 'NO';
+    $disponibilidadLunesViernes = !empty($_POST['disponibilidad_lunes_viernes']) ? 'SI' : 'NO';
+    $disponibilidadOtro = !empty($_POST['disponibilidad_otro']) ? 'SI' : 'NO';
+    $disponibilidadOtroTexto = trim($_POST['disponibilidad_otro_texto'] ?? '');
+
+    $modalidadPresencial = !empty($_POST['modalidad_presencial']) ? 'SI' : 'NO';
+    $modalidadHibrida = !empty($_POST['modalidad_hibrida']) ? 'SI' : 'NO';
+    $modalidadRemota = !empty($_POST['modalidad_remota']) ? 'SI' : 'NO';
+    $modalidadOtro = !empty($_POST['modalidad_otro']) ? 'SI' : 'NO';
+    $modalidadOtroTexto = trim($_POST['modalidad_otro_texto'] ?? '');
+
+    $transporteCarro = !empty($_POST['transporte_carro_publico']) ? 'SI' : 'NO';
+    $transporteMoto = !empty($_POST['transporte_motoconcho']) ? 'SI' : 'NO';
+    $transportePie = !empty($_POST['transporte_a_pie']) ? 'SI' : 'NO';
+    $transporteOtro = !empty($_POST['transporte_otro']) ? 'SI' : 'NO';
+    $transporteOtroTexto = trim($_POST['transporte_otro_texto'] ?? '');
+    $transporteDetalles = trim($_POST['transporte_detalles'] ?? '');
+
+    $nivelPrimaria = !empty($_POST['nivel_primaria']) ? 'SI' : 'NO';
+    $nivelBachillerato = !empty($_POST['nivel_bachillerato']) ? 'SI' : 'NO';
+    $nivelEstudiante = !empty($_POST['nivel_estudiante_universitario']) ? 'SI' : 'NO';
+    $nivelTecnico = !empty($_POST['nivel_tecnico']) ? 'SI' : 'NO';
+    $nivelCarreraCompleta = !empty($_POST['nivel_carrera_completa']) ? 'SI' : 'NO';
+    $nivelPostgrado = !empty($_POST['nivel_postgrado']) ? 'SI' : 'NO';
+    $nivelTecnicoDetalle = trim($_POST['nivel_tecnico_detalle'] ?? '');
+    $nivelCarreraDetalle = trim($_POST['nivel_carrera_detalle'] ?? '');
+    $nivelPostgradoDetalle = trim($_POST['nivel_postgrado_detalle'] ?? '');
+
+    $estudiaActualmente = !empty($_POST['estudia_actualmente']) ? 'SI' : 'NO';
+    $queEstudia = trim($_POST['que_estudia'] ?? '');
+    $dondeEstudia = trim($_POST['donde_estudia'] ?? '');
+    $horarioClases = trim($_POST['horario_clases'] ?? '');
+
+    $otrosCursos = [
+        ['curso' => trim($_POST['otros_curso_1'] ?? ''), 'institucion' => trim($_POST['otros_curso_institucion_1'] ?? ''), 'fecha' => trim($_POST['otros_curso_fecha_1'] ?? '')],
+        ['curso' => trim($_POST['otros_curso_2'] ?? ''), 'institucion' => trim($_POST['otros_curso_institucion_2'] ?? ''), 'fecha' => trim($_POST['otros_curso_fecha_2'] ?? '')],
+        ['curso' => trim($_POST['otros_curso_3'] ?? ''), 'institucion' => trim($_POST['otros_curso_institucion_3'] ?? ''), 'fecha' => trim($_POST['otros_curso_fecha_3'] ?? '')],
+    ];
+
+    $idiomas = [];
+    for ($i = 1; $i <= 3; $i++) {
+        $nombreIdioma = trim($_POST["idioma_{$i}_nombre"] ?? '');
+        $habla = $_POST["idioma_{$i}_habla"] ?? '';
+        $lee = $_POST["idioma_{$i}_lee"] ?? '';
+        $escribe = $_POST["idioma_{$i}_escribe"] ?? '';
+        if ($nombreIdioma !== '' || $habla !== '' || $lee !== '' || $escribe !== '') {
+            $idiomas[] = [
+                'idioma' => $nombreIdioma,
+                'habla' => $habla,
+                'lee' => $lee,
+                'escribe' => $escribe
+            ];
+        }
+    }
+
+    $exp1Empresa = trim($_POST['exp1_empresa'] ?? '');
+    $exp1Superior = trim($_POST['exp1_superior'] ?? '');
+    $exp1Tiempo = trim($_POST['exp1_tiempo'] ?? '');
+    $exp1Telefono = trim($_POST['exp1_telefono'] ?? '');
+    $exp1Cargo = trim($_POST['exp1_cargo'] ?? '');
+    $exp1Sueldo = trim($_POST['exp1_sueldo'] ?? '');
+    $exp1Tareas = trim($_POST['exp1_tareas'] ?? '');
+    $exp1Razon = trim($_POST['exp1_razon_salida'] ?? '');
+
+    $exp2Empresa = trim($_POST['exp2_empresa'] ?? '');
+    $exp2Superior = trim($_POST['exp2_superior'] ?? '');
+    $exp2Tiempo = trim($_POST['exp2_tiempo'] ?? '');
+    $exp2Telefono = trim($_POST['exp2_telefono'] ?? '');
+    $exp2Cargo = trim($_POST['exp2_cargo'] ?? '');
+    $exp2Sueldo = trim($_POST['exp2_sueldo'] ?? '');
+    $exp2Tareas = trim($_POST['exp2_tareas'] ?? '');
+    $exp2Razon = trim($_POST['exp2_razon_salida'] ?? '');
+
+    $mayorLogro = trim($_POST['mayor_logro'] ?? '');
+    $expectativasSalariales = trim($_POST['expectativas_salariales'] ?? '');
+    $incapacidad = $_POST['incapacidad'] ?? '';
+    $incapacidadCual = trim($_POST['incapacidad_cual'] ?? '');
+    $horasExtras = $_POST['horas_extras'] ?? '';
+    $diasFiestas = $_POST['dias_fiestas'] ?? '';
+    $conoceEmpleado = $_POST['conoce_empleado'] ?? '';
+    $conoceEmpleadoNombre = trim($_POST['conoce_empleado_nombre'] ?? '');
+
+    $medioVacante = $_POST['medio_vacante'] ?? [];
+    if (!is_array($medioVacante)) {
+        $medioVacante = [$medioVacante];
+    }
+    $medioVacanteOtro = trim($_POST['medio_vacante_otro_texto'] ?? '');
+    $aceptaDatos = !empty($_POST['acepta_datos']) ? 'SI' : 'NO';
+    $firmaSolicitante = trim($_POST['firma_solicitante'] ?? '');
+
+    $evaluadorNombre = trim($_POST['evaluador_nombre'] ?? '');
+    $evaluacionFecha = trim($_POST['evaluacion_fecha'] ?? '');
+    $evaluadorPuesto = trim($_POST['evaluador_puesto'] ?? '');
+    $observacionesEntrevista = trim($_POST['observaciones_entrevista'] ?? '');
 
     // Validar requeridos (job_posting_id se resuelve aparte)
     $required_fields = [
-        'candidate_name' => $candidateName,
+        'puesto_aplicado' => $puestoAplicado,
         'cedula' => $cedula,
-        'phone_numbers' => $phoneNumbers,
-        'sector_residencia' => $sectorResidencia,
-        'applied_before' => $appliedBefore,
-        'source' => $source,
-        'knows_company' => $knowsCompany,
-        'interest_reason' => $interestReason,
-        'application_language' => $applicationLanguage,
-        'availability_time' => $availabilityTime,
-        'training_schedule' => $trainingSchedule,
-        'agrees_rotating_days' => $agreesRotatingDays,
-        'weekend_holidays' => $weekendHolidays,
-        'currently_employed' => $currentlyEmployed,
-        'has_call_center_experience' => $hasCallCenterExperience
+        'direccion' => $direccion,
+        'telefono' => $telefono,
+        'apellido_paterno' => $apellidoPaterno,
+        'apellido_materno' => $apellidoMaterno,
+        'nombres' => $nombres,
+        'fecha_nacimiento' => $fechaNacimiento,
+        'sexo' => $sexo,
+        'estado_civil' => $estadoCivil,
+        'acepta_datos' => $aceptaDatos
     ];
     foreach ($required_fields as $field => $value) {
         if ($value === '' || $value === null) {
@@ -96,26 +186,9 @@ try {
             exit;
         }
     }
-    if (strtolower($source) === 'otro' && $sourceOther === '') {
-        echo json_encode(['success' => false, 'message' => 'El campo source_other es requerido cuando la fuente es Otro']);
+    if ($fechaNacimiento !== '' && !DateTime::createFromFormat('Y-m-d', $fechaNacimiento)) {
+        echo json_encode(['success' => false, 'message' => 'El campo fecha_nacimiento no es valido']);
         exit;
-    }
-
-    // Defaults para opcionales
-    if ($candidateName === '') {
-        $candidateName = 'Candidato';
-    }
-    if ($interestReason === '') {
-        $interestReason = 'N/A';
-    }
-    if ($applicationLanguage === '') {
-        $applicationLanguage = 'Espanol';
-    }
-    if ($availabilityTime === '') {
-        $availabilityTime = 'Horario abierto';
-    }
-    if ($trainingSchedule === '') {
-        $trainingSchedule = 'Horario abierto';
     }
 
     // Resolver job_posting_id
@@ -206,12 +279,144 @@ try {
     }
 
     // Separar nombre
-    $nameParts = preg_split('/\\s+/', trim($candidateName));
-    $firstName = $nameParts[0] ?? 'Candidato';
-    $lastName = trim(implode(' ', array_slice($nameParts, 1)));
+    $firstName = $nombres !== '' ? $nombres : 'Candidato';
+    $lastName = trim($apellidoPaterno . ' ' . $apellidoMaterno);
     if ($lastName === '') {
         $lastName = 'N/A';
     }
+
+    $educationLevels = [];
+    if ($nivelPrimaria === 'SI') {
+        $educationLevels[] = 'Educacion basica (Primaria)';
+    }
+    if ($nivelBachillerato === 'SI') {
+        $educationLevels[] = 'Educacion media (Bachillerato)';
+    }
+    if ($nivelEstudiante === 'SI') {
+        $educationLevels[] = 'Estudiante universitario (en curso)';
+    }
+    if ($nivelTecnico === 'SI') {
+        $educationLevels[] = $nivelTecnicoDetalle !== '' ? 'Tecnico: ' . $nivelTecnicoDetalle : 'Tecnico o curso especializado';
+    }
+    if ($nivelCarreraCompleta === 'SI') {
+        $educationLevels[] = $nivelCarreraDetalle !== '' ? 'Carrera completa: ' . $nivelCarreraDetalle : 'Carrera universitaria completa';
+    }
+    if ($nivelPostgrado === 'SI') {
+        $educationLevels[] = $nivelPostgradoDetalle !== '' ? 'Postgrado: ' . $nivelPostgradoDetalle : 'Postgrado / Maestria';
+    }
+    $educationLevelSummary = !empty($educationLevels) ? implode(', ', $educationLevels) : null;
+
+    $yearsExperience = null;
+    if ($exp1Tiempo !== '' && preg_match('/\d+/', $exp1Tiempo, $matches)) {
+        $yearsExperience = (int) $matches[0];
+    }
+
+    $sourceCombined = !empty($medioVacante) ? implode(', ', $medioVacante) : null;
+
+    $formPayload = [
+        'form_version' => '2026-01-30',
+        'puesto_aplicado' => $puestoAplicado,
+        'serie' => $serie,
+        'cedula' => $cedula,
+        'direccion' => $direccion,
+        'telefono' => $telefono,
+        'apellido_paterno' => $apellidoPaterno,
+        'apellido_materno' => $apellidoMaterno,
+        'nombres' => $nombres,
+        'apodo' => $apodo,
+        'fecha_nacimiento' => $fechaNacimiento,
+        'edad' => $edad,
+        'lugar_nacimiento' => $lugarNacimiento,
+        'pais_nacimiento' => $paisNacimiento,
+        'nacionalidad' => $nacionalidad,
+        'sexo' => $sexo,
+        'estado_civil' => $estadoCivil,
+        'tipo_sangre' => $tipoSangre,
+        'estatura' => $estatura,
+        'peso' => $peso,
+        'vive_con' => $viveCon,
+        'personas_dependen' => $personasDependen,
+        'tiene_hijos' => $tieneHijos,
+        'edad_hijos' => $edadHijos,
+        'casa_propia' => $casaPropia,
+        'personas_vive' => $personasVive,
+        'disponibilidad' => [
+            'turno_rotativo' => $disponibilidadTurno,
+            'lunes_viernes' => $disponibilidadLunesViernes,
+            'otro' => $disponibilidadOtro,
+            'otro_texto' => $disponibilidadOtroTexto
+        ],
+        'modalidad' => [
+            'presencial' => $modalidadPresencial,
+            'hibrida' => $modalidadHibrida,
+            'remota' => $modalidadRemota,
+            'otro' => $modalidadOtro,
+            'otro_texto' => $modalidadOtroTexto
+        ],
+        'transporte' => [
+            'carro_publico' => $transporteCarro,
+            'motoconcho' => $transporteMoto,
+            'a_pie' => $transportePie,
+            'otro' => $transporteOtro,
+            'otro_texto' => $transporteOtroTexto,
+            'detalles' => $transporteDetalles
+        ],
+        'educacion' => [
+            'nivel' => $educationLevels,
+            'nivel_tecnico_detalle' => $nivelTecnicoDetalle,
+            'nivel_carrera_detalle' => $nivelCarreraDetalle,
+            'nivel_postgrado_detalle' => $nivelPostgradoDetalle,
+            'estudia_actualmente' => $estudiaActualmente,
+            'que_estudia' => $queEstudia,
+            'donde_estudia' => $dondeEstudia,
+            'horario_clases' => $horarioClases,
+            'otros_cursos' => $otrosCursos
+        ],
+        'idiomas' => $idiomas,
+        'experiencias' => [
+            [
+                'empresa' => $exp1Empresa,
+                'superior' => $exp1Superior,
+                'tiempo' => $exp1Tiempo,
+                'telefono' => $exp1Telefono,
+                'cargo' => $exp1Cargo,
+                'sueldo' => $exp1Sueldo,
+                'tareas' => $exp1Tareas,
+                'razon_salida' => $exp1Razon
+            ],
+            [
+                'empresa' => $exp2Empresa,
+                'superior' => $exp2Superior,
+                'tiempo' => $exp2Tiempo,
+                'telefono' => $exp2Telefono,
+                'cargo' => $exp2Cargo,
+                'sueldo' => $exp2Sueldo,
+                'tareas' => $exp2Tareas,
+                'razon_salida' => $exp2Razon
+            ]
+        ],
+        'adicional' => [
+            'mayor_logro' => $mayorLogro,
+            'expectativas_salariales' => $expectativasSalariales,
+            'incapacidad' => $incapacidad,
+            'incapacidad_cual' => $incapacidadCual,
+            'horas_extras' => $horasExtras,
+            'dias_fiestas' => $diasFiestas,
+            'conoce_empleado' => $conoceEmpleado,
+            'conoce_empleado_nombre' => $conoceEmpleadoNombre,
+            'medio_vacante' => $medioVacante,
+            'medio_vacante_otro' => $medioVacanteOtro,
+            'acepta_datos' => $aceptaDatos,
+            'firma' => $firmaSolicitante
+        ],
+        'evaluador' => [
+            'nombre' => $evaluadorNombre,
+            'fecha' => $evaluacionFecha,
+            'puesto' => $evaluadorPuesto,
+            'observaciones' => $observacionesEntrevista
+        ]
+    ];
+    $formJson = json_encode($formPayload);
 
     // Datos a persistir
     $application_data = [
@@ -219,47 +424,47 @@ try {
         'first_name' => $firstName,
         'last_name' => $lastName,
         'email' => !empty($_POST['email']) ? $_POST['email'] : 'sin-correo@evallish.local',
-        'phone' => $phoneNumbers,
-        'address' => $sectorResidencia,
+        'phone' => $telefono,
+        'address' => $direccion,
         'city' => null,
         'state' => null,
         'postal_code' => null,
-        'date_of_birth' => null,
-        'education_level' => 'N/A',
-        'years_of_experience' => $recentYears !== '' ? $recentYears : null,
-        'current_position' => $recentRole !== '' ? $recentRole : null,
-        'current_company' => $recentCompany !== '' ? $recentCompany : null,
-        'expected_salary' => $recentLastSalary !== '' ? $recentLastSalary : null,
+        'date_of_birth' => $fechaNacimiento !== '' ? $fechaNacimiento : null,
+        'education_level' => $educationLevelSummary,
+        'years_of_experience' => $yearsExperience,
+        'current_position' => $exp1Cargo !== '' ? $exp1Cargo : null,
+        'current_company' => $exp1Empresa !== '' ? $exp1Empresa : null,
+        'expected_salary' => $expectativasSalariales !== '' ? $expectativasSalariales : null,
         'availability_date' => null,
         'cv_filename' => $cv_filename,
         'cv_path' => $cv_path,
-        'cover_letter' => null,
+        'cover_letter' => $formJson,
         'linkedin_url' => null,
         'portfolio_url' => null,
         'cedula' => $cedula,
-        'sector_residencia' => $sectorResidencia,
-        'applied_before' => $appliedBefore,
-        'applied_before_details' => $appliedBeforeDetails !== '' ? $appliedBeforeDetails : null,
-        'source' => $source,
-        'source_other' => $sourceOther !== '' ? $sourceOther : null,
-        'knows_company' => $knowsCompany,
-        'interest_reason' => $interestReason,
-        'application_language' => $applicationLanguage,
-        'availability_time' => $availabilityTime,
-        'availability_preference' => $availabilityPreference !== '' ? $availabilityPreference : null,
-        'training_schedule' => $trainingSchedule,
-        'agrees_rotating_days' => $agreesRotatingDays,
-        'weekend_holidays' => $weekendHolidays,
-        'currently_employed' => $currentlyEmployed,
-        'current_employment_details' => $currentEmploymentDetails !== '' ? $currentEmploymentDetails : null,
-        'recent_company' => $recentCompany !== '' ? $recentCompany : null,
-        'recent_role' => $recentRole !== '' ? $recentRole : null,
-        'recent_years' => $recentYears !== '' ? $recentYears : null,
-        'recent_last_salary' => $recentLastSalary !== '' ? $recentLastSalary : null,
-        'has_call_center_experience' => $hasCallCenterExperience,
-        'call_center_name' => $callCenterName !== '' ? $callCenterName : null,
-        'call_center_role' => $callCenterRole !== '' ? $callCenterRole : null,
-        'call_center_salary' => $callCenterSalary !== '' ? $callCenterSalary : null
+        'sector_residencia' => null,
+        'applied_before' => null,
+        'applied_before_details' => null,
+        'source' => $sourceCombined,
+        'source_other' => $medioVacanteOtro !== '' ? $medioVacanteOtro : null,
+        'knows_company' => null,
+        'interest_reason' => null,
+        'application_language' => null,
+        'availability_time' => null,
+        'availability_preference' => null,
+        'training_schedule' => null,
+        'agrees_rotating_days' => null,
+        'weekend_holidays' => null,
+        'currently_employed' => null,
+        'current_employment_details' => null,
+        'recent_company' => null,
+        'recent_role' => null,
+        'recent_years' => null,
+        'recent_last_salary' => null,
+        'has_call_center_experience' => null,
+        'call_center_name' => null,
+        'call_center_role' => null,
+        'call_center_salary' => null
     ];
 
     $stmt = $pdo->prepare("

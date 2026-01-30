@@ -20,7 +20,7 @@ function getUnreadCount(PDO $pdo, int $userId): void {
         SELECT COUNT(*) as count
         FROM chat_messages cm
         JOIN chat_participants p ON p.conversation_id = cm.conversation_id
-        WHERE p.user_id = ? 
+        WHERE p.user_id =  
         AND p.is_active = 1
         AND cm.user_id != ?
         AND cm.created_at > COALESCE(p.last_read_at, '1970-01-01')
@@ -45,7 +45,7 @@ function getUnreadCount(PDO $pdo, int $userId): void {
 // Contaba notificaciones en general
 SELECT COUNT(*) as count
 FROM chat_notifications
-WHERE user_id = ? AND is_read = 0
+WHERE user_id =  AND is_read = 0
 ```
 
 ### 2. Mejora en el Conteo Individual por Conversación
@@ -152,7 +152,7 @@ async updateUnreadCount() {
             const badge = document.getElementById('unreadBadge');
             
             if (this.unreadCount > 0) {
-                badge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+                badge.textContent = this.unreadCount > 99  '99+' : this.unreadCount;
                 badge.style.display = 'flex';
             } else {
                 // OCULTAR cuando no hay mensajes

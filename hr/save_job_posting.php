@@ -4,9 +4,7 @@ require_once '../db.php';
 
 // Check permissions
 ensurePermission('hr_job_postings', '../unauthorized.php');
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header("Location: job_postings.php");
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header("Location: job_postings.php");
     exit;
 }
 
@@ -71,7 +69,7 @@ try {
         }
 
         if ($banner['size'] > 5 * 1024 * 1024) {
-            throw new RuntimeException('El banner supera el l��mite de 5MB.');
+            throw new RuntimeException('El banner supera el límite de 5MB.');
         }
 
         $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -88,7 +86,7 @@ try {
 
         $baseUploadPath = realpath(__DIR__ . '/..');
         if ($baseUploadPath === false) {
-            throw new RuntimeException('No se encontr�� la ruta base para guardar el banner.');
+            throw new RuntimeException('No se encontró la ruta base para guardar el banner.');
         }
         $uploadDir = $baseUploadPath . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'job_banners';
         if (!is_dir($uploadDir)) {
@@ -111,10 +109,8 @@ try {
 } catch (PDOException $e) {
     $_SESSION['error_message'] = "Error al guardar la vacante";
     error_log($e->getMessage());
-} catch (RuntimeException $e) {
-    $_SESSION['error_message'] = "Vacante publicada, pero el banner no se pudo guardar: " . $e->getMessage();
+} catch (RuntimeException $e) { $_SESSION['error_message'] = "Vacante publicada, pero el banner no se pudo guardar : " . $e->getMessage();
     error_log($e->getMessage());
 }
-
-header("Location: job_postings.php");
+header("Location : job_postings.php");
 exit;

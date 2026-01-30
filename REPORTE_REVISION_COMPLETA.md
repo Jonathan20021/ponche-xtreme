@@ -33,7 +33,7 @@ Después de realizar una revisión exhaustiva de toda la aplicación Ponche Xtre
 - ✅ Sintaxis correcta en todos los archivos principales
 - ✅ Uso adecuado de `session_start()`
 - ✅ Manejo de errores con try-catch
-- ✅ Uso del operador null coalescing (`??`) para evitar undefined variables
+- ✅ Uso del operador null coalescing (`?`) para evitar undefined variables
 - ✅ Headers HTTP configurados correctamente
 - ✅ Zona horaria configurada ('America/Santo_Domingo')
 

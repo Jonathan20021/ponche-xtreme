@@ -12,12 +12,17 @@ $job_filter = $_GET['job'] ?? 'all';
 $search = $_GET['search'] ?? '';
 $sort = $_GET['sort'] ?? 'applied_date';
 $order = $_GET['order'] ?? 'DESC';
+$page = max(1, (int)($_GET['page'] ?? 1));
+$per_page = (int)($_GET['per_page'] ?? 20);
+if ($per_page < 10) {
+    $per_page = 10;
+} elseif ($per_page > 100) {
+    $per_page = 100;
+}
+$offset = ($page - 1) * $per_page;
 
 // Build query
-$query = "
-    SELECT a.*, j.title as job_title, j.department, u.full_name as assigned_to_name,
-           (SELECT COUNT(*) FROM application_comments WHERE application_id = a.id) as comment_count,
-           (SELECT COUNT(*) FROM recruitment_interviews WHERE application_id = a.id AND status = 'scheduled') as interview_count
+$baseQuery = "
     FROM job_applications a
     LEFT JOIN job_postings j ON a.job_posting_id = j.id
     LEFT JOIN users u ON a.assigned_to = u.id
@@ -27,29 +32,53 @@ $query = "
 $params = [];
 
 if ($status_filter !== 'all') {
-    $query .= " AND a.status = :status";
+    $baseQuery .= " AND a.status = :status";
     $params['status'] = $status_filter;
 }
 
 if ($job_filter !== 'all') {
-    $query .= " AND a.job_posting_id = :job_id";
+    $baseQuery .= " AND a.job_posting_id = :job_id";
     $params['job_id'] = $job_filter;
 }
 
 if (!empty($search)) {
-    $query .= " AND (
-        a.first_name LIKE :search
-        OR a.last_name LIKE :search
-        OR CONCAT(a.first_name, ' ', a.last_name) LIKE :search
-        OR CONCAT(a.last_name, ' ', a.first_name) LIKE :search
-        OR a.email LIKE :search
-        OR a.phone LIKE :search
-        OR a.application_code LIKE :search
+    $baseQuery .= " AND (
+        a.first_name LIKE :search_first
+        OR a.last_name LIKE :search_last
+        OR CONCAT(a.first_name, ' ', a.last_name) LIKE :search_full
+        OR CONCAT(a.last_name, ' ', a.first_name) LIKE :search_full_rev
+        OR a.email LIKE :search_email
+        OR a.phone LIKE :search_phone
+        OR a.application_code LIKE :search_code
     )";
-    $params['search'] = "%$search%";
+    $searchTerm = "%$search%";
+    $params['search_first'] = $searchTerm;
+    $params['search_last'] = $searchTerm;
+    $params['search_full'] = $searchTerm;
+    $params['search_full_rev'] = $searchTerm;
+    $params['search_email'] = $searchTerm;
+    $params['search_phone'] = $searchTerm;
+    $params['search_code'] = $searchTerm;
 }
 
-$query .= " ORDER BY a.$sort $order";
+$countQuery = "SELECT COUNT(*) " . $baseQuery;
+$countStmt = $pdo->prepare($countQuery);
+$countStmt->execute($params);
+$total_filtered = (int)$countStmt->fetchColumn();
+$total_pages = max(1, (int)ceil($total_filtered / $per_page));
+if ($page > $total_pages) {
+    $page = $total_pages;
+    $offset = ($page - 1) * $per_page;
+}
+
+$query = "
+    SELECT a.*, j.title as job_title, j.department, u.full_name as assigned_to_name,
+           (SELECT COUNT(*) FROM application_comments WHERE application_id = a.id) as comment_count,
+           (SELECT COUNT(*) FROM recruitment_interviews WHERE application_id = a.id AND status = 'scheduled') as interview_count
+    " . $baseQuery . "
+    ORDER BY a.$sort $order
+    LIMIT $per_page OFFSET $offset
+";
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -279,7 +308,7 @@ require_once '../header.php';
         <div class="flex justify-between items-center mb-6">
             <h3 class="text-xl font-semibold text-white">
                 <i class="fas fa-list mr-2 text-indigo-400"></i>
-                Solicitudes (<?php echo count($applications); ?>)
+                Solicitudes (<?php echo $total_filtered; ?>)
             </h3>
             <button class="btn-success" onclick="exportToExcel()">
                 <i class="fas fa-file-excel"></i> Exportar Excel
@@ -293,7 +322,10 @@ require_once '../header.php';
                 <p class="text-slate-400">Intenta ajustar los filtros de búsqueda</p>
             </div>
         <?php else: ?>
-            <div class="overflow-x-auto">
+            <div class="recruitment-scrollbar-top">
+                <div class="recruitment-scrollbar-top-inner"></div>
+            </div>
+            <div class="overflow-x-auto recruitment-table-scroll" data-sync-scroll="recruitment-table">
                 <table class="w-full">
                     <thead>
                         <tr class="border-b border-slate-700">
@@ -396,11 +428,85 @@ require_once '../header.php';
                     </tbody>
                 </table>
             </div>
+            <?php if ($total_pages > 1): ?>
+                <?php
+                    $paginationParams = $_GET;
+                    $paginationParams['per_page'] = $per_page;
+                    $startItem = $total_filtered > 0 ? ($offset + 1) : 0;
+                    $endItem = min($offset + $per_page, $total_filtered);
+                ?>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mt-6">
+                    <div class="text-sm text-slate-400">
+                        Mostrando <?php echo $startItem; ?>-<?php echo $endItem; ?> de <?php echo $total_filtered; ?>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <?php
+                            $prevPage = max(1, $page - 1);
+                            $nextPage = min($total_pages, $page + 1);
+
+                            $paginationParams['page'] = $prevPage;
+                            $prevUrl = 'recruitment.php?' . http_build_query($paginationParams);
+
+                            $paginationParams['page'] = $nextPage;
+                            $nextUrl = 'recruitment.php?' . http_build_query($paginationParams);
+                        ?>
+                        <a class="btn-secondary <?php echo $page <= 1 ? 'opacity-50 pointer-events-none' : ''; ?>" href="<?php echo $prevUrl; ?>">
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </a>
+                        <?php
+                            $maxButtons = 5;
+                            $startPage = max(1, $page - (int)floor($maxButtons / 2));
+                            $endPage = min($total_pages, $startPage + $maxButtons - 1);
+                            if ($endPage - $startPage + 1 < $maxButtons) {
+                                $startPage = max(1, $endPage - $maxButtons + 1);
+                            }
+
+                            for ($p = $startPage; $p <= $endPage; $p++):
+                                $paginationParams['page'] = $p;
+                                $pageUrl = 'recruitment.php?' . http_build_query($paginationParams);
+                        ?>
+                            <a class="<?php echo $p === $page ? 'btn-primary' : 'btn-secondary'; ?>" href="<?php echo $pageUrl; ?>">
+                                <?php echo $p; ?>
+                            </a>
+                        <?php endfor; ?>
+                        <a class="btn-secondary <?php echo $page >= $total_pages ? 'opacity-50 pointer-events-none' : ''; ?>" href="<?php echo $nextUrl; ?>">
+                            Siguiente <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>
 
 <script>
+function initRecruitmentStickyScrollbar() {
+    const tableScroll = document.querySelector('[data-sync-scroll="recruitment-table"]');
+    const topBar = document.querySelector('.recruitment-scrollbar-top');
+    const topInner = document.querySelector('.recruitment-scrollbar-top-inner');
+    if (!tableScroll || !topBar || !topInner) return;
+
+    const updateTopWidth = () => {
+        topInner.style.width = tableScroll.scrollWidth + 'px';
+        topBar.scrollLeft = tableScroll.scrollLeft;
+        const needsScroll = tableScroll.scrollWidth > tableScroll.clientWidth + 1;
+        topBar.style.display = needsScroll ? 'block' : 'none';
+    };
+
+    const syncFromTop = () => {
+        tableScroll.scrollLeft = topBar.scrollLeft;
+    };
+    const syncFromBottom = () => {
+        topBar.scrollLeft = tableScroll.scrollLeft;
+    };
+
+    topBar.addEventListener('scroll', syncFromTop);
+    tableScroll.addEventListener('scroll', syncFromBottom);
+    window.addEventListener('resize', updateTopWidth);
+
+    updateTopWidth();
+}
+
 function sortTable(column) {
     const urlParams = new URLSearchParams(window.location.search);
     const currentSort = urlParams.get('sort');
@@ -469,6 +575,8 @@ async function submitEvaluation(event) {
         submitBtn.innerHTML = original;
     }
 }
+
+document.addEventListener('DOMContentLoaded', initRecruitmentStickyScrollbar);
 </script>
 
 <!-- Evaluation Modal -->

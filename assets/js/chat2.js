@@ -264,17 +264,17 @@ class ChatApp {
         }
 
         container.innerHTML = conversations.map(conv => `
-            <div class="chat-conversation-item ${conv.unread_count > 0 ? 'unread' : ''}" data-id="${conv.id}">
+            <div class="chat-conversation-item ${conv.unread_count > 0  'unread' : ''}" data-id="${conv.id}">
                 <div class="chat-avatar">
                     ${this.getInitials(conv.display_name || 'Chat')}
                 </div>
                 <div class="chat-conversation-info">
                     <div class="chat-conversation-name">
                         <span>${this.escapeHtml(conv.display_name || 'Sin nombre')}</span>
-                        ${conv.unread_count > 0 ? `<span class="chat-conversation-unread">${conv.unread_count}</span>` : ''}
+                        ${conv.unread_count > 0  `<span class="chat-conversation-unread">${conv.unread_count}</span>` : ''}
                     </div>
                     <div class="chat-conversation-last-message">
-                        ${conv.last_sender ? this.escapeHtml(conv.last_sender) + ': ' : ''}
+                        ${conv.last_sender  this.escapeHtml(conv.last_sender) + ': ' : ''}
                         ${this.escapeHtml(conv.last_message || 'Sin mensajes')}
                     </div>
                 </div>
@@ -356,7 +356,7 @@ class ChatApp {
 
             const isOwn = msg.user_id == this.getCurrentUserId();
             const messageEl = document.createElement('div');
-            messageEl.className = `chat-message ${isOwn ? 'own' : ''}`;
+            messageEl.className = `chat-message ${isOwn  'own' : ''}`;
             messageEl.dataset.id = msg.id;
 
             let attachmentsHtml = '';
@@ -396,15 +396,15 @@ class ChatApp {
                 reactionsHtml = '<div class="chat-reactions">' +
                     Object.entries(groupedReactions).map(([emoji, users]) => {
                         const isOwn = users.some(u => u.user_id == this.getCurrentUserId());
-                        return `<div class="chat-reaction ${isOwn ? 'own' : ''}">${emoji} ${users.length}</div>`;
+                        return `<div class="chat-reaction ${isOwn  'own' : ''}">${emoji} ${users.length}</div>`;
                     }).join('') +
                     '</div>';
             }
 
             messageEl.innerHTML = `
-                ${!isOwn ? `<div class="chat-message-avatar">${this.getInitials(msg.full_name)}</div>` : ''}
+                ${!isOwn  `<div class="chat-message-avatar">${this.getInitials(msg.full_name)}</div>` : ''}
                 <div class="chat-message-content">
-                    ${!isOwn ? `<div class="chat-message-meta"><strong>${this.escapeHtml(msg.full_name)}</strong></div>` : ''}
+                    ${!isOwn  `<div class="chat-message-meta"><strong>${this.escapeHtml(msg.full_name)}</strong></div>` : ''}
                     <div class="chat-message-bubble">
                         ${this.escapeHtml(msg.message_text)}
                         ${attachmentsHtml}
@@ -412,10 +412,10 @@ class ChatApp {
                     ${reactionsHtml}
                     <div class="chat-message-meta">
                         <span>${this.formatTime(msg.created_at)}</span>
-                        ${msg.is_edited ? '<span class="chat-message-edited">(editado)</span>' : ''}
+                        ${msg.is_edited  '<span class="chat-message-edited">(editado)</span>' : ''}
                     </div>
                 </div>
-                ${isOwn ? `<div class="chat-message-avatar">${this.getInitials(msg.full_name)}</div>` : ''}
+                ${isOwn  `<div class="chat-message-avatar">${this.getInitials(msg.full_name)}</div>` : ''}
             `;
 
             container.appendChild(messageEl);
@@ -679,7 +679,7 @@ class ChatApp {
                 const badge = document.getElementById('unreadBadge');
 
                 if (this.unreadCount > 0) {
-                    badge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+                    badge.textContent = this.unreadCount > 99  '99+' : this.unreadCount;
                     badge.style.display = 'flex';
                 } else {
                     badge.style.display = 'none';
@@ -790,7 +790,7 @@ class ChatApp {
             const basePath = this.getBasePath();
             const response = await fetch(`api.php?action=get_conversations`);
             const data = await response.json();
-            return data.success ? data.conversations : [];
+            return data.success  data.conversations : [];
         } catch (error) {
             console.error('Error fetching conversations:', error);
             return [];
@@ -872,7 +872,7 @@ class ChatApp {
 // Inicializar chat cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Chat JS cargado');
-    console.log('👤 currentUserId:', typeof currentUserId !== 'undefined' ? currentUserId : 'NO DEFINIDO');
+    console.log('👤 currentUserId:', typeof currentUserId !== 'undefined'  currentUserId : 'NO DEFINIDO');
 
     // Verificar que el usuario esté autenticado
     if (typeof currentUserId !== 'undefined' && currentUserId) {

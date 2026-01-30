@@ -139,7 +139,7 @@ foreach ($punchesByDate as $date => $dayPunches) {
 
 **Corrección de moneda (líneas ~167-179):**
 ```php
-$preferredCurrency = $employee['preferred_currency'] ?? 'USD';
+$preferredCurrency = $employee['preferred_currency']  'USD';
 if ($preferredCurrency === 'DOP') {
     $hourlyRate = (float)$employee['hourly_rate_dop'];
     $monthlySalary = (float)$employee['monthly_salary_dop'];

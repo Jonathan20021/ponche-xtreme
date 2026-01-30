@@ -32,7 +32,7 @@ function closeEventModal() {
 function toggleTimeFields() {
     const isAllDay = document.getElementById('isAllDay').checked;
     const timeFields = document.getElementById('timeFields');
-    timeFields.style.display = isAllDay ? 'none' : 'grid';
+    timeFields.style.display = isAllDay  'none' : 'grid';
     
     if (isAllDay) {
         document.getElementById('startTime').value = '';
@@ -65,11 +65,11 @@ async function saveEvent() {
         event_type: formData.get('event_type'),
         color: formData.get('color'),
         location: formData.get('location'),
-        is_all_day: document.getElementById('isAllDay').checked ? 1 : 0
+        is_all_day: document.getElementById('isAllDay').checked  1 : 0
     };
     
     const eventId = document.getElementById('eventId').value;
-    const action = eventId ? 'update' : 'create';
+    const action = eventId  'update' : 'create';
     
     if (eventId) {
         eventData.id = eventId;
@@ -175,7 +175,7 @@ function displayEventDetails(event) {
         `;
     } else if (event.start_time) {
         const timeText = event.end_time 
-            ? `${event.start_time.substring(0, 5)} - ${event.end_time.substring(0, 5)}`
+             `${event.start_time.substring(0, 5)} - ${event.end_time.substring(0, 5)}`
             : event.start_time.substring(0, 5);
         
         html += `

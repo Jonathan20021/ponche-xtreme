@@ -606,7 +606,7 @@ if (!function_exists('getEmployeeSchedule')) {
             
             $stmt = $pdo->prepare("
                 SELECT * FROM employee_schedules 
-                WHERE employee_id = ? 
+                WHERE employee_id = ?
                 AND is_active = 1
                 AND (effective_date IS NULL OR effective_date <= ?)
                 AND (end_date IS NULL OR end_date >= ?)
@@ -634,7 +634,7 @@ if (!function_exists('getEmployeeScheduleByUserId')) {
             
             $stmt = $pdo->prepare("
                 SELECT * FROM employee_schedules 
-                WHERE user_id = ? 
+                WHERE user_id = ?
                 AND is_active = 1
                 AND (effective_date IS NULL OR effective_date <= ?)
                 AND (end_date IS NULL OR end_date >= ?)
@@ -836,7 +836,7 @@ if (!function_exists('getSystemSetting')) {
             // Cast to appropriate type
             switch ($type) {
                 case 'number':
-                    return is_numeric($value) ? (float)$value : $default;
+                    return is_numeric($value) ? (float) $value : $default;
                 case 'boolean':
                     return filter_var($value, FILTER_VALIDATE_BOOLEAN);
                 case 'json':

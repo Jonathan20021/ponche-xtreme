@@ -83,6 +83,75 @@
     padding: 1.5rem;
 }
 
+.recruitment-table-scroll {
+    overflow-x: scroll;
+    scrollbar-gutter: stable both-edges;
+}
+
+.recruitment-scrollbar-top {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    height: 14px;
+    overflow-x: scroll;
+    overflow-y: hidden;
+    margin-bottom: 8px;
+    background: rgba(2, 6, 23, 0.35);
+    border-radius: 999px;
+}
+
+.recruitment-scrollbar-top-inner {
+    height: 1px;
+}
+
+.theme-light .recruitment-scrollbar-top {
+    background: rgba(226, 232, 240, 0.85);
+}
+
+.recruitment-table-scroll::-webkit-scrollbar {
+    height: 12px;
+}
+
+.recruitment-table-scroll::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 999px;
+}
+
+.recruitment-table-scroll::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.6);
+    border-radius: 999px;
+}
+
+.theme-light .recruitment-table-scroll::-webkit-scrollbar-track {
+    background: rgba(226, 232, 240, 0.9);
+}
+
+.theme-light .recruitment-table-scroll::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.7);
+}
+
+.recruitment-scrollbar-top::-webkit-scrollbar {
+    height: 12px;
+}
+
+.recruitment-scrollbar-top::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 999px;
+}
+
+.recruitment-scrollbar-top::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.6);
+    border-radius: 999px;
+}
+
+.theme-light .recruitment-scrollbar-top::-webkit-scrollbar-track {
+    background: rgba(226, 232, 240, 0.9);
+}
+
+.theme-light .recruitment-scrollbar-top::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.7);
+}
+
 .theme-light .recruitment-table-container {
     background: rgba(255, 255, 255, 0.9);
     border: 1px solid rgba(148, 163, 184, 0.2);
@@ -92,6 +161,7 @@
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
+    min-width: 1200px;
 }
 
 .recruitment-table thead tr {

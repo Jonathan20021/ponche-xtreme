@@ -48,7 +48,7 @@ if ($workedHours > $scheduledHours) {
 **AFP (Administradora de Fondos de Pensiones)** - ✅ CORRECTO
 ```php
 function calculateAFP($pdo, $grossSalary, $isEmployer = false) {
-    $rate = $isEmployer ? 7.10% : 2.87%;
+    $rate = $isEmployer  7.10% : 2.87%;
     return round($grossSalary * ($rate / 100), 2);
 }
 ```
@@ -58,7 +58,7 @@ function calculateAFP($pdo, $grossSalary, $isEmployer = false) {
 **SFS (Seguro Familiar de Salud)** - ✅ CORRECTO
 ```php
 function calculateSFS($pdo, $grossSalary, $isEmployer = false) {
-    $rate = $isEmployer ? 7.09% : 3.04%;
+    $rate = $isEmployer  7.09% : 3.04%;
     return round($grossSalary * ($rate / 100), 2);
 }
 ```
@@ -187,12 +187,12 @@ GREATEST(
 ```php
 // Diario
 $adherencePercent = $productive > 0
-    ? min(round(($productive / $scheduledSecondsPerDay) * 100, 1), 999)
+     min(round(($productive / $scheduledSecondsPerDay) * 100, 1), 999)
     : 0.0;
 
 // Mensual
 $adherence_percent = $productive_seconds > 0
-    ? min(round(($productive_seconds / $expectedSeconds) * 100, 1), 999)
+     min(round(($productive_seconds / $expectedSeconds) * 100, 1), 999)
     : 0.0;
 ```
 

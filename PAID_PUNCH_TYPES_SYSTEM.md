@@ -94,7 +94,7 @@ Retorna todos los tipos de asistencia, incluyendo el campo `is_paid`.
 ```php
 $allTypes = getAttendanceTypes($pdo);
 foreach ($allTypes as $type) {
-    echo $type['label'] . ': ' . ($type['is_paid'] ? 'Pagado' : 'No pagado');
+    echo $type['label'] . ': ' . ($type['is_paid']  'Pagado' : 'No pagado');
 }
 ```
 
@@ -115,7 +115,7 @@ $stmt = $pdo->prepare("
         )) as total_seconds
     FROM attendance
     WHERE user_id = ?
-    AND DATE(timestamp) BETWEEN ? AND ?
+    AND DATE(timestamp) BETWEEN  AND ?
     AND UPPER(type) IN ($paidTypesPlaceholders)
     GROUP BY DATE(timestamp)
 ");

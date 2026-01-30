@@ -86,7 +86,7 @@ foreach ($employees as $employee) {
     }
     
     echo "Salario: $" . number_format($salary, 2) . " {$preferredCurrency}";
-    echo " (Equivalente: $" . number_format($salaryConverted, 2) . " " . ($preferredCurrency === 'USD' ? 'DOP' : 'USD') . ")";
+    echo " (Equivalente: $" . number_format($salaryConverted, 2) . " " . ($preferredCurrency === 'USD'  'DOP' : 'USD') . ")";
 }
 ```
 

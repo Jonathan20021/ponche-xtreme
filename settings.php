@@ -17,7 +17,7 @@ $sections = [
     'system_settings' => ['label' => 'Configuracion del Sistema', 'category' => 'Sistema Principal', 'icon' => 'fa-cog', 'description' => 'Opciones globales y parametros avanzados del sistema'],
     'activity_logs' => ['label' => 'Logs de Actividad', 'category' => 'Sistema Principal', 'icon' => 'fa-history', 'description' => 'Registro completo de todas las acciones del sistema'],
     'login_logs' => ['label' => 'Logs de Acceso', 'category' => 'Sistema Principal', 'icon' => 'fa-shield-alt', 'description' => 'Historial de inicios de sesión'],
-    
+
     // Records & Reports
     'records' => ['label' => 'Registros', 'category' => 'Registros y Reportes', 'icon' => 'fa-table', 'description' => 'Registros de asistencia'],
     'records_qa' => ['label' => 'Registros QA', 'category' => 'Registros y Reportes', 'icon' => 'fa-clipboard-check', 'description' => 'Registros de control de calidad'],
@@ -27,10 +27,11 @@ $sections = [
     'operations_dashboard' => ['label' => 'Dashboard de Operaciones', 'category' => 'Registros y Reportes', 'icon' => 'fa-sitemap', 'description' => 'Panel de operaciones'],
     'download_excel' => ['label' => 'Exportar Excel Mensual', 'category' => 'Registros y Reportes', 'icon' => 'fa-file-excel', 'description' => 'Exportación mensual a Excel'],
     'download_excel_daily' => ['label' => 'Exportar Excel Diario', 'category' => 'Registros y Reportes', 'icon' => 'fa-file-excel', 'description' => 'Exportación diaria a Excel'],
-    
+    'wfm_report' => ['label' => 'Reporte WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-chart-area', 'description' => 'Reporte de WFM (Punch vs Payroll)'],
+
     // Attendance
     'register_attendance' => ['label' => 'Registrar Horas', 'category' => 'Asistencia', 'icon' => 'fa-calendar-plus', 'description' => 'Registro de horas administrativas'],
-    
+
     // HR Module
     'hr_dashboard' => ['label' => 'Dashboard HR', 'category' => 'Recursos Humanos', 'icon' => 'fa-chart-pie', 'description' => 'Panel principal de recursos humanos'],
     'hr_employees' => ['label' => 'Empleados', 'category' => 'Recursos Humanos', 'icon' => 'fa-id-card', 'description' => 'Gestión de empleados'],
@@ -45,7 +46,7 @@ $sections = [
     'hr_recruitment' => ['label' => 'Reclutamiento', 'category' => 'Recursos Humanos', 'icon' => 'fa-user-plus', 'description' => 'Gestión de vacantes y solicitudes de empleo'],
     'hr_job_postings' => ['label' => 'Gestión de Vacantes', 'category' => 'Recursos Humanos', 'icon' => 'fa-briefcase', 'description' => 'Crear y administrar vacantes de empleo'],
     'manage_campaigns' => ['label' => 'Gestión de Campañas', 'category' => 'Recursos Humanos', 'icon' => 'fa-bullhorn', 'description' => 'Crear, editar y gestionar campañas de agentes y supervisores'],
-    
+
     // Helpdesk
     'helpdesk' => ['label' => 'Dashboard Helpdesk', 'category' => 'Helpdesk', 'icon' => 'fa-headset', 'description' => 'Panel de tickets y asignaciones'],
     'helpdesk_tickets' => ['label' => 'Tickets', 'category' => 'Helpdesk', 'icon' => 'fa-ticket-alt', 'description' => 'CreaciИn y seguimiento de tickets'],
@@ -54,14 +55,14 @@ $sections = [
     // Agents
     'agent_dashboard' => ['label' => 'Dashboard de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-chart-bar', 'description' => 'Panel para agentes'],
     'agent_records' => ['label' => 'Registros de Agentes', 'category' => 'Portal de Agentes', 'icon' => 'fa-list', 'description' => 'Registros de agentes'],
-    
+
     // Supervisor
     'supervisor_dashboard' => ['label' => 'Monitor en Tiempo Real', 'category' => 'Supervisión', 'icon' => 'fa-users-cog', 'description' => 'Monitor en tiempo real del estado de todos los agentes'],
-    
+
     // Manager
     'manager_dashboard' => ['label' => 'Monitor Administrativos', 'category' => 'Gerencia', 'icon' => 'fa-user-tie', 'description' => 'Monitor en tiempo real del personal administrativo (todos los roles excepto agentes)'],
     'executive_dashboard' => ['label' => 'Dashboard Ejecutivo', 'category' => 'Gerencia', 'icon' => 'fa-chart-pie', 'description' => 'Dashboard completo para gerencia general con vista de nómina, costos por campaña y monitor en tiempo real'],
-    
+
     // Chat
     'chat' => ['label' => 'Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comment-dots', 'description' => 'Acceso general al modulo de chat'],
     'chat_admin' => ['label' => 'Administraci?n de Chat', 'category' => 'Comunicaciones', 'icon' => 'fa-comments', 'description' => 'Gesti?n de permisos y monitoreo de conversaciones de chat'],
@@ -125,7 +126,7 @@ try {
 
         switch ($action) {
             case 'create_role':
-                    $roleKey = strtoupper(sanitize_role_name(trim($_POST['role_key'] ?? '')));
+                $roleKey = strtoupper(sanitize_role_name(trim($_POST['role_key'] ?? '')));
                 $roleLabel = trim($_POST['role_label'] ?? '');
                 $roleDescription = trim($_POST['role_description'] ?? '');
 
@@ -212,25 +213,25 @@ try {
 
                 // Generate employee code: EMP-YYYY-XXXX
                 $currentYear = date('Y');
-                
+
                 // Get the highest employee code for the current year
                 $codeStmt = $pdo->prepare("SELECT employee_code FROM users WHERE employee_code LIKE ? ORDER BY employee_code DESC LIMIT 1");
                 $codeStmt->execute(["EMP-{$currentYear}-%"]);
                 $lastCode = $codeStmt->fetch();
-                
+
                 if ($lastCode && $lastCode['employee_code']) {
                     // Extract the sequential number and increment it
-                    $lastNumber = (int)substr($lastCode['employee_code'], -4);
+                    $lastNumber = (int) substr($lastCode['employee_code'], -4);
                     $newNumber = $lastNumber + 1;
                 } else {
                     // First employee of the year
                     $newNumber = 1;
                 }
-                
+
                 $employeeCode = sprintf("EMP-%s-%04d", $currentYear, $newNumber);
 
                 $pdo->beginTransaction();
-                
+
                 try {
                     // Create user (sin datos de salario, se configurarán desde HR)
                     $createStmt = $pdo->prepare("
@@ -245,19 +246,19 @@ try {
                         $role,
                         $departmentId
                     ]);
-                    
+
                     $newUserId = $pdo->lastInsertId();
-                    
+
                     // Auto-create employee record
                     // Split full_name into first_name and last_name
                     $nameParts = explode(' ', $fullName, 2);
                     $firstName = $nameParts[0];
                     $lastName = isset($nameParts[1]) ? $nameParts[1] : '';
-                    
+
                     $campaignIdInput = $_POST['campaign_id'] ?? '';
-                    $campaignId = (is_numeric($campaignIdInput) && (int)$campaignIdInput > 0) ? (int)$campaignIdInput : null;
+                    $campaignId = (is_numeric($campaignIdInput) && (int) $campaignIdInput > 0) ? (int) $campaignIdInput : null;
                     $supervisorInput = $_POST['supervisor_id'] ?? '';
-                    $supervisorId = (is_numeric($supervisorInput) && (int)$supervisorInput > 0) ? (int)$supervisorInput : null;
+                    $supervisorId = (is_numeric($supervisorInput) && (int) $supervisorInput > 0) ? (int) $supervisorInput : null;
 
                     $createEmployeeStmt = $pdo->prepare("
                         INSERT INTO employees (
@@ -284,15 +285,15 @@ try {
                         $campaignId,
                         $supervisorId
                     ]);
-                    
+
                     $pdo->commit();
-                    
+
                     // Enviar correo de bienvenida si hay email en el registro de empleado
                     $emailWarning = null;
                     $employeeStmt = $pdo->prepare("SELECT email FROM employees WHERE user_id = ?");
                     $employeeStmt->execute([$newUserId]);
                     $employeeData = $employeeStmt->fetch();
-                    
+
                     if ($employeeData && !empty($employeeData['email'])) {
                         // Obtener nombre del departamento
                         $departmentName = 'N/A';
@@ -304,7 +305,7 @@ try {
                                 $departmentName = $deptResult['name'];
                             }
                         }
-                        
+
                         $emailData = [
                             'email' => $employeeData['email'],
                             'employee_name' => $fullName,
@@ -315,9 +316,9 @@ try {
                             'department' => $departmentName,
                             'hire_date' => date('Y-m-d')
                         ];
-                        
+
                         $emailResult = sendWelcomeEmail($emailData);
-                        
+
                         if ($emailResult['success']) {
                             $successMessages[] = "Usuario '{$username}' y empleado creados correctamente con código {$employeeCode}. El empleado está en período de prueba (90 días). Se ha enviado un correo de bienvenida a {$employeeData['email']}.";
                         } else {
@@ -394,13 +395,13 @@ try {
                         ensureRoleExists($pdo, $newRole, $newRole);
                         $updateWithRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $newRole, $userId]);
                         // If the current logged-in user's role changed, update the session immediately
-                        if ((int)$userId === (int)($_SESSION['user_id'] ?? 0)) {
+                        if ((int) $userId === (int) ($_SESSION['user_id'] ?? 0)) {
                             $_SESSION['role'] = $newRole;
                         }
                     } else {
                         $updateWithoutRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $userId]);
                     }
-                    
+
                     // Sync department_id to employees table if employee record exists
                     $syncEmployeeStmt = $pdo->prepare("UPDATE employees SET department_id = ? WHERE user_id = ?");
                     $syncEmployeeStmt->execute([$departmentId, $userId]);
@@ -673,13 +674,13 @@ try {
                 }
 
                 $pdo->commit();
-                
+
                 // Clear permission cache for real-time updates
                 include_once 'find_accessible_page.php';
                 clearPermissionCache();
-                
+
                 $successMessages[] = 'Permisos actualizados correctamente.';
-                
+
                 // Force page reload to update menu in real-time
                 header('Location: settings.php?tab=roles&permissions_updated=1#permissions-section');
                 exit;
@@ -708,12 +709,12 @@ try {
                 }
 
                 $createdBy = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
-                
+
                 if (addHourlyRateHistory($pdo, $userId, $rateUsd, $rateDop, $effectiveDate, $createdBy, $notes !== '' ? $notes : null)) {
                     // Also update the current rate in users table
                     $updateStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, hourly_rate_dop = ? WHERE id = ?");
                     $updateStmt->execute([$rateUsd, $rateDop, $userId]);
-                    
+
                     $successMessages[] = 'Cambio de tarifa registrado correctamente.';
                 } else {
                     $errorMessages[] = 'No se pudo registrar el cambio de tarifa.';
@@ -737,7 +738,7 @@ try {
             case 'toggle_user_status':
                 $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
                 $newStatus = isset($_POST['new_status']) ? (int) $_POST['new_status'] : 0;
-                
+
                 if ($userId <= 0) {
                     $errorMessages[] = 'Usuario invalido.';
                     break;
@@ -765,7 +766,7 @@ try {
                 $usageContext = trim($_POST['usage_context'] ?? '') ?: null;
                 $validFrom = trim($_POST['valid_from'] ?? '') ?: null;
                 $validUntil = trim($_POST['valid_until'] ?? '') ?: null;
-                $maxUses = trim($_POST['max_uses'] ?? '') !== '' ? (int)$_POST['max_uses'] : null;
+                $maxUses = trim($_POST['max_uses'] ?? '') !== '' ? (int) $_POST['max_uses'] : null;
 
                 if (empty($codeName) || empty($code) || empty($roleType)) {
                     $errorMessages[] = 'Nombre, código y tipo de rol son obligatorios.';
@@ -792,7 +793,7 @@ try {
                 break;
 
             case 'update_auth_code':
-                $codeId = (int)($_POST['code_id'] ?? 0);
+                $codeId = (int) ($_POST['code_id'] ?? 0);
                 $codeName = trim($_POST['code_name'] ?? '');
                 $code = trim($_POST['code'] ?? '');
                 $roleType = trim($_POST['role_type'] ?? '');
@@ -800,7 +801,7 @@ try {
                 $usageContext = trim($_POST['usage_context'] ?? '') ?: null;
                 $validFrom = trim($_POST['valid_from'] ?? '') ?: null;
                 $validUntil = trim($_POST['valid_until'] ?? '') ?: null;
-                $maxUses = trim($_POST['max_uses'] ?? '') !== '' ? (int)$_POST['max_uses'] : null;
+                $maxUses = trim($_POST['max_uses'] ?? '') !== '' ? (int) $_POST['max_uses'] : null;
 
                 if ($codeId <= 0) {
                     $errorMessages[] = 'ID de código inválido.';
@@ -833,7 +834,7 @@ try {
                 break;
 
             case 'delete_auth_code':
-                $codeId = (int)($_POST['code_id'] ?? 0);
+                $codeId = (int) ($_POST['code_id'] ?? 0);
 
                 if ($codeId <= 0) {
                     $errorMessages[] = 'ID de código inválido.';
@@ -862,13 +863,13 @@ try {
                         VALUES (?, ?, 'boolean', 'authorization')
                         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
                     ");
-                    
+
                     $stmt->execute(['authorization_codes_enabled', $enabled]);
                     $stmt->execute(['authorization_require_for_overtime', $requireForOvertime]);
                     $stmt->execute(['authorization_require_for_edit_records', $requireForEdit]);
                     $stmt->execute(['authorization_require_for_delete_records', $requireForDelete]);
                     $stmt->execute(['authorization_require_for_early_punch', $requireForEarlyPunch]);
-                    
+
                     $successMessages[] = 'Configuración del sistema de autorización actualizada.';
                 } catch (PDOException $e) {
                     $errorMessages[] = 'Error al actualizar la configuración.';
@@ -886,11 +887,11 @@ try {
                         VALUES (?, ?, 'text', 'reports')
                         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
                     ");
-                    
+
                     $stmt->execute(['absence_report_recipients', $recipients]);
                     $stmt->execute(['absence_report_enabled', $enabled]);
                     $stmt->execute(['absence_report_time', $time]);
-                    
+
                     $successMessages[] = 'Configuración del reporte de ausencias actualizada.';
                 } catch (PDOException $e) {
                     $errorMessages[] = 'Error al actualizar la configuración del reporte.';
@@ -903,7 +904,7 @@ try {
                     break;
                 }
                 $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
-                
+
                 if ($userId <= 0) {
                     $errorMessages[] = 'Usuario invalido.';
                     break;
@@ -968,7 +969,7 @@ try {
 
             case 'delete_user':
                 $userId = isset($_POST['user_id']) ? (int) $_POST['user_id'] : 0;
-                
+
                 if ($userId <= 0) {
                     $errorMessages[] = 'Usuario invalido.';
                     break;
@@ -985,11 +986,11 @@ try {
                     // Delete related employee record if exists
                     $deleteEmployeeStmt = $pdo->prepare("DELETE FROM employees WHERE user_id = ?");
                     $deleteEmployeeStmt->execute([$userId]);
-                    
+
                     // Delete user
                     $deleteUserStmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
                     $deleteUserStmt->execute([$userId]);
-                    
+
                     $pdo->commit();
                     $successMessages[] = 'Usuario eliminado correctamente.';
                 } catch (Exception $e) {
@@ -1148,7 +1149,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="space-y-3">
                 <p class="text-muted text-xs uppercase tracking-[0.35em]">Control Center</p>
                 <h1 class="text-primary text-3xl md:text-4xl font-bold">Configuracion general del sistema</h1>
-                <p class="text-muted max-w-2xl">Administra usuarios, departamentos, roles y metas de horarios desde una sola vista. Los cambios se aplican inmediatamente en todos los reportes y dashboards.</p>
+                <p class="text-muted max-w-2xl">Administra usuarios, departamentos, roles y metas de horarios desde una
+                    sola vista. Los cambios se aplican inmediatamente en todos los reportes y dashboards.</p>
             </div>
             <div class="section-card w-full lg:w-80 p-5 space-y-3">
                 <p class="text-muted text-xs uppercase tracking-widest">Referencia rapida</p>
@@ -1163,9 +1165,10 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         <?php foreach ($successMessages as $message): ?>
             <div class="status-banner success"><?= htmlspecialchars($message) ?></div>
         <?php endforeach; ?>
-        
+
         <?php if ($emailWarning): ?>
-            <div class="status-banner" style="background: linear-gradient(135deg, #f59e0b15 0%, #d9770615 100%); border-left: 4px solid #f59e0b; color: #d97706;">
+            <div class="status-banner"
+                style="background: linear-gradient(135deg, #f59e0b15 0%, #d9770615 100%); border-left: 4px solid #f59e0b; color: #d97706;">
                 <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($emailWarning) ?>
             </div>
         <?php endif; ?>
@@ -1209,7 +1212,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     </div>
                     <div>
                         <h2 class="text-primary text-lg font-semibold">Crear usuario</h2>
-                        <p class="text-muted text-sm">Registra usuarios administrativos u operativos con su compensacion completa.</p>
+                        <p class="text-muted text-sm">Registra usuarios administrativos u operativos con su compensacion
+                            completa.</p>
                     </div>
                 </div>
                 <form method="POST" class="space-y-4">
@@ -1221,22 +1225,27 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         </div>
                         <div>
                             <label class="form-label">Nombre completo</label>
-                            <input type="text" name="full_name" required class="input-control" placeholder="Nombre y apellido">
+                            <input type="text" name="full_name" required class="input-control"
+                                placeholder="Nombre y apellido">
                         </div>
                         <div>
                             <label class="form-label">Email</label>
                             <input type="email" name="email" class="input-control" placeholder="correo@ejemplo.com">
-                            <p class="text-muted text-xs mt-1">Se enviará un correo de bienvenida con las credenciales de acceso.</p>
+                            <p class="text-muted text-xs mt-1">Se enviará un correo de bienvenida con las credenciales
+                                de acceso.</p>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                                 <label class="form-label">Contrasena temporal</label>
-                                <input type="text" name="password" required class="input-control" placeholder="Define una contrasena inicial">
+                                <input type="text" name="password" required class="input-control"
+                                    placeholder="Define una contrasena inicial">
                             </div>
                             <div>
                                 <label class="form-label">Rol</label>
-                                <input type="text" name="role" list="role-options" required class="input-control" placeholder="Ej. Admin">
-                                <p class="text-muted text-xs mt-1">Puedes crear roles desde la pestana Roles y permisos.</p>
+                                <input type="text" name="role" list="role-options" required class="input-control"
+                                    placeholder="Ej. Admin">
+                                <p class="text-muted text-xs mt-1">Puedes crear roles desde la pestana Roles y permisos.
+                                </p>
                             </div>
                         </div>
                         <div>
@@ -1244,7 +1253,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <select name="department_id" class="select-control" required <?= empty($departments) ? 'disabled' : '' ?>>
                                 <option value="">Selecciona un departamento</option>
                                 <?php foreach ($departments as $department): ?>
-                                    <option value="<?= (int) $department['id'] ?>"><?= htmlspecialchars($department['name']) ?></option>
+                                    <option value="<?= (int) $department['id'] ?>">
+                                        <?= htmlspecialchars($department['name']) ?></option>
                                 <?php endforeach; ?>
                             </select>
                             <?php if (empty($departments)): ?>
@@ -1257,7 +1267,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <select name="campaign_id" class="select-control" <?= empty($campaigns) ? 'disabled' : '' ?>>
                                     <option value="">Sin asignar</option>
                                     <?php foreach ($campaigns as $campaign): ?>
-                                        <option value="<?= (int) $campaign['id'] ?>"><?= htmlspecialchars($campaign['name']) ?></option>
+                                        <option value="<?= (int) $campaign['id'] ?>">
+                                            <?= htmlspecialchars($campaign['name']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                                 <?php if (empty($campaigns)): ?>
@@ -1269,7 +1280,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <select name="supervisor_id" class="select-control" <?= empty($supervisorsList) ? 'disabled' : '' ?>>
                                     <option value="">Sin asignar</option>
                                     <?php foreach ($supervisorsList as $sup): ?>
-                                        <option value="<?= (int) $sup['id'] ?>"><?= htmlspecialchars($sup['full_name']) ?></option>
+                                        <option value="<?= (int) $sup['id'] ?>"><?= htmlspecialchars($sup['full_name']) ?>
+                                        </option>
                                     <?php endforeach; ?>
                                 </select>
                                 <?php if (empty($supervisorsList)): ?>
@@ -1307,7 +1319,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     </div>
                     <div>
                         <label class="form-label">Descripcion</label>
-                        <textarea name="role_description" class="textarea-control" placeholder="Que permisos o proposito tiene este rol?"></textarea>
+                        <textarea name="role_description" class="textarea-control"
+                            placeholder="Que permisos o proposito tiene este rol?"></textarea>
                     </div>
                     <button type="submit" class="btn-secondary w-full justify-center">
                         <i class="fas fa-plus-circle"></i>
@@ -1323,18 +1336,21 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     </div>
                     <div>
                         <h2 class="text-primary text-lg font-semibold">Registrar departamento</h2>
-                        <p class="text-muted text-sm">Clasifica a tus colaboradores por area para indicadores y reportes.</p>
+                        <p class="text-muted text-sm">Clasifica a tus colaboradores por area para indicadores y
+                            reportes.</p>
                     </div>
                 </div>
                 <form method="POST" class="space-y-4">
                     <input type="hidden" name="action" value="create_department">
                     <div>
                         <label class="form-label">Nombre del departamento</label>
-                        <input type="text" name="department_name" required class="input-control" placeholder="Ej. Operaciones">
+                        <input type="text" name="department_name" required class="input-control"
+                            placeholder="Ej. Operaciones">
                     </div>
                     <div>
                         <label class="form-label">Descripcion</label>
-                        <textarea name="department_description" class="textarea-control" placeholder="Resumen o responsabilidades"></textarea>
+                        <textarea name="department_description" class="textarea-control"
+                            placeholder="Resumen o responsabilidades"></textarea>
                     </div>
                     <button type="submit" class="btn-secondary w-full justify-center">
                         <i class="fas fa-check-circle"></i>
@@ -1346,7 +1362,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
 
         <article id="create-attendance-type-card" class="glass-card space-y-5">
             <div class="flex items-center gap-3">
-                <div class="h-10 w-10 rounded-xl bg-fuchsia-500/20 border border-fuchsia-500/40 flex items-center justify-center text-fuchsia-300">
+                <div
+                    class="h-10 w-10 rounded-xl bg-fuchsia-500/20 border border-fuchsia-500/40 flex items-center justify-center text-fuchsia-300">
                     <i class="fas fa-plus"></i>
                 </div>
                 <div>
@@ -1359,19 +1376,23 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="form-label">Nombre visible</label>
-                        <input type="text" name="attendance_label" class="input-control" required placeholder="Ej. Capacitación">
+                        <input type="text" name="attendance_label" class="input-control" required
+                            placeholder="Ej. Capacitación">
                     </div>
                     <div>
                         <label class="form-label">Identificador (slug)</label>
-                        <input type="text" name="attendance_slug" class="input-control" placeholder="Se genera automáticamente si lo dejas vacío">
+                        <input type="text" name="attendance_slug" class="input-control"
+                            placeholder="Se genera automáticamente si lo dejas vacío">
                     </div>
                     <div>
                         <label class="form-label">Icono (Font Awesome)</label>
-                        <input type="text" name="attendance_icon" class="input-control" value="fas fa-circle" placeholder="fas fa-briefcase">
+                        <input type="text" name="attendance_icon" class="input-control" value="fas fa-circle"
+                            placeholder="fas fa-briefcase">
                     </div>
                     <div>
                         <label class="form-label">Atajo de teclado</label>
-                        <input type="text" name="attendance_shortcut" class="input-control text-center" maxlength="2" placeholder="Opcional">
+                        <input type="text" name="attendance_shortcut" class="input-control text-center" maxlength="2"
+                            placeholder="Opcional">
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1411,7 +1432,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Tipos de asistencia</h2>
-                    <p class="text-muted text-sm">Modifica etiquetas, colores e iconos de los botones usados en punch.php.</p>
+                    <p class="text-muted text-sm">Modifica etiquetas, colores e iconos de los botones usados en
+                        punch.php.</p>
                 </div>
                 <span class="chip"><i class="fas fa-fingerprint"></i> <?= $attendanceTypeActiveCount ?> activos</span>
             </div>
@@ -1430,49 +1452,69 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <th>Atajo</th>
                                 <th>Único/día</th>
                                 <th>Activo</th>
-                                <th title="Indica si este tipo de punch cuenta para pago de nómina">Pagado <i class="fas fa-info-circle text-xs text-muted ml-1"></i></th>
+                                <th title="Indica si este tipo de punch cuenta para pago de nómina">Pagado <i
+                                        class="fas fa-info-circle text-xs text-muted ml-1"></i></th>
                                 <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($attendanceTypesList)): ?>
-                                <tr><td colspan="11" class="data-table-empty">Aún no has configurado tipos de asistencia.</td></tr>
+                                <tr>
+                                    <td colspan="11" class="data-table-empty">Aún no has configurado tipos de asistencia.
+                                    </td>
+                                </tr>
                             <?php else: ?>
                                 <?php foreach ($attendanceTypesList as $type): ?>
                                     <?php $typeId = (int) $type['id']; ?>
                                     <tr>
                                         <td>
-                                            <input type="number" name="attendance_sort_order[<?= $typeId ?>]" value="<?= (int) $type['sort_order'] ?>" class="input-control">
+                                            <input type="number" name="attendance_sort_order[<?= $typeId ?>]"
+                                                value="<?= (int) $type['sort_order'] ?>" class="input-control">
                                         </td>
                                         <td>
-                                            <input type="text" name="attendance_slug[<?= $typeId ?>]" value="<?= htmlspecialchars($type['slug']) ?>" class="input-control">
+                                            <input type="text" name="attendance_slug[<?= $typeId ?>]"
+                                                value="<?= htmlspecialchars($type['slug']) ?>" class="input-control">
                                         </td>
                                         <td>
-                                            <input type="text" name="attendance_label[<?= $typeId ?>]" value="<?= htmlspecialchars($type['label']) ?>" class="input-control">
+                                            <input type="text" name="attendance_label[<?= $typeId ?>]"
+                                                value="<?= htmlspecialchars($type['label']) ?>" class="input-control">
                                         </td>
                                         <td>
-                                            <input type="text" name="attendance_icon[<?= $typeId ?>]" value="<?= htmlspecialchars($type['icon_class'] ?? 'fas fa-circle') ?>" class="input-control">
+                                            <input type="text" name="attendance_icon[<?= $typeId ?>]"
+                                                value="<?= htmlspecialchars($type['icon_class'] ?? 'fas fa-circle') ?>"
+                                                class="input-control">
                                         </td>
                                         <td>
-                                            <input type="color" name="attendance_color_start[<?= $typeId ?>]" value="<?= htmlspecialchars($type['color_start'] ?? '#6366f1') ?>" class="input-control h-11">
+                                            <input type="color" name="attendance_color_start[<?= $typeId ?>]"
+                                                value="<?= htmlspecialchars($type['color_start'] ?? '#6366f1') ?>"
+                                                class="input-control h-11">
                                         </td>
                                         <td>
-                                            <input type="color" name="attendance_color_end[<?= $typeId ?>]" value="<?= htmlspecialchars($type['color_end'] ?? '#4338ca') ?>" class="input-control h-11">
+                                            <input type="color" name="attendance_color_end[<?= $typeId ?>]"
+                                                value="<?= htmlspecialchars($type['color_end'] ?? '#4338ca') ?>"
+                                                class="input-control h-11">
                                         </td>
                                         <td>
-                                            <input type="text" name="attendance_shortcut[<?= $typeId ?>]" value="<?= htmlspecialchars($type['shortcut_key'] ?? '') ?>" class="input-control text-center" maxlength="2">
+                                            <input type="text" name="attendance_shortcut[<?= $typeId ?>]"
+                                                value="<?= htmlspecialchars($type['shortcut_key'] ?? '') ?>"
+                                                class="input-control text-center" maxlength="2">
                                         </td>
                                         <td class="text-center">
-                                            <input type="checkbox" name="attendance_unique[<?= $typeId ?>]" value="1" class="accent-cyan-500" <?= ((int) ($type['is_unique_daily'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                            <input type="checkbox" name="attendance_unique[<?= $typeId ?>]" value="1"
+                                                class="accent-cyan-500" <?= ((int) ($type['is_unique_daily'] ?? 0) === 1) ? 'checked' : '' ?>>
                                         </td>
                                         <td class="text-center">
-                                            <input type="checkbox" name="attendance_active[<?= $typeId ?>]" value="1" class="accent-cyan-500" <?= ((int) ($type['is_active'] ?? 0) === 1) ? 'checked' : '' ?>>
+                                            <input type="checkbox" name="attendance_active[<?= $typeId ?>]" value="1"
+                                                class="accent-cyan-500" <?= ((int) ($type['is_active'] ?? 0) === 1) ? 'checked' : '' ?>>
                                         </td>
                                         <td class="text-center">
-                                            <input type="checkbox" name="attendance_paid[<?= $typeId ?>]" value="1" class="accent-green-500" <?= ((int) ($type['is_paid'] ?? 1) === 1) ? 'checked' : '' ?>>
+                                            <input type="checkbox" name="attendance_paid[<?= $typeId ?>]" value="1"
+                                                class="accent-green-500" <?= ((int) ($type['is_paid'] ?? 1) === 1) ? 'checked' : '' ?>>
                                         </td>
                                         <td class="text-center">
-                                            <button type="submit" name="action" value="delete_attendance_type" class="btn-danger btn-sm w-full justify-center" formnovalidate onclick="this.form.elements['attendance_type_id'].value='<?= $typeId ?>'; return confirm('¿Eliminar el tipo <?= htmlspecialchars($type['label']) ?>?');">
+                                            <button type="submit" name="action" value="delete_attendance_type"
+                                                class="btn-danger btn-sm w-full justify-center" formnovalidate
+                                                onclick="this.form.elements['attendance_type_id'].value='<?= $typeId ?>'; return confirm('¿Eliminar el tipo <?= htmlspecialchars($type['label']) ?>?');">
                                                 <i class="fas fa-trash-alt"></i>
                                                 Eliminar
                                             </button>
@@ -1484,12 +1526,13 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     </table>
                 </div>
                 <?php if (!empty($attendanceTypesList)): ?>
-                <div class="flex justify-end">
-                    <button type="submit" name="action" value="update_attendance_types" class="btn-primary" onclick="this.form.elements['attendance_type_id'].value='';">
-                        <i class="fas fa-save"></i>
-                        Actualizar tipos
-                    </button>
-                </div>
+                    <div class="flex justify-end">
+                        <button type="submit" name="action" value="update_attendance_types" class="btn-primary"
+                            onclick="this.form.elements['attendance_type_id'].value='';">
+                            <i class="fas fa-save"></i>
+                            Actualizar tipos
+                        </button>
+                    </div>
                 <?php endif; ?>
             </form>
         </section>
@@ -1501,8 +1544,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <h2 class="text-primary text-xl font-semibold">Configuración del Sistema de Códigos</h2>
                     <p class="text-muted text-sm">Habilita y configura el sistema de códigos de autorización.</p>
                 </div>
-                <span class="chip <?= $authSystemEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' ?>">
-                    <i class="fas fa-<?= $authSystemEnabled ? 'check-circle' : 'times-circle' ?>"></i> 
+                <span
+                    class="chip <?= $authSystemEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' ?>">
+                    <i class="fas fa-<?= $authSystemEnabled ? 'check-circle' : 'times-circle' ?>"></i>
                     <?= $authSystemEnabled ? 'Activo' : 'Inactivo' ?>
                 </span>
             </div>
@@ -1510,43 +1554,48 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 <input type="hidden" name="action" value="toggle_auth_system">
                 <div class="space-y-4">
                     <label class="inline-flex items-center gap-3 text-base font-medium cursor-pointer">
-                        <input type="checkbox" name="authorization_codes_enabled" value="1" 
-                               class="w-5 h-5 accent-cyan-500" <?= $authSystemEnabled ? 'checked' : '' ?>>
+                        <input type="checkbox" name="authorization_codes_enabled" value="1"
+                            class="w-5 h-5 accent-cyan-500" <?= $authSystemEnabled ? 'checked' : '' ?>>
                         <span>Habilitar Sistema de Códigos de Autorización</span>
                     </label>
-                    <p class="text-sm text-muted ml-8">Activa el sistema para requerir códigos de autorización en diversos contextos.</p>
+                    <p class="text-sm text-muted ml-8">Activa el sistema para requerir códigos de autorización en
+                        diversos contextos.</p>
                 </div>
                 <div class="space-y-4 ml-8">
                     <label class="inline-flex items-center gap-3 text-base cursor-pointer">
-                        <input type="checkbox" name="authorization_require_for_overtime" value="1" 
-                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForOvertime ? 'checked' : '' ?>>
+                        <input type="checkbox" name="authorization_require_for_overtime" value="1"
+                            class="w-5 h-5 accent-cyan-500" <?= $authRequireForOvertime ? 'checked' : '' ?>>
                         <span>Requerir código para Hora Extra</span>
                     </label>
-                    <p class="text-sm text-muted ml-8">Los empleados deberán ingresar un código de supervisor para registrar hora extra.</p>
+                    <p class="text-sm text-muted ml-8">Los empleados deberán ingresar un código de supervisor para
+                        registrar hora extra.</p>
                 </div>
                 <div class="space-y-4 ml-8">
                     <label class="inline-flex items-center gap-3 text-base cursor-pointer">
-                        <input type="checkbox" name="authorization_require_for_edit_records" value="1" 
-                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForEdit ? 'checked' : '' ?>>
+                        <input type="checkbox" name="authorization_require_for_edit_records" value="1"
+                            class="w-5 h-5 accent-cyan-500" <?= $authRequireForEdit ? 'checked' : '' ?>>
                         <span>Requerir código para Editar Registros</span>
                     </label>
-                    <p class="text-sm text-muted ml-8">Se requiere autorización para modificar registros de asistencia.</p>
+                    <p class="text-sm text-muted ml-8">Se requiere autorización para modificar registros de asistencia.
+                    </p>
                 </div>
                 <div class="space-y-4 ml-8">
                     <label class="inline-flex items-center gap-3 text-base cursor-pointer">
-                        <input type="checkbox" name="authorization_require_for_delete_records" value="1" 
-                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForDelete ? 'checked' : '' ?>>
+                        <input type="checkbox" name="authorization_require_for_delete_records" value="1"
+                            class="w-5 h-5 accent-cyan-500" <?= $authRequireForDelete ? 'checked' : '' ?>>
                         <span>Requerir código para Eliminar Registros</span>
                     </label>
-                    <p class="text-sm text-muted ml-8">Se requiere autorización para eliminar registros de asistencia.</p>
+                    <p class="text-sm text-muted ml-8">Se requiere autorización para eliminar registros de asistencia.
+                    </p>
                 </div>
                 <div class="space-y-4 ml-8">
                     <label class="inline-flex items-center gap-3 text-base cursor-pointer">
-                        <input type="checkbox" name="authorization_require_for_early_punch" value="1" 
-                               class="w-5 h-5 accent-cyan-500" <?= $authRequireForEarlyPunch ? 'checked' : '' ?>>
+                        <input type="checkbox" name="authorization_require_for_early_punch" value="1"
+                            class="w-5 h-5 accent-cyan-500" <?= $authRequireForEarlyPunch ? 'checked' : '' ?>>
                         <span>Requerir código para Entrada Anticipada</span>
                     </label>
-                    <p class="text-sm text-muted ml-8">Los empleados deberán ingresar un código de supervisor para marcar entrada antes de su horario programado.</p>
+                    <p class="text-sm text-muted ml-8">Los empleados deberán ingresar un código de supervisor para
+                        marcar entrada antes de su horario programado.</p>
                 </div>
                 <div class="flex justify-end pt-4 border-t border-slate-200">
                     <button type="submit" class="btn-primary">
@@ -1563,7 +1612,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <h2 class="text-primary text-xl font-semibold">Crear Código de Autorización</h2>
                     <p class="text-muted text-sm">Crea códigos configurables para supervisores, IT, gerentes, etc.</p>
                 </div>
-                <button type="button" onclick="document.getElementById('authCodeForm').reset(); document.getElementById('generate-code-btn').click();" class="btn-secondary btn-sm">
+                <button type="button"
+                    onclick="document.getElementById('authCodeForm').reset(); document.getElementById('generate-code-btn').click();"
+                    class="btn-secondary btn-sm">
                     <i class="fas fa-plus"></i> Nuevo Código
                 </button>
             </div>
@@ -1572,13 +1623,16 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="form-label">Nombre del Código <span class="text-red-500">*</span></label>
-                        <input type="text" name="code_name" class="input-control" placeholder="Supervisor Turno A" required>
+                        <input type="text" name="code_name" class="input-control" placeholder="Supervisor Turno A"
+                            required>
                     </div>
                     <div>
                         <label class="form-label">Código <span class="text-red-500">*</span></label>
                         <div class="flex gap-2">
-                            <input type="text" id="auth_code_input" name="code" class="input-control" placeholder="SUP2025" required>
-                            <button type="button" id="generate-code-btn" class="btn-secondary btn-sm" onclick="generateAuthCode()">
+                            <input type="text" id="auth_code_input" name="code" class="input-control"
+                                placeholder="SUP2025" required>
+                            <button type="button" id="generate-code-btn" class="btn-secondary btn-sm"
+                                onclick="generateAuthCode()">
                                 <i class="fas fa-random"></i> Generar
                             </button>
                         </div>
@@ -1605,7 +1659,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <option value="delete_record">Eliminar Registros</option>
                             <option value="special_punch">Punch Especial</option>
                         </select>
-                        <p class="text-xs text-muted mt-1">Especifica dónde se puede usar este código. Vacío = todos los contextos.</p>
+                        <p class="text-xs text-muted mt-1">Especifica dónde se puede usar este código. Vacío = todos los
+                            contextos.</p>
                     </div>
                     <div>
                         <label class="form-label">Válido Desde</label>
@@ -1617,7 +1672,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     </div>
                     <div>
                         <label class="form-label">Máximo de Usos</label>
-                        <input type="number" name="max_uses" class="input-control" placeholder="Dejar vacío = ilimitado" min="1">
+                        <input type="number" name="max_uses" class="input-control" placeholder="Dejar vacío = ilimitado"
+                            min="1">
                     </div>
                 </div>
                 <div class="flex justify-end">
@@ -1637,7 +1693,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 </div>
                 <span class="chip"><i class="fas fa-key"></i> <?= count($authCodesList) ?> códigos</span>
             </div>
-            
+
             <?php if (empty($authCodesList)): ?>
                 <div class="text-center py-12 text-muted">
                     <i class="fas fa-key text-5xl mb-4 opacity-25"></i>
@@ -1662,20 +1718,20 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         </thead>
                         <tbody>
                             <?php foreach ($authCodesList as $authCode): ?>
-                                <?php 
-                                    $codeId = (int)$authCode['id'];
-                                    $isExpired = !empty($authCode['valid_until']) && strtotime($authCode['valid_until']) < time();
-                                    $isLimited = $authCode['max_uses'] !== null && $authCode['current_uses'] >= $authCode['max_uses'];
-                                    $statusClass = $isExpired || $isLimited ? 'text-red-600' : 'text-green-600';
-                                    $statusIcon = $isExpired || $isLimited ? 'fa-times-circle' : 'fa-check-circle';
-                                    $statusText = $isExpired ? 'Expirado' : ($isLimited ? 'Límite alcanzado' : 'Activo');
+                                <?php
+                                $codeId = (int) $authCode['id'];
+                                $isExpired = !empty($authCode['valid_until']) && strtotime($authCode['valid_until']) < time();
+                                $isLimited = $authCode['max_uses'] !== null && $authCode['current_uses'] >= $authCode['max_uses'];
+                                $statusClass = $isExpired || $isLimited ? 'text-red-600' : 'text-green-600';
+                                $statusIcon = $isExpired || $isLimited ? 'fa-times-circle' : 'fa-check-circle';
+                                $statusText = $isExpired ? 'Expirado' : ($isLimited ? 'Límite alcanzado' : 'Activo');
                                 ?>
                                 <tr>
                                     <td class="font-medium"><?= htmlspecialchars($authCode['code_name']) ?></td>
                                     <td>
                                         <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                                            <?= htmlspecialchars($authCode['code']) ?>
-                                        </code>
+                                                    <?= htmlspecialchars($authCode['code']) ?>
+                                                </code>
                                     </td>
                                     <td>
                                         <span class="badge badge-primary">
@@ -1698,9 +1754,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                         <?= $authCode['valid_until'] ? date('d/m/Y H:i', strtotime($authCode['valid_until'])) : '-' ?>
                                     </td>
                                     <td class="text-sm text-center">
-                                        <?= (int)$authCode['current_uses'] ?>
+                                        <?= (int) $authCode['current_uses'] ?>
                                         <?php if ($authCode['max_uses'] !== null): ?>
-                                            / <?= (int)$authCode['max_uses'] ?>
+                                            / <?= (int) $authCode['max_uses'] ?>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -1711,11 +1767,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                     </td>
                                     <td class="text-center">
                                         <div class="flex gap-2 justify-center">
-                                            <button type="button" onclick="viewCodeDetails(<?= $codeId ?>)" 
-                                                    class="btn-info btn-sm" title="Ver detalles">
+                                            <button type="button" onclick="viewCodeDetails(<?= $codeId ?>)"
+                                                class="btn-info btn-sm" title="Ver detalles">
                                                 <i class="fas fa-eye"></i>
                                             </button>
-                                            <form method="POST" class="inline" onsubmit="return confirm('¿Desactivar este código?');">
+                                            <form method="POST" class="inline"
+                                                onsubmit="return confirm('¿Desactivar este código?');">
                                                 <input type="hidden" name="action" value="delete_auth_code">
                                                 <input type="hidden" name="code_id" value="<?= $codeId ?>">
                                                 <button type="submit" class="btn-danger btn-sm" title="Desactivar">
@@ -1740,24 +1797,27 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         <i class="fas fa-file-medical-alt text-red-400"></i>
                         Reporte Diario de Ausencias
                     </h2>
-                    <p class="text-muted text-sm">Configuración del reporte automático de empleados que no han marcado asistencia.</p>
+                    <p class="text-muted text-sm">Configuración del reporte automático de empleados que no han marcado
+                        asistencia.</p>
                 </div>
                 <span class="chip">
-                    <i class="fas fa-<?= $absenceReportEnabled ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <i
+                        class="fas fa-<?= $absenceReportEnabled ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
                     <?= $absenceReportEnabled ? 'Activo' : 'Inactivo' ?>
                 </span>
             </div>
 
             <form method="POST" class="space-y-5">
                 <input type="hidden" name="action" value="update_absence_report_config">
-                
+
                 <div class="space-y-4">
                     <label class="inline-flex items-center gap-3 text-base cursor-pointer">
-                        <input type="checkbox" name="absence_report_enabled" value="1" 
-                               class="w-5 h-5 accent-cyan-500" <?= $absenceReportEnabled ? 'checked' : '' ?>>
+                        <input type="checkbox" name="absence_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $absenceReportEnabled ? 'checked' : '' ?>>
                         <span class="font-semibold">Habilitar envío automático del reporte</span>
                     </label>
-                    <p class="text-sm text-muted ml-8">El reporte se enviará automáticamente todos los días a la hora configurada.</p>
+                    <p class="text-sm text-muted ml-8">El reporte se enviará automáticamente todos los días a la hora
+                        configurada.</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1765,11 +1825,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         <label class="form-label">
                             <i class="fas fa-clock"></i> Hora de envío (GMT-4)
                         </label>
-                        <input type="time" 
-                               name="absence_report_time" 
-                               value="<?= htmlspecialchars($absenceReportTime) ?>" 
-                               class="input-control"
-                               required>
+                        <input type="time" name="absence_report_time"
+                            value="<?= htmlspecialchars($absenceReportTime) ?>" class="input-control" required>
                         <p class="text-xs text-muted mt-1">Hora de Santo Domingo (GMT-4)</p>
                     </div>
                 </div>
@@ -1778,14 +1835,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <label class="form-label">
                         <i class="fas fa-envelope"></i> Destinatarios del reporte
                     </label>
-                    <textarea 
-                        name="absence_report_recipients" 
-                        rows="3" 
-                        class="input-control font-mono text-sm"
+                    <textarea name="absence_report_recipients" rows="3" class="input-control font-mono text-sm"
                         placeholder="ejemplo@empresa.com, rrhh@empresa.com, gerencia@empresa.com"><?= htmlspecialchars($absenceReportRecipients) ?></textarea>
                     <p class="text-xs text-muted mt-1">
-                        <i class="fas fa-info-circle"></i> 
-                        Ingrese los correos electrónicos separados por comas. El reporte incluye validación de permisos, vacaciones y licencias médicas.
+                        <i class="fas fa-info-circle"></i>
+                        Ingrese los correos electrónicos separados por comas. El reporte incluye validación de permisos,
+                        vacaciones y licencias médicas.
                     </p>
                 </div>
 
@@ -1794,11 +1849,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         <i class="fas fa-save"></i>
                         Guardar Configuración
                     </button>
-                    
-                    <button type="button" 
-                            onclick="sendAbsenceReportManually()" 
-                            class="btn-secondary"
-                            id="sendReportBtn">
+
+                    <button type="button" onclick="sendAbsenceReportManually()" class="btn-secondary"
+                        id="sendReportBtn">
                         <i class="fas fa-paper-plane"></i>
                         Enviar Reporte Ahora
                     </button>
@@ -1812,11 +1865,14 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     Información del Reporte
                 </h3>
                 <ul class="text-sm text-blue-200 space-y-2">
-                    <li><i class="fas fa-check text-green-400"></i> Muestra empleados que no han marcado asistencia hoy</li>
-                    <li><i class="fas fa-check text-green-400"></i> Valida permisos aprobados (medical, personal, study)</li>
+                    <li><i class="fas fa-check text-green-400"></i> Muestra empleados que no han marcado asistencia hoy
+                    </li>
+                    <li><i class="fas fa-check text-green-400"></i> Valida permisos aprobados (medical, personal, study)
+                    </li>
                     <li><i class="fas fa-check text-green-400"></i> Valida vacaciones activas</li>
                     <li><i class="fas fa-check text-green-400"></i> Valida licencias médicas vigentes</li>
-                    <li><i class="fas fa-check text-green-400"></i> Separa ausencias justificadas de no justificadas</li>
+                    <li><i class="fas fa-check text-green-400"></i> Separa ausencias justificadas de no justificadas
+                    </li>
                     <li><i class="fas fa-check text-green-400"></i> Diseño profesional y responsive para email</li>
                 </ul>
             </div>
@@ -1834,7 +1890,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     0 8 * * * /usr/bin/php <?= __DIR__ ?>/cron_daily_absence_report.php
                 </code>
                 <p class="text-xs text-purple-200 mt-2">
-                    <i class="fas fa-lightbulb"></i> 
+                    <i class="fas fa-lightbulb"></i>
                     Esto ejecutará el reporte automáticamente todos los días a las 8:00 AM GMT-4.
                     También puede usar wget/curl si su servidor no soporta ejecución PHP directa.
                 </p>
@@ -1845,87 +1901,116 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Horario objetivo para analiticas</h2>
-                    <p class="text-muted text-sm">Estos valores alimentan los calculos de adherencia, horas productivas y alertas.</p>
+                    <p class="text-muted text-sm">Estos valores alimentan los calculos de adherencia, horas productivas
+                        y alertas.</p>
                 </div>
-                <span class="chip"><i class="fas fa-clock"></i> Ultima actualizacion <?= htmlspecialchars(date('d/m/Y', strtotime($scheduleConfig['updated_at'] ?? $scheduleConfig['created_at'] ?? 'now'))) ?></span>
+                <span class="chip"><i class="fas fa-clock"></i> Ultima actualizacion
+                    <?= htmlspecialchars(date('d/m/Y', strtotime($scheduleConfig['updated_at'] ?? $scheduleConfig['created_at'] ?? 'now'))) ?></span>
             </div>
             <form method="POST" class="space-y-5">
                 <input type="hidden" name="action" value="update_schedule">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="form-label">Entrada</label>
-                        <input type="time" name="entry_time" value="<?= htmlspecialchars(substr($scheduleConfig['entry_time'], 0, 5)) ?>" class="input-control">
+                        <input type="time" name="entry_time"
+                            value="<?= htmlspecialchars(substr($scheduleConfig['entry_time'], 0, 5)) ?>"
+                            class="input-control">
                     </div>
                     <div>
                         <label class="form-label">Salida</label>
-                        <input type="time" name="exit_time" value="<?= htmlspecialchars(substr($scheduleConfig['exit_time'], 0, 5)) ?>" class="input-control">
+                        <input type="time" name="exit_time"
+                            value="<?= htmlspecialchars(substr($scheduleConfig['exit_time'], 0, 5)) ?>"
+                            class="input-control">
                     </div>
                     <div>
                         <label class="form-label">Inicio almuerzo</label>
-                        <input type="time" name="lunch_time" value="<?= htmlspecialchars(substr($scheduleConfig['lunch_time'], 0, 5)) ?>" class="input-control">
+                        <input type="time" name="lunch_time"
+                            value="<?= htmlspecialchars(substr($scheduleConfig['lunch_time'], 0, 5)) ?>"
+                            class="input-control">
                     </div>
                     <div>
                         <label class="form-label">Inicio break</label>
-                        <input type="time" name="break_time" value="<?= htmlspecialchars(substr($scheduleConfig['break_time'], 0, 5)) ?>" class="input-control">
+                        <input type="time" name="break_time"
+                            value="<?= htmlspecialchars(substr($scheduleConfig['break_time'], 0, 5)) ?>"
+                            class="input-control">
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="form-label">Minutos de almuerzo</label>
-                        <input type="number" min="0" name="lunch_minutes" value="<?= htmlspecialchars((string) $scheduleConfig['lunch_minutes']) ?>" class="input-control">
+                        <input type="number" min="0" name="lunch_minutes"
+                            value="<?= htmlspecialchars((string) $scheduleConfig['lunch_minutes']) ?>"
+                            class="input-control">
                     </div>
                     <div>
                         <label class="form-label">Minutos de break</label>
-                        <input type="number" min="0" name="break_minutes" value="<?= htmlspecialchars((string) $scheduleConfig['break_minutes']) ?>" class="input-control">
+                        <input type="number" min="0" name="break_minutes"
+                            value="<?= htmlspecialchars((string) $scheduleConfig['break_minutes']) ?>"
+                            class="input-control">
                     </div>
                     <div>
                         <label class="form-label">Minutos de reuniones</label>
-                        <input type="number" min="0" name="meeting_minutes" value="<?= htmlspecialchars((string) $scheduleConfig['meeting_minutes']) ?>" class="input-control">
+                        <input type="number" min="0" name="meeting_minutes"
+                            value="<?= htmlspecialchars((string) $scheduleConfig['meeting_minutes']) ?>"
+                            class="input-control">
                     </div>
                 </div>
                 <div>
                     <label class="form-label">Horas programadas al dia</label>
-                    <input type="number" min="0" step="0.25" name="scheduled_hours" value="<?= htmlspecialchars((string) $scheduleConfig['scheduled_hours']) ?>" class="input-control">
+                    <input type="number" min="0" step="0.25" name="scheduled_hours"
+                        value="<?= htmlspecialchars((string) $scheduleConfig['scheduled_hours']) ?>"
+                        class="input-control">
                 </div>
-                
-                <div class="section-card p-5 space-y-4 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border border-cyan-500/20">
+
+                <div
+                    class="section-card p-5 space-y-4 bg-gradient-to-br from-cyan-500/5 to-blue-500/5 border border-cyan-500/20">
                     <div class="flex items-center gap-3">
                         <div class="h-10 w-10 rounded-xl bg-cyan-500/15 text-primary flex items-center justify-center">
                             <i class="fas fa-clock text-cyan-400"></i>
                         </div>
                         <div>
                             <h3 class="text-primary text-base font-semibold">Configuracion de Horas Extras</h3>
-                            <p class="text-muted text-xs">Las horas extras se calculan automaticamente despues de la hora de salida configurada para cada empleado.</p>
+                            <p class="text-muted text-xs">Las horas extras se calculan automaticamente despues de la
+                                hora de salida configurada para cada empleado.</p>
                         </div>
                     </div>
-                    
+
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="inline-flex items-center gap-2 text-sm text-primary font-medium mb-2">
-                                <input type="checkbox" name="overtime_enabled" value="1" class="accent-cyan-500" <?= ((int) ($scheduleConfig['overtime_enabled'] ?? 1) === 1) ? 'checked' : '' ?>>
+                                <input type="checkbox" name="overtime_enabled" value="1" class="accent-cyan-500"
+                                    <?= ((int) ($scheduleConfig['overtime_enabled'] ?? 1) === 1) ? 'checked' : '' ?>>
                                 Activar calculo de horas extras
                             </label>
-                            <p class="text-muted text-xs ml-6">Habilita el sistema de horas extras en todos los reportes.</p>
+                            <p class="text-muted text-xs ml-6">Habilita el sistema de horas extras en todos los
+                                reportes.</p>
                         </div>
                         <div>
                             <label class="form-label">
                                 Multiplicador de pago
-                                <i class="fas fa-info-circle text-xs text-muted ml-1" title="Factor por el cual se multiplica la tarifa por hora para calcular el pago de horas extras. Ejemplo: 1.5 = tiempo y medio, 2.0 = tiempo doble"></i>
+                                <i class="fas fa-info-circle text-xs text-muted ml-1"
+                                    title="Factor por el cual se multiplica la tarifa por hora para calcular el pago de horas extras. Ejemplo: 1.5 = tiempo y medio, 2.0 = tiempo doble"></i>
                             </label>
-                            <input type="number" min="1.0" step="0.01" name="overtime_multiplier" value="<?= htmlspecialchars((string) ($scheduleConfig['overtime_multiplier'] ?? 1.50)) ?>" class="input-control" placeholder="1.50">
+                            <input type="number" min="1.0" step="0.01" name="overtime_multiplier"
+                                value="<?= htmlspecialchars((string) ($scheduleConfig['overtime_multiplier'] ?? 1.50)) ?>"
+                                class="input-control" placeholder="1.50">
                             <p class="text-muted text-xs mt-1">Ej: 1.5 = tiempo y medio, 2.0 = doble</p>
                         </div>
                         <div>
                             <label class="form-label">
                                 Minutos de gracia
-                                <i class="fas fa-info-circle text-xs text-muted ml-1" title="Minutos despues de la hora de salida antes de comenzar a contar horas extras. Ejemplo: 15 minutos = las horas extras comienzan 15 minutos despues de la hora de salida"></i>
+                                <i class="fas fa-info-circle text-xs text-muted ml-1"
+                                    title="Minutos despues de la hora de salida antes de comenzar a contar horas extras. Ejemplo: 15 minutos = las horas extras comienzan 15 minutos despues de la hora de salida"></i>
                             </label>
-                            <input type="number" min="0" step="1" name="overtime_start_minutes" value="<?= htmlspecialchars((string) ($scheduleConfig['overtime_start_minutes'] ?? 0)) ?>" class="input-control" placeholder="0">
+                            <input type="number" min="0" step="1" name="overtime_start_minutes"
+                                value="<?= htmlspecialchars((string) ($scheduleConfig['overtime_start_minutes'] ?? 0)) ?>"
+                                class="input-control" placeholder="0">
                             <p class="text-muted text-xs mt-1">Minutos despues de la salida para iniciar conteo</p>
                         </div>
                     </div>
-                    
-                    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+
+                    <div
+                        class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                         <h4 class="text-primary text-sm font-semibold mb-2 flex items-center gap-2">
                             <i class="fas fa-calculator text-blue-500"></i>
                             Como se calculan las horas extras:
@@ -1933,13 +2018,15 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         <ul class="text-muted text-xs space-y-1 ml-6 list-disc">
                             <li>El sistema detecta la hora de salida (EXIT) de cada empleado</li>
                             <li>Compara con la hora de salida configurada (global o personalizada por empleado)</li>
-                            <li>Si trabajo mas alla de la hora de salida + minutos de gracia, se cuentan como horas extras</li>
+                            <li>Si trabajo mas alla de la hora de salida + minutos de gracia, se cuentan como horas
+                                extras</li>
                             <li>El pago se calcula: (Horas extras × Tarifa por hora × Multiplicador)</li>
-                            <li>Cada empleado puede tener su propio multiplicador personalizado desde la seccion de usuarios</li>
+                            <li>Cada empleado puede tener su propio multiplicador personalizado desde la seccion de
+                                usuarios</li>
                         </ul>
                     </div>
                 </div>
-                
+
                 <div class="flex justify-end">
                     <button type="submit" class="btn-secondary">
                         <i class="fas fa-save"></i>
@@ -1953,7 +2040,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Gestionar usuarios existentes</h2>
-                    <p class="text-muted text-sm">Actualiza roles, tarifas, pagos mensuales y reasigna departamentos.</p>
+                    <p class="text-muted text-sm">Actualiza roles, tarifas, pagos mensuales y reasigna departamentos.
+                    </p>
                 </div>
                 <span class="chip"><i class="fas fa-users"></i> <?= count($users) ?> usuarios</span>
             </div>
@@ -1961,25 +2049,31 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 <input type="hidden" name="action" value="update_users">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <p class="text-muted text-xs">
-                        Mostrando <?= (int) $usersRangeStart ?>-<?= (int) $usersRangeEnd ?> de <?= (int) $usersTotal ?> usuarios.
+                        Mostrando <?= (int) $usersRangeStart ?>-<?= (int) $usersRangeEnd ?> de <?= (int) $usersTotal ?>
+                        usuarios.
                     </p>
                     <?php if ($usersTotalPages > 1): ?>
                         <nav class="manage-users-pagination" aria-label="Paginacion de usuarios">
-                            <a class="pagination-link <?= $usersPage <= 1 ? 'is-disabled' : '' ?>" href="<?= $usersPage <= 1 ? '#' : buildUsersPageUrl($usersPage - 1, $usersPageParams) ?>" aria-disabled="<?= $usersPage <= 1 ? 'true' : 'false' ?>">
+                            <a class="pagination-link <?= $usersPage <= 1 ? 'is-disabled' : '' ?>"
+                                href="<?= $usersPage <= 1 ? '#' : buildUsersPageUrl($usersPage - 1, $usersPageParams) ?>"
+                                aria-disabled="<?= $usersPage <= 1 ? 'true' : 'false' ?>">
                                 <i class="fas fa-chevron-left"></i>
                                 Anterior
                             </a>
                             <?php
-                                $usersPageWindow = 2;
-                                $usersPageStart = max(1, $usersPage - $usersPageWindow);
-                                $usersPageEnd = min($usersTotalPages, $usersPage + $usersPageWindow);
+                            $usersPageWindow = 2;
+                            $usersPageStart = max(1, $usersPage - $usersPageWindow);
+                            $usersPageEnd = min($usersTotalPages, $usersPage + $usersPageWindow);
                             ?>
                             <?php for ($page = $usersPageStart; $page <= $usersPageEnd; $page++): ?>
-                                <a class="pagination-link <?= $page === $usersPage ? 'is-active' : '' ?>" href="<?= buildUsersPageUrl($page, $usersPageParams) ?>">
+                                <a class="pagination-link <?= $page === $usersPage ? 'is-active' : '' ?>"
+                                    href="<?= buildUsersPageUrl($page, $usersPageParams) ?>">
                                     <?= $page ?>
                                 </a>
                             <?php endfor; ?>
-                            <a class="pagination-link <?= $usersPage >= $usersTotalPages ? 'is-disabled' : '' ?>" href="<?= $usersPage >= $usersTotalPages ? '#' : buildUsersPageUrl($usersPage + 1, $usersPageParams) ?>" aria-disabled="<?= $usersPage >= $usersTotalPages ? 'true' : 'false' ?>">
+                            <a class="pagination-link <?= $usersPage >= $usersTotalPages ? 'is-disabled' : '' ?>"
+                                href="<?= $usersPage >= $usersTotalPages ? '#' : buildUsersPageUrl($usersPage + 1, $usersPageParams) ?>"
+                                aria-disabled="<?= $usersPage >= $usersTotalPages ? 'true' : 'false' ?>">
                                 Siguiente
                                 <i class="fas fa-chevron-right"></i>
                             </a>
@@ -1992,156 +2086,195 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     </div>
                     <div class="responsive-scroll" data-scroll-target="manage-users">
                         <table class="data-table manage-users-table">
-                        <thead>
-                            <tr>
-                                <th>Estado</th>
-                                <th>Usuario</th>
-                                <th>Nombre</th>
-                                <th>Rol</th>
-                                <th>Departamento</th>
-                                <th>Tarifa USD</th>
-                                <th>Tarifa DOP</th>
-                                <th>Mensual USD</th>
-                                <th>Mensual DOP</th>
-                                <th>Moneda</th>
-                                <th title="Hora de salida personalizada para este empleado">
-                                    Hora Salida
-                                    <i class="fas fa-info-circle text-xs text-muted ml-1" title="Hora de salida personalizada. Si se deja vacio, se usa la hora global del sistema."></i>
-                                </th>
-                                <th title="Multiplicador personalizado de horas extras">
-                                    Mult. HE
-                                    <i class="fas fa-info-circle text-xs text-muted ml-1" title="Multiplicador de horas extras personalizado (ej: 1.5, 2.0). Si se deja vacio, se usa el multiplicador global."></i>
-                                </th>
-                                <th>Nueva contrasena</th>
-                                <th>Creado</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($users as $user): ?>
-                                <?php 
-                                    $isActive = isset($user['is_active']) ? (int)$user['is_active'] : 1;
-                                    $isCurrentUser = (int)$user['id'] === (int)$_SESSION['user_id'];
-                                ?>
-                                <tr class="<?= $isActive === 0 ? 'opacity-60' : '' ?>">
-                                    <td>
-                                        <?php if ($isActive === 1): ?>
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                                                <i class="fas fa-check-circle"></i>
-                                                Activo
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20">
-                                                <i class="fas fa-times-circle"></i>
-                                                Inactivo
-                                            </span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <div class="font-semibold text-primary"><?= htmlspecialchars($user['username']) ?></div>
-                                        <?php if (!empty($user['role_label'])): ?>
-                                            <div class="text-muted text-xs"><?= htmlspecialchars($user['role_label']) ?></div>
-                                        <?php endif; ?>
-                                        <?php if ($isCurrentUser): ?>
-                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 mt-1">
-                                                <i class="fas fa-user"></i>
-                                                Tú
-                                            </span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <div class="text-primary"><?= htmlspecialchars($user['full_name']) ?></div>
-                                        <div class="text-muted text-xs">ID: <?= (int) $user['id'] ?></div>
-                                    </td>
-                                    <td>
-                                        <input type="text" name="role[<?= (int) $user['id'] ?>]" value="<?= htmlspecialchars($user['role']) ?>" list="role-options" class="input-control">
-                                    </td>
-                                <td>
-                                    <select name="department_id[<?= (int) $user['id'] ?>]" class="select-control">
-                                        <option value="">Sin departamento</option>
-                                        <?php foreach ($departments as $department): ?>
-                                            <option value="<?= (int) $department['id'] ?>" <?php if ((int) ($user['department_id'] ?? 0) === (int) $department['id']) echo 'selected'; ?>><?= htmlspecialchars($department['name']) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </td>
-                                <td>
-                                    <input type="number" name="hourly_rate_usd[<?= (int) $user['id'] ?>]" value="<?= htmlspecialchars(number_format((float) $user['hourly_rate'], 2, '.', '')) ?>" step="0.01" min="0" class="input-control">
-                                </td>
-                                <td>
-                                    <input type="number" name="hourly_rate_dop[<?= (int) $user['id'] ?>]" value="<?= htmlspecialchars(number_format((float) $user['hourly_rate_dop'], 2, '.', '')) ?>" step="0.01" min="0" class="input-control">
-                                </td>
-                                <td>
-                                    <input type="number" name="monthly_salary_usd[<?= (int) $user['id'] ?>]" value="<?= htmlspecialchars(number_format((float) $user['monthly_salary'], 2, '.', '')) ?>" step="0.01" min="0" class="input-control">
-                                </td>
-                                <td>
-                                    <input type="number" name="monthly_salary_dop[<?= (int) $user['id'] ?>]" value="<?= htmlspecialchars(number_format((float) $user['monthly_salary_dop'], 2, '.', '')) ?>" step="0.01" min="0" class="input-control">
-                                </td>
-                                <td>
-                                    <select name="preferred_currency[<?= (int) $user['id'] ?>]" class="select-control">
-                                        <option value="USD" <?= ($user['preferred_currency'] ?? 'USD') === 'USD' ? 'selected' : '' ?>>USD</option>
-                                        <option value="DOP" <?= ($user['preferred_currency'] ?? 'USD') === 'DOP' ? 'selected' : '' ?>>DOP</option>
-                                    </select>
-                                </td>
-                                <td>
-                                    <input type="time" name="exit_time[<?= (int) $user['id'] ?>]" value="<?= $user['exit_time'] ? htmlspecialchars(substr($user['exit_time'], 0, 5)) : '' ?>" class="input-control" placeholder="HH:MM">
-                                    <p class="text-muted text-xs mt-1">Vacio = usar global</p>
-                                </td>
-                                <td>
-                                    <input type="number" name="overtime_multiplier[<?= (int) $user['id'] ?>]" value="<?= $user['overtime_multiplier'] !== null ? htmlspecialchars(number_format((float) $user['overtime_multiplier'], 2, '.', '')) : '' ?>" step="0.01" min="1.0" class="input-control" placeholder="1.50">
-                                    <p class="text-muted text-xs mt-1">Vacio = usar global</p>
-                                </td>
-                                <td>
-                                    <input type="text" name="password[<?= (int) $user['id'] ?>]" placeholder="Opcional" class="input-control">
-                                    <p class="text-muted text-xs mt-1">Se mantiene si se deja vacio.</p>
-                                </td>
-                                <td class="text-muted text-xs"><?= htmlspecialchars(date('d/m/Y', strtotime($user['created_at']))) ?></td>
-                                <td>
-                                    <div class="flex flex-col gap-2">
-                                        <?php if (!$isCurrentUser): ?>
-                                            <!-- Send Password Reset Email (non-nested action) -->
-                                            <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 hover:bg-blue-500/25 transition-colors w-full justify-center" title="Enviar email de reseteo de contraseña" onclick="if(confirm('¿Enviar email de reseteo de contraseña a este usuario?')) submitRowAction('send_password_reset', <?= (int) $user['id'] ?>)">
-                                                <i class="fas fa-envelope"></i>
-                                                Reset Password
-                                            </button>
-
-                                            <div class="flex items-center gap-2">
-                                                <!-- Toggle Active/Inactive (non-nested action) -->
-                                                <?php if ($isActive === 1): ?>
-                                                    <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors w-full justify-center" title="Desactivar usuario" onclick="if(confirm('¿Estás seguro de desactivar este usuario?')) submitRowAction('toggle_user_status', <?= (int) $user['id'] ?>, { new_status: 0 })">
-                                                        <i class="fas fa-ban"></i>
-                                                        Desactivar
-                                                    </button>
-                                                <?php else: ?>
-                                                    <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors w-full justify-center" title="Activar usuario" onclick="if(confirm('¿Estás seguro de activar este usuario?')) submitRowAction('toggle_user_status', <?= (int) $user['id'] ?>, { new_status: 1 })">
-                                                        <i class="fas fa-check"></i>
-                                                        Activar
-                                                    </button>
-                                                <?php endif; ?>
-
-                                                <!-- Delete User (non-nested action) -->
-                                                <button type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors w-full justify-center" title="Eliminar usuario" onclick="if(confirm('¿ADVERTENCIA! ¿Estás seguro de eliminar permanentemente al usuario <?= htmlspecialchars($user['username']) ?>? Esta acción no se puede deshacer.')) submitRowAction('delete_user', <?= (int) $user['id'] ?>)">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                    Eliminar
-                                                </button>
-                                            </div>
-                                        <?php else: ?>
-                                            <span class="text-muted text-xs italic">Tu cuenta</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                            <?php if (empty($users)): ?>
+                            <thead>
                                 <tr>
-                                    <td colspan="15" class="text-center text-muted py-6">No hay usuarios registrados.</td>
+                                    <th>Estado</th>
+                                    <th>Usuario</th>
+                                    <th>Nombre</th>
+                                    <th>Rol</th>
+                                    <th>Departamento</th>
+                                    <th>Tarifa USD</th>
+                                    <th>Tarifa DOP</th>
+                                    <th>Mensual USD</th>
+                                    <th>Mensual DOP</th>
+                                    <th>Moneda</th>
+                                    <th title="Hora de salida personalizada para este empleado">
+                                        Hora Salida
+                                        <i class="fas fa-info-circle text-xs text-muted ml-1"
+                                            title="Hora de salida personalizada. Si se deja vacio, se usa la hora global del sistema."></i>
+                                    </th>
+                                    <th title="Multiplicador personalizado de horas extras">
+                                        Mult. HE
+                                        <i class="fas fa-info-circle text-xs text-muted ml-1"
+                                            title="Multiplicador de horas extras personalizado (ej: 1.5, 2.0). Si se deja vacio, se usa el multiplicador global."></i>
+                                    </th>
+                                    <th>Nueva contrasena</th>
+                                    <th>Creado</th>
+                                    <th>Acciones</th>
                                 </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($users as $user): ?>
+                                    <?php
+                                    $isActive = isset($user['is_active']) ? (int) $user['is_active'] : 1;
+                                    $isCurrentUser = (int) $user['id'] === (int) $_SESSION['user_id'];
+                                    ?>
+                                    <tr class="<?= $isActive === 0 ? 'opacity-60' : '' ?>">
+                                        <td>
+                                            <?php if ($isActive === 1): ?>
+                                                <span
+                                                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                                    <i class="fas fa-check-circle"></i>
+                                                    Activo
+                                                </span>
+                                            <?php else: ?>
+                                                <span
+                                                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20">
+                                                    <i class="fas fa-times-circle"></i>
+                                                    Inactivo
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div class="font-semibold text-primary">
+                                                <?= htmlspecialchars($user['username']) ?></div>
+                                            <?php if (!empty($user['role_label'])): ?>
+                                                <div class="text-muted text-xs"><?= htmlspecialchars($user['role_label']) ?>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if ($isCurrentUser): ?>
+                                                <span
+                                                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 mt-1">
+                                                    <i class="fas fa-user"></i>
+                                                    Tú
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div class="text-primary"><?= htmlspecialchars($user['full_name']) ?></div>
+                                            <div class="text-muted text-xs">ID: <?= (int) $user['id'] ?></div>
+                                        </td>
+                                        <td>
+                                            <input type="text" name="role[<?= (int) $user['id'] ?>]"
+                                                value="<?= htmlspecialchars($user['role']) ?>" list="role-options"
+                                                class="input-control">
+                                        </td>
+                                        <td>
+                                            <select name="department_id[<?= (int) $user['id'] ?>]" class="select-control">
+                                                <option value="">Sin departamento</option>
+                                                <?php foreach ($departments as $department): ?>
+                                                    <option value="<?= (int) $department['id'] ?>" <?php if ((int) ($user['department_id'] ?? 0) === (int) $department['id'])
+                                                           echo 'selected'; ?>><?= htmlspecialchars($department['name']) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="number" name="hourly_rate_usd[<?= (int) $user['id'] ?>]"
+                                                value="<?= htmlspecialchars(number_format((float) $user['hourly_rate'], 2, '.', '')) ?>"
+                                                step="0.01" min="0" class="input-control">
+                                        </td>
+                                        <td>
+                                            <input type="number" name="hourly_rate_dop[<?= (int) $user['id'] ?>]"
+                                                value="<?= htmlspecialchars(number_format((float) $user['hourly_rate_dop'], 2, '.', '')) ?>"
+                                                step="0.01" min="0" class="input-control">
+                                        </td>
+                                        <td>
+                                            <input type="number" name="monthly_salary_usd[<?= (int) $user['id'] ?>]"
+                                                value="<?= htmlspecialchars(number_format((float) $user['monthly_salary'], 2, '.', '')) ?>"
+                                                step="0.01" min="0" class="input-control">
+                                        </td>
+                                        <td>
+                                            <input type="number" name="monthly_salary_dop[<?= (int) $user['id'] ?>]"
+                                                value="<?= htmlspecialchars(number_format((float) $user['monthly_salary_dop'], 2, '.', '')) ?>"
+                                                step="0.01" min="0" class="input-control">
+                                        </td>
+                                        <td>
+                                            <select name="preferred_currency[<?= (int) $user['id'] ?>]"
+                                                class="select-control">
+                                                <option value="USD" <?= ($user['preferred_currency'] ?? 'USD') === 'USD' ? 'selected' : '' ?>>USD</option>
+                                                <option value="DOP" <?= ($user['preferred_currency'] ?? 'USD') === 'DOP' ? 'selected' : '' ?>>DOP</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="time" name="exit_time[<?= (int) $user['id'] ?>]"
+                                                value="<?= $user['exit_time'] ? htmlspecialchars(substr($user['exit_time'], 0, 5)) : '' ?>"
+                                                class="input-control" placeholder="HH:MM">
+                                            <p class="text-muted text-xs mt-1">Vacio = usar global</p>
+                                        </td>
+                                        <td>
+                                            <input type="number" name="overtime_multiplier[<?= (int) $user['id'] ?>]"
+                                                value="<?= $user['overtime_multiplier'] !== null ? htmlspecialchars(number_format((float) $user['overtime_multiplier'], 2, '.', '')) : '' ?>"
+                                                step="0.01" min="1.0" class="input-control" placeholder="1.50">
+                                            <p class="text-muted text-xs mt-1">Vacio = usar global</p>
+                                        </td>
+                                        <td>
+                                            <input type="text" name="password[<?= (int) $user['id'] ?>]"
+                                                placeholder="Opcional" class="input-control">
+                                            <p class="text-muted text-xs mt-1">Se mantiene si se deja vacio.</p>
+                                        </td>
+                                        <td class="text-muted text-xs">
+                                            <?= htmlspecialchars(date('d/m/Y', strtotime($user['created_at']))) ?></td>
+                                        <td>
+                                            <div class="flex flex-col gap-2">
+                                                <?php if (!$isCurrentUser): ?>
+                                                    <!-- Send Password Reset Email (non-nested action) -->
+                                                    <button type="button"
+                                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20 hover:bg-blue-500/25 transition-colors w-full justify-center"
+                                                        title="Enviar email de reseteo de contraseña"
+                                                        onclick="if(confirm('¿Enviar email de reseteo de contraseña a este usuario?')) submitRowAction('send_password_reset', <?= (int) $user['id'] ?>)">
+                                                        <i class="fas fa-envelope"></i>
+                                                        Reset Password
+                                                    </button>
+
+                                                    <div class="flex items-center gap-2">
+                                                        <!-- Toggle Active/Inactive (non-nested action) -->
+                                                        <?php if ($isActive === 1): ?>
+                                                            <button type="button"
+                                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/15 text-orange-400 border border-orange-500/20 hover:bg-orange-500/25 transition-colors w-full justify-center"
+                                                                title="Desactivar usuario"
+                                                                onclick="if(confirm('¿Estás seguro de desactivar este usuario?')) submitRowAction('toggle_user_status', <?= (int) $user['id'] ?>, { new_status: 0 })">
+                                                                <i class="fas fa-ban"></i>
+                                                                Desactivar
+                                                            </button>
+                                                        <?php else: ?>
+                                                            <button type="button"
+                                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition-colors w-full justify-center"
+                                                                title="Activar usuario"
+                                                                onclick="if(confirm('¿Estás seguro de activar este usuario?')) submitRowAction('toggle_user_status', <?= (int) $user['id'] ?>, { new_status: 1 })">
+                                                                <i class="fas fa-check"></i>
+                                                                Activar
+                                                            </button>
+                                                        <?php endif; ?>
+
+                                                        <!-- Delete User (non-nested action) -->
+                                                        <button type="button"
+                                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors w-full justify-center"
+                                                            title="Eliminar usuario"
+                                                            onclick="if(confirm('¿ADVERTENCIA! ¿Estás seguro de eliminar permanentemente al usuario <?= htmlspecialchars($user['username']) ?>? Esta acción no se puede deshacer.')) submitRowAction('delete_user', <?= (int) $user['id'] ?>)">
+                                                            <i class="fas fa-trash-alt"></i>
+                                                            Eliminar
+                                                        </button>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <span class="text-muted text-xs italic">Tu cuenta</span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                <?php if (empty($users)): ?>
+                                    <tr>
+                                        <td colspan="15" class="text-center text-muted py-6">No hay usuarios registrados.
+                                        </td>
+                                    </tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <p class="text-muted text-xs">Actualiza multiples usuarios y luego guarda para aplicar los cambios.</p>
+                    <p class="text-muted text-xs">Actualiza multiples usuarios y luego guarda para aplicar los cambios.
+                    </p>
                     <button type="submit" class="btn-primary">
                         <i class="fas fa-save"></i>
                         Guardar usuarios
@@ -2154,23 +2287,26 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Historial de cambios de tarifas</h2>
-                    <p class="text-muted text-sm">Registra aumentos de pago por fecha efectiva. Los registros historicos mantendran su tarifa original.</p>
+                    <p class="text-muted text-sm">Registra aumentos de pago por fecha efectiva. Los registros historicos
+                        mantendran su tarifa original.</p>
                 </div>
                 <span class="chip"><i class="fas fa-history"></i> Gestion de aumentos</span>
             </div>
 
             <!-- Add Rate Change Form -->
-            <div class="section-card p-5 space-y-4 bg-gradient-to-br from-emerald-500/5 to-cyan-500/5 border border-emerald-500/20">
+            <div
+                class="section-card p-5 space-y-4 bg-gradient-to-br from-emerald-500/5 to-cyan-500/5 border border-emerald-500/20">
                 <div class="flex items-center gap-3">
                     <div class="h-10 w-10 rounded-xl bg-emerald-500/15 text-primary flex items-center justify-center">
                         <i class="fas fa-dollar-sign text-emerald-400"></i>
                     </div>
                     <div>
                         <h3 class="text-primary text-base font-semibold">Registrar cambio de tarifa</h3>
-                        <p class="text-muted text-xs">Define una nueva tarifa con fecha efectiva. Los calculos usaran la tarifa vigente en cada fecha.</p>
+                        <p class="text-muted text-xs">Define una nueva tarifa con fecha efectiva. Los calculos usaran la
+                            tarifa vigente en cada fecha.</p>
                     </div>
                 </div>
-                
+
                 <form method="POST" class="space-y-4" id="rate-change-form">
                     <input type="hidden" name="action" value="add_rate_change">
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2179,10 +2315,11 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <select name="user_id" id="rate-user-select" required class="select-control">
                                 <option value="">Selecciona un usuario</option>
                                 <?php foreach ($users as $user): ?>
-                                    <option value="<?= (int) $user['id'] ?>" 
-                                            data-rate-usd="<?= htmlspecialchars(number_format((float) $user['hourly_rate'], 2, '.', '')) ?>"
-                                            data-rate-dop="<?= htmlspecialchars(number_format((float) $user['hourly_rate_dop'], 2, '.', '')) ?>">
-                                        <?= htmlspecialchars($user['full_name']) ?> (<?= htmlspecialchars($user['username']) ?>)
+                                    <option value="<?= (int) $user['id'] ?>"
+                                        data-rate-usd="<?= htmlspecialchars(number_format((float) $user['hourly_rate'], 2, '.', '')) ?>"
+                                        data-rate-dop="<?= htmlspecialchars(number_format((float) $user['hourly_rate_dop'], 2, '.', '')) ?>">
+                                        <?= htmlspecialchars($user['full_name']) ?>
+                                        (<?= htmlspecialchars($user['username']) ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -2192,23 +2329,27 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 Nueva tarifa USD
                                 <span id="current-rate-usd" class="text-xs text-muted ml-1"></span>
                             </label>
-                            <input type="number" name="new_rate_usd" id="rate-usd-input" step="0.01" min="0" required class="input-control" placeholder="0.00">
+                            <input type="number" name="new_rate_usd" id="rate-usd-input" step="0.01" min="0" required
+                                class="input-control" placeholder="0.00">
                         </div>
                         <div>
                             <label class="form-label">
                                 Nueva tarifa DOP
                                 <span id="current-rate-dop" class="text-xs text-muted ml-1"></span>
                             </label>
-                            <input type="number" name="new_rate_dop" id="rate-dop-input" step="0.01" min="0" required class="input-control" placeholder="0.00">
+                            <input type="number" name="new_rate_dop" id="rate-dop-input" step="0.01" min="0" required
+                                class="input-control" placeholder="0.00">
                         </div>
                         <div>
                             <label class="form-label">Fecha efectiva</label>
-                            <input type="date" name="effective_date" required class="input-control" value="<?= date('Y-m-d') ?>">
+                            <input type="date" name="effective_date" required class="input-control"
+                                value="<?= date('Y-m-d') ?>">
                         </div>
                     </div>
                     <div>
                         <label class="form-label">Notas (opcional)</label>
-                        <textarea name="rate_notes" class="textarea-control" rows="2" placeholder="Ej: Aumento anual, promocion, ajuste por inflacion..."></textarea>
+                        <textarea name="rate_notes" class="textarea-control" rows="2"
+                            placeholder="Ej: Aumento anual, promocion, ajuste por inflacion..."></textarea>
                     </div>
                     <div class="flex justify-end">
                         <button type="submit" class="btn-primary">
@@ -2222,15 +2363,17 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <!-- Rate History by User -->
             <div class="space-y-6">
                 <?php foreach ($users as $user): ?>
-                    <?php 
-                        $userId = (int) $user['id'];
-                        $rateHistory = getUserRateHistory($pdo, $userId);
-                        if (empty($rateHistory)) continue;
+                    <?php
+                    $userId = (int) $user['id'];
+                    $rateHistory = getUserRateHistory($pdo, $userId);
+                    if (empty($rateHistory))
+                        continue;
                     ?>
                     <div class="section-card p-5 space-y-4">
                         <div class="flex items-center justify-between">
                             <div>
-                                <h3 class="text-primary text-lg font-semibold"><?= htmlspecialchars($user['full_name']) ?></h3>
+                                <h3 class="text-primary text-lg font-semibold"><?= htmlspecialchars($user['full_name']) ?>
+                                </h3>
                                 <p class="text-muted text-sm">
                                     <i class="fas fa-user"></i> <?= htmlspecialchars($user['username']) ?>
                                     <?php if (!empty($user['department_name'])): ?>
@@ -2241,12 +2384,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <div class="text-right">
                                 <div class="text-primary font-semibold">Tarifa actual</div>
                                 <div class="text-sm text-muted">
-                                    USD: $<?= number_format((float) $user['hourly_rate'], 2) ?> | 
+                                    USD: $<?= number_format((float) $user['hourly_rate'], 2) ?> |
                                     DOP: $<?= number_format((float) $user['hourly_rate_dop'], 2) ?>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="responsive-scroll">
                             <table class="data-table w-full text-sm">
                                 <thead>
@@ -2269,13 +2412,20 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                                     <?= htmlspecialchars(date('d/m/Y', strtotime($history['effective_date']))) ?>
                                                 </span>
                                             </td>
-                                            <td class="font-semibold text-primary">$<?= number_format((float) $history['hourly_rate_usd'], 2) ?></td>
-                                            <td class="font-semibold text-primary">$<?= number_format((float) $history['hourly_rate_dop'], 2) ?></td>
-                                            <td class="text-muted text-xs"><?= htmlspecialchars($history['notes'] ?? '-') ?></td>
-                                            <td class="text-muted text-xs"><?= htmlspecialchars($history['created_by_username'] ?? 'Sistema') ?></td>
-                                            <td class="text-muted text-xs"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($history['created_at']))) ?></td>
+                                            <td class="font-semibold text-primary">
+                                                $<?= number_format((float) $history['hourly_rate_usd'], 2) ?></td>
+                                            <td class="font-semibold text-primary">
+                                                $<?= number_format((float) $history['hourly_rate_dop'], 2) ?></td>
+                                            <td class="text-muted text-xs"><?= htmlspecialchars($history['notes'] ?? '-') ?>
+                                            </td>
+                                            <td class="text-muted text-xs">
+                                                <?= htmlspecialchars($history['created_by_username'] ?? 'Sistema') ?></td>
+                                            <td class="text-muted text-xs">
+                                                <?= htmlspecialchars(date('d/m/Y H:i', strtotime($history['created_at']))) ?>
+                                            </td>
                                             <td class="text-center">
-                                                <form method="POST" style="display: inline;" onsubmit="return confirm('¿Eliminar esta entrada del historial?');">
+                                                <form method="POST" style="display: inline;"
+                                                    onsubmit="return confirm('¿Eliminar esta entrada del historial?');">
                                                     <input type="hidden" name="action" value="delete_rate_history">
                                                     <input type="hidden" name="history_id" value="<?= (int) $history['id'] ?>">
                                                     <button type="submit" class="btn-danger btn-sm">
@@ -2290,17 +2440,17 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         </div>
                     </div>
                 <?php endforeach; ?>
-                
-                <?php 
-                    $hasAnyHistory = false;
-                    foreach ($users as $user) {
-                        if (!empty(getUserRateHistory($pdo, (int) $user['id']))) {
-                            $hasAnyHistory = true;
-                            break;
-                        }
+
+                <?php
+                $hasAnyHistory = false;
+                foreach ($users as $user) {
+                    if (!empty(getUserRateHistory($pdo, (int) $user['id']))) {
+                        $hasAnyHistory = true;
+                        break;
                     }
-                    if (!$hasAnyHistory):
-                ?>
+                }
+                if (!$hasAnyHistory):
+                    ?>
                     <div class="section-card p-8 text-center">
                         <i class="fas fa-history text-5xl text-muted opacity-30 mb-4"></i>
                         <p class="text-muted">No hay historial de cambios de tarifas registrado.</p>
@@ -2314,7 +2464,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Departamentos y equipos</h2>
-                    <p class="text-muted text-sm">Edita nombres, descripciones o elimina departamentos que ya no utilices.</p>
+                    <p class="text-muted text-sm">Edita nombres, descripciones o elimina departamentos que ya no
+                        utilices.</p>
                 </div>
             </div>
             <form method="POST" class="space-y-4">
@@ -2331,23 +2482,28 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         <tbody>
                             <?php if (empty($departments)): ?>
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted py-6">Aun no hay departamentos registrados.</td>
+                                    <td colspan="4" class="text-center text-muted py-6">Aun no hay departamentos
+                                        registrados.</td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($departments as $department): ?>
                                     <?php $deptId = (int) $department['id']; ?>
                                     <tr>
                                         <td>
-                                            <input type="text" name="department_name[<?= $deptId ?>]" value="<?= htmlspecialchars($department['name']) ?>" class="input-control">
+                                            <input type="text" name="department_name[<?= $deptId ?>]"
+                                                value="<?= htmlspecialchars($department['name']) ?>" class="input-control">
                                         </td>
                                         <td>
-                                            <textarea name="department_description[<?= $deptId ?>]" class="textarea-control" rows="2"><?= htmlspecialchars($department['description'] ?? '') ?></textarea>
+                                            <textarea name="department_description[<?= $deptId ?>]" class="textarea-control"
+                                                rows="2"><?= htmlspecialchars($department['description'] ?? '') ?></textarea>
                                         </td>
                                         <td>
-                                            <span class="chip"><i class="fas fa-user"></i> <?= $departmentUsage[$deptId] ?? 0 ?></span>
+                                            <span class="chip"><i class="fas fa-user"></i>
+                                                <?= $departmentUsage[$deptId] ?? 0 ?></span>
                                         </td>
                                         <td class="text-right">
-                                            <button type="submit" name="delete_department_id" value="<?= $deptId ?>" class="btn-danger" formnovalidate>
+                                            <button type="submit" name="delete_department_id" value="<?= $deptId ?>"
+                                                class="btn-danger" formnovalidate>
                                                 <i class="fas fa-trash-alt"></i>
                                                 Eliminar
                                             </button>
@@ -2371,7 +2527,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Roles registrados</h2>
-                    <p class="text-muted text-sm">Manten las etiquetas descriptivas para ahorrar tiempo al asignar permisos.</p>
+                    <p class="text-muted text-sm">Manten las etiquetas descriptivas para ahorrar tiempo al asignar
+                        permisos.</p>
                 </div>
                 <span class="chip"><i class="fas fa-layer-group"></i> <?= count($rolesList) ?> roles</span>
             </div>
@@ -2396,10 +2553,14 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                     <tr>
                                         <td class="font-semibold text-primary"><?= htmlspecialchars($roleRow['name']) ?></td>
                                         <td>
-                                            <input type="text" name="role_label[<?= htmlspecialchars($roleRow['name']) ?>]" value="<?= htmlspecialchars($roleRow['label'] ?? $roleRow['name']) ?>" class="input-control">
+                                            <input type="text" name="role_label[<?= htmlspecialchars($roleRow['name']) ?>]"
+                                                value="<?= htmlspecialchars($roleRow['label'] ?? $roleRow['name']) ?>"
+                                                class="input-control">
                                         </td>
                                         <td>
-                                            <textarea name="role_description[<?= htmlspecialchars($roleRow['name']) ?>]" rows="2" class="textarea-control"><?= htmlspecialchars($roleRow['description'] ?? '') ?></textarea>
+                                            <textarea name="role_description[<?= htmlspecialchars($roleRow['name']) ?>]"
+                                                rows="2"
+                                                class="textarea-control"><?= htmlspecialchars($roleRow['description'] ?? '') ?></textarea>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -2420,7 +2581,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <div class="panel-heading">
                 <div>
                     <h2 class="text-primary text-xl font-semibold">Permisos por sección</h2>
-                    <p class="text-muted text-sm">Gestiona los accesos de cada rol a los diferentes módulos del sistema de forma organizada.</p>
+                    <p class="text-muted text-sm">Gestiona los accesos de cada rol a los diferentes módulos del sistema
+                        de forma organizada.</p>
                 </div>
                 <div class="flex gap-2">
                     <button type="button" onclick="selectAllPermissions()" class="btn-secondary text-sm">
@@ -2478,247 +2640,255 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
 
             <form method="POST" class="space-y-6" id="permissions-form">
-            <input type="hidden" name="action" value="update_permissions">
-            
-            <?php
-            // Group sections by category
-            $sectionsByCategory = [];
-            foreach ($sections as $sectionKey => $sectionData) {
-                $category = is_array($sectionData) ? $sectionData['category'] : 'General';
-                if (!isset($sectionsByCategory[$category])) {
-                    $sectionsByCategory[$category] = [];
+                <input type="hidden" name="action" value="update_permissions">
+
+                <?php
+                // Group sections by category
+                $sectionsByCategory = [];
+                foreach ($sections as $sectionKey => $sectionData) {
+                    $category = is_array($sectionData) ? $sectionData['category'] : 'General';
+                    if (!isset($sectionsByCategory[$category])) {
+                        $sectionsByCategory[$category] = [];
+                    }
+                    $sectionsByCategory[$category][$sectionKey] = $sectionData;
                 }
-                $sectionsByCategory[$category][$sectionKey] = $sectionData;
-            }
-            ?>
+                ?>
 
-            <?php foreach ($sectionsByCategory as $category => $categorySections): ?>
-                <div class="space-y-4">
-                    <div class="flex items-center gap-3 pb-2 border-b border-slate-700">
-                        <i class="fas fa-folder text-cyan-400"></i>
-                        <h3 class="text-primary text-lg font-semibold"><?= htmlspecialchars($category) ?></h3>
-                        <span class="chip text-xs"><?= count($categorySections) ?> secciones</span>
-                    </div>
+                <?php foreach ($sectionsByCategory as $category => $categorySections): ?>
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-3 pb-2 border-b border-slate-700">
+                            <i class="fas fa-folder text-cyan-400"></i>
+                            <h3 class="text-primary text-lg font-semibold"><?= htmlspecialchars($category) ?></h3>
+                            <span class="chip text-xs"><?= count($categorySections) ?> secciones</span>
+                        </div>
 
-                    <div class="grid grid-cols-1 gap-4">
-                        <?php foreach ($categorySections as $sectionKey => $sectionData): ?>
-                            <?php 
-                            $assignedRoles = $permissionsBySection[$sectionKey] ?? [];
-                            $label = is_array($sectionData) ? $sectionData['label'] : $sectionData;
-                            $icon = is_array($sectionData) ? $sectionData['icon'] : 'fa-circle';
-                            $description = is_array($sectionData) ? $sectionData['description'] : '';
-                            ?>
-                            <div class="section-card p-5 space-y-4 hover:border-cyan-500/30 transition-all">
-                                <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                                    <div class="flex items-start gap-3 flex-1">
-                                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center flex-shrink-0">
-                                            <i class="fas <?= htmlspecialchars($icon) ?> text-cyan-400"></i>
+                        <div class="grid grid-cols-1 gap-4">
+                            <?php foreach ($categorySections as $sectionKey => $sectionData): ?>
+                                <?php
+                                $assignedRoles = $permissionsBySection[$sectionKey] ?? [];
+                                $label = is_array($sectionData) ? $sectionData['label'] : $sectionData;
+                                $icon = is_array($sectionData) ? $sectionData['icon'] : 'fa-circle';
+                                $description = is_array($sectionData) ? $sectionData['description'] : '';
+                                ?>
+                                <div class="section-card p-5 space-y-4 hover:border-cyan-500/30 transition-all">
+                                    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                                        <div class="flex items-start gap-3 flex-1">
+                                            <div
+                                                class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                                <i class="fas <?= htmlspecialchars($icon) ?> text-cyan-400"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <h4 class="text-primary text-base font-semibold mb-1">
+                                                    <?= htmlspecialchars($label) ?></h4>
+                                                <p class="text-muted text-xs mb-2"><?= htmlspecialchars($description) ?></p>
+                                                <p
+                                                    class="text-muted text-xs font-mono bg-slate-900/50 inline-block px-2 py-1 rounded">
+                                                    <i class="fas fa-code text-slate-500"></i>
+                                                    <?= htmlspecialchars($sectionKey) ?>
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div class="flex-1">
-                                            <h4 class="text-primary text-base font-semibold mb-1"><?= htmlspecialchars($label) ?></h4>
-                                            <p class="text-muted text-xs mb-2"><?= htmlspecialchars($description) ?></p>
-                                            <p class="text-muted text-xs font-mono bg-slate-900/50 inline-block px-2 py-1 rounded">
-                                                <i class="fas fa-code text-slate-500"></i> <?= htmlspecialchars($sectionKey) ?>
-                                            </p>
+                                        <div class="flex items-center gap-2">
+                                            <span
+                                                class="chip <?= count($assignedRoles) > 0 ? 'bg-green-500/20 text-green-300' : 'bg-slate-700/50' ?>">
+                                                <i class="fas fa-users"></i> <?= count($assignedRoles) ?> rol(es)
+                                            </span>
                                         </div>
                                     </div>
-                                    <div class="flex items-center gap-2">
-                                        <span class="chip <?= count($assignedRoles) > 0 ? 'bg-green-500/20 text-green-300' : 'bg-slate-700/50' ?>">
-                                            <i class="fas fa-users"></i> <?= count($assignedRoles) ?> rol(es)
-                                        </span>
+
+                                    <div class="space-y-3">
+                                        <div class="flex items-center justify-between">
+                                            <label class="form-label mb-0">Roles con acceso:</label>
+                                            <div class="flex gap-2">
+                                                <button type="button"
+                                                    onclick="selectAllInSection('<?= htmlspecialchars($sectionKey) ?>')"
+                                                    class="text-xs text-cyan-400 hover:text-cyan-300">
+                                                    <i class="fas fa-check-circle"></i> Todos
+                                                </button>
+                                                <button type="button"
+                                                    onclick="clearAllInSection('<?= htmlspecialchars($sectionKey) ?>')"
+                                                    class="text-xs text-slate-400 hover:text-slate-300">
+                                                    <i class="fas fa-times-circle"></i> Ninguno
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <?php foreach ($roleNames as $roleName): ?>
+                                                <?php $isActive = in_array($roleName, $assignedRoles, true); ?>
+                                                <label class="pill-option <?= $isActive ? 'is-active' : '' ?>"
+                                                    data-section="<?= htmlspecialchars($sectionKey) ?>">
+                                                    <input type="checkbox"
+                                                        name="permissions[<?= htmlspecialchars($sectionKey) ?>][]"
+                                                        value="<?= htmlspecialchars($roleName) ?>" <?= $isActive ? 'checked' : '' ?>
+                                                        class="accent-cyan-500" onchange="updatePillState(this)">
+                                                    <span><?= htmlspecialchars($roleLabels[$roleName] ?? $roleName) ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
                                     </div>
                                 </div>
-
-                                <div class="space-y-3">
-                                    <div class="flex items-center justify-between">
-                                        <label class="form-label mb-0">Roles con acceso:</label>
-                                        <div class="flex gap-2">
-                                            <button type="button" onclick="selectAllInSection('<?= htmlspecialchars($sectionKey) ?>')" class="text-xs text-cyan-400 hover:text-cyan-300">
-                                                <i class="fas fa-check-circle"></i> Todos
-                                            </button>
-                                            <button type="button" onclick="clearAllInSection('<?= htmlspecialchars($sectionKey) ?>')" class="text-xs text-slate-400 hover:text-slate-300">
-                                                <i class="fas fa-times-circle"></i> Ninguno
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="flex flex-wrap gap-2">
-                                        <?php foreach ($roleNames as $roleName): ?>
-                                            <?php $isActive = in_array($roleName, $assignedRoles, true); ?>
-                                            <label class="pill-option <?= $isActive ? 'is-active' : '' ?>" data-section="<?= htmlspecialchars($sectionKey) ?>">
-                                                <input type="checkbox" 
-                                                       name="permissions[<?= htmlspecialchars($sectionKey) ?>][]" 
-                                                       value="<?= htmlspecialchars($roleName) ?>" 
-                                                       <?= $isActive ? 'checked' : '' ?> 
-                                                       class="accent-cyan-500"
-                                                       onchange="updatePillState(this)">
-                                                <span><?= htmlspecialchars($roleLabels[$roleName] ?? $roleName) ?></span>
-                                            </label>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
+                <?php endforeach; ?>
+
+                <div class="flex justify-between items-center pt-4 border-t border-slate-700">
+                    <p class="text-muted text-sm">
+                        <i class="fas fa-info-circle text-cyan-400"></i>
+                        Los cambios se aplicarán inmediatamente y actualizarán los menús de todos los usuarios.
+                    </p>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar todos los permisos
+                    </button>
                 </div>
-            <?php endforeach; ?>
+            </form>
+        </section>
 
-            <div class="flex justify-between items-center pt-4 border-t border-slate-700">
-                <p class="text-muted text-sm">
-                    <i class="fas fa-info-circle text-cyan-400"></i>
-                    Los cambios se aplicarán inmediatamente y actualizarán los menús de todos los usuarios.
-                </p>
-                <button type="submit" class="btn-primary">
-                    <i class="fas fa-save"></i>
-                    Guardar todos los permisos
-                </button>
-            </div>
-        </form>
-    </section>
+        <script>
+            function updatePillState(checkbox) {
+                const label = checkbox.closest('.pill-option');
+                if (checkbox.checked) {
+                    label.classList.add('is-active');
+                } else {
+                    label.classList.remove('is-active');
+                }
+            }
 
-    <script>
-    function updatePillState(checkbox) {
-        const label = checkbox.closest('.pill-option');
-        if (checkbox.checked) {
-            label.classList.add('is-active');
-        } else {
-            label.classList.remove('is-active');
-        }
-    }
+            function selectAllInSection(sectionKey) {
+                const checkboxes = document.querySelectorAll(`input[name="permissions[${sectionKey}][]"]`);
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                    updatePillState(cb);
+                });
+            }
 
-    function selectAllInSection(sectionKey) {
-        const checkboxes = document.querySelectorAll(`input[name="permissions[${sectionKey}][]"]`);
-        checkboxes.forEach(cb => {
-            cb.checked = true;
-            updatePillState(cb);
-        });
-    }
+            function clearAllInSection(sectionKey) {
+                const checkboxes = document.querySelectorAll(`input[name="permissions[${sectionKey}][]"]`);
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                    updatePillState(cb);
+                });
+            }
 
-    function clearAllInSection(sectionKey) {
-        const checkboxes = document.querySelectorAll(`input[name="permissions[${sectionKey}][]"]`);
-        checkboxes.forEach(cb => {
-            cb.checked = false;
-            updatePillState(cb);
-        });
-    }
+            function selectAllPermissions() {
+                const checkboxes = document.querySelectorAll('#permissions-form input[type="checkbox"]');
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                    updatePillState(cb);
+                });
+            }
 
-    function selectAllPermissions() {
-        const checkboxes = document.querySelectorAll('#permissions-form input[type="checkbox"]');
-        checkboxes.forEach(cb => {
-            cb.checked = true;
-            updatePillState(cb);
-        });
-    }
-
-    function clearAllPermissions() {
-        if (confirm('¿Estás seguro de que deseas desmarcar todos los permisos?')) {
-            const checkboxes = document.querySelectorAll('#permissions-form input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                cb.checked = false;
-                updatePillState(cb);
-            });
-        }
-    }
-    </script>
-</div>
+            function clearAllPermissions() {
+                if (confirm('¿Estás seguro de que deseas desmarcar todos los permisos?')) {
+                    const checkboxes = document.querySelectorAll('#permissions-form input[type="checkbox"]');
+                    checkboxes.forEach(cb => {
+                        cb.checked = false;
+                        updatePillState(cb);
+                    });
+                }
+            }
+        </script>
+    </div>
 </section>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    const tabConfig = [
-        {
-            key: 'users',
-            label: 'Usuarios',
-            icon: 'fas fa-users-cog',
-            selectors: ['#create-user-card', '#manage-users-section']
-        },
-        {
-            key: 'rates',
-            label: 'Historial de tarifas',
-            icon: 'fas fa-history',
-            selectors: ['#rate-history-section']
-        },
-        {
-            key: 'departments',
-            label: 'Departamentos',
-            icon: 'fas fa-sitemap',
-            selectors: ['#create-department-card', '#departments-section']
-        },
-        {
-            key: 'roles',
-            label: 'Roles y permisos',
-            icon: 'fas fa-user-shield',
-            selectors: ['#create-role-card', '#roles-section', '#permissions-section']
-        },
-        {
-            key: 'attendance',
-            label: 'Tipos de punch',
-            icon: 'fas fa-fingerprint',
-            selectors: ['#create-attendance-type-card', '#attendance-types-section']
-        },
-        {
-            key: 'authorization',
-            label: 'Códigos de Autorización',
-            icon: 'fas fa-key',
-            selectors: ['#authorization-system-config', '#create-auth-code-card', '#authorization-codes-section']
-        },
-        {
-            key: 'absence_report',
-            label: 'Reporte de Ausencias',
-            icon: 'fas fa-file-medical-alt',
-            selectors: ['#absence-report-config']
-        },
-        {
-            key: 'schedule',
-            label: 'Horario objetivo',
-            icon: 'fas fa-clock',
-            selectors: ['#schedule-card']
-        }
-    ];
-
-    function initTableScrollSync() {
-        const shells = document.querySelectorAll('.table-scroll-shell');
-        shells.forEach(shell => {
-            const scroller = shell.querySelector('.responsive-scroll');
-            const bar = shell.querySelector('.table-scrollbar');
-            const inner = shell.querySelector('.table-scrollbar-inner');
-            if (!scroller || !bar || !inner) {
-                return;
+    document.addEventListener('DOMContentLoaded', function () {
+        const tabConfig = [
+            {
+                key: 'users',
+                label: 'Usuarios',
+                icon: 'fas fa-users-cog',
+                selectors: ['#create-user-card', '#manage-users-section']
+            },
+            {
+                key: 'rates',
+                label: 'Historial de tarifas',
+                icon: 'fas fa-history',
+                selectors: ['#rate-history-section']
+            },
+            {
+                key: 'departments',
+                label: 'Departamentos',
+                icon: 'fas fa-sitemap',
+                selectors: ['#create-department-card', '#departments-section']
+            },
+            {
+                key: 'roles',
+                label: 'Roles y permisos',
+                icon: 'fas fa-user-shield',
+                selectors: ['#create-role-card', '#roles-section', '#permissions-section']
+            },
+            {
+                key: 'attendance',
+                label: 'Tipos de punch',
+                icon: 'fas fa-fingerprint',
+                selectors: ['#create-attendance-type-card', '#attendance-types-section']
+            },
+            {
+                key: 'authorization',
+                label: 'Códigos de Autorización',
+                icon: 'fas fa-key',
+                selectors: ['#authorization-system-config', '#create-auth-code-card', '#authorization-codes-section']
+            },
+            {
+                key: 'absence_report',
+                label: 'Reporte de Ausencias',
+                icon: 'fas fa-file-medical-alt',
+                selectors: ['#absence-report-config']
+            },
+            {
+                key: 'schedule',
+                label: 'Horario objetivo',
+                icon: 'fas fa-clock',
+                selectors: ['#schedule-card']
             }
+        ];
 
-            const syncWidths = () => {
-                inner.style.width = `${scroller.scrollWidth}px`;
-                bar.scrollLeft = scroller.scrollLeft;
-            };
-
-            syncWidths();
-            scroller.addEventListener('scroll', () => {
-                bar.scrollLeft = scroller.scrollLeft;
-            });
-            bar.addEventListener('scroll', () => {
-                scroller.scrollLeft = bar.scrollLeft;
-            });
-
-            if ('ResizeObserver' in window) {
-                const observer = new ResizeObserver(syncWidths);
-                observer.observe(scroller);
-                if (scroller.firstElementChild) {
-                    observer.observe(scroller.firstElementChild);
+        function initTableScrollSync() {
+            const shells = document.querySelectorAll('.table-scroll-shell');
+            shells.forEach(shell => {
+                const scroller = shell.querySelector('.responsive-scroll');
+                const bar = shell.querySelector('.table-scrollbar');
+                const inner = shell.querySelector('.table-scrollbar-inner');
+                if (!scroller || !bar || !inner) {
+                    return;
                 }
-            } else {
-                window.addEventListener('resize', syncWidths);
-            }
-        });
-    }
 
-    initTableScrollSync();
+                const syncWidths = () => {
+                    inner.style.width = `${scroller.scrollWidth}px`;
+                    bar.scrollLeft = scroller.scrollLeft;
+                };
 
-    const firstTarget = document.querySelector(tabConfig[0]?.selectors[0] || '');
-    if (!firstTarget) {
-        return;
-    }
+                syncWidths();
+                scroller.addEventListener('scroll', () => {
+                    bar.scrollLeft = scroller.scrollLeft;
+                });
+                bar.addEventListener('scroll', () => {
+                    scroller.scrollLeft = bar.scrollLeft;
+                });
 
-    const style = document.createElement('style');
-    style.textContent = `
+                if ('ResizeObserver' in window) {
+                    const observer = new ResizeObserver(syncWidths);
+                    observer.observe(scroller);
+                    if (scroller.firstElementChild) {
+                        observer.observe(scroller.firstElementChild);
+                    }
+                } else {
+                    window.addEventListener('resize', syncWidths);
+                }
+            });
+        }
+
+        initTableScrollSync();
+
+        const firstTarget = document.querySelector(tabConfig[0]?.selectors[0] || '');
+        if (!firstTarget) {
+            return;
+        }
+
+        const style = document.createElement('style');
+        style.textContent = `
         .settings-tabs-nav {
             display: flex;
             flex-wrap: wrap;
@@ -2764,182 +2934,192 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
     `;
-    document.head.appendChild(style);
+        document.head.appendChild(style);
 
-    const host = document.createElement('div');
-    host.className = 'settings-tabs space-y-8';
+        const host = document.createElement('div');
+        host.className = 'settings-tabs space-y-8';
 
-    const nav = document.createElement('nav');
-    nav.className = 'settings-tabs-nav';
-    nav.setAttribute('role', 'tablist');
-    host.appendChild(nav);
+        const nav = document.createElement('nav');
+        nav.className = 'settings-tabs-nav';
+        nav.setAttribute('role', 'tablist');
+        host.appendChild(nav);
 
-    const panelsWrapper = document.createElement('div');
-    panelsWrapper.className = 'settings-tab-panels space-y-12';
-    host.appendChild(panelsWrapper);
+        const panelsWrapper = document.createElement('div');
+        panelsWrapper.className = 'settings-tab-panels space-y-12';
+        host.appendChild(panelsWrapper);
 
-    const quickGrid = document.getElementById('quick-actions-grid');
-    if (quickGrid) {
-        quickGrid.parentNode.insertBefore(host, quickGrid);
-    } else {
-        firstTarget.parentNode.insertBefore(host, firstTarget);
-    }
+        const quickGrid = document.getElementById('quick-actions-grid');
+        if (quickGrid) {
+            quickGrid.parentNode.insertBefore(host, quickGrid);
+        } else {
+            firstTarget.parentNode.insertBefore(host, firstTarget);
+        }
 
-    const panels = new Map();
-    const buttons = new Map();
+        const panels = new Map();
+        const buttons = new Map();
 
-    tabConfig.forEach(function (config) {
-        const panel = document.createElement('div');
-        panel.className = 'settings-tab-panel space-y-8';
-        panel.dataset.tabPanel = config.key;
-        panel.id = `settings-panel-${config.key}`;
-        panel.setAttribute('role', 'tabpanel');
-        panel.setAttribute('aria-hidden', 'true');
-        panel.setAttribute('tabindex', '0');
-        panelsWrapper.appendChild(panel);
-        panels.set(config.key, panel);
+        tabConfig.forEach(function (config) {
+            const panel = document.createElement('div');
+            panel.className = 'settings-tab-panel space-y-8';
+            panel.dataset.tabPanel = config.key;
+            panel.id = `settings-panel-${config.key}`;
+            panel.setAttribute('role', 'tabpanel');
+            panel.setAttribute('aria-hidden', 'true');
+            panel.setAttribute('tabindex', '0');
+            panelsWrapper.appendChild(panel);
+            panels.set(config.key, panel);
 
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.id = `settings-tab-${config.key}`;
-        button.className = 'settings-tab-button';
-        button.dataset.tabTarget = config.key;
-        button.setAttribute('role', 'tab');
-        button.setAttribute('aria-selected', 'false');
-        button.setAttribute('aria-controls', panel.id);
-        button.innerHTML = `<i class=\"${config.icon}\"></i><span>${config.label}</span>`;
-        nav.appendChild(button);
-        buttons.set(config.key, button);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.id = `settings-tab-${config.key}`;
+            button.className = 'settings-tab-button';
+            button.dataset.tabTarget = config.key;
+            button.setAttribute('role', 'tab');
+            button.setAttribute('aria-selected', 'false');
+            button.setAttribute('aria-controls', panel.id);
+            button.innerHTML = `<i class=\"${config.icon}\"></i><span>${config.label}</span>`;
+            nav.appendChild(button);
+            buttons.set(config.key, button);
 
-        panel.setAttribute('aria-labelledby', button.id);
+            panel.setAttribute('aria-labelledby', button.id);
 
-        config.selectors.forEach(function (selector) {
-            const element = document.querySelector(selector);
-            if (element) {
-                panel.appendChild(element);
+            config.selectors.forEach(function (selector) {
+                const element = document.querySelector(selector);
+                if (element) {
+                    panel.appendChild(element);
+                }
+            });
+        });
+
+        if (quickGrid && quickGrid.childElementCount === 0) {
+            quickGrid.remove();
+        }
+
+        function setActiveTab(key) {
+            panels.forEach(function (panel, panelKey) {
+                const isActive = panelKey === key;
+                panel.classList.toggle('is-active', isActive);
+                panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+            });
+
+            buttons.forEach(function (button, buttonKey) {
+                const isActive = buttonKey === key;
+                button.classList.toggle('is-active', isActive);
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                button.setAttribute('tabindex', isActive ? '0' : '-1');
+            });
+
+            try {
+                localStorage.setItem('settings-active-tab', key);
+            } catch (error) {
+                /* ignore storage errors */
             }
-        });
-    });
+        }
 
-    if (quickGrid && quickGrid.childElementCount === 0) {
-        quickGrid.remove();
-    }
-
-    function setActiveTab(key) {
-        panels.forEach(function (panel, panelKey) {
-            const isActive = panelKey === key;
-            panel.classList.toggle('is-active', isActive);
-            panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-        });
-
-        buttons.forEach(function (button, buttonKey) {
-            const isActive = buttonKey === key;
-            button.classList.toggle('is-active', isActive);
-            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-            button.setAttribute('tabindex', isActive ? '0' : '-1');
-        });
-
+        let initialTab = tabConfig[0]?.key;
         try {
-            localStorage.setItem('settings-active-tab', key);
+            const stored = localStorage.getItem('settings-active-tab');
+            if (stored && panels.has(stored)) {
+                initialTab = stored;
+            }
         } catch (error) {
             /* ignore storage errors */
         }
-    }
 
-    let initialTab = tabConfig[0]?.key;
-    try {
-        const stored = localStorage.getItem('settings-active-tab');
-        if (stored && panels.has(stored)) {
-            initialTab = stored;
-        }
-    } catch (error) {
-        /* ignore storage errors */
-    }
+        setActiveTab(initialTab);
 
-    setActiveTab(initialTab);
-
-    buttons.forEach(function (button, key) {
-        button.addEventListener('click', function () {
-            setActiveTab(key);
+        buttons.forEach(function (button, key) {
+            button.addEventListener('click', function () {
+                setActiveTab(key);
+            });
         });
-    });
 
-    // Auto-fill rate change form when user is selected
-    const rateUserSelect = document.getElementById('rate-user-select');
-    const rateUsdInput = document.getElementById('rate-usd-input');
-    const rateDopInput = document.getElementById('rate-dop-input');
-    const currentRateUsdSpan = document.getElementById('current-rate-usd');
-    const currentRateDopSpan = document.getElementById('current-rate-dop');
+        // Auto-fill rate change form when user is selected
+        const rateUserSelect = document.getElementById('rate-user-select');
+        const rateUsdInput = document.getElementById('rate-usd-input');
+        const rateDopInput = document.getElementById('rate-dop-input');
+        const currentRateUsdSpan = document.getElementById('current-rate-usd');
+        const currentRateDopSpan = document.getElementById('current-rate-dop');
 
-    if (rateUserSelect && rateUsdInput && rateDopInput) {
-        rateUserSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            
-            if (selectedOption.value) {
-                const rateUsd = selectedOption.getAttribute('data-rate-usd');
-                const rateDop = selectedOption.getAttribute('data-rate-dop');
-                
-                // Fill the input fields with current rates
-                rateUsdInput.value = rateUsd || '0.00';
-                rateDopInput.value = rateDop || '0.00';
-                
-                // Show current rates in labels
-                if (currentRateUsdSpan) {
-                    currentRateUsdSpan.textContent = '(actual: $' + (rateUsd || '0.00') + ')';
+        if (rateUserSelect && rateUsdInput && rateDopInput) {
+            rateUserSelect.addEventListener('change', function () {
+                const selectedOption = this.options[this.selectedIndex];
+
+                if (selectedOption.value) {
+                    const rateUsd = selectedOption.getAttribute('data-rate-usd');
+                    const rateDop = selectedOption.getAttribute('data-rate-dop');
+
+                    // Fill the input fields with current rates
+                    rateUsdInput.value = rateUsd || '0.00';
+                    rateDopInput.value = rateDop || '0.00';
+
+                    // Show current rates in labels
+                    if (currentRateUsdSpan) {
+                        currentRateUsdSpan.textContent = '(actual: $' + (rateUsd || '0.00') + ')';
+                    }
+                    if (currentRateDopSpan) {
+                        currentRateDopSpan.textContent = '(actual: $' + (rateDop || '0.00') + ')';
+                    }
+                } else {
+                    // Clear fields if no user selected
+                    rateUsdInput.value = '';
+                    rateDopInput.value = '';
+                    if (currentRateUsdSpan) currentRateUsdSpan.textContent = '';
+                    if (currentRateDopSpan) currentRateDopSpan.textContent = '';
                 }
-                if (currentRateDopSpan) {
-                    currentRateDopSpan.textContent = '(actual: $' + (rateDop || '0.00') + ')';
-                }
-            } else {
-                // Clear fields if no user selected
-                rateUsdInput.value = '';
-                rateDopInput.value = '';
-                if (currentRateUsdSpan) currentRateUsdSpan.textContent = '';
-                if (currentRateDopSpan) currentRateDopSpan.textContent = '';
+            });
+        }
+
+        // Auto-reload page after permission update to reflect changes in real-time
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('permissions_updated')) {
+            // Switch to roles tab
+            const tabParam = urlParams.get('tab');
+            if (tabParam) {
+                setActiveTab(tabParam);
             }
-        });
-    }
 
-    // Auto-reload page after permission update to reflect changes in real-time
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('permissions_updated')) {
-        // Switch to roles tab
-        const tabParam = urlParams.get('tab');
-        if (tabParam) {
-            setActiveTab(tabParam);
-        }
-        
-        // Remove the parameter from URL
-        const newUrl = window.location.pathname + window.location.hash;
-        window.history.replaceState({}, document.title, newUrl);
-        
-        // Create and show success message
-        const container = document.querySelector('.max-w-7xl.mx-auto.px-6.py-10');
-        if (container) {
-            const banner = document.createElement('div');
-            banner.className = 'status-banner success';
-            banner.textContent = 'Permisos actualizados correctamente. Los cambios se reflejan inmediatamente.';
-            container.insertBefore(banner, container.firstChild.nextSibling);
-            banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Remove banner after 5 seconds
-            setTimeout(() => {
-                banner.style.transition = 'opacity 0.5s';
-                banner.style.opacity = '0';
-                setTimeout(() => banner.remove(), 500);
-            }, 5000);
-        }
-    }
+            // Remove the parameter from URL
+            const newUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, document.title, newUrl);
 
-    // Authorization Codes Functions
-    window.generateAuthCode = async function() {
-        try {
-            const response = await fetch('api/authorization_codes.php?action=generate_code&length=8');
-            const data = await response.json();
-            
-            if (data.success && data.data && data.data.code) {
-                document.getElementById('auth_code_input').value = data.data.code;
-            } else {
+            // Create and show success message
+            const container = document.querySelector('.max-w-7xl.mx-auto.px-6.py-10');
+            if (container) {
+                const banner = document.createElement('div');
+                banner.className = 'status-banner success';
+                banner.textContent = 'Permisos actualizados correctamente. Los cambios se reflejan inmediatamente.';
+                container.insertBefore(banner, container.firstChild.nextSibling);
+                banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // Remove banner after 5 seconds
+                setTimeout(() => {
+                    banner.style.transition = 'opacity 0.5s';
+                    banner.style.opacity = '0';
+                    setTimeout(() => banner.remove(), 500);
+                }, 5000);
+            }
+        }
+
+        // Authorization Codes Functions
+        window.generateAuthCode = async function () {
+            try {
+                const response = await fetch('api/authorization_codes.php?action=generate_code&length=8');
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.code) {
+                    document.getElementById('auth_code_input').value = data.data.code;
+                } else {
+                    // Fallback: generate client-side
+                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                    let code = '';
+                    for (let i = 0; i < 8; i++) {
+                        code += chars.charAt(Math.floor(Math.random() * chars.length));
+                    }
+                    document.getElementById('auth_code_input').value = code;
+                }
+            } catch (error) {
+                console.error('Error generating code:', error);
                 // Fallback: generate client-side
                 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
                 let code = '';
@@ -2948,213 +3128,204 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 document.getElementById('auth_code_input').value = code;
             }
-        } catch (error) {
-            console.error('Error generating code:', error);
-            // Fallback: generate client-side
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let code = '';
-            for (let i = 0; i < 8; i++) {
-                code += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            document.getElementById('auth_code_input').value = code;
-        }
-    };
+        };
 
-    window.viewCodeDetails = function(codeId) {
-        // Fetch code details and usage history via AJAX
-        fetch(`api/authorization_codes.php?action=code_details&id=${codeId}`)
-            .then(response => {
-                console.log('Response status:', response.status);
-                console.log('Response headers:', response.headers);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.text(); // Get as text first to see what we're getting
-            })
-            .then(text => {
-                console.log('Raw response:', text);
-                try {
-                    const data = JSON.parse(text);
-                    console.log('Parsed JSON:', data);
-                    
-                    if (data.success) {
-                        // La API retorna los datos dentro de data.data
-                        const code = data.data?.code || data.code;
-                        const history = data.data?.usage_history || data.usage_history;
-                        
-                        if (code) {
-                            showCodeDetailsModal(code, history || []);
-                        } else {
-                            console.error('No code data found:', data);
-                            alert('Error: Estructura de datos inválida. Revisa la consola para más detalles.');
-                        }
-                    } else {
-                        alert('Error: ' + (data.message || 'No se pudieron cargar los detalles'));
+        window.viewCodeDetails = function (codeId) {
+            // Fetch code details and usage history via AJAX
+            fetch(`api/authorization_codes.php?action=code_details&id=${codeId}`)
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    console.log('Response headers:', response.headers);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
                     }
-                } catch (e) {
-                    console.error('JSON Parse Error:', e);
-                    console.error('Text was:', text);
-                    alert('Error: La respuesta no es JSON válido. Revisa la consola.');
-                }
-            })
-            .catch(error => {
-                console.error('Fetch Error:', error);
-                alert('Error al cargar los detalles del código: ' + error.message);
-            });
-    };
-    
-    let isEditMode = false;
-    let currentCodeData = null;
-    
-    function showCodeDetailsModal(code, usageHistory) {
-        const modal = document.getElementById('codeDetailsModal');
-        if (!modal) return;
-        
-        // Store current code data
-        currentCodeData = code;
-        isEditMode = false;
-        
-        // Populate code details
-        document.getElementById('edit_code_id').value = code.id;
-        document.getElementById('detail_code').value = code.code;
-        document.getElementById('detail_name').value = code.code_name;
-        document.getElementById('detail_role').value = code.role_type;
-        document.getElementById('detail_context').value = code.usage_context || '';
-        document.getElementById('detail_status').value = code.is_active;
-        document.getElementById('detail_max_uses').value = code.max_uses || '';
-        document.getElementById('detail_current_uses').textContent = code.current_uses || 0;
-        
-        // Handle dates
-        if (code.valid_from && code.valid_from !== 'Sin límite') {
-            const fromDate = new Date(code.valid_from);
-            document.getElementById('detail_valid_from').value = fromDate.toISOString().slice(0, 16);
-        } else {
-            document.getElementById('detail_valid_from').value = '';
-        }
-        
-        if (code.valid_until && code.valid_until !== 'Sin límite') {
-            const untilDate = new Date(code.valid_until);
-            document.getElementById('detail_valid_until').value = untilDate.toISOString().slice(0, 16);
-        } else {
-            document.getElementById('detail_valid_until').value = '';
-        }
-        
-        document.getElementById('detail_created').textContent = code.created_at;
-        
-        // Set fields to readonly mode initially
-        setEditMode(false);
-        
-        // Populate usage history table
-        const tbody = document.getElementById('usageHistoryBody');
-        tbody.innerHTML = '';
-        
-        if (!usageHistory || usageHistory.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 dark:text-gray-400 p-6">No se ha usado este código aún</td></tr>';
-        } else {
-            usageHistory.forEach(usage => {
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors';
-                row.innerHTML = `
+                    return response.text(); // Get as text first to see what we're getting
+                })
+                .then(text => {
+                    console.log('Raw response:', text);
+                    try {
+                        const data = JSON.parse(text);
+                        console.log('Parsed JSON:', data);
+
+                        if (data.success) {
+                            // La API retorna los datos dentro de data.data
+                            const code = data.data?.code || data.code;
+                            const history = data.data?.usage_history || data.usage_history;
+
+                            if (code) {
+                                showCodeDetailsModal(code, history || []);
+                            } else {
+                                console.error('No code data found:', data);
+                                alert('Error: Estructura de datos inválida. Revisa la consola para más detalles.');
+                            }
+                        } else {
+                            alert('Error: ' + (data.message || 'No se pudieron cargar los detalles'));
+                        }
+                    } catch (e) {
+                        console.error('JSON Parse Error:', e);
+                        console.error('Text was:', text);
+                        alert('Error: La respuesta no es JSON válido. Revisa la consola.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch Error:', error);
+                    alert('Error al cargar los detalles del código: ' + error.message);
+                });
+        };
+
+        let isEditMode = false;
+        let currentCodeData = null;
+
+        function showCodeDetailsModal(code, usageHistory) {
+            const modal = document.getElementById('codeDetailsModal');
+            if (!modal) return;
+
+            // Store current code data
+            currentCodeData = code;
+            isEditMode = false;
+
+            // Populate code details
+            document.getElementById('edit_code_id').value = code.id;
+            document.getElementById('detail_code').value = code.code;
+            document.getElementById('detail_name').value = code.code_name;
+            document.getElementById('detail_role').value = code.role_type;
+            document.getElementById('detail_context').value = code.usage_context || '';
+            document.getElementById('detail_status').value = code.is_active;
+            document.getElementById('detail_max_uses').value = code.max_uses || '';
+            document.getElementById('detail_current_uses').textContent = code.current_uses || 0;
+
+            // Handle dates
+            if (code.valid_from && code.valid_from !== 'Sin límite') {
+                const fromDate = new Date(code.valid_from);
+                document.getElementById('detail_valid_from').value = fromDate.toISOString().slice(0, 16);
+            } else {
+                document.getElementById('detail_valid_from').value = '';
+            }
+
+            if (code.valid_until && code.valid_until !== 'Sin límite') {
+                const untilDate = new Date(code.valid_until);
+                document.getElementById('detail_valid_until').value = untilDate.toISOString().slice(0, 16);
+            } else {
+                document.getElementById('detail_valid_until').value = '';
+            }
+
+            document.getElementById('detail_created').textContent = code.created_at;
+
+            // Set fields to readonly mode initially
+            setEditMode(false);
+
+            // Populate usage history table
+            const tbody = document.getElementById('usageHistoryBody');
+            tbody.innerHTML = '';
+
+            if (!usageHistory || usageHistory.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500 dark:text-gray-400 p-6">No se ha usado este código aún</td></tr>';
+            } else {
+                usageHistory.forEach(usage => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors';
+                    row.innerHTML = `
                     <td class="p-3 text-gray-900 dark:text-gray-100">${usage.used_at}</td>
                     <td class="p-3 text-gray-900 dark:text-gray-100">${usage.user_name || usage.username}</td>
                     <td class="p-3"><span class="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">${usage.usage_context}</span></td>
                     <td class="p-3 text-gray-700 dark:text-gray-300">${usage.reference_info || '-'}</td>
                     <td class="p-3 text-gray-700 dark:text-gray-300 font-mono text-xs">${usage.ip_address}</td>
                 `;
-                tbody.appendChild(row);
-            });
-        }
-        
-        // Show modal
-        modal.style.display = 'block';
-    }
-    
-    window.toggleEditMode = function() {
-        isEditMode = !isEditMode;
-        setEditMode(isEditMode);
-    };
-    
-    function setEditMode(enabled) {
-        const fields = document.querySelectorAll('.editable-field');
-        const btnToggleEdit = document.getElementById('btnToggleEdit');
-        const btnSave = document.getElementById('btnSave');
-        const modalTitle = document.getElementById('modalTitle');
-        
-        // Enable/disable fields
-        fields.forEach(field => {
-            field.disabled = !enabled;
-        });
-        
-        if (enabled) {
-            btnToggleEdit.innerHTML = '<i class="fas fa-times"></i> Cancelar';
-            btnToggleEdit.className = 'btn-danger';
-            btnSave.style.display = 'inline-block';
-            modalTitle.textContent = 'Editar Código de Autorización';
-        } else {
-            btnToggleEdit.innerHTML = '<i class="fas fa-edit"></i> Editar';
-            btnToggleEdit.className = 'btn-success';
-            btnSave.style.display = 'none';
-            modalTitle.textContent = 'Detalles del Código de Autorización';
-            
-            // Restore original values if cancelled (only repopulate fields, don't call showCodeDetailsModal again)
-            if (currentCodeData && isEditMode === false) {
-                // Restore values directly without calling showCodeDetailsModal to avoid recursion
-                document.getElementById('detail_name').value = currentCodeData.code_name;
-                document.getElementById('detail_role').value = currentCodeData.role_type;
-                document.getElementById('detail_context').value = currentCodeData.usage_context || '';
-                document.getElementById('detail_status').value = currentCodeData.is_active;
-                document.getElementById('detail_max_uses').value = currentCodeData.max_uses || '';
+                    tbody.appendChild(row);
+                });
             }
+
+            // Show modal
+            modal.style.display = 'block';
         }
-    }
-    
-    window.saveCodeChanges = function() {
-        const codeId = document.getElementById('edit_code_id').value;
-        const formData = {
-            id: codeId,
-            code_name: document.getElementById('detail_name').value,
-            role_type: document.getElementById('detail_role').value,
-            usage_context: document.getElementById('detail_context').value || null,
-            is_active: document.getElementById('detail_status').value,
-            max_uses: document.getElementById('detail_max_uses').value || null,
-            valid_from: document.getElementById('detail_valid_from').value || null,
-            valid_until: document.getElementById('detail_valid_until').value || null
+
+        window.toggleEditMode = function () {
+            isEditMode = !isEditMode;
+            setEditMode(isEditMode);
         };
-        
-        fetch('api/authorization_codes.php?action=update', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(formData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('✅ Código actualizado correctamente');
-                closeCodeDetailsModal();
-                location.reload(); // Reload to see changes
+
+        function setEditMode(enabled) {
+            const fields = document.querySelectorAll('.editable-field');
+            const btnToggleEdit = document.getElementById('btnToggleEdit');
+            const btnSave = document.getElementById('btnSave');
+            const modalTitle = document.getElementById('modalTitle');
+
+            // Enable/disable fields
+            fields.forEach(field => {
+                field.disabled = !enabled;
+            });
+
+            if (enabled) {
+                btnToggleEdit.innerHTML = '<i class="fas fa-times"></i> Cancelar';
+                btnToggleEdit.className = 'btn-danger';
+                btnSave.style.display = 'inline-block';
+                modalTitle.textContent = 'Editar Código de Autorización';
             } else {
-                alert('❌ Error: ' + (data.message || 'No se pudo actualizar'));
+                btnToggleEdit.innerHTML = '<i class="fas fa-edit"></i> Editar';
+                btnToggleEdit.className = 'btn-success';
+                btnSave.style.display = 'none';
+                modalTitle.textContent = 'Detalles del Código de Autorización';
+
+                // Restore original values if cancelled (only repopulate fields, don't call showCodeDetailsModal again)
+                if (currentCodeData && isEditMode === false) {
+                    // Restore values directly without calling showCodeDetailsModal to avoid recursion
+                    document.getElementById('detail_name').value = currentCodeData.code_name;
+                    document.getElementById('detail_role').value = currentCodeData.role_type;
+                    document.getElementById('detail_context').value = currentCodeData.usage_context || '';
+                    document.getElementById('detail_status').value = currentCodeData.is_active;
+                    document.getElementById('detail_max_uses').value = currentCodeData.max_uses || '';
+                }
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('❌ Error al guardar los cambios');
-        });
-    };
-    
-    window.closeCodeDetailsModal = function() {
-        document.getElementById('codeDetailsModal').style.display = 'none';
-        isEditMode = false;
-        currentCodeData = null;
-    };
-});
+        }
+
+        window.saveCodeChanges = function () {
+            const codeId = document.getElementById('edit_code_id').value;
+            const formData = {
+                id: codeId,
+                code_name: document.getElementById('detail_name').value,
+                role_type: document.getElementById('detail_role').value,
+                usage_context: document.getElementById('detail_context').value || null,
+                is_active: document.getElementById('detail_status').value,
+                max_uses: document.getElementById('detail_max_uses').value || null,
+                valid_from: document.getElementById('detail_valid_from').value || null,
+                valid_until: document.getElementById('detail_valid_until').value || null
+            };
+
+            fetch('api/authorization_codes.php?action=update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('✅ Código actualizado correctamente');
+                        closeCodeDetailsModal();
+                        location.reload(); // Reload to see changes
+                    } else {
+                        alert('❌ Error: ' + (data.message || 'No se pudo actualizar'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('❌ Error al guardar los cambios');
+                });
+        };
+
+        window.closeCodeDetailsModal = function () {
+            document.getElementById('codeDetailsModal').style.display = 'none';
+            isEditMode = false;
+            currentCodeData = null;
+        };
+    });
 </script>
 
 <datalist id="role-options">
     <?php foreach ($rolesList as $roleRow): ?>
-        <option value="<?= htmlspecialchars($roleRow['name']) ?>" label="<?= htmlspecialchars($roleRow['label'] ?? $roleRow['name']) ?>"></option>
+        <option value="<?= htmlspecialchars($roleRow['name']) ?>"
+            label="<?= htmlspecialchars($roleRow['label'] ?? $roleRow['name']) ?>"></option>
     <?php endforeach; ?>
 </datalist>
 
@@ -3170,16 +3341,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 &times;
             </button>
         </div>
-        
+
         <!-- Body -->
         <form id="codeDetailsForm" class="modal-body">
             <input type="hidden" id="edit_code_id" name="id">
-            
+
             <!-- Code Information -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div class="p-4 rounded-lg border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20">
                     <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Código</label>
-                    <input type="text" id="detail_code" name="code" readonly class="w-full text-2xl font-bold text-blue-600 dark:text-blue-400 bg-transparent border-none p-0 outline-none" style="cursor: default;">
+                    <input type="text" id="detail_code" name="code" readonly
+                        class="w-full text-2xl font-bold text-blue-600 dark:text-blue-400 bg-transparent border-none p-0 outline-none"
+                        style="cursor: default;">
                 </div>
                 <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                     <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Nombre</label>
@@ -3213,57 +3386,70 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
                 <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                     <label class="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Usos Máximos</label>
-                    <input type="number" id="detail_max_uses" name="max_uses" class="editable-field input-control w-full" placeholder="∞ Ilimitado">
-                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">Usos actuales: <span id="detail_current_uses" class="font-semibold text-blue-600 dark:text-blue-400">0</span></div>
+                    <input type="number" id="detail_max_uses" name="max_uses"
+                        class="editable-field input-control w-full" placeholder="∞ Ilimitado">
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">Usos actuales: <span
+                            id="detail_current_uses" class="font-semibold text-blue-600 dark:text-blue-400">0</span>
+                    </div>
                 </div>
             </div>
-            
+
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                     <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Válido Desde</label>
-                    <input type="datetime-local" id="detail_valid_from" name="valid_from" class="editable-field input-control text-sm w-full">
+                    <input type="datetime-local" id="detail_valid_from" name="valid_from"
+                        class="editable-field input-control text-sm w-full">
                 </div>
                 <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                     <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Válido Hasta</label>
-                    <input type="datetime-local" id="detail_valid_until" name="valid_until" class="editable-field input-control text-sm w-full">
+                    <input type="datetime-local" id="detail_valid_until" name="valid_until"
+                        class="editable-field input-control text-sm w-full">
                 </div>
                 <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                     <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Creado</div>
                     <div class="text-sm font-medium text-gray-900 dark:text-gray-100" id="detail_created">-</div>
                 </div>
             </div>
-            
+
             <!-- Usage History -->
             <div class="mb-4">
                 <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
                     <i class="fas fa-history text-blue-600 dark:text-blue-400"></i> Historial de Uso
                 </h4>
             </div>
-            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700" style="max-height: 300px; overflow-y: auto;">
+            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700"
+                style="max-height: 300px; overflow-y: auto;">
                 <table class="w-full">
-                    <thead class="sticky top-0 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                    <thead
+                        class="sticky top-0 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                         <tr>
-                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Fecha/Hora</th>
-                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Usuario</th>
-                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Contexto</th>
-                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Referencia</th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Fecha/Hora
+                            </th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Usuario
+                            </th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Contexto
+                            </th>
+                            <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Referencia
+                            </th>
                             <th class="text-left p-3 text-sm font-semibold text-gray-700 dark:text-gray-300">IP</th>
                         </tr>
                     </thead>
-                    <tbody id="usageHistoryBody" class="text-sm bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tbody id="usageHistoryBody"
+                        class="text-sm bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
                         <!-- Populated by JavaScript -->
                     </tbody>
                 </table>
             </div>
         </form>
-        
+
         <!-- Footer -->
         <div class="modal-footer flex justify-between items-center">
             <button type="button" onclick="toggleEditMode()" id="btnToggleEdit" class="btn-success">
                 <i class="fas fa-edit"></i> Editar
             </button>
             <div class="flex gap-2">
-                <button type="button" onclick="saveCodeChanges()" id="btnSave" class="btn-primary" style="display: none;">
+                <button type="button" onclick="saveCodeChanges()" id="btnSave" class="btn-primary"
+                    style="display: none;">
                     <i class="fas fa-save"></i> Guardar
                 </button>
                 <button type="button" onclick="closeCodeDetailsModal()" class="btn-secondary">
@@ -3275,233 +3461,233 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>
 
 <style>
-/* Modal Styles with Light/Dark Theme Support */
-.modal-overlay {
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0, 0, 0, 0.5);
-}
+    /* Modal Styles with Light/Dark Theme Support */
+    .modal-overlay {
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
 
-.modal-content {
-    background: white;
-    margin: 2% auto;
-    padding: 0;
-    border-radius: 1rem;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem 2rem;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.modal-title {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #111827;
-}
-
-.modal-close-btn {
-    color: #6b7280;
-    font-size: 1.75rem;
-    font-weight: bold;
-    cursor: pointer;
-    background: none;
-    border: none;
-    line-height: 1;
-}
-
-.modal-close-btn:hover {
-    color: #374151;
-}
-
-.modal-body {
-    padding: 2rem;
-}
-
-.modal-footer {
-    padding: 1.5rem 2rem;
-    border-top: 1px solid #e5e7eb;
-}
-
-/* Dark Mode */
-@media (prefers-color-scheme: dark) {
     .modal-content {
-        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        background: white;
+        margin: 2% auto;
+        padding: 0;
+        border-radius: 1rem;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
     }
-    
+
     .modal-header {
-        border-bottom-color: rgba(226, 232, 240, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid #e5e7eb;
     }
-    
+
     .modal-title {
-        color: #f1f5f9;
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #111827;
     }
-    
+
     .modal-close-btn {
-        color: #94a3b8;
+        color: #6b7280;
+        font-size: 1.75rem;
+        font-weight: bold;
+        cursor: pointer;
+        background: none;
+        border: none;
+        line-height: 1;
     }
-    
+
     .modal-close-btn:hover {
-        color: #cbd5e1;
+        color: #374151;
     }
-    
+
+    .modal-body {
+        padding: 2rem;
+    }
+
     .modal-footer {
-        border-top-color: rgba(226, 232, 240, 0.1);
+        padding: 1.5rem 2rem;
+        border-top: 1px solid #e5e7eb;
     }
-}
 
-/* Editable Field States */
-.editable-field:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    background-color: #f9fafb !important;
-}
+    /* Dark Mode */
+    @media (prefers-color-scheme: dark) {
+        .modal-content {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        }
 
-.editable-field:not(:disabled) {
-    border-color: #3b82f6 !important;
-    background-color: #eff6ff !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
+        .modal-header {
+            border-bottom-color: rgba(226, 232, 240, 0.1);
+        }
 
-@media (prefers-color-scheme: dark) {
+        .modal-title {
+            color: #f1f5f9;
+        }
+
+        .modal-close-btn {
+            color: #94a3b8;
+        }
+
+        .modal-close-btn:hover {
+            color: #cbd5e1;
+        }
+
+        .modal-footer {
+            border-top-color: rgba(226, 232, 240, 0.1);
+        }
+    }
+
+    /* Editable Field States */
     .editable-field:disabled {
-        background-color: #1f2937 !important;
+        opacity: 0.6;
+        cursor: not-allowed;
+        background-color: #f9fafb !important;
     }
-    
+
     .editable-field:not(:disabled) {
-        background-color: rgba(59, 130, 246, 0.15) !important;
+        border-color: #3b82f6 !important;
+        background-color: #eff6ff !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
-}
 
-.manage-users-pagination {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    justify-content: flex-end;
-}
+    @media (prefers-color-scheme: dark) {
+        .editable-field:disabled {
+            background-color: #1f2937 !important;
+        }
 
-.pagination-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.35rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: rgba(14, 116, 144, 0.12);
-    color: #0f172a;
-    border: 1px solid rgba(14, 116, 144, 0.2);
-    transition: all 0.2s ease;
-}
+        .editable-field:not(:disabled) {
+            background-color: rgba(59, 130, 246, 0.15) !important;
+        }
+    }
 
-.pagination-link:hover {
-    background: rgba(14, 116, 144, 0.2);
-}
+    .manage-users-pagination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        justify-content: flex-end;
+    }
 
-.pagination-link.is-active {
-    background: #0ea5e9;
-    border-color: #0ea5e9;
-    color: #fff;
-}
-
-.pagination-link.is-disabled {
-    opacity: 0.45;
-    pointer-events: none;
-}
-
-.table-scroll-shell {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.table-scrollbar {
-    height: 14px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.08);
-    scrollbar-color: rgba(14, 116, 144, 0.6) transparent;
-    scrollbar-width: thin;
-    position: sticky;
-    top: 0.75rem;
-    z-index: 5;
-}
-
-.table-scrollbar-inner {
-    height: 1px;
-}
-
-.table-scrollbar::-webkit-scrollbar {
-    height: 10px;
-}
-
-.table-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(14, 116, 144, 0.6);
-    border-radius: 999px;
-}
-
-.table-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-@media (prefers-color-scheme: dark) {
     .pagination-link {
-        color: #e2e8f0;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: rgba(14, 116, 144, 0.12);
+        color: #0f172a;
+        border: 1px solid rgba(14, 116, 144, 0.2);
+        transition: all 0.2s ease;
+    }
+
+    .pagination-link:hover {
         background: rgba(14, 116, 144, 0.2);
-        border-color: rgba(14, 116, 144, 0.35);
     }
 
     .pagination-link.is-active {
-        color: #f8fafc;
+        background: #0ea5e9;
+        border-color: #0ea5e9;
+        color: #fff;
+    }
+
+    .pagination-link.is-disabled {
+        opacity: 0.45;
+        pointer-events: none;
+    }
+
+    .table-scroll-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
     }
 
     .table-scrollbar {
-        background: rgba(148, 163, 184, 0.15);
-        scrollbar-color: rgba(56, 189, 248, 0.6) transparent;
+        height: 14px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.08);
+        scrollbar-color: rgba(14, 116, 144, 0.6) transparent;
+        scrollbar-width: thin;
+        position: sticky;
+        top: 0.75rem;
+        z-index: 5;
+    }
+
+    .table-scrollbar-inner {
+        height: 1px;
+    }
+
+    .table-scrollbar::-webkit-scrollbar {
+        height: 10px;
     }
 
     .table-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(56, 189, 248, 0.6);
+        background: rgba(14, 116, 144, 0.6);
+        border-radius: 999px;
     }
-}
+
+    .table-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .pagination-link {
+            color: #e2e8f0;
+            background: rgba(14, 116, 144, 0.2);
+            border-color: rgba(14, 116, 144, 0.35);
+        }
+
+        .pagination-link.is-active {
+            color: #f8fafc;
+        }
+
+        .table-scrollbar {
+            background: rgba(148, 163, 184, 0.15);
+            scrollbar-color: rgba(56, 189, 248, 0.6) transparent;
+        }
+
+        .table-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.6);
+        }
+    }
 </style>
 
 <script>
-// Send Absence Report Manually
-async function sendAbsenceReportManually() {
-    const btn = document.getElementById('sendReportBtn');
-    const originalHTML = btn.innerHTML;
-    
-    // Disable button and show loading
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
-    
-    try {
-        const response = await fetch('send_absence_report.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // Show success message
-            const successDiv = document.createElement('div');
-            successDiv.className = 'bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in';
-            successDiv.innerHTML = `
+    // Send Absence Report Manually
+    async function sendAbsenceReportManually() {
+        const btn = document.getElementById('sendReportBtn');
+        const originalHTML = btn.innerHTML;
+
+        // Disable button and show loading
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+
+        try {
+            const response = await fetch('send_absence_report.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Show success message
+                const successDiv = document.createElement('div');
+                successDiv.className = 'bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in';
+                successDiv.innerHTML = `
                 <div class="flex items-center gap-2">
                     <i class="fas fa-check-circle text-green-400"></i>
                     <div>
@@ -3517,45 +3703,44 @@ async function sendAbsenceReportManually() {
                     </div>
                 </div>
             `;
-            
-            // Insert at the top of the form
-            const form = btn.closest('form');
-            form.parentElement.insertBefore(successDiv, form);
-            
-            // Auto-remove after 10 seconds
-            setTimeout(() => {
-                successDiv.style.opacity = '0';
-                successDiv.style.transition = 'opacity 0.5s';
-                setTimeout(() => successDiv.remove(), 500);
-            }, 10000);
-            
-        } else {
-            // Show error message
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4';
-            errorDiv.innerHTML = `
+
+                // Insert at the top of the form
+                const form = btn.closest('form');
+                form.parentElement.insertBefore(successDiv, form);
+
+                // Auto-remove after 10 seconds
+                setTimeout(() => {
+                    successDiv.style.opacity = '0';
+                    successDiv.style.transition = 'opacity 0.5s';
+                    setTimeout(() => successDiv.remove(), 500);
+                }, 10000);
+
+            } else {
+                // Show error message
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4';
+                errorDiv.innerHTML = `
                 <div class="flex items-center gap-2">
                     <i class="fas fa-exclamation-circle text-red-400"></i>
                     <p class="text-red-300">${result.error || 'Error desconocido al enviar el reporte'}</p>
                 </div>
             `;
-            
-            const form = btn.closest('form');
-            form.parentElement.insertBefore(errorDiv, form);
-            
-            setTimeout(() => errorDiv.remove(), 8000);
+
+                const form = btn.closest('form');
+                form.parentElement.insertBefore(errorDiv, form);
+
+                setTimeout(() => errorDiv.remove(), 8000);
+            }
+
+        } catch (error) {
+            console.error('Error sending report:', error);
+            alert('Error al enviar el reporte. Por favor, intente nuevamente.');
+        } finally {
+            // Re-enable button
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
         }
-        
-    } catch (error) {
-        console.error('Error sending report:', error);
-        alert('Error al enviar el reporte. Por favor, intente nuevamente.');
-    } finally {
-        // Re-enable button
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
     }
-}
 </script>
 
 <?php include 'footer.php'; ?>
-

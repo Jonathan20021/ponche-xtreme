@@ -318,7 +318,7 @@ Para agregar logging a una nueva funcionalidad:
 require_once '../lib/logging_functions.php';
 
 // 2. Realizar la operación
-$stmt = $pdo->prepare("UPDATE employees SET position = ? WHERE id = ?");
+$stmt = $pdo->prepare("UPDATE employees SET position =  WHERE id = ?");
 $stmt->execute(['Senior Developer', 123]);
 
 // 3. Registrar el log
