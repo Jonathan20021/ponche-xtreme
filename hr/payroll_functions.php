@@ -174,7 +174,8 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
     // Obtener datos del empleado
     $empStmt = $pdo->prepare("
         SELECT e.*, u.hourly_rate, u.monthly_salary, u.hourly_rate_dop, u.monthly_salary_dop, 
-               u.preferred_currency, u.overtime_multiplier
+               u.daily_salary_usd, u.daily_salary_dop, u.preferred_currency, u.overtime_multiplier,
+               u.compensation_type, u.role
         FROM employees e
         JOIN users u ON u.id = e.user_id
         WHERE e.id = ?
@@ -186,20 +187,104 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
         return null;
     }
     
+    // Obtener datos del periodo (cacheado por llamada)
+    static $periodCache = [];
+    if (!isset($periodCache[$periodId])) {
+        $periodStmt = $pdo->prepare("SELECT period_type, start_date, end_date FROM payroll_periods WHERE id = ?");
+        $periodStmt->execute([$periodId]);
+        $periodCache[$periodId] = $periodStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+    $period = $periodCache[$periodId];
+
     // Calcular salario base usando la moneda preferida del empleado
     $preferredCurrency = $employee['preferred_currency'] ?? 'USD';
+    $preferredCurrency = strtoupper(trim($preferredCurrency));
+    $hourlyRateUsd = (float)$employee['hourly_rate'];
+    $hourlyRateDop = (float)$employee['hourly_rate_dop'];
+    $monthlySalaryUsd = (float)$employee['monthly_salary'];
+    $monthlySalaryDop = (float)$employee['monthly_salary_dop'];
+    $dailySalaryUsd = (float)$employee['daily_salary_usd'];
+    $dailySalaryDop = (float)$employee['daily_salary_dop'];
+
     if ($preferredCurrency === 'DOP') {
-        $hourlyRate = (float)$employee['hourly_rate_dop'];
-        $monthlySalary = (float)$employee['monthly_salary_dop'];
+        $hourlyRate = $hourlyRateDop;
+        $monthlySalary = $monthlySalaryDop;
+        $dailySalary = $dailySalaryDop;
     } else {
-        $hourlyRate = (float)$employee['hourly_rate'];
-        $monthlySalary = (float)$employee['monthly_salary'];
+        $hourlyRate = $hourlyRateUsd;
+        $monthlySalary = $monthlySalaryUsd;
+        $dailySalary = $dailySalaryUsd;
+    }
+
+    // Fallback de moneda si el valor preferido está en 0 pero existe en la otra moneda
+    if ($monthlySalary <= 0) {
+        if ($preferredCurrency === 'DOP' && $monthlySalaryUsd > 0) {
+            $monthlySalary = convertCurrency($pdo, $monthlySalaryUsd, 'USD', 'DOP');
+        } elseif ($preferredCurrency === 'USD' && $monthlySalaryDop > 0) {
+            $monthlySalary = convertCurrency($pdo, $monthlySalaryDop, 'DOP', 'USD');
+        }
+    }
+    if ($hourlyRate <= 0) {
+        if ($preferredCurrency === 'DOP' && $hourlyRateUsd > 0) {
+            $hourlyRate = convertCurrency($pdo, $hourlyRateUsd, 'USD', 'DOP');
+        } elseif ($preferredCurrency === 'USD' && $hourlyRateDop > 0) {
+            $hourlyRate = convertCurrency($pdo, $hourlyRateDop, 'DOP', 'USD');
+        }
+    }
+    if ($dailySalary <= 0) {
+        if ($preferredCurrency === 'DOP' && $dailySalaryUsd > 0) {
+            $dailySalary = convertCurrency($pdo, $dailySalaryUsd, 'USD', 'DOP');
+        } elseif ($preferredCurrency === 'USD' && $dailySalaryDop > 0) {
+            $dailySalary = convertCurrency($pdo, $dailySalaryDop, 'DOP', 'USD');
+        }
     }
     $overtimeMultiplier = (float)($employee['overtime_multiplier'] ?? 1.5);
+    $compensationType = strtolower(trim($employee['compensation_type'] ?? 'hourly'));
+    $role = strtoupper(trim($employee['role'] ?? ''));
+    if ($compensationType === '' || $compensationType === 'hourly') {
+        if ($role !== 'AGENT' && $monthlySalary > 0) {
+            $compensationType = 'fixed';
+        }
+    }
     
     // Calcular ingresos
-    $regularPay = $hoursData['regular_hours'] * $hourlyRate;
-    $overtimePay = $hoursData['overtime_hours'] * $hourlyRate * $overtimeMultiplier;
+    $regularHours = (float)($hoursData['regular_hours'] ?? 0);
+    $overtimeHours = (float)($hoursData['overtime_hours'] ?? 0);
+    $daysWorked = (int)($hoursData['days_worked'] ?? 0);
+
+    $regularPay = 0.0;
+    $baseSalary = 0.0;
+
+    if ($compensationType === 'fixed') {
+        $prorationFactor = 1.0;
+        if ($period) {
+            if ($period['period_type'] === 'BIWEEKLY') {
+                $prorationFactor = 0.5;
+            } elseif ($period['period_type'] === 'WEEKLY') {
+                $prorationFactor = 0.25;
+            } elseif ($period['period_type'] !== 'MONTHLY'
+                && !empty($period['start_date'])
+                && !empty($period['end_date'])) {
+                $startDate = new DateTime($period['start_date']);
+                $endDate = new DateTime($period['end_date']);
+                $periodDays = $startDate->diff($endDate)->days + 1;
+                $daysInMonth = (int)$startDate->format('t');
+                if ($periodDays > 0 && $daysInMonth > 0) {
+                    $prorationFactor = $periodDays / $daysInMonth;
+                }
+            }
+        }
+        $baseSalary = round($monthlySalary * $prorationFactor, 2);
+        $regularPay = $baseSalary;
+    } elseif ($compensationType === 'daily') {
+        $baseSalary = round($dailySalary * $daysWorked, 2);
+        $regularPay = $baseSalary;
+    } else {
+        $regularPay = $regularHours * $hourlyRate;
+        $baseSalary = $regularPay;
+    }
+
+    $overtimePay = $overtimeHours * $hourlyRate * $overtimeMultiplier;
     $bonuses = $hoursData['bonuses'] ?? 0;
     $commissions = $hoursData['commissions'] ?? 0;
     $otherIncome = $hoursData['other_income'] ?? 0;
@@ -225,9 +310,9 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
     
     return [
         'employee_id' => $employeeId,
-        'base_salary' => $monthlySalary,
-        'regular_hours' => $hoursData['regular_hours'],
-        'overtime_hours' => $hoursData['overtime_hours'],
+        'base_salary' => $baseSalary,
+        'regular_hours' => $regularHours,
+        'overtime_hours' => $overtimeHours,
         'overtime_amount' => $overtimePay,
         'bonuses' => $bonuses,
         'commissions' => $commissions,
@@ -244,7 +329,7 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
         'infotep_employer' => $employerContributions['infotep_employer'],
         'total_employer_contributions' => $employerContributions['total_employer'],
         'net_salary' => $netSalary,
-        'total_hours' => $hoursData['regular_hours'] + $hoursData['overtime_hours']
+        'total_hours' => $regularHours + $overtimeHours
     ];
 }
 

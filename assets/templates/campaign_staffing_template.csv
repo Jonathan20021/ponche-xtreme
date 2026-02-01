@@ -1,0 +1,2 @@
+interval_start;interval_minutes;offered_volume;aht_seconds;target_sl;target_answer_seconds;occupancy_target;shrinkage;channel
+2026-01-01 08:00:00;30;120;360;0.80;20;0.85;0.30;Voice

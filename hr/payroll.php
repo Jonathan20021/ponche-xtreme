@@ -77,6 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         if (!$period) {
             throw new Exception("Período no encontrado");
         }
+
+        // Rebuild records for this period to ensure recalculation applies new rules
+        $pdo->prepare("DELETE FROM payroll_records WHERE payroll_period_id = ?")->execute([$periodId]);
         
         // Get all active employees
         $employees = $pdo->query("
@@ -99,12 +102,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             // Calculate hours from attendance.
             // NOTE: For precision consistency with /records and the Daily Attendance Report,
             // we must fetch ALL punch types (paid and non-paid) to correctly close paid intervals.
-            if (empty($paidTypes)) {
-                // Si no hay tipos pagados configurados, saltar este empleado
-                continue;
+            $paidTypeSlugs = [];
+            if (!empty($paidTypes)) {
+                $paidTypeSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', $paidTypes)));
             }
-
-            $paidTypeSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', $paidTypes)));
 
             // Get all punches for the period (ALL types)
             $punchesStmt = $pdo->prepare("
@@ -124,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             
             $totalRegularHours = 0;
             $totalOvertimeHours = 0;
+            $daysWorked = 0;
             
             // Group punches by date and calculate hours
             $punchesByDate = [];
@@ -142,6 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 
                 // Convert to hours
                 if ($totalSecondsWorked > 0) {
+                    $daysWorked++;
                     $workedHours = $totalSecondsWorked / 3600;
                     
                     if ($workedHours > $scheduledHours) {
@@ -157,6 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $hoursData = [
                 'regular_hours' => $totalRegularHours,
                 'overtime_hours' => $totalOvertimeHours,
+                'days_worked' => $daysWorked,
                 'bonuses' => 0,
                 'commissions' => 0,
                 'other_income' => 0

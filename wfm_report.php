@@ -17,6 +17,124 @@ function formatDuration(int $seconds): string
     return sprintf('%02d:%02d:%02d', $hours, $minutes, $secs);
 }
 
+function formatCurrencyAmount(float $amount, string $currency): string
+{
+    if (strtoupper($currency) === 'DOP') {
+        return 'RD$' . number_format($amount, 2);
+    }
+    return '$' . number_format($amount, 2);
+}
+
+function formatCurrencyTotals(array $totals): string
+{
+    if (empty($totals)) {
+        return '$0.00';
+    }
+    $parts = [];
+    foreach ($totals as $currency => $amount) {
+        $parts[] = strtoupper($currency) . ': ' . formatCurrencyAmount((float)$amount, (string)$currency);
+    }
+    return implode(' | ', $parts);
+}
+
+function erlangC(float $a, int $n): float
+{
+    if ($a <= 0 || $n <= 0) {
+        return 0.0;
+    }
+    if ($n <= $a) {
+        return 1.0;
+    }
+
+    $sum = 1.0;
+    $term = 1.0;
+    for ($k = 1; $k <= $n - 1; $k++) {
+        $term *= $a / $k;
+        $sum += $term;
+    }
+    $term *= $a / $n;
+    $numer = $term * ($n / ($n - $a));
+    $denom = $sum + $numer;
+    if ($denom == 0.0) {
+        return 1.0;
+    }
+    return $numer / $denom;
+}
+
+function calcStaffing(array $row): array
+{
+    $intervalMinutes = max(1, (int)($row['interval_minutes'] ?? 30));
+    $intervalSeconds = $intervalMinutes * 60;
+    $offered = (int)($row['offered_volume'] ?? 0);
+    $ahtSeconds = (int)($row['aht_seconds'] ?? 0);
+    $targetSl = (float)($row['target_sl'] ?? 0.8);
+    $targetAns = (int)($row['target_answer_seconds'] ?? 20);
+    $occupancyTarget = (float)($row['occupancy_target'] ?? 0.85);
+    $shrinkage = (float)($row['shrinkage'] ?? 0.3);
+
+    if ($targetSl > 1) {
+        $targetSl = $targetSl / 100;
+    }
+    if ($occupancyTarget > 1) {
+        $occupancyTarget = $occupancyTarget / 100;
+    }
+    if ($shrinkage > 1) {
+        $shrinkage = $shrinkage / 100;
+    }
+
+    $workload = 0.0;
+    if ($intervalSeconds > 0 && $ahtSeconds > 0 && $offered > 0) {
+        $workload = ($offered * $ahtSeconds) / $intervalSeconds;
+    }
+
+    $requiredAgents = 0;
+    $serviceLevel = 1.0;
+    $occupancy = 0.0;
+
+    if ($workload > 0 && $ahtSeconds > 0) {
+        $n = (int)ceil($workload);
+        if ($n <= $workload) {
+            $n = (int)floor($workload) + 1;
+        }
+        if ($occupancyTarget > 0) {
+            $minOcc = (int)ceil($workload / $occupancyTarget);
+            if ($minOcc > $n) {
+                $n = $minOcc;
+            }
+        }
+
+        $maxIterations = 200;
+        $serviceLevel = 0.0;
+        for ($i = 0; $i <= $maxIterations; $i++) {
+            if ($n <= $workload) {
+                $n++;
+                continue;
+            }
+            $ec = erlangC($workload, $n);
+            $serviceLevel = 1 - $ec * exp(-($n - $workload) * ($targetAns / $ahtSeconds));
+            if ($serviceLevel >= $targetSl) {
+                break;
+            }
+            $n++;
+        }
+        $requiredAgents = $n;
+        $occupancy = $requiredAgents > 0 ? ($workload / $requiredAgents) : 0.0;
+    }
+
+    $requiredStaff = $requiredAgents;
+    if ($shrinkage > 0 && $shrinkage < 1 && $requiredAgents > 0) {
+        $requiredStaff = (int)ceil($requiredAgents / (1 - $shrinkage));
+    }
+
+    return [
+        'workload' => $workload,
+        'required_agents' => $requiredAgents,
+        'required_staff' => $requiredStaff,
+        'service_level' => $serviceLevel,
+        'occupancy' => $occupancy
+    ];
+}
+
 // -----------------------------------------------------------------------------
 // Filters
 // -----------------------------------------------------------------------------
@@ -131,6 +249,25 @@ $totals = [
     'scheduled_seconds' => 0,
     'payroll_amount_usd' => 0.0,
     'payroll_amount_dop' => 0.0
+];
+
+// Campaign Ops (Sales/Revenue/Volume)
+$campaignSalesRows = [];
+$campaignSalesTotals = [
+    'sales' => [],
+    'revenue' => [],
+    'volume' => 0,
+    'records' => 0
+];
+
+$staffingRows = [];
+$staffingSummary = [
+    'intervals' => 0,
+    'total_volume' => 0,
+    'total_workload' => 0.0,
+    'total_staff_hours' => 0.0,
+    'max_required_staff' => 0,
+    'avg_required_staff' => 0.0
 ];
 
 // Helper to resolve schedule from memory
@@ -273,6 +410,137 @@ foreach ($users as $user) {
     $totals['payroll_amount_dop'] += $payDop;
 }
 
+// Campaign Ops data within selected range
+try {
+    $campaignSalesRowsRaw = [];
+    $campaignSalesStmt = $pdo->prepare("
+        SELECT 
+            c.id,
+            c.name,
+            c.code,
+            c.color,
+            r.currency,
+            SUM(r.sales_amount) AS sales_amount,
+            SUM(r.revenue_amount) AS revenue_amount,
+            SUM(r.volume) AS volume,
+            COUNT(r.id) AS records
+        FROM campaigns c
+        LEFT JOIN campaign_sales_reports r
+            ON r.campaign_id = c.id
+            AND r.report_date BETWEEN ? AND ?
+        GROUP BY c.id, r.currency
+        ORDER BY c.name ASC
+    ");
+    $campaignSalesStmt->execute([$startDate, $endDate]);
+    $campaignSalesRowsRaw = $campaignSalesStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    foreach ($campaignSalesRowsRaw as $row) {
+        if ($row['currency'] === null && $row['records'] == 0) {
+            continue;
+        }
+        $currency = $row['currency'] ?: 'USD';
+        $salesAmount = (float)($row['sales_amount'] ?? 0);
+        $revenueAmount = (float)($row['revenue_amount'] ?? 0);
+        $volume = (int)($row['volume'] ?? 0);
+        $records = (int)($row['records'] ?? 0);
+
+        $campaignSalesRows[] = [
+            'id' => $row['id'],
+            'name' => $row['name'],
+            'code' => $row['code'],
+            'color' => $row['color'],
+            'currency' => $currency,
+            'sales_amount' => $salesAmount,
+            'revenue_amount' => $revenueAmount,
+            'volume' => $volume,
+            'records' => $records
+        ];
+
+        if (!isset($campaignSalesTotals['sales'][$currency])) {
+            $campaignSalesTotals['sales'][$currency] = 0;
+        }
+        if (!isset($campaignSalesTotals['revenue'][$currency])) {
+            $campaignSalesTotals['revenue'][$currency] = 0;
+        }
+        $campaignSalesTotals['sales'][$currency] += $salesAmount;
+        $campaignSalesTotals['revenue'][$currency] += $revenueAmount;
+        $campaignSalesTotals['volume'] += $volume;
+        $campaignSalesTotals['records'] += $records;
+    }
+} catch (Exception $e) {
+    $campaignSalesRows = [];
+    $campaignSalesTotals = [
+        'sales' => [],
+        'revenue' => [],
+        'volume' => 0,
+        'records' => 0
+    ];
+}
+
+// Staffing (Erlang C) data
+try {
+    $staffingStmt = $pdo->prepare("
+        SELECT 
+            f.*,
+            c.name AS campaign_name,
+            c.code AS campaign_code
+        FROM campaign_staffing_forecast f
+        INNER JOIN campaigns c ON c.id = f.campaign_id
+        WHERE f.interval_start BETWEEN ? AND ?
+        ORDER BY c.name ASC, f.interval_start ASC
+    ");
+    $staffingStmt->execute([$startBound, $endBound]);
+    $staffingRowsRaw = $staffingStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    foreach ($staffingRowsRaw as $row) {
+        $calc = calcStaffing($row);
+        $intervalMinutes = max(1, (int)($row['interval_minutes'] ?? 30));
+        $staffHours = $calc['required_staff'] * ($intervalMinutes / 60);
+
+        $staffingRows[] = [
+            'campaign_name' => $row['campaign_name'],
+            'campaign_code' => $row['campaign_code'],
+            'interval_start' => $row['interval_start'],
+            'interval_minutes' => $intervalMinutes,
+            'offered_volume' => (int)$row['offered_volume'],
+            'aht_seconds' => (int)$row['aht_seconds'],
+            'target_sl' => (float)$row['target_sl'],
+            'target_answer_seconds' => (int)$row['target_answer_seconds'],
+            'occupancy_target' => (float)$row['occupancy_target'],
+            'shrinkage' => (float)$row['shrinkage'],
+            'channel' => $row['channel'],
+            'workload' => $calc['workload'],
+            'required_agents' => $calc['required_agents'],
+            'required_staff' => $calc['required_staff'],
+            'service_level' => $calc['service_level'],
+            'occupancy' => $calc['occupancy']
+        ];
+
+        $staffingSummary['intervals']++;
+        $staffingSummary['total_volume'] += (int)$row['offered_volume'];
+        $staffingSummary['total_workload'] += $calc['workload'];
+        $staffingSummary['total_staff_hours'] += $staffHours;
+        if ($calc['required_staff'] > $staffingSummary['max_required_staff']) {
+            $staffingSummary['max_required_staff'] = $calc['required_staff'];
+        }
+    }
+
+    if ($staffingSummary['intervals'] > 0) {
+        $staffingSummary['avg_required_staff'] = $staffingSummary['total_staff_hours'] /
+            ($staffingSummary['intervals'] * ((int)($staffingRows[0]['interval_minutes'] ?? 30) / 60));
+    }
+} catch (Exception $e) {
+    $staffingRows = [];
+    $staffingSummary = [
+        'intervals' => 0,
+        'total_volume' => 0,
+        'total_workload' => 0.0,
+        'total_staff_hours' => 0.0,
+        'max_required_staff' => 0,
+        'avg_required_staff' => 0.0
+    ];
+}
+
 include 'header.php';
 ?>
 
@@ -312,6 +580,18 @@ include 'header.php';
                 class="px-5 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2">
                 <i class="fas fa-file-invoice-dollar"></i>
                 Payroll (TSS)
+            </button>
+            <button @click="activeTab = 'campaign_ops'"
+                :class="{ 'bg-amber-600 text-white shadow-lg': activeTab === 'campaign_ops', 'text-slate-400 hover:text-white': activeTab !== 'campaign_ops' }"
+                class="px-5 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2">
+                <i class="fas fa-chart-line"></i>
+                Campaign Ops
+            </button>
+            <button @click="activeTab = 'staffing'"
+                :class="{ 'bg-blue-600 text-white shadow-lg': activeTab === 'staffing', 'text-slate-400 hover:text-white': activeTab !== 'staffing' }"
+                class="px-5 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2">
+                <i class="fas fa-users"></i>
+                Staffing (Erlang C)
             </button>
         </div>
     </div>
@@ -566,6 +846,158 @@ include 'header.php';
                                     </span>
                                 </td>
                             </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: CAMPAIGN OPS -->
+        <div x-show="activeTab === 'campaign_ops'" style="display: none;" class="p-0">
+            <div class="p-6 border-b border-slate-700 bg-slate-800/50">
+                <h3 class="text-xl font-bold text-amber-400">
+                    <i class="fas fa-chart-line mr-2"></i> Campaign Ops (Ventas / Ingresos / Volumen)
+                </h3>
+            </div>
+            <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 border-b border-slate-700 bg-slate-800/30">
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+                    <div class="text-sm text-slate-400 mb-1">Ventas Totales</div>
+                    <div class="text-xl font-bold text-white">
+                        <?= htmlspecialchars(formatCurrencyTotals($campaignSalesTotals['sales'])) ?>
+                    </div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+                    <div class="text-sm text-slate-400 mb-1">Ingresos Totales</div>
+                    <div class="text-xl font-bold text-white">
+                        <?= htmlspecialchars(formatCurrencyTotals($campaignSalesTotals['revenue'])) ?>
+                    </div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+                    <div class="text-sm text-slate-400 mb-1">Volumen Total</div>
+                    <div class="text-2xl font-bold text-white">
+                        <?= number_format($campaignSalesTotals['volume']) ?>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">Registros: <?= number_format($campaignSalesTotals['records']) ?></div>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-900/50 text-slate-400 uppercase text-xs font-semibold">
+                        <tr>
+                            <th class="p-4">CampaÃ±a</th>
+                            <th class="p-4">CÃ³digo</th>
+                            <th class="p-4">Moneda</th>
+                            <th class="p-4">Ventas</th>
+                            <th class="p-4">Ingresos</th>
+                            <th class="p-4">Volumen</th>
+                            <th class="p-4">Registros</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+                        <?php if (empty($campaignSalesRows)): ?>
+                            <tr><td colspan="7" class="p-8 text-center text-slate-500">No se encontraron registros de Campaign Ops.</td></tr>
+                        <?php else: ?>
+                            <?php foreach ($campaignSalesRows as $row): ?>
+                            <tr class="hover:bg-slate-700/30 transition-colors">
+                                <td class="p-4">
+                                    <div class="font-medium text-white"><?= htmlspecialchars($row['name']) ?></div>
+                                </td>
+                                <td class="p-4 text-slate-400"><?= htmlspecialchars($row['code']) ?></td>
+                                <td class="p-4 text-slate-400"><?= htmlspecialchars($row['currency']) ?></td>
+                                <td class="p-4 text-slate-300 font-mono">
+                                    <?= formatCurrencyAmount($row['sales_amount'], $row['currency']) ?>
+                                </td>
+                                <td class="p-4 text-slate-300 font-mono">
+                                    <?= formatCurrencyAmount($row['revenue_amount'], $row['currency']) ?>
+                                </td>
+                                <td class="p-4 text-slate-300 font-mono">
+                                    <?= number_format($row['volume']) ?>
+                                </td>
+                                <td class="p-4 text-slate-500 font-mono">
+                                    <?= number_format($row['records']) ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: STAFFING -->
+        <div x-show="activeTab === 'staffing'" style="display: none;" class="p-0">
+            <div class="p-6 border-b border-slate-700 bg-slate-800/50">
+                <h3 class="text-xl font-bold text-blue-400">
+                    <i class="fas fa-users mr-2"></i> WFM / Staffing (Erlang C)
+                </h3>
+            </div>
+            <div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-6 border-b border-slate-700 bg-slate-800/30">
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+                    <div class="text-sm text-slate-400 mb-1">Intervalos</div>
+                    <div class="text-2xl font-bold text-white"><?= number_format($staffingSummary['intervals']) ?></div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+                    <div class="text-sm text-slate-400 mb-1">Volumen Total</div>
+                    <div class="text-2xl font-bold text-white"><?= number_format($staffingSummary['total_volume']) ?></div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+                    <div class="text-sm text-slate-400 mb-1">Workload (Erlangs)</div>
+                    <div class="text-2xl font-bold text-white"><?= number_format($staffingSummary['total_workload'], 2) ?></div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+                    <div class="text-sm text-slate-400 mb-1">Staff Hours</div>
+                    <div class="text-2xl font-bold text-white"><?= number_format($staffingSummary['total_staff_hours'], 2) ?></div>
+                    <div class="text-xs text-slate-500 mt-1">Max staff: <?= number_format($staffingSummary['max_required_staff']) ?></div>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-900/50 text-slate-400 uppercase text-xs font-semibold">
+                        <tr>
+                            <th class="p-4">CampaÃ±a</th>
+                            <th class="p-4">Intervalo</th>
+                            <th class="p-4">Volumen</th>
+                            <th class="p-4">AHT (s)</th>
+                            <th class="p-4">Erlangs</th>
+                            <th class="p-4">SL Obj</th>
+                            <th class="p-4">SL Est</th>
+                            <th class="p-4">Agentes</th>
+                            <th class="p-4">DotaciÃ³n</th>
+                            <th class="p-4">Ocup.</th>
+                            <th class="p-4">Shrink</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+                        <?php if (empty($staffingRows)): ?>
+                            <tr><td colspan="11" class="p-8 text-center text-slate-500">No se encontraron intervalos de staffing.</td></tr>
+                        <?php else: ?>
+                            <?php foreach ($staffingRows as $row): ?>
+                                <?php
+                                    $slTargetPct = $row['target_sl'] > 1 ? $row['target_sl'] : ($row['target_sl'] * 100);
+                                    $slEstPct = $row['service_level'] * 100;
+                                    $occPct = $row['occupancy'] * 100;
+                                    $shrinkPct = $row['shrinkage'] > 1 ? $row['shrinkage'] : ($row['shrinkage'] * 100);
+                                ?>
+                                <tr class="hover:bg-slate-700/30 transition-colors">
+                                    <td class="p-4">
+                                        <div class="font-medium text-white"><?= htmlspecialchars($row['campaign_name']) ?></div>
+                                        <div class="text-xs text-slate-500"><?= htmlspecialchars($row['campaign_code']) ?></div>
+                                    </td>
+                                    <td class="p-4 text-slate-300 font-mono">
+                                        <?= htmlspecialchars($row['interval_start']) ?>
+                                        <div class="text-xs text-slate-500"><?= (int)$row['interval_minutes'] ?>m <?= $row['channel'] ? '· ' . htmlspecialchars($row['channel']) : '' ?></div>
+                                    </td>
+                                    <td class="p-4 text-slate-300 font-mono"><?= number_format($row['offered_volume']) ?></td>
+                                    <td class="p-4 text-slate-300 font-mono"><?= number_format($row['aht_seconds']) ?></td>
+                                    <td class="p-4 text-slate-300 font-mono"><?= number_format($row['workload'], 2) ?></td>
+                                    <td class="p-4 text-slate-400 font-mono"><?= number_format($slTargetPct, 1) ?>%</td>
+                                    <td class="p-4 text-slate-300 font-mono"><?= number_format($slEstPct, 1) ?>%</td>
+                                    <td class="p-4 text-slate-300 font-mono"><?= number_format($row['required_agents']) ?></td>
+                                    <td class="p-4 text-slate-300 font-mono"><?= number_format($row['required_staff']) ?></td>
+                                    <td class="p-4 text-slate-300 font-mono"><?= number_format($occPct, 1) ?>%</td>
+                                    <td class="p-4 text-slate-400 font-mono"><?= number_format($shrinkPct, 1) ?>%</td>
+                                </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </tbody>

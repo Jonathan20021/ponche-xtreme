@@ -156,6 +156,82 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     </div>
                 </div>
             </div>
+
+            <div class="glass-card mb-6">
+                <div class="p-5">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">
+                                <i class="fas fa-file-import text-emerald-400 mr-2"></i>
+                                Carga de Reporte de Ventas (Campaign Ops)
+                            </h2>
+                            <p class="text-sm text-slate-400">Sube el CSV con ventas/ingresos/volumen por campaña.</p>
+                        </div>
+                        <a href="../assets/templates/campaign_sales_report_template.csv" download class="btn-secondary">
+                            <i class="fas fa-download mr-2"></i>
+                            Descargar Plantilla
+                        </a>
+                    </div>
+                    <form id="salesReportForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div>
+                            <label class="text-sm text-slate-400 mb-2 block">Campaña</label>
+                            <select id="salesCampaignSelect" name="campaign_id" class="w-full">
+                                <option value="">Selecciona una campaña...</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
+                            <input type="file" id="salesReportFile" name="report_file" accept=".csv" class="w-full">
+                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por <strong>;</strong>) para ver columnas en Excel.</p>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn-primary w-full">
+                                <i class="fas fa-upload mr-2"></i>
+                                Subir Reporte
+                            </button>
+                        </div>
+                    </form>
+                    <div id="salesReportMessage" class="mt-3 hidden"></div>
+                </div>
+            </div>
+
+            <div class="glass-card mb-6">
+                <div class="p-5">
+                    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">
+                                <i class="fas fa-users-cog text-cyan-400 mr-2"></i>
+                                Carga de Staffing (Erlang C)
+                            </h2>
+                            <p class="text-sm text-slate-400">Pronóstico por intervalo para calcular capacidad y dotación.</p>
+                        </div>
+                        <a href="../assets/templates/campaign_staffing_template.csv" download class="btn-secondary">
+                            <i class="fas fa-download mr-2"></i>
+                            Descargar Plantilla
+                        </a>
+                    </div>
+                    <form id="staffingForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div>
+                            <label class="text-sm text-slate-400 mb-2 block">Campaña</label>
+                            <select id="staffingCampaignSelect" name="campaign_id" class="w-full">
+                                <option value="">Selecciona una campaña...</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
+                            <input type="file" id="staffingFile" name="report_file" accept=".csv" class="w-full">
+                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por <strong>;</strong>) para ver columnas en Excel.</p>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn-primary w-full">
+                                <i class="fas fa-upload mr-2"></i>
+                                Subir Pronóstico
+                            </button>
+                        </div>
+                    </form>
+                    <div id="staffingMessage" class="mt-3 hidden"></div>
+                </div>
+            </div>
             
             <div class="campaign-grid" id="campaignGrid">
                 <div class="text-center py-8 text-slate-400">
@@ -324,6 +400,14 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         document.addEventListener('DOMContentLoaded', function() {
             loadCampaigns();
             loadSupervisors();
+            const salesForm = document.getElementById('salesReportForm');
+            if (salesForm) {
+                salesForm.addEventListener('submit', handleSalesReportUpload);
+            }
+            const staffingForm = document.getElementById('staffingForm');
+            if (staffingForm) {
+                staffingForm.addEventListener('submit', handleStaffingUpload);
+            }
         });
         
         async function loadCampaigns() {
@@ -335,6 +419,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     campaigns = data.campaigns;
                     renderCampaigns();
                     updateStats();
+                    populateSalesCampaigns();
+                    populateStaffingCampaigns();
                 } else {
                     showError('Error al cargar campañas: ' + data.error);
                 }
@@ -427,6 +513,140 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             document.getElementById('activeCampaigns').textContent = active;
             document.getElementById('totalSupervisors').textContent = totalSupervisors;
             document.getElementById('totalAgents').textContent = totalAgents;
+        }
+
+        function populateSalesCampaigns() {
+            const select = document.getElementById('salesCampaignSelect');
+            if (!select) return;
+            select.innerHTML = '<option value="">Selecciona una campaña...</option>' +
+                campaigns.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.code)})</option>`).join('');
+        }
+
+        function populateStaffingCampaigns() {
+            const select = document.getElementById('staffingCampaignSelect');
+            if (!select) return;
+            select.innerHTML = '<option value="">Selecciona una campaña...</option>' +
+                campaigns.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.code)})</option>`).join('');
+        }
+
+        async function handleSalesReportUpload(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const campaignId = document.getElementById('salesCampaignSelect').value;
+            const fileInput = document.getElementById('salesReportFile');
+            const file = fileInput.files[0];
+
+            if (!campaignId) {
+                showSalesReportMessage('Selecciona una campaña.', 'error');
+                return;
+            }
+            if (!file) {
+                showSalesReportMessage('Selecciona un archivo CSV.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('campaign_id', campaignId);
+            formData.append('report_file', file);
+
+            showSalesReportMessage('Subiendo reporte...', 'info');
+
+            try {
+                const response = await fetch('../api/campaign_sales.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showSalesReportMessage(
+                        `Carga completada. Insertados: ${data.inserted}, Actualizados: ${data.updated}, Omitidos: ${data.skipped}`,
+                        'success'
+                    );
+                    fileInput.value = '';
+                } else {
+                    showSalesReportMessage(data.error || 'Error al procesar el archivo.', 'error');
+                }
+            } catch (error) {
+                showSalesReportMessage('Error al subir el archivo: ' + error.message, 'error');
+            }
+        }
+
+        async function handleStaffingUpload(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const campaignId = document.getElementById('staffingCampaignSelect').value;
+            const fileInput = document.getElementById('staffingFile');
+            const file = fileInput.files[0];
+
+            if (!campaignId) {
+                showStaffingMessage('Selecciona una campaña.', 'error');
+                return;
+            }
+            if (!file) {
+                showStaffingMessage('Selecciona un archivo CSV.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('campaign_id', campaignId);
+            formData.append('report_file', file);
+
+            showStaffingMessage('Subiendo pronóstico...', 'info');
+
+            try {
+                const response = await fetch('../api/campaign_staffing.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showStaffingMessage(
+                        `Carga completada. Insertados: ${data.inserted}, Actualizados: ${data.updated}, Omitidos: ${data.skipped}`,
+                        'success'
+                    );
+                    fileInput.value = '';
+                } else {
+                    showStaffingMessage(data.error || 'Error al procesar el archivo.', 'error');
+                }
+            } catch (error) {
+                showStaffingMessage('Error al subir el archivo: ' + error.message, 'error');
+            }
+        }
+
+        function showStaffingMessage(message, type) {
+            const div = document.getElementById('staffingMessage');
+            if (!div) return;
+            const icon = type === 'success' ? 'check-circle' : (type === 'info' ? 'spinner fa-spin' : 'exclamation-circle');
+            const bannerType = type === 'info' ? '' : type;
+            div.className = `status-banner ${bannerType} mt-3`;
+            div.innerHTML = `<i class="fas fa-${icon} mr-2"></i>${message}`;
+            div.classList.remove('hidden');
+
+            if (type !== 'info') {
+                setTimeout(() => {
+                    div.classList.add('hidden');
+                }, 5000);
+            }
+        }
+
+        function showSalesReportMessage(message, type) {
+            const div = document.getElementById('salesReportMessage');
+            if (!div) return;
+            const icon = type === 'success' ? 'check-circle' : (type === 'info' ? 'spinner fa-spin' : 'exclamation-circle');
+            const bannerType = type === 'info' ? '' : type;
+            div.className = `status-banner ${bannerType} mt-3`;
+            div.innerHTML = `<i class="fas fa-${icon} mr-2"></i>${message}`;
+            div.classList.remove('hidden');
+
+            if (type !== 'info') {
+                setTimeout(() => {
+                    div.classList.add('hidden');
+                }, 5000);
+            }
         }
         
         function openCreateModal() {
@@ -834,3 +1054,5 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
     </script>
 </body>
 </html>
+
+
