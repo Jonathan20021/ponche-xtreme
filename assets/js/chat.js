@@ -66,7 +66,7 @@ class ChatApp {
 
         // Si cambió de móvil a desktop o viceversa
         if (wasMobile !== this.isMobile) {
-            console.log(`📱 Cambio de dispositivo detectado: ${this.isMobile  'Móvil' : 'Desktop'}`);
+            console.log(`📱 Cambio de dispositivo detectado: ${this.isMobile ? 'Móvil' : 'Desktop'}`);
             this.adjustForDevice();
         }
 
@@ -132,7 +132,7 @@ class ChatApp {
 
             // Si deslizó hacia abajo más de 100px desde el header
             const header = chatWindow.querySelector('.chat-header');
-            const headerRect = header  header.getBoundingClientRect() : null;
+            const headerRect = header ? header.getBoundingClientRect() : null;
 
             if (headerRect && touchStartY < headerRect.bottom && touchEndY - touchStartY > 100) {
                 this.toggleChat();
