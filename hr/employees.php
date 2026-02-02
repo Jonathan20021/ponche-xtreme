@@ -141,6 +141,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             'supervisor_id' => !empty($_POST['supervisor_id']) ? (int)$_POST['supervisor_id'] : null,
             'campaign_id' => !empty($_POST['campaign_id']) ? (int)$_POST['campaign_id'] : null,
         ];
+
+        if (!array_key_exists('supervisor_id', $_POST)) {
+            $data['supervisor_id'] = $oldData['supervisor_id'] ?? null;
+        }
+        if (!array_key_exists('campaign_id', $_POST)) {
+            $data['campaign_id'] = $oldData['campaign_id'] ?? null;
+        }
         
         // Handle photo upload
         $photoPath = null;
