@@ -14,6 +14,52 @@ $active_users = $pdo->query("
     WHERE DATE(timestamp) = CURDATE()
 ")->fetchColumn();
 
+$total_records_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE DATE(timestamp) = CURDATE()")->fetchColumn();
+$entries_week = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)")->fetchColumn();
+$entries_month = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())")->fetchColumn();
+$active_users_week = $pdo->query("SELECT COUNT(DISTINCT user_id) FROM attendance WHERE DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)")->fetchColumn();
+
+$total_work_seconds_today = $pdo->query("
+    SELECT COALESCE(SUM(TIMESTAMPDIFF(SECOND, a.timestamp, (
+        SELECT MIN(b.timestamp)
+        FROM attendance b
+        WHERE b.user_id = a.user_id
+          AND b.type = 'Exit'
+          AND b.timestamp > a.timestamp
+    ))), 0)
+    FROM attendance a
+    WHERE a.type = 'Entry'
+      AND DATE(a.timestamp) = CURDATE()
+")->fetchColumn();
+
+$avg_hours_today = 0;
+if ($active_users > 0) {
+    $avg_hours_today = round(($total_work_seconds_today / 3600) / $active_users, 2);
+}
+
+$peak_entry_hour = $pdo->query("
+    SELECT HOUR(timestamp) as hour
+    FROM attendance
+    WHERE type = 'Entry'
+      AND DATE(timestamp) = CURDATE()
+    GROUP BY HOUR(timestamp)
+    ORDER BY COUNT(*) DESC
+    LIMIT 1
+")->fetchColumn();
+
+$late_entries_today = $pdo->query("
+    SELECT COUNT(*)
+    FROM attendance
+    WHERE type = 'Entry'
+      AND DATE(timestamp) = CURDATE()
+      AND TIME(timestamp) > '10:05:00'
+")->fetchColumn();
+
+$late_rate_today = 0;
+if ($entries_today > 0) {
+    $late_rate_today = round(($late_entries_today / $entries_today) * 100, 2);
+}
+
 // Datos para grÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡ficos
 $category_data = $pdo->query("
     SELECT type, COUNT(*) as count 
@@ -33,6 +79,48 @@ $work_time_data = $pdo->query("
     JOIN users ON attendance.user_id = users.id
     WHERE attendance.type = 'Entry'
     GROUP BY users.username
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$trend_rows = $pdo->query("
+        SELECT DATE(timestamp) AS day,
+                     SUM(type = 'Entry') AS entries,
+                     SUM(type = 'Exit') AS exits
+        FROM attendance
+        WHERE DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)
+        GROUP BY day
+        ORDER BY day
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$hour_rows = $pdo->query("
+        SELECT HOUR(timestamp) AS hour, COUNT(*) AS count
+        FROM attendance
+        WHERE type = 'Entry'
+            AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        GROUP BY hour
+        ORDER BY hour
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$top_tardy_users = $pdo->query("
+        SELECT users.username, COUNT(*) AS late_entries
+        FROM attendance
+        JOIN users ON attendance.user_id = users.id
+        WHERE attendance.type = 'Entry'
+            AND attendance.timestamp >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            AND TIME(attendance.timestamp) > '10:05:00'
+        GROUP BY users.username
+        ORDER BY late_entries DESC
+        LIMIT 5
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$top_punctual_users = $pdo->query("
+        SELECT users.username, SUM(CASE WHEN TIME(timestamp) <= '10:05:00' THEN 1 ELSE 0 END) AS on_time
+        FROM attendance
+        JOIN users ON attendance.user_id = users.id
+        WHERE attendance.type = 'Entry'
+            AND attendance.timestamp >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        GROUP BY users.username
+        ORDER BY on_time DESC
+        LIMIT 5
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 // CÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡lculo del porcentaje total de tardanzas generales
@@ -75,6 +163,38 @@ $overall_tardiness_entry = 0;
 
 if ($tardiness_entry_data['total_entries'] > 0) {
     $overall_tardiness_entry = round(($tardiness_entry_data['late_entries'] / $tardiness_entry_data['total_entries']) * 100, 2);
+}
+
+$trend_map = [];
+foreach ($trend_rows as $row) {
+    $trend_map[$row['day']] = [
+        'entries' => (int)$row['entries'],
+        'exits' => (int)$row['exits']
+    ];
+}
+
+$trend_labels = [];
+$trend_entries = [];
+$trend_exits = [];
+$start = new DateTime('today -13 days');
+for ($i = 0; $i < 14; $i++) {
+    $day = $start->format('Y-m-d');
+    $trend_labels[] = $start->format('M d');
+    $trend_entries[] = $trend_map[$day]['entries'] ?? 0;
+    $trend_exits[] = $trend_map[$day]['exits'] ?? 0;
+    $start->modify('+1 day');
+}
+
+$hour_map = [];
+foreach ($hour_rows as $row) {
+    $hour_map[(int)$row['hour']] = (int)$row['count'];
+}
+
+$hour_labels = [];
+$hour_counts = [];
+for ($h = 0; $h < 24; $h++) {
+    $hour_labels[] = str_pad((string)$h, 2, '0', STR_PAD_LEFT) . ':00';
+    $hour_counts[] = $hour_map[$h] ?? 0;
 }
 ?>
 
@@ -176,6 +296,87 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             </div>
         </div>
 
+        <!-- Additional KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Registros Hoy</p>
+                        <h3 class="text-3xl font-bold text-gray-800"><?= $total_records_today ?></h3>
+                    </div>
+                    <div class="bg-indigo-100 rounded-full p-3">
+                        <i class="fas fa-clipboard-list text-indigo-500 text-lg"></i>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Entradas + Salidas + Breaks</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Entradas (7 días)</p>
+                        <h3 class="text-3xl font-bold text-gray-800"><?= $entries_week ?></h3>
+                    </div>
+                    <div class="bg-green-100 rounded-full p-3">
+                        <i class="fas fa-calendar-week text-green-500 text-lg"></i>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Últimos 7 días</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Entradas (Mes)</p>
+                        <h3 class="text-3xl font-bold text-gray-800"><?= $entries_month ?></h3>
+                    </div>
+                    <div class="bg-blue-100 rounded-full p-3">
+                        <i class="fas fa-calendar-alt text-blue-500 text-lg"></i>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Mes actual</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Activos (7 días)</p>
+                        <h3 class="text-3xl font-bold text-gray-800"><?= $active_users_week ?></h3>
+                    </div>
+                    <div class="bg-purple-100 rounded-full p-3">
+                        <i class="fas fa-user-friends text-purple-500 text-lg"></i>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Usuarios únicos</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Prom. Horas Hoy</p>
+                        <h3 class="text-3xl font-bold text-gray-800"><?= $avg_hours_today ?></h3>
+                    </div>
+                    <div class="bg-yellow-100 rounded-full p-3">
+                        <i class="fas fa-hourglass-half text-yellow-500 text-lg"></i>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Por usuario activo</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Tardanza Hoy</p>
+                        <h3 class="text-3xl font-bold <?= $late_rate_today > 50 ? 'text-red-500' : ($late_rate_today > 25 ? 'text-yellow-500' : 'text-green-500') ?>"><?= $late_rate_today ?>%</h3>
+                    </div>
+                    <div class="bg-red-100 rounded-full p-3">
+                        <i class="fas fa-exclamation-triangle text-red-500 text-lg"></i>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Entradas tardías hoy</p>
+            </div>
+        </div>
+
         <!-- Charts Section -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <!-- Attendance Distribution -->
@@ -195,6 +396,32 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             </div>
         </div>
 
+        <!-- Advanced Analytics -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Tendencia 14 Días</h3>
+                    <div class="text-xs text-gray-400">Entradas vs Salidas</div>
+                </div>
+                <div style="height: 360px; position: relative;">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Distribución de Entradas por Hora</h3>
+                    <div class="text-xs text-gray-400">Últimos 7 días</div>
+                </div>
+                <div style="height: 360px; position: relative;">
+                    <canvas id="entryHourChart"></canvas>
+                </div>
+                <div class="mt-3 text-sm text-gray-500">
+                    Pico de entrada: <span class="font-semibold text-gray-700"><?= $peak_entry_hour !== false && $peak_entry_hour !== null ? str_pad($peak_entry_hour, 2, '0', STR_PAD_LEFT) . ':00' : 'N/A' ?></span>
+                </div>
+            </div>
+        </div>
+
         <!-- Tardiness Breakdown -->
         <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
             <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
@@ -207,6 +434,47 @@ if ($tardiness_entry_data['total_entries'] > 0) {
             </div>
             <div style="height: 300px; position: relative;">
                 <canvas id="tardinessChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Rankings -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Top Tardanzas (30 días)</h3>
+                <div class="space-y-3">
+                    <?php if (count($top_tardy_users) > 0): ?>
+                        <?php foreach ($top_tardy_users as $row): ?>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                                    <span class="text-gray-700"><?= htmlspecialchars($row['username']) ?></span>
+                                </div>
+                                <span class="text-sm text-gray-500"><?= (int)$row['late_entries'] ?> tardanzas</span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p class="text-gray-500 text-sm">Sin datos recientes.</p>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Top Puntuales (30 días)</h3>
+                <div class="space-y-3">
+                    <?php if (count($top_punctual_users) > 0): ?>
+                        <?php foreach ($top_punctual_users as $row): ?>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                                    <span class="text-gray-700"><?= htmlspecialchars($row['username']) ?></span>
+                                </div>
+                                <span class="text-sm text-gray-500"><?= (int)$row['on_time'] ?> a tiempo</span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p class="text-gray-500 text-sm">Sin datos recientes.</p>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -253,6 +521,11 @@ if ($tardiness_entry_data['total_entries'] > 0) {
         const workTimeData = <?= json_encode(array_map(fn($row) => round($row['total_time'] / 3600, 2), $work_time_data)) ?>;
         const tardinessLabels = ['Entradas Tardías', 'Almuerzos Tardíos', 'Descansos Tardíos'];
         const tardinessData = [<?= $late_entries_percent ?>, <?= $late_lunches_percent ?>, <?= $late_breaks_percent ?>];
+        const trendLabels = <?= json_encode($trend_labels) ?>;
+        const trendEntries = <?= json_encode($trend_entries) ?>;
+        const trendExits = <?= json_encode($trend_exits) ?>;
+        const entryHourLabels = <?= json_encode($hour_labels) ?>;
+        const entryHourCounts = <?= json_encode($hour_counts) ?>;
 
         // ConfiguraciÃƒÆ’Ã†a€™Ãƒa€šÃ‚a³n comÃƒÆ’Ã†a€™Ãƒa€šÃ‚aºn para todos los grÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡ficos
         Chart.defaults.font.size = 12;
@@ -379,6 +652,96 @@ if ($tardiness_entry_data['total_entries'] > 0) {
                         right: 10,
                         top: 10,
                         bottom: 10
+                    }
+                }
+            }
+        });
+
+        // Trend Chart (14 days)
+        new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    {
+                        label: 'Entradas',
+                        data: trendEntries,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                        fill: true,
+                        tension: 0.35
+                    },
+                    {
+                        label: 'Salidas',
+                        data: trendExits,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                        fill: true,
+                        tension: 0.35
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            drawBorder: false
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // Entry Hour Distribution
+        new Chart(document.getElementById('entryHourChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: entryHourLabels,
+                datasets: [{
+                    label: 'Entradas',
+                    data: entryHourCounts,
+                    backgroundColor: '#6366f1',
+                    borderRadius: 4,
+                    maxBarThickness: 18
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            drawBorder: false
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 12
+                        },
+                        grid: {
+                            display: false
+                        }
                     }
                 }
             }
