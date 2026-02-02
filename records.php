@@ -1351,7 +1351,7 @@ $tardinessTotal = count($tardiness_data);
             <span class="chip"><i class="fas fa-percent"></i> <?= number_format($tardinessTotal) ?> registros</span>
         </div>
         <div class="responsive-scroll">
-            <table class="custom-table">
+            <table id="tardinessTable" class="data-table js-datatable" data-export-name="tardiness-percentage" data-length="25">
                 <thead>
                     <tr>
                         <th>Nombre</th>
@@ -1439,7 +1439,7 @@ $(document).ready(function() {
     };
 
     const tableInstances = {};
-    ['#recordsTable', '#summaryTable', '#agentPaymentsTable', '#withExitTable'].forEach(function (selector) {
+    ['#recordsTable', '#summaryTable', '#agentPaymentsTable', '#withExitTable', '#tardinessTable'].forEach(function (selector) {
         const $table = $(selector);
         if ($table.length) {
             const customConfig = $.extend(true, {}, tableConfig);
