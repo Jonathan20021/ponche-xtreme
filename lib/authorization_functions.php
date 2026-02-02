@@ -643,32 +643,15 @@ function isEarlyPunchAttempt(PDO $pdo, int $userId, ?string $currentTime = null,
         error_log("Current time: $currentTime");
         error_log("Grace minutes: $graceMinutes");
 
-        // 1. Intentar obtener horario individual del empleado
-        $stmt = $pdo->prepare("
-            SELECT st.entry_time 
-            FROM employee_schedules es
-            INNER JOIN schedule_templates st ON es.schedule_template_id = st.id
-            WHERE es.user_id = ? AND es.is_active = 1
-            LIMIT 1
-        ");
-        $stmt->execute([$userId]);
-        $employeeSchedule = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Obtener horario del usuario (personalizado o global)
+        $schedule = getScheduleConfigForUser($pdo, $userId, date('Y-m-d'));
+        $scheduledEntryTime = $schedule['entry_time'] ?? null;
 
-        if ($employeeSchedule && !empty($employeeSchedule['entry_time'])) {
-            $scheduledEntryTime = $employeeSchedule['entry_time'];
-            error_log("Found individual schedule - entry_time: $scheduledEntryTime");
+        if ($scheduledEntryTime) {
+            error_log("Resolved schedule entry_time: $scheduledEntryTime");
         } else {
-            // 2. Si no tiene horario individual, usar horario global de schedule_config
-            $stmt = $pdo->query("SELECT entry_time FROM schedule_config LIMIT 1");
-            $globalSchedule = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($globalSchedule && !empty($globalSchedule['entry_time'])) {
-                $scheduledEntryTime = $globalSchedule['entry_time'];
-                error_log("Using global schedule - entry_time: $scheduledEntryTime");
-            } else {
-                error_log("No schedule found, cannot determine early punch");
-                return false; // No hay horario configurado, no se puede determinar si es early
-            }
+            error_log("No schedule found, cannot determine early punch");
+            return false; // No hay horario configurado, no se puede determinar si es early
         }
 
         // 3. Aplicar margen de tolerancia (grace period)

@@ -29,6 +29,16 @@ $entryThreshold = date('H:i:s', strtotime($scheduleConfig['entry_time'] . ' +5 m
 $lunchThreshold = $scheduleConfig['lunch_time'];
 $breakThreshold = $scheduleConfig['break_time'];
 
+$scheduleCache = [];
+$getScheduleForUserDate = function (int $userId, ?string $recordDate = null) use ($pdo, &$scheduleCache): array {
+    $dateKey = $recordDate ?? date('Y-m-d');
+    $cacheKey = $userId . '|' . $dateKey;
+    if (!isset($scheduleCache[$cacheKey])) {
+        $scheduleCache[$cacheKey] = getScheduleConfigForUser($pdo, $userId, $dateKey);
+    }
+    return $scheduleCache[$cacheKey];
+};
+
 // Handle punch submission
 $punch_error = null;
 $punch_success = null;
@@ -453,7 +463,7 @@ $work_summary = [];
 $currentGroup = null;
 $currentKey = null;
 
-$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $paidTypeSlugs, $hourly_rates, $userExitTimes, $defaultExitTime, $exitSlug, $overtimeEnabled, $defaultOvertimeMultiplier, $overtimeStartMinutes, $userOvertimeMultipliers, $pdo): void {
+$finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryColumns, $nonWorkSlugs, $paidTypeSlugs, $hourly_rates, $userExitTimes, $defaultExitTime, $exitSlug, $overtimeEnabled, $defaultOvertimeMultiplier, $overtimeStartMinutes, $userOvertimeMultipliers, $getScheduleForUserDate, $pdo): void {
     if ($group === null) {
         return;
     }
@@ -509,6 +519,12 @@ $finalizeSummaryGroup = function (?array &$group) use (&$work_summary, $summaryC
 
     if ($recordDate !== null && $overtimeEnabled) {
         $configuredExit = $defaultExitTime;
+        if ($userId !== null) {
+            $userSchedule = $getScheduleForUserDate((int) $userId, $recordDate);
+            if (!empty($userSchedule['exit_time'])) {
+                $configuredExit = $userSchedule['exit_time'];
+            }
+        }
         if ($username !== null && isset($userExitTimes[$username]) && $userExitTimes[$username] !== '') {
             $configuredExit = $userExitTimes[$username];
         }

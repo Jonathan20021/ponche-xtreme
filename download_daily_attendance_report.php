@@ -212,6 +212,16 @@ $defaultOvertimeMultiplier = (float) ($scheduleConfig['overtime_multiplier'] ?? 
 $overtimeStartMinutes = (int) ($scheduleConfig['overtime_start_minutes'] ?? 0);
 $exitSlug = sanitizeAttendanceTypeSlug('EXIT');
 
+$scheduleCache = [];
+$getScheduleForUserDate = function (int $userId, ?string $recordDate = null) use ($pdo, &$scheduleCache): array {
+    $dateKey = $recordDate ?? date('Y-m-d');
+    $cacheKey = $userId . '|' . $dateKey;
+    if (!isset($scheduleCache[$cacheKey])) {
+        $scheduleCache[$cacheKey] = getScheduleConfigForUser($pdo, $userId, $dateKey);
+    }
+    return $scheduleCache[$cacheKey];
+};
+
 // Procesar datos para el resumen
 $work_summary = [];
 $currentGroup = null;
@@ -229,6 +239,7 @@ $finalizeSummaryGroup = function (?array &$group) use (
     $defaultOvertimeMultiplier, 
     $overtimeStartMinutes, 
     $userOvertimeMultipliers, 
+    $getScheduleForUserDate,
     $pdo
 ): void {
     if ($group === null) {
@@ -296,6 +307,12 @@ $finalizeSummaryGroup = function (?array &$group) use (
     // Calcular horas extra
     if ($recordDate !== null && $overtimeEnabled) {
         $configuredExit = $defaultExitTime;
+        if ($userId !== null) {
+            $userSchedule = $getScheduleForUserDate((int) $userId, $recordDate);
+            if (!empty($userSchedule['exit_time'])) {
+                $configuredExit = $userSchedule['exit_time'];
+            }
+        }
         if ($username !== null && isset($userExitTimes[$username]) && $userExitTimes[$username] !== '') {
             $configuredExit = $userExitTimes[$username];
         }

@@ -257,7 +257,7 @@ $periods = $pdo->query("
     LEFT JOIN users u ON u.id = pp.created_by
     GROUP BY pp.id, pp.name, pp.period_type, pp.start_date, pp.end_date, pp.payment_date, pp.status,
              pp.total_gross, pp.total_deductions, pp.total_net, u.username
-    ORDER BY pp.start_date DESC
+    ORDER BY COALESCE(pp.updated_at, pp.created_at) DESC, pp.start_date DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 // Get selected period

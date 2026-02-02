@@ -12,7 +12,7 @@ function formatHoursMinutes(int $seconds): string
     return sprintf('%d:%02d', $hours, $minutes);
 }
 
-$schedule = getScheduleConfig($pdo);
+$globalSchedule = getScheduleConfig($pdo);
 $compensation = getUserCompensation($pdo);
 
 function calculateAmountFromSeconds(int $seconds, float $rate): float
@@ -28,17 +28,17 @@ function calculateAmountFromSeconds(int $seconds, float $rate): float
     return $amountCents / 100;
 }
 
-$entryTime = $schedule['entry_time'] ?? '10:00:00';
-$exitTime = $schedule['exit_time'] ?? '19:00:00';
-$lunchMinutes = max(0, (int) ($schedule['lunch_minutes'] ?? 45));
-$breakMinutes = max(0, (int) ($schedule['break_minutes'] ?? 15));
-$meetingMinutes = max(0, (int) ($schedule['meeting_minutes'] ?? 45));
-$scheduledHours = max((float) ($schedule['scheduled_hours'] ?? 8), 0.0);
-
-$lunchSeconds = $lunchMinutes * 60;
-$breakSeconds = $breakMinutes * 60;
+$meetingMinutes = max(0, (int) ($globalSchedule['meeting_minutes'] ?? 45));
 $meetingSeconds = $meetingMinutes * 60;
-$scheduledSecondsPerDay = max((int) round($scheduledHours * 3600), 1);
+
+$scheduleCache = [];
+$getScheduleForUserDate = function (int $userId, string $workDate) use ($pdo, &$scheduleCache): array {
+    $cacheKey = $userId . '|' . $workDate;
+    if (!isset($scheduleCache[$cacheKey])) {
+        $scheduleCache[$cacheKey] = getScheduleConfigForUser($pdo, $userId, $workDate);
+    }
+    return $scheduleCache[$cacheKey];
+};
 
 $selectedMonth = $_GET['month'] ?? date('Y-m');
 if (!preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
@@ -106,6 +106,15 @@ $dailyRowsRaw = [];
 foreach ($dailyRowsBasic as $row) {
     $userId = $row['user_id'];
     $workDate = $row['work_date'];
+    $scheduleForUser = $getScheduleForUserDate($userId, $workDate);
+    $entryTime = $scheduleForUser['entry_time'] ?? '10:00:00';
+    $exitTime = $scheduleForUser['exit_time'] ?? '19:00:00';
+    $lunchMinutes = max(0, (int) ($scheduleForUser['lunch_minutes'] ?? 45));
+    $breakMinutes = max(0, (int) ($scheduleForUser['break_minutes'] ?? 15));
+    $scheduledHours = max((float) ($scheduleForUser['scheduled_hours'] ?? 8), 0.0);
+    $lunchSeconds = $lunchMinutes * 60;
+    $breakSeconds = $breakMinutes * 60;
+    $scheduledSecondsPerDay = max((int) round($scheduledHours * 3600), 1);
     
     // Obtener todos los punches del día ordenados cronológicamente
     $punchesStmt = $pdo->prepare("
@@ -185,11 +194,13 @@ foreach ($dailyRowsBasic as $row) {
         'username' => $row['username'],
         'department_name' => $row['department_name'],
         'work_date' => $workDate,
+        'entry_time' => $entryTime,
         'first_entry' => $firstEntry,
         'last_exit' => $lastExit,
         'lunch_seconds' => $lunchCount * $lunchSeconds,
         'break_seconds' => $breakCount * $breakSeconds,
         'meeting_seconds' => $meetingCount * $meetingSeconds,
+        'scheduled_seconds' => $scheduledSecondsPerDay,
         'productive_seconds' => max(0, $productiveSeconds)
     ];
 }
@@ -219,12 +230,13 @@ foreach ($dailyRowsRaw as $row) {
     $monthlySalaryDop = (float) ($comp['monthly_salary_dop'] ?? 0.0);
     $amountUsd = calculateAmountFromSeconds($productive, $rateUsd);
     $amountDop = calculateAmountFromSeconds($productive, $rateDop);
+    $scheduledSeconds = max((int) ($row['scheduled_seconds'] ?? 0), 1);
     $adherencePercent = $productive > 0
-        ? min(round(($productive / $scheduledSecondsPerDay) * 100, 1), 999)
+        ? min(round(($productive / $scheduledSeconds) * 100, 1), 999)
         : 0.0;
 
     $status = 'Sin datos';
-    if ($productive >= $scheduledSecondsPerDay) {
+    if ($productive >= $scheduledSeconds) {
         $status = 'En meta';
     } elseif ($productive > 0) {
         $status = 'Parcial';
@@ -233,7 +245,7 @@ foreach ($dailyRowsRaw as $row) {
     $isLate = false;
     if (!empty($row['first_entry'])) {
         $entryMoment = strtotime($row['first_entry']);
-        $scheduledMoment = strtotime($row['work_date'] . ' ' . $entryTime);
+        $scheduledMoment = strtotime($row['work_date'] . ' ' . ($row['entry_time'] ?? '10:00:00'));
         if ($entryMoment !== false && $scheduledMoment !== false && $entryMoment > $scheduledMoment) {
             $isLate = true;
             $totalLate++;
@@ -264,6 +276,7 @@ foreach ($dailyRowsRaw as $row) {
             'username' => $row['username'],
             'department' => $departmentName,
             'days_worked' => 0,
+            'expected_seconds' => 0,
             'productive_seconds' => 0,
             'lunch_seconds' => 0,
             'break_seconds' => 0,
@@ -279,6 +292,7 @@ foreach ($dailyRowsRaw as $row) {
     }
 
     $monthlyAggregates[$row['username']]['days_worked']++;
+    $monthlyAggregates[$row['username']]['expected_seconds'] += (int) ($row['scheduled_seconds'] ?? 0);
     $monthlyAggregates[$row['username']]['productive_seconds'] += $productive;
     $monthlyAggregates[$row['username']]['lunch_seconds'] += (int) $row['lunch_seconds'];
     $monthlyAggregates[$row['username']]['break_seconds'] += (int) $row['break_seconds'];
@@ -308,7 +322,7 @@ $totalMonthlyBaseUsd = 0.0;
 $totalMonthlyBaseDop = 0.0;
 $departmentAggregates = [];
 foreach ($monthlySummary as &$item) {
-    $expectedSeconds = max($item['days_worked'] * $scheduledSecondsPerDay, 1);
+    $expectedSeconds = max((int) ($item['expected_seconds'] ?? 0), 1);
     $item['hours'] = $item['productive_seconds'] / 3600;
     $item['expected_hours'] = $expectedSeconds / 3600;
     $item['adherence_percent'] = $item['productive_seconds'] > 0
@@ -375,6 +389,8 @@ $totalHoursWorked = $totalProductiveSeconds / 3600;
 
 $trendStart = date('Y-m-01', strtotime('-5 months'));
 $trendEnd = date('Y-m-t');
+$trendEntryTime = $globalSchedule['entry_time'] ?? '10:00:00';
+$trendExitTime = $globalSchedule['exit_time'] ?? '19:00:00';
 
 $trendSql = "
     SELECT
@@ -428,8 +444,8 @@ $trendStmt = $pdo->prepare($trendSql);
 $trendStmt->execute([
     ':trend_start' => $trendStart . ' 00:00:00',
     ':trend_end' => $trendEnd . ' 23:59:59',
-    ':exit_time' => $exitTime,
-    ':entry_time' => $entryTime,
+    ':exit_time' => $trendExitTime,
+    ':entry_time' => $trendEntryTime,
 ]);
 $trendRows = $trendStmt->fetchAll(PDO::FETCH_ASSOC);
 
