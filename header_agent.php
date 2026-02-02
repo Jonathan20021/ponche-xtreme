@@ -26,6 +26,7 @@ $basePath = $inSubdir ? '../' : '';
 
 $agentNavItems = [
     'agent_dashboard' => ['label' => 'Panel de Control', 'href' => $basePath . 'agent_dashboard.php', 'icon' => 'fa-house-user'],
+    'agent_quality' => ['label' => 'Calidad', 'href' => $basePath . 'agent_quality.php', 'icon' => 'fa-star'],
     'agent_records' => ['label' => 'Registros', 'href' => $basePath . 'agent.php', 'icon' => 'fa-clock'],
     'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => $basePath . 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
     'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => $basePath . 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
@@ -122,7 +123,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                 <?php foreach ($agentNavItems as $sectionKey => $item): ?>
                     <?php
                         // Show HR request links to all agents without permission check
-                        $showLink = in_array($sectionKey, ['agent_permissions', 'agent_vacations']) || userHasPermission($sectionKey);
+                        $showLink = in_array($sectionKey, ['agent_permissions', 'agent_vacations', 'agent_quality']) || userHasPermission($sectionKey);
                         if ($showLink):
                             $isActive = $currentPath === basename($item['href']);
                             $classes = $isActive

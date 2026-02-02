@@ -6,6 +6,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT',
 }
 
 include 'db.php';
+require_once __DIR__ . '/quality_db.php';
 date_default_timezone_set('America/Santo_Domingo');
 
 if (!function_exists('sanitizeHexColorValue')) {
@@ -19,6 +20,114 @@ if (!function_exists('sanitizeHexColorValue')) {
 $user_id = (int) $_SESSION['user_id'];
 $username = $_SESSION['username'] ?? null;
 $full_name = $_SESSION['full_name'] ?? null;
+
+$qualityPdo = getQualityDbConnection();
+$qualityUser = null;
+$qualityMetrics = [
+    'total_evaluations' => 0,
+    'audited_calls' => 0,
+    'avg_percentage' => 0.0,
+    'max_percentage' => 0.0,
+    'min_percentage' => 0.0,
+    'last_eval_date' => null,
+    'avg_ai_score' => 0.0,
+];
+$qualityAudits = [];
+$qualityError = null;
+
+if ($qualityPdo && $username) {
+    $qualityUserStmt = $qualityPdo->prepare("SELECT id, full_name, username FROM users WHERE username = ? LIMIT 1");
+    $qualityUserStmt->execute([$username]);
+    $qualityUser = $qualityUserStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+    if ($qualityUser) {
+        $qualityUserId = (int) $qualityUser['id'];
+
+        $metricsStmt = $qualityPdo->prepare("
+            SELECT
+                COUNT(*) AS total_evaluations,
+                SUM(CASE WHEN call_id IS NOT NULL THEN 1 ELSE 0 END) AS audited_calls,
+                ROUND(AVG(percentage), 2) AS avg_percentage,
+                ROUND(MAX(percentage), 2) AS max_percentage,
+                ROUND(MIN(percentage), 2) AS min_percentage,
+                MAX(COALESCE(call_date, DATE(created_at))) AS last_eval_date
+            FROM evaluations
+            WHERE agent_id = ?
+        ");
+        $metricsStmt->execute([$qualityUserId]);
+        $metricsRow = $metricsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $qualityMetrics['total_evaluations'] = (int) ($metricsRow['total_evaluations'] ?? 0);
+        $qualityMetrics['audited_calls'] = (int) ($metricsRow['audited_calls'] ?? 0);
+        $qualityMetrics['avg_percentage'] = (float) ($metricsRow['avg_percentage'] ?? 0);
+        $qualityMetrics['max_percentage'] = (float) ($metricsRow['max_percentage'] ?? 0);
+        $qualityMetrics['min_percentage'] = (float) ($metricsRow['min_percentage'] ?? 0);
+        $qualityMetrics['last_eval_date'] = $metricsRow['last_eval_date'] ?? null;
+
+        $aiStmt = $qualityPdo->prepare("
+            SELECT ROUND(AVG(ai.score), 2) AS avg_ai_score
+            FROM call_ai_analytics ai
+            INNER JOIN calls c ON c.id = ai.call_id
+            INNER JOIN evaluations e ON e.call_id = c.id
+            WHERE e.agent_id = ?
+        ");
+        $aiStmt->execute([$qualityUserId]);
+        $qualityMetrics['avg_ai_score'] = (float) (($aiStmt->fetchColumn() ?: 0));
+
+        $auditsStmt = $qualityPdo->prepare("
+            SELECT
+                e.id AS evaluation_id,
+                e.call_id,
+                e.percentage,
+                e.total_score,
+                e.max_possible_score,
+                e.general_comments,
+                e.call_date,
+                e.created_at,
+                c.call_datetime,
+                c.duration_seconds,
+                c.customer_phone,
+                c.recording_path,
+                c.call_type,
+                camp.name AS campaign_name,
+                ai.model AS ai_model,
+                ai.score AS ai_score,
+                ai.summary AS ai_summary,
+                ai.metrics_json AS ai_metrics
+            FROM evaluations e
+            LEFT JOIN calls c ON c.id = e.call_id
+            LEFT JOIN campaigns camp ON camp.id = e.campaign_id
+            LEFT JOIN call_ai_analytics ai ON ai.call_id = c.id
+            WHERE e.agent_id = ?
+            ORDER BY e.created_at DESC
+            LIMIT 20
+        ");
+        $auditsStmt->execute([$qualityUserId]);
+        $qualityAudits = $auditsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } else {
+        $qualityError = 'No se encontró el usuario en el sistema de calidad.';
+    }
+} elseif (!$qualityPdo) {
+    $qualityError = 'No se pudo conectar con la base de calidad.';
+}
+
+if (!function_exists('resolveQualityRecordingUrl')) {
+    function resolveQualityRecordingUrl(?string $recordingPath): ?string
+    {
+        $recordingPath = trim((string) $recordingPath);
+        if ($recordingPath === '') {
+            return null;
+        }
+        if (preg_match('~^https?://~i', $recordingPath)) {
+            return $recordingPath;
+        }
+        $baseUrl = defined('QUALITY_MEDIA_BASE_URL') ? QUALITY_MEDIA_BASE_URL : '';
+        if ($baseUrl !== '') {
+            return rtrim($baseUrl, '/') . '/' . ltrim($recordingPath, '/');
+        }
+        return $recordingPath;
+    }
+}
 
 if ($username === null || $full_name === null) {
     $userStmt = $pdo->prepare('SELECT username, full_name FROM users WHERE id = ?');
@@ -586,6 +695,137 @@ $chartColorsJson = json_encode($chartColors);
             </article>
         <?php endforeach; ?>
     </section>
+
+    <section class="glass-card mb-6">
+        <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-lg font-semibold text-primary">Calidad del agente</h2>
+                <p class="text-sm text-muted">Métricas y auditorías desde el sistema de calidad.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="badge badge--info">Auditorías</span>
+                <a href="agent_quality.php" class="btn-secondary">
+                    <i class="fas fa-star"></i>
+                    Ver todo
+                </a>
+            </div>
+        </header>
+
+        <?php if ($qualityError): ?>
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-amber-400"></i>
+                    <p class="text-amber-200 text-sm"><?= htmlspecialchars($qualityError) ?></p>
+                </div>
+            </div>
+        <?php else: ?>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="metric-card" style="--metric-start: #0ea5e9; --metric-end: #2563eb;">
+                    <div class="metric-icon"><i class="fas fa-clipboard-check"></i></div>
+                    <p class="metric-label">Evaluaciones</p>
+                    <p class="metric-value"><?= (int) $qualityMetrics['total_evaluations'] ?></p>
+                    <p class="metric-sub">Total registradas</p>
+                </div>
+                <div class="metric-card" style="--metric-start: #22c55e; --metric-end: #16a34a;">
+                    <div class="metric-icon"><i class="fas fa-chart-line"></i></div>
+                    <p class="metric-label">Promedio de calidad</p>
+                    <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_percentage'], 2) ?>%</p>
+                    <p class="metric-sub">Score promedio</p>
+                </div>
+                <div class="metric-card" style="--metric-start: #f97316; --metric-end: #ea580c;">
+                    <div class="metric-icon"><i class="fas fa-headphones"></i></div>
+                    <p class="metric-label">Llamadas auditadas</p>
+                    <p class="metric-value"><?= (int) $qualityMetrics['audited_calls'] ?></p>
+                    <p class="metric-sub">Con evaluación</p>
+                </div>
+                <div class="metric-card" style="--metric-start: #a855f7; --metric-end: #7c3aed;">
+                    <div class="metric-icon"><i class="fas fa-star"></i></div>
+                    <p class="metric-label">Mejor / Peor</p>
+                    <p class="metric-value">
+                        <?= number_format((float) $qualityMetrics['max_percentage'], 2) ?>% / <?= number_format((float) $qualityMetrics['min_percentage'], 2) ?>%
+                    </p>
+                    <p class="metric-sub">Rango de desempeño</p>
+                </div>
+                <div class="metric-card" style="--metric-start: #14b8a6; --metric-end: #0f766e;">
+                    <div class="metric-icon"><i class="fas fa-robot"></i></div>
+                    <p class="metric-label">Score AI</p>
+                    <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_ai_score'], 2) ?></p>
+                    <p class="metric-sub">Promedio analítica</p>
+                </div>
+                <div class="metric-card" style="--metric-start: #64748b; --metric-end: #334155;">
+                    <div class="metric-icon"><i class="fas fa-calendar-alt"></i></div>
+                    <p class="metric-label">Última evaluación</p>
+                    <p class="metric-value">
+                        <?= $qualityMetrics['last_eval_date'] ? htmlspecialchars(date('d/m/Y', strtotime($qualityMetrics['last_eval_date']))) : 'N/A' ?>
+                    </p>
+                    <p class="metric-sub">Fecha más reciente</p>
+                </div>
+            </div>
+        <?php endif; ?>
+    </section>
+
+    <article class="glass-card table-card">
+        <header>
+            <h2>Llamadas auditadas</h2>
+            <span><?= count($qualityAudits) ?> registros</span>
+        </header>
+        <div class="responsive-scroll">
+            <table class="data-table" data-skip-responsive="true">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Campaña</th>
+                        <th>Score</th>
+                        <th>AI</th>
+                        <th>Resumen</th>
+                        <th>Audio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (!empty($qualityAudits)): ?>
+                        <?php foreach ($qualityAudits as $audit): ?>
+                            <?php
+                                $audioUrl = resolveQualityRecordingUrl($audit['recording_path'] ?? null);
+                                $scoreValue = $audit['percentage'] !== null ? number_format((float) $audit['percentage'], 2) . '%' : 'N/A';
+                                $aiScoreValue = $audit['ai_score'] !== null ? number_format((float) $audit['ai_score'], 2) : 'N/A';
+                                $summaryText = $audit['ai_summary'] ?: ($audit['general_comments'] ?? '');
+                            ?>
+                            <tr>
+                                <td>
+                                    <?= htmlspecialchars(date('d/m/Y', strtotime($audit['call_date'] ?: $audit['created_at']))) ?><br>
+                                    <span class="text-xs text-slate-400">
+                                        <?= htmlspecialchars(date('H:i', strtotime($audit['call_datetime'] ?: $audit['created_at']))) ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <?= htmlspecialchars($audit['campaign_name'] ?? 'Sin campaña') ?>
+                                    <?php if (!empty($audit['call_type'])): ?>
+                                        <div class="text-xs text-slate-400"><?= htmlspecialchars($audit['call_type']) ?></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td><?= $scoreValue ?></td>
+                                <td><?= htmlspecialchars($aiScoreValue) ?></td>
+                                <td class="text-sm">
+                                    <?= htmlspecialchars(mb_strimwidth((string) $summaryText, 0, 140, '...')) ?>
+                                </td>
+                                <td>
+                                    <?php if ($audioUrl): ?>
+                                        <audio controls preload="none" style="min-width: 220px;">
+                                            <source src="<?= htmlspecialchars($audioUrl) ?>" type="audio/mpeg">
+                                        </audio>
+                                    <?php else: ?>
+                                        <span class="text-xs text-slate-400">Sin audio</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr><td colspan="6" class="data-table-empty">No hay llamadas auditadas disponibles.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </article>
 
     <div class="insight-grid">
         <article class="glass-card chart-card <?= $chartTotal <= 0 ? 'is-empty' : '' ?>">
