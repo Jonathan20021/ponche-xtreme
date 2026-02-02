@@ -612,7 +612,23 @@ if (!function_exists('getEmployeeSchedules')) {
                 ORDER BY effective_date DESC, entry_time ASC
             ");
             $stmt->execute([$employeeId, $date, $date]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $dayIndex = (int) date('N', strtotime($date));
+            $filtered = [];
+
+            foreach ($rows as $row) {
+                $days = trim((string) ($row['days_of_week'] ?? ''));
+                if ($days === '') {
+                    $filtered[] = $row;
+                    continue;
+                }
+                $dayList = array_filter(array_map('intval', explode(',', $days)));
+                if (in_array($dayIndex, $dayList, true)) {
+                    $filtered[] = $row;
+                }
+            }
+
+            return $filtered;
         } catch (PDOException $e) {
             return [];
         }
@@ -649,7 +665,23 @@ if (!function_exists('getEmployeeSchedulesByUserId')) {
                 ORDER BY effective_date DESC, entry_time ASC
             ");
             $stmt->execute([$userId, $date, $date]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $dayIndex = (int) date('N', strtotime($date));
+            $filtered = [];
+
+            foreach ($rows as $row) {
+                $days = trim((string) ($row['days_of_week'] ?? ''));
+                if ($days === '') {
+                    $filtered[] = $row;
+                    continue;
+                }
+                $dayList = array_filter(array_map('intval', explode(',', $days)));
+                if (in_array($dayIndex, $dayList, true)) {
+                    $filtered[] = $row;
+                }
+            }
+
+            return $filtered;
         } catch (PDOException $e) {
             return [];
         }
@@ -678,7 +710,7 @@ if (!function_exists('createEmployeeSchedule')) {
                 INSERT INTO employee_schedules (
                     employee_id, user_id, schedule_name, entry_time, exit_time, 
                     lunch_time, break_time, lunch_minutes, break_minutes, 
-                    scheduled_hours, is_active, effective_date, end_date, notes
+                    scheduled_hours, is_active, effective_date, end_date, notes, days_of_week
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
@@ -696,7 +728,8 @@ if (!function_exists('createEmployeeSchedule')) {
                 $scheduleData['is_active'] ?? 1,
                 $scheduleData['effective_date'] ?? date('Y-m-d'),
                 $scheduleData['end_date'] ?? null,
-                $scheduleData['notes'] ?? null
+                $scheduleData['notes'] ?? null,
+                $scheduleData['days_of_week'] ?? null
             ]);
             
             return (int) $pdo->lastInsertId();
@@ -756,7 +789,7 @@ if (!function_exists('updateEmployeeSchedule')) {
                     schedule_name = ?, entry_time = ?, exit_time = ?, 
                     lunch_time = ?, break_time = ?, lunch_minutes = ?, 
                     break_minutes = ?, scheduled_hours = ?, is_active = ?,
-                    effective_date = ?, end_date = ?, notes = ?,
+                    effective_date = ?, end_date = ?, notes = ?, days_of_week = ?,
                     updated_at = NOW()
                 WHERE id = ?
             ");
@@ -774,6 +807,7 @@ if (!function_exists('updateEmployeeSchedule')) {
                 $scheduleData['effective_date'] ?? null,
                 $scheduleData['end_date'] ?? null,
                 $scheduleData['notes'] ?? null,
+                $scheduleData['days_of_week'] ?? null,
                 $scheduleId
             ]);
         } catch (PDOException $e) {

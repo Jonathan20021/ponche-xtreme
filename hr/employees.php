@@ -64,7 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
                         'is_active' => 1,
                         'effective_date' => $assignment['effective_date'] ?? date('Y-m-d'),
                         'end_date' => $assignment['end_date'] ?? null,
-                        'notes' => $assignment['notes'] ?? null
+                        'notes' => $assignment['notes'] ?? null,
+                        'days_of_week' => !empty($assignment['days_of_week']) ? $assignment['days_of_week'] : null
                     ];
                     createEmployeeSchedule($pdo, $employeeId, (int) $userId, $scheduleData);
                 }
@@ -723,6 +724,7 @@ $terminatedEmployees = $pdo->query("
                                 effective_date: schedule.effective_date,
                                 end_date: schedule.end_date,
                                 notes: schedule.notes || null,
+                                days_of_week: schedule.days_of_week || null,
                                 entry_time_display: schedule.entry_time_display,
                                 exit_time_display: schedule.exit_time_display
                             }))
@@ -802,6 +804,21 @@ $terminatedEmployees = $pdo->query("
                 return `${hour}:${minutes} ${ampm}`;
             }
 
+            function formatDaysLabel(daysValue) {
+                if (!daysValue) return 'Todos los días';
+                const map = {
+                    1: 'Lun',
+                    2: 'Mar',
+                    3: 'Mié',
+                    4: 'Jue',
+                    5: 'Vie',
+                    6: 'Sáb',
+                    7: 'Dom'
+                };
+                const parts = daysValue.split(',').map(value => map[parseInt(value, 10)]).filter(Boolean);
+                return parts.length ? parts.join(', ') : 'Todos los días';
+            }
+
             window.renderScheduleAssignmentsEdit = function() {
                 const list = document.getElementById('schedule_assignments_list');
                 const input = document.getElementById('schedule_assignments_json');
@@ -826,6 +843,7 @@ $terminatedEmployees = $pdo->query("
                     const dateLabel = assignment.effective_date
                         ? `${assignment.effective_date}${assignment.end_date ? ' → ' + assignment.end_date : ''}`
                         : 'Sin fecha';
+                    const daysLabel = formatDaysLabel(assignment.days_of_week);
                     return `
                         <div class="flex items-start justify-between gap-3 p-3 bg-slate-800/60 rounded-lg">
                             <div>
@@ -833,7 +851,7 @@ $terminatedEmployees = $pdo->query("
                                     ${escapeHtml(assignment.schedule_name || 'Horario')}
                                 </div>
                                 <div class="text-slate-400 text-xs">
-                                    ${escapeHtml(entryLabel)} - ${escapeHtml(exitLabel)} · ${escapeHtml(dateLabel)}
+                                    ${escapeHtml(entryLabel)} - ${escapeHtml(exitLabel)} · ${escapeHtml(dateLabel)} · ${escapeHtml(daysLabel)}
                                 </div>
                                 <div class="text-slate-500 text-xs">
                                     ${Number(assignment.scheduled_hours || 0).toFixed(2)} horas
@@ -851,6 +869,7 @@ $terminatedEmployees = $pdo->query("
                 const select = document.getElementById('edit_schedule_template_id');
                 const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
                 const endDateInput = document.getElementById('assignment_end_date_edit');
+                const dayInputs = document.querySelectorAll('[data-schedule-day-edit]');
 
                 if (!select || !select.value) {
                     alert('Selecciona un turno para agregar.');
@@ -860,6 +879,11 @@ $terminatedEmployees = $pdo->query("
                 const scheduleId = select.value;
                 const effectiveDate = effectiveDateInput && effectiveDateInput.value ? effectiveDateInput.value : new Date().toISOString().slice(0, 10);
                 const endDate = endDateInput && endDateInput.value ? endDateInput.value : null;
+                const selectedDays = Array.from(dayInputs)
+                    .filter(input => input.checked)
+                    .map(input => input.value)
+                    .join(',');
+                const daysOfWeek = selectedDays !== '' ? selectedDays : null;
 
                 fetch('../get_schedule_template.php?id=' + scheduleId)
                     .then(response => response.json())
@@ -882,11 +906,15 @@ $terminatedEmployees = $pdo->query("
                             effective_date: effectiveDate,
                             end_date: endDate,
                             notes: template.description ? `Asignado desde template: ${template.name}` : null,
+                            days_of_week: daysOfWeek,
                             entry_time_display: null,
                             exit_time_display: null
                         });
                         renderScheduleAssignmentsEdit();
                         select.value = '';
+                        dayInputs.forEach(input => {
+                            input.checked = false;
+                        });
                         if (endDateInput) {
                             endDateInput.value = '';
                         }
@@ -1933,6 +1961,33 @@ $terminatedEmployees = $pdo->query("
                                 Agregar horario
                             </button>
                         </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="text-xs text-slate-400 block mb-2">Días de la semana (opcional)</label>
+                        <div class="flex flex-wrap gap-2">
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" value="1" data-schedule-day-edit> Lunes
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" value="2" data-schedule-day-edit> Martes
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" value="3" data-schedule-day-edit> Miércoles
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" value="4" data-schedule-day-edit> Jueves
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" value="5" data-schedule-day-edit> Viernes
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" value="6" data-schedule-day-edit> Sábado
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" value="7" data-schedule-day-edit> Domingo
+                            </label>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">Si no seleccionas días, el horario aplicará todos los días.</p>
                     </div>
                     <p class="text-xs text-slate-400 mt-1">
                         <i class="fas fa-info-circle"></i>
