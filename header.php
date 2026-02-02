@@ -43,6 +43,18 @@ $navItems = [
                 'icon' => 'fa-bullhorn',
             ],
             [
+                'section' => 'productivity_dashboard',
+                'label' => 'Productividad',
+                'href' => $baseHref . 'hr/productivity.php',
+                'icon' => 'fa-bullseye',
+            ],
+            [
+                'section' => 'wfm_planning',
+                'label' => 'WFM Planificacion',
+                'href' => $baseHref . 'hr/wfm_planning.php',
+                'icon' => 'fa-calendar-check',
+            ],
+            [
                 'section' => 'hr_trial_period',
                 'label' => 'Período de Prueba',
                 'href' => $baseHref . 'hr/trial_period.php',

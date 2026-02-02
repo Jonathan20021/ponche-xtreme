@@ -22,8 +22,8 @@
             }
 
             function setState(open) {
-                nav.setAttribute('data-open', open  'true' : 'false');
-                toggle.setAttribute('aria-expanded', open  'true' : 'false');
+                nav.setAttribute('data-open', open ? 'true' : 'false');
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
             }
 
             var desktopMatch = window.matchMedia(DESKTOP_QUERY);

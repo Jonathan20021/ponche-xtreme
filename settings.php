@@ -28,6 +28,7 @@ $sections = [
     'download_excel' => ['label' => 'Exportar Excel Mensual', 'category' => 'Registros y Reportes', 'icon' => 'fa-file-excel', 'description' => 'Exportación mensual a Excel'],
     'download_excel_daily' => ['label' => 'Exportar Excel Diario', 'category' => 'Registros y Reportes', 'icon' => 'fa-file-excel', 'description' => 'Exportación diaria a Excel'],
     'wfm_report' => ['label' => 'Reporte WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-chart-area', 'description' => 'Reporte de WFM (Punch vs Payroll)'],
+    'wfm_planning' => ['label' => 'Planificacion WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-calendar-check', 'description' => 'Pronostico, dimensionamiento y alertas intradia'],
 
     // Attendance
     'register_attendance' => ['label' => 'Registrar Horas', 'category' => 'Asistencia', 'icon' => 'fa-calendar-plus', 'description' => 'Registro de horas administrativas'],
@@ -46,6 +47,7 @@ $sections = [
     'hr_recruitment' => ['label' => 'Reclutamiento', 'category' => 'Recursos Humanos', 'icon' => 'fa-user-plus', 'description' => 'Gestión de vacantes y solicitudes de empleo'],
     'hr_job_postings' => ['label' => 'Gestión de Vacantes', 'category' => 'Recursos Humanos', 'icon' => 'fa-briefcase', 'description' => 'Crear y administrar vacantes de empleo'],
     'manage_campaigns' => ['label' => 'Gestión de Campañas', 'category' => 'Recursos Humanos', 'icon' => 'fa-bullhorn', 'description' => 'Crear, editar y gestionar campañas de agentes y supervisores'],
+    'productivity_dashboard' => ['label' => 'Productividad', 'category' => 'Recursos Humanos', 'icon' => 'fa-bullseye', 'description' => 'KPIs por campaña/equipo, metas, coaching y gamificacion'],
 
     // Helpdesk
     'helpdesk' => ['label' => 'Dashboard Helpdesk', 'category' => 'Helpdesk', 'icon' => 'fa-headset', 'description' => 'Panel de tickets y asignaciones'],

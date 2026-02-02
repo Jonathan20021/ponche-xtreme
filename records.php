@@ -114,40 +114,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
     $authRequiredForOvertime = isAuthorizationRequiredForContext($pdo, 'overtime');
     $authRequiredForEarlyPunch = isAuthorizationRequiredForContext($pdo, 'early_punch');
     $authorizationCodeId = null;
+    $authorizationContext = null;
     
     // Check overtime authorization
     if ($authSystemEnabled && $authRequiredForOvertime) {
         $isOvertime = isOvertimeAttempt($pdo, $user_id, $typeSlug);
-        
         if ($isOvertime) {
-            $_SESSION['punch_error'] = "Se requiere código de autorización para registrar hora extra. Use el formulario de punch principal.";
-            header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-            exit;
+            $authCode = trim($_POST['authorization_code'] ?? '');
+            if ($authCode === '') {
+                $_SESSION['punch_error'] = "Se requiere código de autorización para registrar hora extra.";
+                header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+                exit;
+            }
+
+            $validation = validateAuthorizationCode($pdo, $authCode, 'overtime');
+            if (!$validation['valid']) {
+                $_SESSION['punch_error'] = "Código de autorización inválido: " . $validation['message'];
+                header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+                exit;
+            }
+
+            $authorizationCodeId = $validation['code_id'];
+            $authorizationContext = 'overtime';
         }
     }
     
     // Check early punch authorization
     if ($authSystemEnabled && $authRequiredForEarlyPunch) {
         $isEarly = isEarlyPunchAttempt($pdo, $user_id);
-        
         if ($isEarly) {
-            $_SESSION['punch_error'] = "Se requiere código de autorización para marcar entrada antes de su horario. Use el formulario de punch principal.";
-            header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-            exit;
+            $authCode = trim($_POST['authorization_code'] ?? '');
+            if ($authCode === '') {
+                $_SESSION['punch_error'] = "Se requiere código de autorización para marcar entrada antes de su horario.";
+                header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+                exit;
+            }
+
+            $validation = validateAuthorizationCode($pdo, $authCode, 'early_punch');
+            if (!$validation['valid']) {
+                $_SESSION['punch_error'] = "Código de autorización inválido: " . $validation['message'];
+                header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+                exit;
+            }
+
+            if ($authorizationCodeId === null) {
+                $authorizationCodeId = $validation['code_id'];
+            }
+            if ($authorizationContext === null) {
+                $authorizationContext = 'early_punch';
+            }
         }
     }
     
     // Register the punch
     $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
     $insert_stmt = $pdo->prepare("
-        INSERT INTO attendance (user_id, type, ip_address, timestamp) 
-        VALUES (?, ?, ?, NOW())
+        INSERT INTO attendance (user_id, type, ip_address, timestamp, authorization_code_id) 
+        VALUES (?, ?, ?, NOW(), ?)
     ");
-    $insert_stmt->execute([$user_id, $typeSlug, $ip_address]);
+    $insert_stmt->execute([$user_id, $typeSlug, $ip_address, $authorizationCodeId]);
     
     // Log attendance registration
     require_once 'lib/logging_functions.php';
     $recordId = $pdo->lastInsertId();
+    if ($authorizationCodeId !== null) {
+        logAuthorizationCodeUsage(
+            $pdo,
+            $authorizationCodeId,
+            $user_id,
+            $authorizationContext ?? 'overtime',
+            $recordId,
+            'attendance',
+            ['type' => $typeSlug, 'username' => $username]
+        );
+    }
+
     log_custom_action(
         $pdo,
         $user_id,
@@ -158,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
         "Registro de asistencia desde records: {$typeSlug}",
         'attendance_record',
         $recordId,
-        ['type' => $typeSlug, 'ip_address' => $ip_address]
+        ['type' => $typeSlug, 'ip_address' => $ip_address, 'authorization_code_id' => $authorizationCodeId]
     );
     
     // Send Slack notification
@@ -192,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
     curl_close($ch);
     
     // Set success message and redirect
-    $_SESSION['punch_success'] = "¡Asistencia registrada exitosamente como {$typeLabel}!";
+    $_SESSION['punch_success'] = "¡Asistencia registrada exitosamente como {$typeLabel}!" . ($authorizationCodeId ? " (Código de autorización validado)" : "");
     header('Location: records.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
     exit;
 }
@@ -859,6 +900,20 @@ $tardinessTotal = count($tardiness_data);
         <?php endif; ?>
         
         <form method="POST" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div class="col-span-full">
+                <label class="text-xs font-semibold text-slate-300 uppercase tracking-wide" for="authorization_code">Código de autorización (si aplica)</label>
+                <div class="mt-2">
+                    <input
+                        type="text"
+                        id="authorization_code"
+                        name="authorization_code"
+                        placeholder="Ingresa el código para horas extras o entrada temprana"
+                        class="input-control w-full"
+                        autocomplete="off"
+                    >
+                </div>
+                <p class="text-xs text-slate-400 mt-2">Solo es necesario cuando el sistema lo solicita (hora extra o entrada antes de horario).</p>
+            </div>
             <?php foreach ($activeAttendanceTypes as $type): ?>
                 <?php
                     $buttonSlug = htmlspecialchars($type['slug'], ENT_QUOTES, 'UTF-8');
