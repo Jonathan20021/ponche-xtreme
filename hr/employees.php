@@ -16,35 +16,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
     
     try {
         // Get user_id from employee
-        $stmt = $pdo->prepare("SELECT user_id FROM employees WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT user_id, first_name, last_name FROM employees WHERE id = ?");
         $stmt->execute([$employeeId]);
-        $userId = $stmt->fetchColumn();
+        $empData = $stmt->fetch(PDO::FETCH_ASSOC);
+        $userId = $empData['user_id'] ?? null;
         
         if ($userId) {
+            // Get old schedule for logging
+            $oldSchedule = getEmployeeSchedule($pdo, $employeeId);
+            
             // Deactivate existing schedules
             deactivateEmployeeSchedules($pdo, $employeeId);
             
-            // Get employee name for logging
-            $empStmt = $pdo->prepare("SELECT first_name, last_name FROM employees WHERE id = ?");
-            $empStmt->execute([$employeeId]);
-            $empData = $empStmt->fetch();
-            $employeeName = $empData['first_name'] . ' ' . $empData['last_name'];
-            
-            // Get old schedule for logging
-            $oldScheduleStmt = $pdo->prepare("SELECT schedule_template_id FROM employee_schedules WHERE employee_id = ? AND is_active = 1 LIMIT 1");
-            $oldScheduleStmt->execute([$employeeId]);
-            $oldSchedule = $oldScheduleStmt->fetchColumn();
-            
             // Create new schedule from template if selected
             if ($scheduleTemplateId) {
-                createEmployeeScheduleFromTemplate($pdo, $employeeId, $userId, $scheduleTemplateId);
+                createEmployeeScheduleFromTemplate($pdo, $employeeId, (int)$userId, $scheduleTemplateId);
                 $successMsg = "Horario actualizado correctamente.";
             } else {
                 $successMsg = "Horario eliminado. El empleado usará el horario global del sistema.";
             }
             
             // Log schedule change
-            log_schedule_changed($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $employeeName, ['schedule_template_id' => $oldSchedule], ['schedule_template_id' => $scheduleTemplateId]);
+            $employeeName = trim(($empData['first_name'] ?? '') . ' ' . ($empData['last_name'] ?? ''));
+            log_schedule_changed(
+                $pdo,
+                $_SESSION['user_id'],
+                $_SESSION['full_name'],
+                $_SESSION['role'],
+                $employeeId,
+                $employeeName,
+                $oldSchedule,
+                ['schedule_template_id' => $scheduleTemplateId]
+            );
         } else {
             $errorMsg = "No se pudo encontrar el usuario asociado al empleado.";
         }
@@ -191,15 +194,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
 
         // Update employee schedule if changed
         $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
-        $oldScheduleStmt = $pdo->prepare("SELECT schedule_template_id FROM employee_schedules WHERE employee_id = ? AND is_active = 1 LIMIT 1");
-        $oldScheduleStmt->execute([$employeeId]);
-        $oldSchedule = $oldScheduleStmt->fetchColumn();
-        $oldSchedule = $oldSchedule !== false ? (int)$oldSchedule : null;
+        $oldSchedule = getEmployeeSchedule($pdo, $employeeId);
 
-        if ($oldSchedule !== $scheduleTemplateId) {
+        $userIdForSchedule = $oldData['user_id'] ?? null;
+        if (!$userIdForSchedule) {
+            $userIdStmt = $pdo->prepare("SELECT user_id FROM employees WHERE id = ?");
+            $userIdStmt->execute([$employeeId]);
+            $userIdForSchedule = $userIdStmt->fetchColumn();
+        }
+
+        if ($userIdForSchedule) {
             deactivateEmployeeSchedules($pdo, $employeeId);
             if ($scheduleTemplateId) {
-                createEmployeeScheduleFromTemplate($pdo, $employeeId, (int)$oldData['user_id'], $scheduleTemplateId);
+                createEmployeeScheduleFromTemplate($pdo, $employeeId, (int)$userIdForSchedule, $scheduleTemplateId);
             }
 
             $employeeName = trim($data['first_name'] . ' ' . $data['last_name']);
@@ -210,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                 $_SESSION['role'],
                 $employeeId,
                 $employeeName,
-                ['schedule_template_id' => $oldSchedule],
+                $oldSchedule,
                 ['schedule_template_id' => $scheduleTemplateId]
             );
         }
