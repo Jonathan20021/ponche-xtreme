@@ -242,7 +242,7 @@ if ($isAuthenticated) {
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
-    <?php if ($isAuthenticated && userHasPermission('chat')): ?>
+    <?php if ($isAuthenticated): ?>
         <script>
             const currentUserId = <?= (int) $_SESSION['user_id'] ?>;
             const currentUserRole = <?= json_encode($_SESSION['role'] ?? 'agent') ?>;

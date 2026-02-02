@@ -73,7 +73,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
     <link href="<?= htmlspecialchars($assetBase) ?>/css/theme.css" rel="stylesheet">
     <link href="<?= htmlspecialchars($assetBase) ?>/css/chat.css" rel="stylesheet">
     <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
-    <?php if (userHasPermission('chat')): ?>
+    <?php if (isset($_SESSION['user_id'])): ?>
     <script>
         const currentUserId = <?= (int)$_SESSION['user_id'] ?>;
         const currentUserRole = <?= json_encode($_SESSION['role'] ?? 'agent') ?>;
