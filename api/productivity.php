@@ -49,17 +49,22 @@ function buildDateRange(string $startDate, string $endDate): array
 
 function resolveScheduleHours(array $map, array $defaultConfig, int $userId, string $dateStr): float
 {
+    $totalHours = 0.0;
+
     if (isset($map[$userId])) {
         foreach ($map[$userId] as $sch) {
             $effDate = $sch['effective_date'] ?? '0000-00-00';
             $endDate = $sch['end_date'];
-            if ($effDate <= $dateStr) {
-                if ($endDate === null || $endDate >= $dateStr) {
-                    return (float) ($sch['scheduled_hours'] ?? 0);
-                }
+            if ($effDate <= $dateStr && ($endDate === null || $endDate >= $dateStr)) {
+                $totalHours += (float) ($sch['scheduled_hours'] ?? 0);
             }
         }
     }
+
+    if ($totalHours > 0) {
+        return $totalHours;
+    }
+
     return (float) ($defaultConfig['scheduled_hours'] ?? 8.0);
 }
 

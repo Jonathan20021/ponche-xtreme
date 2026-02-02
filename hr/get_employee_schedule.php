@@ -15,23 +15,34 @@ if ($employeeId <= 0) {
 }
 
 try {
-    $schedule = getEmployeeSchedule($pdo, $employeeId);
-    
-    if ($schedule) {
-        // Format times for display
-        $schedule['entry_time'] = date('g:i A', strtotime($schedule['entry_time']));
-        $schedule['exit_time'] = date('g:i A', strtotime($schedule['exit_time']));
-        if ($schedule['lunch_time']) {
-            $schedule['lunch_time'] = date('g:i A', strtotime($schedule['lunch_time']));
-        }
-        if ($schedule['break_time']) {
-            $schedule['break_time'] = date('g:i A', strtotime($schedule['break_time']));
-        }
+    $date = date('Y-m-d');
+    $userStmt = $pdo->prepare("SELECT user_id FROM employees WHERE id = ?");
+    $userStmt->execute([$employeeId]);
+    $userId = (int) $userStmt->fetchColumn();
+
+    $schedules = getEmployeeSchedules($pdo, $employeeId, $date);
+    $summary = $userId > 0 ? getScheduleConfigForUser($pdo, $userId, $date) : null;
+
+    $formattedSchedules = [];
+    foreach ($schedules as $schedule) {
+        $schedule['entry_time_display'] = $schedule['entry_time'] ? date('g:i A', strtotime($schedule['entry_time'])) : null;
+        $schedule['exit_time_display'] = $schedule['exit_time'] ? date('g:i A', strtotime($schedule['exit_time'])) : null;
+        $schedule['lunch_time_display'] = $schedule['lunch_time'] ? date('g:i A', strtotime($schedule['lunch_time'])) : null;
+        $schedule['break_time_display'] = $schedule['break_time'] ? date('g:i A', strtotime($schedule['break_time'])) : null;
+        $formattedSchedules[] = $schedule;
     }
-    
+
+    if ($summary && !empty($summary['entry_time'])) {
+        $summary['entry_time'] = date('g:i A', strtotime($summary['entry_time']));
+    }
+    if ($summary && !empty($summary['exit_time'])) {
+        $summary['exit_time'] = date('g:i A', strtotime($summary['exit_time']));
+    }
+
     echo json_encode([
         'success' => true,
-        'schedule' => $schedule
+        'schedule' => $summary,
+        'schedules' => $formattedSchedules
     ]);
 } catch (Exception $e) {
     echo json_encode([

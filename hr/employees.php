@@ -9,10 +9,32 @@ ensurePermission('hr_employees', '../unauthorized.php');
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
+if (!function_exists('normalizeScheduleTimeValue')) {
+    function normalizeScheduleTimeValue(?string $value, string $fallback): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            $value = $fallback;
+        }
+        if (strlen($value) === 5) {
+            $value .= ':00';
+        }
+        return $value;
+    }
+}
+
 // Handle employee schedule update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
     $employeeId = (int)$_POST['employee_id'];
     $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
+    $scheduleAssignmentsJson = trim($_POST['schedule_assignments_json'] ?? '');
+    $scheduleAssignments = [];
+    if ($scheduleAssignmentsJson !== '') {
+        $decodedAssignments = json_decode($scheduleAssignmentsJson, true);
+        if (is_array($decodedAssignments)) {
+            $scheduleAssignments = $decodedAssignments;
+        }
+    }
     
     try {
         // Get user_id from employee
@@ -27,9 +49,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
             
             // Deactivate existing schedules
             deactivateEmployeeSchedules($pdo, $employeeId);
-            
-            // Create new schedule from template if selected
-            if ($scheduleTemplateId) {
+
+            if (!empty($scheduleAssignments)) {
+                foreach ($scheduleAssignments as $assignment) {
+                    $scheduleData = [
+                        'schedule_name' => $assignment['schedule_name'] ?? null,
+                        'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
+                        'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
+                        'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
+                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, '17:00:00'),
+                        'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
+                        'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
+                        'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
+                        'is_active' => 1,
+                        'effective_date' => $assignment['effective_date'] ?? date('Y-m-d'),
+                        'end_date' => $assignment['end_date'] ?? null,
+                        'notes' => $assignment['notes'] ?? null
+                    ];
+                    createEmployeeSchedule($pdo, $employeeId, (int) $userId, $scheduleData);
+                }
+                $successMsg = "Horarios actualizados correctamente.";
+            } elseif ($scheduleTemplateId) {
                 createEmployeeScheduleFromTemplate($pdo, $employeeId, (int)$userId, $scheduleTemplateId);
                 $successMsg = "Horario actualizado correctamente.";
             } else {
@@ -194,6 +234,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
 
         // Update employee schedule if changed
         $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
+        $scheduleAssignmentsJson = trim($_POST['schedule_assignments_json'] ?? '');
+        $scheduleAssignments = [];
+        if ($scheduleAssignmentsJson !== '') {
+            $decodedAssignments = json_decode($scheduleAssignmentsJson, true);
+            if (is_array($decodedAssignments)) {
+                $scheduleAssignments = $decodedAssignments;
+            }
+        }
+
         $oldSchedule = getEmployeeSchedule($pdo, $employeeId);
 
         $userIdForSchedule = $oldData['user_id'] ?? null;
@@ -205,7 +254,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
 
         if ($userIdForSchedule) {
             deactivateEmployeeSchedules($pdo, $employeeId);
-            if ($scheduleTemplateId) {
+            if (!empty($scheduleAssignments)) {
+                foreach ($scheduleAssignments as $assignment) {
+                    $scheduleData = [
+                        'schedule_name' => $assignment['schedule_name'] ?? null,
+                        'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
+                        'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
+                        'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
+                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, '17:00:00'),
+                        'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
+                        'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
+                        'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
+                        'is_active' => 1,
+                        'effective_date' => $assignment['effective_date'] ?? date('Y-m-d'),
+                        'end_date' => $assignment['end_date'] ?? null,
+                        'notes' => $assignment['notes'] ?? null
+                    ];
+                    createEmployeeSchedule($pdo, $employeeId, (int) $userIdForSchedule, $scheduleData);
+                }
+            } elseif ($scheduleTemplateId) {
                 createEmployeeScheduleFromTemplate($pdo, $employeeId, (int)$userIdForSchedule, $scheduleTemplateId);
             }
 
@@ -218,7 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                 $employeeId,
                 $employeeName,
                 $oldSchedule,
-                ['schedule_template_id' => $scheduleTemplateId]
+                ['schedule_template_id' => $scheduleTemplateId, 'schedule_assignments' => $scheduleAssignments]
             );
         }
         
@@ -607,6 +674,18 @@ $terminatedEmployees = $pdo->query("
                 // Verify elements exist first
                 const scheduleInfo = document.getElementById('current_schedule_info');
                 const scheduleSelect = document.getElementById('edit_schedule_template_id');
+                const assignmentList = document.getElementById('schedule_assignments_list');
+                const assignmentsInput = document.getElementById('schedule_assignments_json');
+                const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
+                const endDateInput = document.getElementById('assignment_end_date_edit');
+                const todayValue = new Date().toISOString().slice(0, 10);
+
+                if (effectiveDateInput && !effectiveDateInput.value) {
+                    effectiveDateInput.value = todayValue;
+                }
+                if (endDateInput) {
+                    endDateInput.value = endDateInput.value || '';
+                }
                 
                 if (!scheduleInfo) {
                     console.warn('Schedule info element not found in modal');
@@ -619,20 +698,50 @@ $terminatedEmployees = $pdo->query("
                         // Double check element still exists
                         const info = document.getElementById('current_schedule_info');
                         const select = document.getElementById('edit_schedule_template_id');
+                        const list = document.getElementById('schedule_assignments_list');
+                        const input = document.getElementById('schedule_assignments_json');
                         
                         if (!info) return; // Exit if element disappeared
                         
+                        window.scheduleAssignmentsEdit = Array.isArray(data.schedules)
+                            ? data.schedules.map(schedule => ({
+                                schedule_name: schedule.schedule_name || 'Horario Personalizado',
+                                entry_time: schedule.entry_time,
+                                exit_time: schedule.exit_time,
+                                lunch_time: schedule.lunch_time,
+                                break_time: schedule.break_time,
+                                lunch_minutes: schedule.lunch_minutes,
+                                break_minutes: schedule.break_minutes,
+                                scheduled_hours: schedule.scheduled_hours,
+                                effective_date: schedule.effective_date,
+                                end_date: schedule.end_date,
+                                notes: schedule.notes || null,
+                                entry_time_display: schedule.entry_time_display,
+                                exit_time_display: schedule.exit_time_display
+                            }))
+                            : [];
+
+                        if (typeof renderScheduleAssignmentsEdit === 'function') {
+                            renderScheduleAssignmentsEdit();
+                        } else if (input) {
+                            input.value = JSON.stringify(window.scheduleAssignmentsEdit || []);
+                        }
+
                         if (data.schedule) {
                             const schedule = data.schedule;
+                            const scheduleLabel = schedule.schedule_name || 'Horario Personalizado';
+                            const countLabel = schedule.schedule_count && schedule.schedule_count > 1
+                                ? ` (${schedule.schedule_count} horarios)`
+                                : '';
                             info.innerHTML = `
                                 <div class="text-green-400">
                                     <i class="fas fa-check-circle mr-2"></i>
-                                    <strong>Horario Actual:</strong> ${schedule.schedule_name || 'Horario Personalizado'}
+                                    <strong>Horario Actual:</strong> ${scheduleLabel}${countLabel}
                                 </div>
                                 <div class="text-slate-300 mt-1">
                                     <i class="fas fa-clock mr-2"></i>
-                                    ${schedule.entry_time} - ${schedule.exit_time} 
-                                    (${schedule.scheduled_hours} horas)
+                                    ${schedule.entry_time || ''} - ${schedule.exit_time || ''}
+                                    (${Number(schedule.scheduled_hours || 0).toFixed(2)} horas)
                                 </div>
                             `;
                             if (select) select.value = '';
@@ -659,6 +768,133 @@ $terminatedEmployees = $pdo->query("
                             `;
                         }
                     });
+            };
+
+            window.scheduleAssignmentsEdit = [];
+
+            function escapeHtml(value) {
+                const text = String(value ?? '');
+                return text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function formatTimeLabel(timeStr) {
+                if (!timeStr) return '';
+                const parts = timeStr.split(':');
+                if (parts.length < 2) return timeStr;
+                let hour = parseInt(parts[0], 10);
+                const minutes = parts[1];
+                if (Number.isNaN(hour)) return timeStr;
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                hour = hour % 12;
+                if (hour === 0) hour = 12;
+                return `${hour}:${minutes} ${ampm}`;
+            }
+
+            window.renderScheduleAssignmentsEdit = function() {
+                const list = document.getElementById('schedule_assignments_list');
+                const input = document.getElementById('schedule_assignments_json');
+                if (!list) return;
+
+                const assignments = Array.isArray(window.scheduleAssignmentsEdit)
+                    ? window.scheduleAssignmentsEdit
+                    : [];
+
+                if (input) {
+                    input.value = JSON.stringify(assignments);
+                }
+
+                if (assignments.length === 0) {
+                    list.innerHTML = '<div class="text-slate-400 text-sm">Sin horarios asignados (usa el horario global o agrega uno)</div>';
+                    return;
+                }
+
+                list.innerHTML = assignments.map((assignment, index) => {
+                    const entryLabel = assignment.entry_time_display || formatTimeLabel(assignment.entry_time);
+                    const exitLabel = assignment.exit_time_display || formatTimeLabel(assignment.exit_time);
+                    const dateLabel = assignment.effective_date
+                        ? `${assignment.effective_date}${assignment.end_date ? ' → ' + assignment.end_date : ''}`
+                        : 'Sin fecha';
+                    return `
+                        <div class="flex items-start justify-between gap-3 p-3 bg-slate-800/60 rounded-lg">
+                            <div>
+                                <div class="text-slate-200 font-medium">
+                                    ${escapeHtml(assignment.schedule_name || 'Horario')}
+                                </div>
+                                <div class="text-slate-400 text-xs">
+                                    ${escapeHtml(entryLabel)} - ${escapeHtml(exitLabel)} · ${escapeHtml(dateLabel)}
+                                </div>
+                                <div class="text-slate-500 text-xs">
+                                    ${Number(assignment.scheduled_hours || 0).toFixed(2)} horas
+                                </div>
+                            </div>
+                            <button type="button" class="btn-secondary px-3" onclick="removeScheduleAssignmentEdit(${index})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            };
+
+            window.addScheduleAssignmentEdit = function() {
+                const select = document.getElementById('edit_schedule_template_id');
+                const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
+                const endDateInput = document.getElementById('assignment_end_date_edit');
+
+                if (!select || !select.value) {
+                    alert('Selecciona un turno para agregar.');
+                    return;
+                }
+
+                const scheduleId = select.value;
+                const effectiveDate = effectiveDateInput && effectiveDateInput.value ? effectiveDateInput.value : new Date().toISOString().slice(0, 10);
+                const endDate = endDateInput && endDateInput.value ? endDateInput.value : null;
+
+                fetch('../get_schedule_template.php?id=' + scheduleId)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.success) {
+                            alert('Error al cargar el turno: ' + (data.error || 'No disponible'));
+                            return;
+                        }
+                        const template = data.template;
+                        window.scheduleAssignmentsEdit = window.scheduleAssignmentsEdit || [];
+                        window.scheduleAssignmentsEdit.push({
+                            schedule_name: template.name || 'Horario',
+                            entry_time: template.entry_time,
+                            exit_time: template.exit_time,
+                            lunch_time: template.lunch_time || null,
+                            break_time: template.break_time || null,
+                            lunch_minutes: template.lunch_minutes || 0,
+                            break_minutes: template.break_minutes || 0,
+                            scheduled_hours: template.scheduled_hours || 0,
+                            effective_date: effectiveDate,
+                            end_date: endDate,
+                            notes: template.description ? `Asignado desde template: ${template.name}` : null,
+                            entry_time_display: null,
+                            exit_time_display: null
+                        });
+                        renderScheduleAssignmentsEdit();
+                        select.value = '';
+                        if (endDateInput) {
+                            endDateInput.value = '';
+                        }
+                    })
+                    .catch(error => {
+                        alert('Error al cargar el turno: ' + error.message);
+                    });
+            };
+
+            window.removeScheduleAssignmentEdit = function(index) {
+                if (!Array.isArray(window.scheduleAssignmentsEdit)) {
+                    window.scheduleAssignmentsEdit = [];
+                }
+                window.scheduleAssignmentsEdit.splice(index, 1);
+                renderScheduleAssignmentsEdit();
             };
             
             var isEditModeEdit = false;
@@ -1675,10 +1911,28 @@ $terminatedEmployees = $pdo->query("
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                        <div class="form-group">
+                            <label for="assignment_effective_date_edit">Fecha inicio</label>
+                            <input type="date" id="assignment_effective_date_edit" name="assignment_effective_date">
+                        </div>
+                        <div class="form-group">
+                            <label for="assignment_end_date_edit">Fecha fin (opcional)</label>
+                            <input type="date" id="assignment_end_date_edit" name="assignment_end_date">
+                        </div>
+                        <div class="flex items-end">
+                            <button type="button" class="btn-secondary w-full" onclick="addScheduleAssignmentEdit()">
+                                <i class="fas fa-plus mr-1"></i>
+                                Agregar horario
+                            </button>
+                        </div>
+                    </div>
                     <p class="text-xs text-slate-400 mt-1">
                         <i class="fas fa-info-circle"></i>
                         El horario se aplicará automáticamente en el sistema de ponche.
                     </p>
+                    <input type="hidden" id="schedule_assignments_json" name="schedule_assignments_json">
+                    <div id="schedule_assignments_list" class="mt-3 space-y-2"></div>
                     <div id="current_schedule_info" class="mt-2 p-3 bg-slate-700/50 rounded-lg text-sm"></div>
                 </div>
 

@@ -594,60 +594,76 @@ if (!function_exists('getAllScheduleTemplates')) {
     }
 }
 
-if (!function_exists('getEmployeeSchedule')) {
+if (!function_exists('getEmployeeSchedules')) {
     /**
-     * Returns the active schedule for an employee.
-     * If no active schedule exists, returns null.
+     * Returns all active schedules for an employee for a specific date.
      */
-    function getEmployeeSchedule(PDO $pdo, int $employeeId, ?string $date = null): ?array
+    function getEmployeeSchedules(PDO $pdo, int $employeeId, ?string $date = null): array
     {
         try {
             $date = $date ?? date('Y-m-d');
-            
+
             $stmt = $pdo->prepare("
                 SELECT * FROM employee_schedules 
                 WHERE employee_id = ?
                 AND is_active = 1
                 AND (effective_date IS NULL OR effective_date <= ?)
                 AND (end_date IS NULL OR end_date >= ?)
-                ORDER BY effective_date DESC
-                LIMIT 1
+                ORDER BY effective_date DESC, entry_time ASC
             ");
             $stmt->execute([$employeeId, $date, $date]);
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            return $result ?: null;
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (PDOException $e) {
-            return null;
+            return [];
         }
     }
 }
 
-if (!function_exists('getEmployeeScheduleByUserId')) {
+if (!function_exists('getEmployeeSchedule')) {
     /**
-     * Returns the active schedule for an employee by user_id.
+     * Returns the primary active schedule for an employee.
+     * If multiple schedules exist, returns the first by effective_date and entry_time.
      */
-    function getEmployeeScheduleByUserId(PDO $pdo, int $userId, ?string $date = null): ?array
+    function getEmployeeSchedule(PDO $pdo, int $employeeId, ?string $date = null): ?array
+    {
+        $schedules = getEmployeeSchedules($pdo, $employeeId, $date);
+        return $schedules[0] ?? null;
+    }
+}
+
+if (!function_exists('getEmployeeSchedulesByUserId')) {
+    /**
+     * Returns all active schedules for an employee by user_id for a specific date.
+     */
+    function getEmployeeSchedulesByUserId(PDO $pdo, int $userId, ?string $date = null): array
     {
         try {
             $date = $date ?? date('Y-m-d');
-            
+
             $stmt = $pdo->prepare("
                 SELECT * FROM employee_schedules 
                 WHERE user_id = ?
                 AND is_active = 1
                 AND (effective_date IS NULL OR effective_date <= ?)
                 AND (end_date IS NULL OR end_date >= ?)
-                ORDER BY effective_date DESC
-                LIMIT 1
+                ORDER BY effective_date DESC, entry_time ASC
             ");
             $stmt->execute([$userId, $date, $date]);
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            return $result ?: null;
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (PDOException $e) {
-            return null;
+            return [];
         }
+    }
+}
+
+if (!function_exists('getEmployeeScheduleByUserId')) {
+    /**
+     * Returns the primary active schedule for an employee by user_id.
+     */
+    function getEmployeeScheduleByUserId(PDO $pdo, int $userId, ?string $date = null): ?array
+    {
+        $schedules = getEmployeeSchedulesByUserId($pdo, $userId, $date);
+        return $schedules[0] ?? null;
     }
 }
 
@@ -784,32 +800,60 @@ if (!function_exists('deactivateEmployeeSchedules')) {
 if (!function_exists('getScheduleConfigForUser')) {
     /**
      * Returns the schedule configuration for a specific user.
-     * First checks if the user has a custom schedule, otherwise returns global config.
+     * Supports multiple schedules by aggregating their values.
      */
     function getScheduleConfigForUser(PDO $pdo, int $userId, ?string $date = null): array
     {
-        // Try to get employee schedule first
-        $employeeSchedule = getEmployeeScheduleByUserId($pdo, $userId, $date);
-        
-        if ($employeeSchedule) {
+        $employeeSchedules = getEmployeeSchedulesByUserId($pdo, $userId, $date);
+
+        if (!empty($employeeSchedules)) {
+            $entryTime = null;
+            $exitTime = null;
+            $lunchMinutes = 0;
+            $breakMinutes = 0;
+            $scheduledHours = 0.0;
+
+            foreach ($employeeSchedules as $schedule) {
+                $scheduledHours += (float) ($schedule['scheduled_hours'] ?? 0);
+                $lunchMinutes += (int) ($schedule['lunch_minutes'] ?? 0);
+                $breakMinutes += (int) ($schedule['break_minutes'] ?? 0);
+
+                if (!empty($schedule['entry_time'])) {
+                    if ($entryTime === null || strtotime('1970-01-01 ' . $schedule['entry_time']) < strtotime('1970-01-01 ' . $entryTime)) {
+                        $entryTime = $schedule['entry_time'];
+                    }
+                }
+                if (!empty($schedule['exit_time'])) {
+                    if ($exitTime === null || strtotime('1970-01-01 ' . $schedule['exit_time']) > strtotime('1970-01-01 ' . $exitTime)) {
+                        $exitTime = $schedule['exit_time'];
+                    }
+                }
+            }
+
+            $primaryName = $employeeSchedules[0]['schedule_name'] ?? 'Horario Personalizado';
+            $scheduleName = count($employeeSchedules) > 1 ? 'Múltiples horarios' : $primaryName;
+
             return [
-                'entry_time' => $employeeSchedule['entry_time'],
-                'exit_time' => $employeeSchedule['exit_time'],
-                'lunch_time' => $employeeSchedule['lunch_time'],
-                'break_time' => $employeeSchedule['break_time'],
-                'lunch_minutes' => (int)$employeeSchedule['lunch_minutes'],
-                'break_minutes' => (int)$employeeSchedule['break_minutes'],
-                'scheduled_hours' => (float)$employeeSchedule['scheduled_hours'],
-                'schedule_name' => $employeeSchedule['schedule_name'] ?? 'Horario Personalizado',
+                'entry_time' => $entryTime ?? $employeeSchedules[0]['entry_time'] ?? null,
+                'exit_time' => $exitTime ?? $employeeSchedules[0]['exit_time'] ?? null,
+                'lunch_time' => $employeeSchedules[0]['lunch_time'] ?? null,
+                'break_time' => $employeeSchedules[0]['break_time'] ?? null,
+                'lunch_minutes' => $lunchMinutes,
+                'break_minutes' => $breakMinutes,
+                'scheduled_hours' => $scheduledHours,
+                'schedule_name' => $scheduleName,
+                'schedule_count' => count($employeeSchedules),
+                'schedule_segments' => $employeeSchedules,
                 'is_custom' => true
             ];
         }
-        
-        // Fall back to global schedule config
+
         $globalConfig = getScheduleConfig($pdo);
         $globalConfig['schedule_name'] = 'Horario Global';
         $globalConfig['is_custom'] = false;
-        
+        $globalConfig['schedule_count'] = 0;
+        $globalConfig['schedule_segments'] = [];
+
         return $globalConfig;
     }
 }

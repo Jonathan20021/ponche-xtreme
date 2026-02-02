@@ -272,20 +272,25 @@ $staffingSummary = [
 
 // Helper to resolve schedule from memory
 function resolveScheduleHours($map, $defaultConfig, $userId, $dateStr) {
+    $totalHours = 0.0;
+
     if (isset($map[$userId])) {
         foreach ($map[$userId] as $sch) {
             // Check dates
             // effective_date <= dateStr AND (end_date IS NULL OR end_date >= dateStr)
             $effDate = $sch['effective_date'] ?? '0000-00-00';
             $endDate = $sch['end_date'];
-            
-            if ($effDate <= $dateStr) {
-                if ($endDate === null || $endDate >= $dateStr) {
-                    return (float)($sch['scheduled_hours'] ?? 0);
-                }
+
+            if ($effDate <= $dateStr && ($endDate === null || $endDate >= $dateStr)) {
+                $totalHours += (float)($sch['scheduled_hours'] ?? 0);
             }
         }
     }
+
+    if ($totalHours > 0) {
+        return $totalHours;
+    }
+
     // Fallback global
     return (float)($defaultConfig['scheduled_hours'] ?? 8.0);
 }
