@@ -711,7 +711,7 @@ if (!function_exists('createEmployeeSchedule')) {
                     employee_id, user_id, schedule_name, entry_time, exit_time, 
                     lunch_time, break_time, lunch_minutes, break_minutes, 
                     scheduled_hours, is_active, effective_date, end_date, notes, days_of_week
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
             $stmt->execute([

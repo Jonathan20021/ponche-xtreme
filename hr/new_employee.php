@@ -11,6 +11,20 @@ $success = null;
 $error = null;
 $emailWarning = null;
 
+if (!function_exists('normalizeScheduleTimeValue')) {
+    function normalizeScheduleTimeValue(?string $value, string $fallback): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            $value = $fallback;
+        }
+        if (strlen($value) === 5) {
+            $value .= ':00';
+        }
+        return $value;
+    }
+}
+
 if (isset($_POST['register'])) {
     $username = trim($_POST['username'] ?? '');
     $full_name = trim($_POST['full_name'] ?? '');
@@ -29,6 +43,14 @@ if (isset($_POST['register'])) {
     $bank_account_number = trim($_POST['bank_account_number'] ?? '');
     $bank_account_type = !empty($_POST['bank_account_type']) ? trim($_POST['bank_account_type']) : null;
     $schedule_template_id = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
+    $scheduleAssignmentsJson = trim($_POST['schedule_assignments_json'] ?? '');
+    $scheduleAssignments = [];
+    if ($scheduleAssignmentsJson !== '') {
+        $decodedAssignments = json_decode($scheduleAssignmentsJson, true);
+        if (is_array($decodedAssignments)) {
+            $scheduleAssignments = $decodedAssignments;
+        }
+    }
     $password = !empty($_POST['password']) ? trim($_POST['password']) : 'defaultpassword';
     $role = !empty($_POST['role']) ? trim($_POST['role']) : 'AGENT';
     $hourly_rate_dop = !empty($_POST['hourly_rate_dop']) ? (float)$_POST['hourly_rate_dop'] : 0.00;
@@ -118,8 +140,27 @@ if (isset($_POST['register'])) {
                 
                 $employeeId = $pdo->lastInsertId();
                 
-                // Create employee schedule if template selected
-                if ($schedule_template_id) {
+                // Create employee schedule
+                if (!empty($scheduleAssignments)) {
+                    foreach ($scheduleAssignments as $assignment) {
+                        $scheduleData = [
+                            'schedule_name' => $assignment['schedule_name'] ?? null,
+                            'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
+                            'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
+                            'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
+                            'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, '17:00:00'),
+                            'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
+                            'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
+                            'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
+                            'is_active' => 1,
+                            'effective_date' => $assignment['effective_date'] ?? $hire_date,
+                            'end_date' => $assignment['end_date'] ?? null,
+                            'notes' => $assignment['notes'] ?? null,
+                            'days_of_week' => !empty($assignment['days_of_week']) ? $assignment['days_of_week'] : null
+                        ];
+                        createEmployeeSchedule($pdo, $employeeId, (int) $userId, $scheduleData);
+                    }
+                } elseif ($schedule_template_id) {
                     createEmployeeScheduleFromTemplate($pdo, $employeeId, $userId, $schedule_template_id, $hire_date);
                 }
                 
@@ -239,7 +280,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     <i class="fas fa-exclamation-triangle"></i> <?= htmlspecialchars($emailWarning) ?>
                 </div>
             <?php endif; ?>
-            <form method="POST" enctype="multipart/form-data" class="space-y-4">
+            <form method="POST" enctype="multipart/form-data" class="space-y-4" id="newEmployeeForm">
                 <h3 class="text-lg font-semibold text-white mb-3 border-b border-slate-700 pb-2">
                     <i class="fas fa-user-circle text-blue-400 mr-2"></i>
                     Información de Usuario del Sistema
@@ -471,7 +512,15 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             $scheduleTemplates = getAllScheduleTemplates($pdo);
                             foreach ($scheduleTemplates as $template) {
                                 $timeInfo = date('g:i A', strtotime($template['entry_time'])) . ' - ' . date('g:i A', strtotime($template['exit_time']));
-                                echo '<option value="' . htmlspecialchars($template['id']) . '">';
+                                echo '<option value="' . htmlspecialchars($template['id']) . '"'
+                                    . ' data-name="' . htmlspecialchars($template['name'], ENT_QUOTES, 'UTF-8') . '"'
+                                    . ' data-entry="' . htmlspecialchars($template['entry_time'], ENT_QUOTES, 'UTF-8') . '"'
+                                    . ' data-exit="' . htmlspecialchars($template['exit_time'], ENT_QUOTES, 'UTF-8') . '"'
+                                    . ' data-lunch="' . htmlspecialchars($template['lunch_time'], ENT_QUOTES, 'UTF-8') . '"'
+                                    . ' data-break="' . htmlspecialchars($template['break_time'], ENT_QUOTES, 'UTF-8') . '"'
+                                    . ' data-lunch-minutes="' . htmlspecialchars((string) $template['lunch_minutes'], ENT_QUOTES, 'UTF-8') . '"'
+                                    . ' data-break-minutes="' . htmlspecialchars((string) $template['break_minutes'], ENT_QUOTES, 'UTF-8') . '"'
+                                    . ' data-hours="' . htmlspecialchars((string) $template['scheduled_hours'], ENT_QUOTES, 'UTF-8') . '">';
                                 echo htmlspecialchars($template['name']) . ' (' . $timeInfo . ')';
                                 echo '</option>';
                             }
@@ -492,6 +541,56 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         Selecciona el horario de trabajo del empleado o crea uno nuevo.
                     </p>
                 </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                    <div class="form-group">
+                        <label for="assignment_effective_date">Fecha inicio</label>
+                        <input type="date" id="assignment_effective_date" name="assignment_effective_date">
+                    </div>
+                    <div class="form-group">
+                        <label for="assignment_end_date">Fecha fin (opcional)</label>
+                        <input type="date" id="assignment_end_date" name="assignment_end_date">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="button" class="btn-secondary w-full" onclick="addScheduleAssignmentNew()">
+                            <i class="fas fa-plus mr-1"></i>
+                            Agregar horario
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="text-xs text-slate-400 block mb-2">Días de la semana (opcional)</label>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                            <input type="checkbox" value="1" data-schedule-day-new> Lunes
+                        </label>
+                        <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                            <input type="checkbox" value="2" data-schedule-day-new> Martes
+                        </label>
+                        <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                            <input type="checkbox" value="3" data-schedule-day-new> Miércoles
+                        </label>
+                        <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                            <input type="checkbox" value="4" data-schedule-day-new> Jueves
+                        </label>
+                        <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                            <input type="checkbox" value="5" data-schedule-day-new> Viernes
+                        </label>
+                        <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                            <input type="checkbox" value="6" data-schedule-day-new> Sábado
+                        </label>
+                        <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                            <input type="checkbox" value="7" data-schedule-day-new> Domingo
+                        </label>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">Si no seleccionas días, el horario aplicará todos los días.</p>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">
+                    <i class="fas fa-info-circle"></i>
+                    El horario se aplicará automáticamente en el sistema de ponche.
+                </p>
+                <input type="hidden" id="schedule_assignments_json" name="schedule_assignments_json">
+                <div id="schedule_assignments_list" class="mt-3 space-y-2"></div>
                 
                 <h3 class="text-lg font-semibold text-white mt-6 mb-3">
                     <i class="fas fa-id-card text-blue-400 mr-2"></i>
@@ -796,6 +895,177 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     alert('Error al cargar el turno: ' + error.message);
                 });
         }
+
+        window.scheduleAssignmentsNew = [];
+
+        function escapeScheduleHtml(value) {
+            const text = String(value ?? '');
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function formatScheduleTimeLabelNew(timeStr) {
+            if (!timeStr) return '';
+            const parts = timeStr.split(':');
+            if (parts.length < 2) return timeStr;
+            let hour = parseInt(parts[0], 10);
+            const minutes = parts[1];
+            if (Number.isNaN(hour)) return timeStr;
+            const ampm = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12;
+            if (hour === 0) hour = 12;
+            return `${hour}:${minutes} ${ampm}`;
+        }
+
+        function formatScheduleDaysLabelNew(daysValue) {
+            if (!daysValue) return 'Todos los días';
+            const map = {
+                1: 'Lun',
+                2: 'Mar',
+                3: 'Mié',
+                4: 'Jue',
+                5: 'Vie',
+                6: 'Sáb',
+                7: 'Dom'
+            };
+            const parts = daysValue.split(',').map(value => map[parseInt(value, 10)]).filter(Boolean);
+            return parts.length ? parts.join(', ') : 'Todos los días';
+        }
+
+        function renderScheduleAssignmentsNew() {
+            const list = document.getElementById('schedule_assignments_list');
+            const input = document.getElementById('schedule_assignments_json');
+            if (!list || !input) return;
+
+            const assignments = Array.isArray(window.scheduleAssignmentsNew)
+                ? window.scheduleAssignmentsNew
+                : [];
+
+            input.value = JSON.stringify(assignments);
+
+            if (assignments.length === 0) {
+                list.innerHTML = '<div class="text-slate-400 text-sm">Sin horarios asignados (usa el horario global o agrega uno)</div>';
+                return;
+            }
+
+            list.innerHTML = assignments.map((assignment, index) => {
+                const entryLabel = assignment.entry_time_display || formatScheduleTimeLabelNew(assignment.entry_time);
+                const exitLabel = assignment.exit_time_display || formatScheduleTimeLabelNew(assignment.exit_time);
+                const dateLabel = assignment.effective_date
+                    ? `${assignment.effective_date}${assignment.end_date ? ' → ' + assignment.end_date : ''}`
+                    : 'Sin fecha';
+                const daysLabel = formatScheduleDaysLabelNew(assignment.days_of_week);
+                return `
+                    <div class="flex items-start justify-between gap-3 p-3 bg-slate-800/60 rounded-lg">
+                        <div>
+                            <div class="text-slate-200 font-medium">
+                                ${escapeScheduleHtml(assignment.schedule_name || 'Horario')}
+                            </div>
+                            <div class="text-slate-400 text-xs">
+                                ${escapeScheduleHtml(entryLabel)} - ${escapeScheduleHtml(exitLabel)} · ${escapeScheduleHtml(dateLabel)} · ${escapeScheduleHtml(daysLabel)}
+                            </div>
+                            <div class="text-slate-500 text-xs">
+                                ${Number(assignment.scheduled_hours || 0).toFixed(2)} horas
+                            </div>
+                        </div>
+                        <button type="button" class="btn-secondary px-3" onclick="removeScheduleAssignmentNew(${index})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function collectSelectedDaysNew() {
+            const dayInputs = document.querySelectorAll('[data-schedule-day-new]');
+            const selectedDays = Array.from(dayInputs)
+                .filter(input => input.checked)
+                .map(input => input.value)
+                .join(',');
+            return selectedDays !== '' ? selectedDays : null;
+        }
+
+        function buildAssignmentFromSelectionNew() {
+            const select = document.getElementById('schedule_template_id');
+            if (!select || !select.value) {
+                return null;
+            }
+            const option = select.options[select.selectedIndex];
+            if (!option) {
+                return null;
+            }
+            const effectiveDateInput = document.getElementById('assignment_effective_date');
+            const endDateInput = document.getElementById('assignment_end_date');
+            const effectiveDate = effectiveDateInput && effectiveDateInput.value
+                ? effectiveDateInput.value
+                : new Date().toISOString().slice(0, 10);
+            const endDate = endDateInput && endDateInput.value ? endDateInput.value : null;
+
+            return {
+                schedule_name: option.dataset.name || option.textContent.trim() || 'Horario',
+                entry_time: option.dataset.entry || null,
+                exit_time: option.dataset.exit || null,
+                lunch_time: option.dataset.lunch || null,
+                break_time: option.dataset.break || null,
+                lunch_minutes: parseInt(option.dataset.lunchMinutes || '0', 10) || 0,
+                break_minutes: parseInt(option.dataset.breakMinutes || '0', 10) || 0,
+                scheduled_hours: parseFloat(option.dataset.hours || '0') || 0,
+                effective_date: effectiveDate,
+                end_date: endDate,
+                notes: option.dataset.name ? `Asignado desde template: ${option.dataset.name}` : null,
+                days_of_week: collectSelectedDaysNew(),
+                entry_time_display: null,
+                exit_time_display: null
+            };
+        }
+
+        function addScheduleAssignmentNew() {
+            const assignment = buildAssignmentFromSelectionNew();
+            if (!assignment) {
+                alert('Selecciona un turno para agregar.');
+                return;
+            }
+            window.scheduleAssignmentsNew = window.scheduleAssignmentsNew || [];
+            window.scheduleAssignmentsNew.push(assignment);
+            renderScheduleAssignmentsNew();
+
+            const select = document.getElementById('schedule_template_id');
+            if (select) {
+                select.value = '';
+            }
+            document.querySelectorAll('[data-schedule-day-new]').forEach(input => {
+                input.checked = false;
+            });
+            const endDateInput = document.getElementById('assignment_end_date');
+            if (endDateInput) {
+                endDateInput.value = '';
+            }
+        }
+
+        function removeScheduleAssignmentNew(index) {
+            if (!Array.isArray(window.scheduleAssignmentsNew)) {
+                window.scheduleAssignmentsNew = [];
+            }
+            window.scheduleAssignmentsNew.splice(index, 1);
+            renderScheduleAssignmentsNew();
+        }
+
+        document.getElementById('newEmployeeForm')?.addEventListener('submit', function() {
+            if (!Array.isArray(window.scheduleAssignmentsNew)) {
+                window.scheduleAssignmentsNew = [];
+            }
+            if (window.scheduleAssignmentsNew.length === 0) {
+                const assignment = buildAssignmentFromSelectionNew();
+                if (assignment) {
+                    window.scheduleAssignmentsNew.push(assignment);
+                }
+            }
+            renderScheduleAssignmentsNew();
+        });
 
         function deleteSelectedSchedule() {
             const select = document.getElementById('schedule_template_id');

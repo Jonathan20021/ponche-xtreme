@@ -260,7 +260,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             $userIdForSchedule = $userIdStmt->fetchColumn();
         }
 
-        if ($userIdForSchedule) {
+        $shouldUpdateSchedule = ($scheduleAssignmentsJson !== '' || $scheduleTemplateId !== null);
+        if ($userIdForSchedule && $shouldUpdateSchedule) {
             deactivateEmployeeSchedules($pdo, $employeeId);
             if (!empty($scheduleAssignments)) {
                 foreach ($scheduleAssignments as $assignment) {
@@ -276,7 +277,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                         'is_active' => 1,
                         'effective_date' => $assignment['effective_date'] ?? date('Y-m-d'),
                         'end_date' => $assignment['end_date'] ?? null,
-                        'notes' => $assignment['notes'] ?? null
+                        'notes' => $assignment['notes'] ?? null,
+                        'days_of_week' => !empty($assignment['days_of_week']) ? $assignment['days_of_week'] : null
                     ];
                     createEmployeeSchedule($pdo, $employeeId, (int) $userIdForSchedule, $scheduleData);
                 }
@@ -683,7 +685,7 @@ $terminatedEmployees = $pdo->query("
                 const scheduleInfo = document.getElementById('current_schedule_info');
                 const scheduleSelect = document.getElementById('edit_schedule_template_id');
                 const assignmentList = document.getElementById('schedule_assignments_list');
-                const assignmentsInput = document.getElementById('schedule_assignments_json');
+                const assignmentsInput = document.getElementById('schedule_assignments_json_edit');
                 const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
                 const endDateInput = document.getElementById('assignment_end_date_edit');
                 const todayValue = new Date().toISOString().slice(0, 10);
@@ -707,7 +709,7 @@ $terminatedEmployees = $pdo->query("
                         const info = document.getElementById('current_schedule_info');
                         const select = document.getElementById('edit_schedule_template_id');
                         const list = document.getElementById('schedule_assignments_list');
-                        const input = document.getElementById('schedule_assignments_json');
+                        const input = document.getElementById('schedule_assignments_json_edit');
                         
                         if (!info) return; // Exit if element disappeared
                         
@@ -821,7 +823,7 @@ $terminatedEmployees = $pdo->query("
 
             window.renderScheduleAssignmentsEdit = function() {
                 const list = document.getElementById('schedule_assignments_list');
-                const input = document.getElementById('schedule_assignments_json');
+                const input = document.getElementById('schedule_assignments_json_edit');
                 if (!list) return;
 
                 const assignments = Array.isArray(window.scheduleAssignmentsEdit)
@@ -2060,7 +2062,7 @@ $terminatedEmployees = $pdo->query("
                         <i class="fas fa-info-circle"></i>
                         El horario se aplicará automáticamente en el sistema de ponche.
                     </p>
-                    <input type="hidden" id="schedule_assignments_json" name="schedule_assignments_json">
+                    <input type="hidden" id="schedule_assignments_json_edit" name="schedule_assignments_json">
                     <div id="schedule_assignments_list" class="mt-3 space-y-2"></div>
                     <div id="current_schedule_info" class="mt-2 p-3 bg-slate-700/50 rounded-lg text-sm"></div>
                 </div>
