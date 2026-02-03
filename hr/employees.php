@@ -869,7 +869,6 @@ $terminatedEmployees = $pdo->query("
 
             window.addScheduleAssignmentEdit = function() {
                 const select = document.getElementById('edit_schedule_template_id');
-                const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
                 const endDateInput = document.getElementById('assignment_end_date_edit');
                 const dayInputs = document.querySelectorAll('[data-schedule-day-edit]');
 
@@ -878,52 +877,23 @@ $terminatedEmployees = $pdo->query("
                     return;
                 }
 
-                const scheduleId = select.value;
-                const effectiveDate = effectiveDateInput && effectiveDateInput.value ? effectiveDateInput.value : new Date().toISOString().slice(0, 10);
-                const endDate = endDateInput && endDateInput.value ? endDateInput.value : null;
-                const selectedDays = Array.from(dayInputs)
-                    .filter(input => input.checked)
-                    .map(input => input.value)
-                    .join(',');
-                const daysOfWeek = selectedDays !== '' ? selectedDays : null;
+                const assignment = buildAssignmentFromSelectionEdit();
+                if (!assignment) {
+                    alert('No se pudo construir el horario seleccionado.');
+                    return;
+                }
 
-                fetch('../get_schedule_template.php?id=' + scheduleId)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (!data.success) {
-                            alert('Error al cargar el turno: ' + (data.error || 'No disponible'));
-                            return;
-                        }
-                        const template = data.template;
-                        window.scheduleAssignmentsEdit = window.scheduleAssignmentsEdit || [];
-                        window.scheduleAssignmentsEdit.push({
-                            schedule_name: template.name || 'Horario',
-                            entry_time: template.entry_time,
-                            exit_time: template.exit_time,
-                            lunch_time: template.lunch_time || null,
-                            break_time: template.break_time || null,
-                            lunch_minutes: template.lunch_minutes || 0,
-                            break_minutes: template.break_minutes || 0,
-                            scheduled_hours: template.scheduled_hours || 0,
-                            effective_date: effectiveDate,
-                            end_date: endDate,
-                            notes: template.description ? `Asignado desde template: ${template.name}` : null,
-                            days_of_week: daysOfWeek,
-                            entry_time_display: null,
-                            exit_time_display: null
-                        });
-                        renderScheduleAssignmentsEdit();
-                        select.value = '';
-                        dayInputs.forEach(input => {
-                            input.checked = false;
-                        });
-                        if (endDateInput) {
-                            endDateInput.value = '';
-                        }
-                    })
-                    .catch(error => {
-                        alert('Error al cargar el turno: ' + error.message);
-                    });
+                window.scheduleAssignmentsEdit = window.scheduleAssignmentsEdit || [];
+                window.scheduleAssignmentsEdit.push(assignment);
+                renderScheduleAssignmentsEdit();
+
+                select.value = '';
+                dayInputs.forEach(input => {
+                    input.checked = false;
+                });
+                if (endDateInput) {
+                    endDateInput.value = '';
+                }
             };
 
             window.removeScheduleAssignmentEdit = function(index) {
