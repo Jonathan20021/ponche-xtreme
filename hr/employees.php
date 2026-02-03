@@ -931,6 +931,64 @@ $terminatedEmployees = $pdo->query("
                 window.scheduleAssignmentsEdit.splice(index, 1);
                 renderScheduleAssignmentsEdit();
             };
+
+            function collectSelectedDaysEdit() {
+                const dayInputs = document.querySelectorAll('[data-schedule-day-edit]');
+                const selectedDays = Array.from(dayInputs)
+                    .filter(input => input.checked)
+                    .map(input => input.value)
+                    .join(',');
+                return selectedDays !== '' ? selectedDays : null;
+            }
+
+            function buildAssignmentFromSelectionEdit() {
+                const select = document.getElementById('edit_schedule_template_id');
+                if (!select || !select.value) {
+                    return null;
+                }
+                const option = select.options[select.selectedIndex];
+                if (!option) {
+                    return null;
+                }
+                const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
+                const endDateInput = document.getElementById('assignment_end_date_edit');
+                const effectiveDate = effectiveDateInput && effectiveDateInput.value
+                    ? effectiveDateInput.value
+                    : new Date().toISOString().slice(0, 10);
+                const endDate = endDateInput && endDateInput.value ? endDateInput.value : null;
+
+                return {
+                    schedule_name: option.dataset.name || option.textContent.trim() || 'Horario',
+                    entry_time: option.dataset.entry || null,
+                    exit_time: option.dataset.exit || null,
+                    lunch_time: option.dataset.lunch || null,
+                    break_time: option.dataset.break || null,
+                    lunch_minutes: parseInt(option.dataset.lunchMinutes || '0', 10) || 0,
+                    break_minutes: parseInt(option.dataset.breakMinutes || '0', 10) || 0,
+                    scheduled_hours: parseFloat(option.dataset.hours || '0') || 0,
+                    effective_date: effectiveDate,
+                    end_date: endDate,
+                    notes: option.dataset.name ? `Asignado desde template: ${option.dataset.name}` : null,
+                    days_of_week: collectSelectedDaysEdit(),
+                    entry_time_display: null,
+                    exit_time_display: null
+                };
+            }
+
+            document.getElementById('editForm')?.addEventListener('submit', function() {
+                if (!Array.isArray(window.scheduleAssignmentsEdit)) {
+                    window.scheduleAssignmentsEdit = [];
+                }
+                if (window.scheduleAssignmentsEdit.length === 0) {
+                    const assignment = buildAssignmentFromSelectionEdit();
+                    if (assignment) {
+                        window.scheduleAssignmentsEdit.push(assignment);
+                    }
+                }
+                if (typeof renderScheduleAssignmentsEdit === 'function') {
+                    renderScheduleAssignmentsEdit();
+                }
+            });
             
             var isEditModeEdit = false;
             var editingScheduleIdEdit = null;
@@ -1932,7 +1990,15 @@ $terminatedEmployees = $pdo->query("
                                 <?php 
                                 $timeInfo = date('g:i A', strtotime($template['entry_time'])) . ' - ' . date('g:i A', strtotime($template['exit_time']));
                                 ?>
-                                <option value="<?= $template['id'] ?>">
+                                <option value="<?= $template['id'] ?>"
+                                    data-name="<?= htmlspecialchars($template['name'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-entry="<?= htmlspecialchars($template['entry_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-exit="<?= htmlspecialchars($template['exit_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-lunch="<?= htmlspecialchars($template['lunch_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-break="<?= htmlspecialchars($template['break_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-lunch-minutes="<?= htmlspecialchars((string) $template['lunch_minutes'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-break-minutes="<?= htmlspecialchars((string) $template['break_minutes'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-hours="<?= htmlspecialchars((string) $template['scheduled_hours'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?= htmlspecialchars($template['name']) ?> (<?= $timeInfo ?>)
                                 </option>
                             <?php endforeach; ?>
