@@ -545,6 +545,288 @@ $recentVacations = $pdo->query("
             </div>
         </div>
 
+        <!-- HR Reports Section -->
+        <div class="mt-12 mb-8">
+            <div class="flex items-center mb-6">
+                <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); width: 48px; height: 48px;">
+                    <i class="fas fa-chart-line text-white"></i>
+                </div>
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Reportería y Análisis</h2>
+                    <p class="text-slate-400">Reportes inteligentes para toma de decisiones estratégicas</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Employee Analytics Report -->
+                <div class="module-card" onclick="window.location.href='reports/employees_analytics.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-users-line text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Análisis de Empleados</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Métricas de headcount, rotación, demografía y distribución por departamento</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            <i class="fas fa-chart-pie mr-1"></i>Demografía
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            <i class="fas fa-sync-alt mr-1"></i>Rotación
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            <i class="fas fa-users mr-1"></i>Headcount
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Trial Period Analytics -->
+                <div class="module-card" onclick="window.location.href='reports/trial_period_analytics.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-user-check text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Período de Prueba</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Tasa de aprobación, tiempo promedio, proyecciones y análisis de desempeño</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            <i class="fas fa-percentage mr-1"></i>Tasas
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            <i class="fas fa-clock mr-1"></i>Tiempos
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            <i class="fas fa-chart-line mr-1"></i>Proyecciones
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Campaign Performance -->
+                <div class="module-card" onclick="window.location.href='reports/campaign_performance.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-chart-bar text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Performance de Campañas</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Productividad, costos, ROI y comparativas entre campañas activas</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <i class="fas fa-dollar-sign mr-1"></i>Costos
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <i class="fas fa-trophy mr-1"></i>ROI
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <i class="fas fa-balance-scale mr-1"></i>Comparativas
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Payroll Analytics -->
+                <div class="module-card" onclick="window.location.href='reports/payroll_analytics.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-file-invoice-dollar text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Análisis de Nómina</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Evolución de costos, distribución salarial, deducciones y proyecciones fiscales</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
+                            <i class="fas fa-trending-up mr-1"></i>Tendencias
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
+                            <i class="fas fa-receipt mr-1"></i>Deducciones
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-300 border border-green-500/30">
+                            <i class="fas fa-coins mr-1"></i>Proyecciones
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Birthday & Events Calendar -->
+                <div class="module-card" onclick="window.location.href='reports/events_calendar_report.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-calendar-star text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Calendario de Eventos</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Cumpleaños, aniversarios, eventos especiales y planificación de celebraciones</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                            <i class="fas fa-birthday-cake mr-1"></i>Cumpleaños
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                            <i class="fas fa-star mr-1"></i>Aniversarios
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                            <i class="fas fa-gift mr-1"></i>Eventos
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Permissions & Absences Report -->
+                <div class="module-card" onclick="window.location.href='reports/permissions_analytics.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-clipboard-check text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Permisos y Ausencias</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Análisis de solicitudes, tipos más comunes, patrones y tendencias de ausentismo</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            <i class="fas fa-chart-area mr-1"></i>Patrones
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            <i class="fas fa-list-check mr-1"></i>Tipos
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            <i class="fas fa-wave-square mr-1"></i>Tendencias
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Vacation Management Report -->
+                <div class="module-card" onclick="window.location.href='reports/vacation_analytics.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-umbrella-beach text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Gestión de Vacaciones</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Balance pendiente, utilización, proyecciones y planificación de cobertura</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            <i class="fas fa-piggy-bank mr-1"></i>Balance
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            <i class="fas fa-calendar-days mr-1"></i>Planificación
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            <i class="fas fa-percentage mr-1"></i>Utilización
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Medical Leaves Analytics -->
+                <div class="module-card" onclick="window.location.href='reports/medical_leaves_analytics.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-stethoscope text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Licencias Médicas</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Frecuencia, duración promedio, tipos de licencias y análisis de salud laboral</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                            <i class="fas fa-heartbeat mr-1"></i>Salud
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                            <i class="fas fa-clock mr-1"></i>Duración
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                            <i class="fas fa-hospital mr-1"></i>Tipos
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Recruitment Funnel -->
+                <div class="module-card" onclick="window.location.href='reports/recruitment_funnel.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-filter text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Embudo de Reclutamiento</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Tasa de conversión, tiempo de contratación, fuentes y costo por hire</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            <i class="fas fa-funnel-dollar mr-1"></i>Conversión
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            <i class="fas fa-stopwatch mr-1"></i>Time-to-Hire
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            <i class="fas fa-dollar-sign mr-1"></i>Costos
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Job Postings Analytics -->
+                <div class="module-card" onclick="window.location.href='reports/job_postings_analytics.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-briefcase text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Análisis de Vacantes</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Tiempo de vacante, aplicaciones por posición, efectividad y tendencias de mercado</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            <i class="fas fa-hourglass mr-1"></i>Tiempo Abierto
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            <i class="fas fa-chart-network mr-1"></i>Efectividad
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            <i class="fas fa-users mr-1"></i>Aplicaciones
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Executive Dashboard -->
+                <div class="module-card" onclick="window.location.href='reports/executive_dashboard.php'" style="border: 2px solid rgba(59, 130, 246, 0.5);">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-chart-mixed text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Dashboard Ejecutivo</h3>
+                        <span class="ml-2 text-xs px-2 py-1 rounded-full bg-blue-500/30 text-blue-300 border border-blue-500/50">
+                            <i class="fas fa-crown mr-1"></i>Premium
+                        </span>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Vista integral con KPIs críticos, tendencias y alertas para gerencia</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            <i class="fas fa-gauge-high mr-1"></i>KPIs
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            <i class="fas fa-bell mr-1"></i>Alertas
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            <i class="fas fa-radar mr-1"></i>Insights
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Compliance & Legal Report -->
+                <div class="module-card" onclick="window.location.href='reports/compliance_report.php'">
+                    <div class="flex items-center mb-3">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                            <i class="fas fa-gavel text-white"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold text-white">Cumplimiento Legal</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">Contratos vencidos, documentos pendientes y cumplimiento regulatorio</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-xs px-2 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                            <i class="fas fa-file-signature mr-1"></i>Contratos
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                            <i class="fas fa-shield-alt mr-1"></i>Regulación
+                        </span>
+                        <span class="text-xs px-2 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>Alertas
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Quick Info Sections -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Upcoming Birthdays -->
