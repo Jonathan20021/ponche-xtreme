@@ -367,6 +367,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
 
 $date_filter = $_GET['dates'] ?? date('Y-m-d');
 
+if (!function_exists('formatScheduleTimeLabel')) {
+    function formatScheduleTimeLabel(?string $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+        return date('g:i A', strtotime($value));
+    }
+}
+
+if (!function_exists('formatScheduleDaysLabel')) {
+    function formatScheduleDaysLabel(?string $daysValue): string
+    {
+        $daysValue = trim((string) $daysValue);
+        if ($daysValue === '') {
+            return 'Todos los días';
+        }
+        $map = [
+            1 => 'Lun',
+            2 => 'Mar',
+            3 => 'Mié',
+            4 => 'Jue',
+            5 => 'Vie',
+            6 => 'Sáb',
+            7 => 'Dom'
+        ];
+        $parts = array_filter(array_map('intval', explode(',', $daysValue)));
+        $labels = [];
+        foreach ($parts as $day) {
+            if (isset($map[$day])) {
+                $labels[] = $map[$day];
+            }
+        }
+        return $labels ? implode(', ', $labels) : 'Todos los días';
+    }
+}
+
+$scheduleSummary = getScheduleConfigForUser($pdo, $user_id, $date_filter);
+$scheduleSegments = $scheduleSummary['schedule_segments'] ?? [];
+$scheduleName = $scheduleSummary['schedule_name'] ?? 'Horario Global';
+$scheduleEntry = formatScheduleTimeLabel($scheduleSummary['entry_time'] ?? null);
+$scheduleExit = formatScheduleTimeLabel($scheduleSummary['exit_time'] ?? null);
+$scheduleHours = isset($scheduleSummary['scheduled_hours']) ? number_format((float) $scheduleSummary['scheduled_hours'], 2) : '0.00';
+
 $attendanceTypes = getAttendanceTypes($pdo, false);
 $attendanceTypeMap = [];
 $durationTypes = [];
@@ -707,6 +752,60 @@ $chartColorsJson = json_encode($chartColors);
                 </button>
             <?php endforeach; ?>
         </form>
+    </section>
+    <section class="glass-card mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-xl font-semibold text-primary flex items-center gap-2">
+                    <i class="fas fa-clock text-sky-400"></i>
+                    Horario de Trabajo
+                </h2>
+                <p class="text-sm text-muted mt-1">Horario aplicado para <?= htmlspecialchars(date('d/m/Y', strtotime($date_filter))) ?></p>
+            </div>
+            <span class="badge badge--info"><?= htmlspecialchars($scheduleName) ?></span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div class="bg-slate-800/60 rounded-lg p-3">
+                <p class="text-xs text-slate-400 uppercase tracking-wide">Entrada</p>
+                <p class="text-lg font-semibold text-white"><?= htmlspecialchars($scheduleEntry ?? 'No definida') ?></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-lg p-3">
+                <p class="text-xs text-slate-400 uppercase tracking-wide">Salida</p>
+                <p class="text-lg font-semibold text-white"><?= htmlspecialchars($scheduleExit ?? 'No definida') ?></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-lg p-3">
+                <p class="text-xs text-slate-400 uppercase tracking-wide">Horas</p>
+                <p class="text-lg font-semibold text-white"><?= htmlspecialchars($scheduleHours) ?> hrs</p>
+            </div>
+        </div>
+        <?php if (!empty($scheduleSegments)): ?>
+            <div class="space-y-2">
+                <?php foreach ($scheduleSegments as $segment): ?>
+                    <?php
+                        $segmentEntry = formatScheduleTimeLabel($segment['entry_time'] ?? null) ?? 'No definida';
+                        $segmentExit = formatScheduleTimeLabel($segment['exit_time'] ?? null) ?? 'No definida';
+                        $segmentDays = formatScheduleDaysLabel($segment['days_of_week'] ?? null);
+                        $segmentEffective = $segment['effective_date'] ?? null;
+                        $segmentEnd = $segment['end_date'] ?? null;
+                        $segmentRange = $segmentEffective
+                            ? $segmentEffective . ($segmentEnd ? ' → ' . $segmentEnd : '')
+                            : 'Sin fecha';
+                        $segmentHours = number_format((float) ($segment['scheduled_hours'] ?? 0), 2);
+                    ?>
+                    <div class="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg p-3">
+                        <div>
+                            <p class="text-slate-200 font-medium"><?= htmlspecialchars($segment['schedule_name'] ?? 'Horario') ?></p>
+                            <p class="text-xs text-slate-400">
+                                <?= htmlspecialchars($segmentEntry) ?> - <?= htmlspecialchars($segmentExit) ?> · <?= htmlspecialchars($segmentRange) ?> · <?= htmlspecialchars($segmentDays) ?>
+                            </p>
+                        </div>
+                        <span class="text-xs text-slate-300 font-semibold"><?= htmlspecialchars($segmentHours) ?> hrs</span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php else: ?>
+            <p class="text-sm text-slate-400">Usando el horario global del sistema.</p>
+        <?php endif; ?>
     </section>
     <section class="dashboard-hero glass-card">
         <div class="hero-main">

@@ -1640,6 +1640,7 @@ $terminatedEmployees = $pdo->query("
             </h3>
             <form method="POST" enctype="multipart/form-data" id="editForm">
                 <input type="hidden" name="update_employee" value="1">
+                <input type="hidden" name="update_schedule" value="1">
                 <input type="hidden" name="employee_id" id="edit_employee_id">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
