@@ -702,7 +702,7 @@ $terminatedEmployees = $pdo->query("
                     return; // Exit if element doesn't exist
                 }
                 
-                fetch(`get_employee_schedule.php?employee_id=${employeeId}`)
+                fetch(`get_employee_schedule.php?employee_id=${employeeId}&include_all=1`)
                     .then(response => response.json())
                     .then(data => {
                         // Double check element still exists

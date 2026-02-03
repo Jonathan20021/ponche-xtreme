@@ -8,6 +8,7 @@ ensurePermission('hr_employees', '../unauthorized.php');
 header('Content-Type: application/json');
 
 $employeeId = isset($_GET['employee_id']) ? (int)$_GET['employee_id'] : 0;
+$includeAll = !empty($_GET['include_all']);
 
 if ($employeeId <= 0) {
     echo json_encode(['error' => 'Invalid employee ID']);
@@ -20,7 +21,20 @@ try {
     $userStmt->execute([$employeeId]);
     $userId = (int) $userStmt->fetchColumn();
 
-    $schedules = getEmployeeSchedules($pdo, $employeeId, $date);
+    if ($includeAll) {
+        $stmt = $pdo->prepare("\
+            SELECT * FROM employee_schedules
+            WHERE employee_id = ?
+            AND is_active = 1
+            AND (effective_date IS NULL OR effective_date <= ?)
+            AND (end_date IS NULL OR end_date >= ?)
+            ORDER BY effective_date DESC, entry_time ASC
+        ");
+        $stmt->execute([$employeeId, $date, $date]);
+        $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } else {
+        $schedules = getEmployeeSchedules($pdo, $employeeId, $date);
+    }
     $summary = $userId > 0 ? getScheduleConfigForUser($pdo, $userId, $date) : null;
 
     $formattedSchedules = [];
