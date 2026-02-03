@@ -103,6 +103,66 @@ include 'header.php';
         </div>
     </div>
 
+    <!-- Operational Summary Section -->
+    <div class="glass-card mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-primary flex items-center">
+                <i class="fas fa-briefcase mr-2 text-cyan-400"></i>Resumen Operativo
+            </h2>
+            <span class="chip text-xs" id="attendanceCoverage">Cobertura: --</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Activos</span>
+                    <i class="fas fa-user-check text-green-400 opacity-50"></i>
+                </div>
+                <div class="value" id="activeEmployeesTotal">0</div>
+                <div class="text-xs text-muted mt-1">Empleados en servicio</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">En prueba</span>
+                    <i class="fas fa-user-clock text-yellow-400 opacity-50"></i>
+                </div>
+                <div class="value" id="trialEmployeesTotal">0</div>
+                <div class="text-xs text-muted mt-1">Periodo de entrenamiento</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Ausentes</span>
+                    <i class="fas fa-user-times text-red-400 opacity-50"></i>
+                </div>
+                <div class="value" id="absentEmployeesTotal">0</div>
+                <div class="text-xs text-muted mt-1">Sin marcaje en rango</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Nuevos ingresos</span>
+                    <i class="fas fa-user-plus text-blue-400 opacity-50"></i>
+                </div>
+                <div class="value" id="newHiresTotal">0</div>
+                <div class="text-xs text-muted mt-1">Contrataciones en periodo</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Bajas</span>
+                    <i class="fas fa-user-minus text-orange-400 opacity-50"></i>
+                </div>
+                <div class="value" id="terminationsTotal">0</div>
+                <div class="text-xs text-muted mt-1">Terminaciones en periodo</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Asistencias</span>
+                    <i class="fas fa-fingerprint text-purple-400 opacity-50"></i>
+                </div>
+                <div class="value" id="attendanceRecordsTotal">0</div>
+                <div class="text-xs text-muted mt-1">Registros en el periodo</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Charts Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <!-- Trend Chart -->
@@ -126,6 +186,67 @@ include 'header.php';
         </div>
     </div>
 
+    <!-- Operational Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="glass-card">
+            <h3 class="text-lg font-semibold mb-4 text-primary flex items-center">
+                <i class="fas fa-building mr-2 text-indigo-400"></i>Distribución por Departamento
+            </h3>
+            <div class="relative h-64 w-full">
+                <canvas id="departmentChart"></canvas>
+            </div>
+        </div>
+        <div class="glass-card">
+            <h3 class="text-lg font-semibold mb-4 text-primary flex items-center">
+                <i class="fas fa-layer-group mr-2 text-amber-400"></i>Asistencia por Tipo
+            </h3>
+            <div class="relative h-64 w-full">
+                <canvas id="attendanceTypeChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payroll Summary Section -->
+    <div class="glass-card mb-6">
+        <h2 class="text-xl font-bold text-primary mb-4 flex items-center">
+            <i class="fas fa-file-invoice-dollar mr-2 text-emerald-400"></i>Resumen de Nómina
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Estado</span>
+                    <i class="fas fa-clipboard-check text-emerald-400 opacity-50"></i>
+                </div>
+                <div class="value" id="payrollStatus">--</div>
+                <div class="text-xs text-muted mt-1" id="payrollPeriod">Periodo: --</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Bruto</span>
+                    <i class="fas fa-arrow-trend-up text-green-400 opacity-50"></i>
+                </div>
+                <div class="value text-green-400" id="payrollGross">$0.00</div>
+                <div class="text-xs text-muted mt-1">Total bruto</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Neto</span>
+                    <i class="fas fa-arrow-trend-down text-blue-400 opacity-50"></i>
+                </div>
+                <div class="value text-blue-400" id="payrollNet">$0.00</div>
+                <div class="text-xs text-muted mt-1">Total neto</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Promedio hora</span>
+                    <i class="fas fa-business-time text-purple-400 opacity-50"></i>
+                </div>
+                <div class="value" id="payrollAvgRate">$0.00</div>
+                <div class="text-xs text-muted mt-1">Tarifa media</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Campaign Costs Section -->
     <div class="glass-card mb-6">
         <h2 class="text-xl font-bold text-primary mb-4 flex items-center">
@@ -133,6 +254,49 @@ include 'header.php';
         </h2>
         <div id="campaignCosts" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <!-- Campaign cards will be populated here -->
+        </div>
+    </div>
+
+    <!-- Top Campaigns Section -->
+    <div class="glass-card mb-6">
+        <h2 class="text-xl font-bold text-primary mb-4 flex items-center">
+            <i class="fas fa-trophy mr-2 text-yellow-400"></i>Top Campañas
+        </h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+                <h3 class="text-sm font-semibold text-muted mb-2">Por costo</h3>
+                <div class="responsive-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Campaña</th>
+                                <th>Empleados</th>
+                                <th>Costos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topCampaignsCost">
+                            <tr><td colspan="3" class="text-center text-muted">--</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div>
+                <h3 class="text-sm font-semibold text-muted mb-2">Por horas</h3>
+                <div class="responsive-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Campaña</th>
+                                <th>Empleados</th>
+                                <th>Horas</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topCampaignsHours">
+                            <tr><td colspan="3" class="text-center text-muted">--</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -203,6 +367,129 @@ include 'header.php';
             </div>
         </div>
     </div>
+
+    <!-- Quality Section -->
+    <div class="glass-card mt-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-primary flex items-center">
+                <i class="fas fa-star mr-2 text-amber-400"></i>Calidad y Cumplimiento
+            </h2>
+            <span class="chip text-xs" id="qualityStatus">Calidad: --</span>
+        </div>
+
+        <div id="qualityError" class="hidden mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 text-amber-200 text-sm"></div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6" id="qualityKpis">
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Evaluaciones</span>
+                    <i class="fas fa-clipboard-check text-amber-400 opacity-50"></i>
+                </div>
+                <div class="value" id="qualityTotalEvaluations">0</div>
+                <div class="text-xs text-muted mt-1">Total en periodo</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Promedio QA</span>
+                    <i class="fas fa-chart-line text-green-400 opacity-50"></i>
+                </div>
+                <div class="value" id="qualityAvgScore">0%</div>
+                <div class="text-xs text-muted mt-1">Score general</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Auditorías</span>
+                    <i class="fas fa-headphones text-blue-400 opacity-50"></i>
+                </div>
+                <div class="value" id="qualityAuditedCalls">0</div>
+                <div class="text-xs text-muted mt-1">Con llamadas</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Score AI</span>
+                    <i class="fas fa-robot text-purple-400 opacity-50"></i>
+                </div>
+                <div class="value" id="qualityAiScore">0</div>
+                <div class="text-xs text-muted mt-1">Promedio analítico</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Agentes evaluados</span>
+                    <i class="fas fa-user-check text-cyan-400 opacity-50"></i>
+                </div>
+                <div class="value" id="qualityAgents">0</div>
+                <div class="text-xs text-muted mt-1">Cobertura QA</div>
+            </div>
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="label">Campañas QA</span>
+                    <i class="fas fa-bullseye text-rose-400 opacity-50"></i>
+                </div>
+                <div class="value" id="qualityCampaigns">0</div>
+                <div class="text-xs text-muted mt-1">Con evaluaciones</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="glass-card">
+                <h3 class="text-lg font-semibold mb-4 text-primary flex items-center">
+                    <i class="fas fa-chart-area mr-2 text-amber-300"></i>Tendencia QA
+                </h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="qualityTrendChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-card">
+                <h3 class="text-lg font-semibold mb-4 text-primary flex items-center">
+                    <i class="fas fa-chart-bar mr-2 text-blue-300"></i>Calidad por Campaña
+                </h3>
+                <div class="relative h-64 w-full">
+                    <canvas id="qualityCampaignChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="glass-card">
+                <h3 class="text-lg font-semibold mb-4 text-primary flex items-center">
+                    <i class="fas fa-trophy mr-2 text-green-400"></i>Top agentes QA
+                </h3>
+                <div class="responsive-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Agente</th>
+                                <th>Evaluaciones</th>
+                                <th>Promedio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="qualityTopAgentsTable">
+                            <tr><td colspan="3" class="text-center text-muted">--</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="glass-card">
+                <h3 class="text-lg font-semibold mb-4 text-primary flex items-center">
+                    <i class="fas fa-triangle-exclamation mr-2 text-red-400"></i>Riesgos QA
+                </h3>
+                <div class="responsive-scroll">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Agente</th>
+                                <th>Evaluaciones</th>
+                                <th>Promedio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="qualityBottomAgentsTable">
+                            <tr><td colspan="3" class="text-center text-muted">--</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <?php include 'footer.php'; ?>
@@ -218,6 +505,10 @@ include 'header.php';
     let searchTerm = '';
     let trendChartInstance = null;
     let costChartInstance = null;
+    let departmentChartInstance = null;
+    let attendanceTypeChartInstance = null;
+    let qualityTrendChartInstance = null;
+    let qualityCampaignChartInstance = null;
     let autoRefreshInterval = null;
     
     // Initialize dashboard
@@ -299,6 +590,12 @@ include 'header.php';
                     employeesData = data.employees;
                     campaignsData = data.campaigns;
                     updateKPIs(data.summary, data.is_today);
+                    updateOperationalMetrics(data.workforce, data.summary);
+                    updateAttendanceTypes(data.attendance);
+                    updateDepartments(data.departments);
+                    updatePayroll(data.payroll);
+                    updateTopCampaigns(data.campaigns_top);
+                    updateQualityMetrics(data.quality);
                     updateCampaignCosts(data.campaigns);
                     updateCharts(data.charts);
                     filterAndDisplayData();
@@ -446,6 +743,363 @@ include 'header.php';
                 }
             }
         });
+    }
+
+    function updateOperationalMetrics(workforce, summary) {
+        if (!workforce) return;
+
+        const activeEmployees = workforce.active_employees || 0;
+        const trialEmployees = workforce.trial_employees || 0;
+        const absentEmployees = workforce.absent_employees || 0;
+        const newHires = workforce.new_hires || 0;
+        const terminations = workforce.terminations || 0;
+        const attendanceRecords = workforce.attendance_records || 0;
+        const attendanceUsers = workforce.attendance_users || 0;
+        const totalActivePool = activeEmployees + trialEmployees;
+
+        document.getElementById('activeEmployeesTotal').textContent = activeEmployees;
+        document.getElementById('trialEmployeesTotal').textContent = trialEmployees;
+        document.getElementById('absentEmployeesTotal').textContent = absentEmployees;
+        document.getElementById('newHiresTotal').textContent = newHires;
+        document.getElementById('terminationsTotal').textContent = terminations;
+        document.getElementById('attendanceRecordsTotal').textContent = attendanceRecords;
+
+        const coverage = totalActivePool > 0 ? Math.round((attendanceUsers / totalActivePool) * 100) : 0;
+        document.getElementById('attendanceCoverage').textContent = `Cobertura: ${coverage}% (${attendanceUsers}/${totalActivePool})`;
+    }
+
+    function updateDepartments(departments) {
+        const ctxDept = document.getElementById('departmentChart').getContext('2d');
+        if (departmentChartInstance) departmentChartInstance.destroy();
+
+        if (!departments || departments.length === 0) {
+            departmentChartInstance = new Chart(ctxDept, {
+                type: 'bar',
+                data: { labels: ['Sin datos'], datasets: [{ data: [0], backgroundColor: ['rgba(148,163,184,0.3)'] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+            return;
+        }
+
+        const labels = departments.map(d => d.name);
+        const data = departments.map(d => d.active_employees ?? d.employees ?? 0);
+
+        departmentChartInstance = new Chart(ctxDept, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Activos',
+                    data: data,
+                    backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                    borderColor: '#6366f1',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }
+                }
+            }
+        });
+    }
+
+    function updateAttendanceTypes(attendance) {
+        const ctxAttendance = document.getElementById('attendanceTypeChart').getContext('2d');
+        if (attendanceTypeChartInstance) attendanceTypeChartInstance.destroy();
+
+        if (!attendance || !attendance.by_type || attendance.by_type.length === 0) {
+            attendanceTypeChartInstance = new Chart(ctxAttendance, {
+                type: 'doughnut',
+                data: { labels: ['Sin datos'], datasets: [{ data: [1], backgroundColor: ['rgba(148,163,184,0.3)'] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8' } } } }
+            });
+            return;
+        }
+
+        const labels = attendance.by_type.map(t => t.label);
+        const data = attendance.by_type.map(t => t.count);
+        const colors = attendance.by_type.map(t => t.color_start || '#94a3b8');
+
+        attendanceTypeChartInstance = new Chart(ctxAttendance, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderColor: '#0f172a',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } }
+            }
+        });
+    }
+
+    function updatePayroll(payroll) {
+        if (!payroll) return;
+
+        if (payroll.has_payroll) {
+            document.getElementById('payrollStatus').textContent = payroll.status || 'Disponible';
+            document.getElementById('payrollGross').textContent = payroll.total_gross_formatted || '$0.00';
+            document.getElementById('payrollNet').textContent = payroll.total_net_formatted || '$0.00';
+            document.getElementById('payrollAvgRate').textContent = payroll.avg_hourly_rate ? `$${payroll.avg_hourly_rate.toFixed(2)}` : '$0.00';
+            const period = payroll.period_start && payroll.period_end
+                ? `${new Date(payroll.period_start).toLocaleDateString()} - ${new Date(payroll.period_end).toLocaleDateString()}`
+                : '--';
+            document.getElementById('payrollPeriod').textContent = `Periodo: ${period}`;
+        } else {
+            document.getElementById('payrollStatus').textContent = payroll.message || 'Sin nómina';
+            document.getElementById('payrollGross').textContent = '$0.00';
+            document.getElementById('payrollNet').textContent = '$0.00';
+            document.getElementById('payrollAvgRate').textContent = '$0.00';
+            document.getElementById('payrollPeriod').textContent = 'Periodo: --';
+        }
+    }
+
+    function updateTopCampaigns(campaignsTop) {
+        const costBody = document.getElementById('topCampaignsCost');
+        const hoursBody = document.getElementById('topCampaignsHours');
+
+        costBody.innerHTML = '';
+        hoursBody.innerHTML = '';
+
+        const renderEmpty = (body) => {
+            body.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Sin datos</td></tr>';
+        };
+
+        if (!campaignsTop || !campaignsTop.by_cost || campaignsTop.by_cost.length === 0) {
+            renderEmpty(costBody);
+        } else {
+            campaignsTop.by_cost.forEach(camp => {
+                const row = document.createElement('tr');
+                const costParts = [];
+                const costUsd = Number(camp.total_cost_usd || 0);
+                const costDop = Number(camp.total_cost_dop || 0);
+                if (costUsd > 0) costParts.push(`$${costUsd.toFixed(2)}`);
+                if (costDop > 0) costParts.push(`RD$${costDop.toFixed(2)}`);
+                row.innerHTML = `
+                    <td>${camp.name || 'Sin Campaña'}</td>
+                    <td>${camp.employees || 0}</td>
+                    <td class="text-green-400">${costParts.join(' / ') || '$0.00'}</td>
+                `;
+                costBody.appendChild(row);
+            });
+        }
+
+        if (!campaignsTop || !campaignsTop.by_hours || campaignsTop.by_hours.length === 0) {
+            renderEmpty(hoursBody);
+        } else {
+            campaignsTop.by_hours.forEach(camp => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${camp.name || 'Sin Campaña'}</td>
+                    <td>${camp.employees || 0}</td>
+                    <td class="text-cyan-300">${formatHours(camp.total_hours || 0)}</td>
+                `;
+                hoursBody.appendChild(row);
+            });
+        }
+    }
+
+    function updateQualityMetrics(quality) {
+        const status = document.getElementById('qualityStatus');
+        const errorBox = document.getElementById('qualityError');
+
+        if (!quality || !quality.available) {
+            status.textContent = 'Calidad: No disponible';
+            errorBox.textContent = quality && quality.error ? quality.error : 'Sin datos de calidad.';
+            errorBox.classList.remove('hidden');
+            updateQualityTrendChart([]);
+            updateQualityCampaignChart([]);
+            updateQualityTables([], []);
+            return;
+        }
+
+        errorBox.classList.add('hidden');
+        status.textContent = 'Calidad: Activa';
+
+        const summary = quality.summary || {};
+        document.getElementById('qualityTotalEvaluations').textContent = summary.total_evaluations || 0;
+        document.getElementById('qualityAvgScore').textContent = `${(summary.avg_percentage || 0).toFixed(2)}%`;
+        document.getElementById('qualityAuditedCalls').textContent = summary.audited_calls || 0;
+        document.getElementById('qualityAiScore').textContent = (summary.avg_ai_score || 0).toFixed(2);
+        document.getElementById('qualityAgents').textContent = summary.agents_evaluated || 0;
+        document.getElementById('qualityCampaigns').textContent = summary.campaigns_evaluated || 0;
+
+        updateQualityTrendChart(quality.trend || []);
+        updateQualityCampaignChart(quality.by_campaign || []);
+        updateQualityTables(quality.top_agents || [], quality.bottom_agents || []);
+    }
+
+    function updateQualityTrendChart(trend) {
+        const ctxQualityTrend = document.getElementById('qualityTrendChart').getContext('2d');
+        if (qualityTrendChartInstance) qualityTrendChartInstance.destroy();
+
+        if (!trend || trend.length === 0) {
+            qualityTrendChartInstance = new Chart(ctxQualityTrend, {
+                type: 'line',
+                data: { labels: ['Sin datos'], datasets: [{ data: [0], borderColor: '#94a3b8' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+            return;
+        }
+
+        const labels = trend.map(t => t.date);
+        const evals = trend.map(t => t.evaluations);
+        const avgScores = trend.map(t => t.avg_score);
+
+        qualityTrendChartInstance = new Chart(ctxQualityTrend, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Evaluaciones',
+                        data: evals,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                        yAxisID: 'y',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Promedio QA',
+                        data: avgScores,
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0)',
+                        yAxisID: 'y1',
+                        borderDash: [6, 4],
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        ticks: { color: '#38bdf8' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateQualityCampaignChart(campaigns) {
+        const ctxQualityCampaign = document.getElementById('qualityCampaignChart').getContext('2d');
+        if (qualityCampaignChartInstance) qualityCampaignChartInstance.destroy();
+
+        if (!campaigns || campaigns.length === 0) {
+            qualityCampaignChartInstance = new Chart(ctxQualityCampaign, {
+                type: 'bar',
+                data: { labels: ['Sin datos'], datasets: [{ data: [0], backgroundColor: 'rgba(148,163,184,0.3)' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+            return;
+        }
+
+        const labels = campaigns.map(c => c.campaign_name || 'Sin campaña');
+        const evals = campaigns.map(c => c.evaluations || 0);
+        const avgScores = campaigns.map(c => c.avg_score || 0);
+
+        qualityCampaignChartInstance = new Chart(ctxQualityCampaign, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Evaluaciones',
+                        data: evals,
+                        backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                        borderColor: '#6366f1',
+                        borderWidth: 1,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Promedio QA',
+                        data: avgScores,
+                        backgroundColor: 'rgba(34, 211, 238, 0.3)',
+                        borderColor: '#22d3ee',
+                        borderWidth: 2,
+                        type: 'line',
+                        yAxisID: 'y1',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8' } } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        ticks: { color: '#22d3ee' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateQualityTables(topAgents, bottomAgents) {
+        const topBody = document.getElementById('qualityTopAgentsTable');
+        const bottomBody = document.getElementById('qualityBottomAgentsTable');
+
+        topBody.innerHTML = '';
+        bottomBody.innerHTML = '';
+
+        const renderEmpty = (body) => {
+            body.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Sin datos</td></tr>';
+        };
+
+        if (!topAgents || topAgents.length === 0) {
+            renderEmpty(topBody);
+        } else {
+            topAgents.forEach(agent => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${agent.full_name || agent.username || 'N/A'}</td>
+                    <td>${agent.evaluations || 0}</td>
+                    <td class="text-green-400">${(agent.avg_score || 0).toFixed(2)}%</td>
+                `;
+                topBody.appendChild(row);
+            });
+        }
+
+        if (!bottomAgents || bottomAgents.length === 0) {
+            renderEmpty(bottomBody);
+        } else {
+            bottomAgents.forEach(agent => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${agent.full_name || agent.username || 'N/A'}</td>
+                    <td>${agent.evaluations || 0}</td>
+                    <td class="text-red-400">${(agent.avg_score || 0).toFixed(2)}%</td>
+                `;
+                bottomBody.appendChild(row);
+            });
+        }
     }
     
     function updateCampaignCosts(campaigns) {

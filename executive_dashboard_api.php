@@ -9,6 +9,7 @@ header('Cache-Control: no-cache, must-revalidate');
 
 require_once 'db.php';
 require_once 'lib/authorization_functions.php';
+require_once 'quality_db.php';
 
 // Verificar permisos ejecutivos
 if (!isset($_SESSION['user_id']) || !userHasPermission('executive_dashboard')) {
@@ -78,6 +79,18 @@ try {
     
     // 4. Obtener estadísticas de nómina (del mes de la fecha fin)
     $payrollStats = getPayrollStats($pdo, date('Y-m', strtotime($endDate)));
+
+    // 5. Métricas operativas adicionales
+    $workforceStats = getWorkforceSummary($pdo, $startDate, $endDate);
+    $attendanceSummary = getAttendanceTypeSummary($pdo, $startDate, $endDate);
+    $departmentSummary = getDepartmentSummary($pdo);
+
+    // Top campañas por costo y horas
+    $campaignsTop = buildTopCampaigns($employeesData['campaigns']);
+
+    // 6. Métricas de calidad (base separada)
+    $qualityPdo = getQualityDbConnection();
+    $qualityMetrics = getQualityDashboardMetrics($qualityPdo, $startDate, $endDate);
     
     // Respuesta final
     echo json_encode([
@@ -91,7 +104,12 @@ try {
             'cost_distribution' => $dailyMetrics['cost_distribution']
         ],
         'summary' => $summary,
-        'payroll' => $payrollStats
+        'payroll' => $payrollStats,
+        'workforce' => $workforceStats,
+        'attendance' => $attendanceSummary,
+        'departments' => $departmentSummary,
+        'campaigns_top' => $campaignsTop,
+        'quality' => $qualityMetrics
     ]);
     
 } catch (Exception $e) {
@@ -562,6 +580,386 @@ function getPayrollStats($pdo, $month) {
     } catch (Exception $e) {
         return [
             'has_payroll' => false,
+            'error' => $e->getMessage()
+        ];
+    }
+}
+
+/**
+ * Obtiene métricas de fuerza laboral en el periodo.
+ */
+function getWorkforceSummary($pdo, $startDate, $endDate) {
+    $defaults = [
+        'active_employees' => 0,
+        'trial_employees' => 0,
+        'suspended_employees' => 0,
+        'terminated_employees' => 0,
+        'new_hires' => 0,
+        'terminations' => 0,
+        'absent_employees' => 0,
+        'attendance_records' => 0,
+        'attendance_users' => 0
+    ];
+
+    try {
+        $statusStmt = $pdo->query("
+            SELECT e.employment_status, COUNT(*) as total
+            FROM employees e
+            INNER JOIN users u ON u.id = e.user_id
+            WHERE u.is_active = 1
+            GROUP BY e.employment_status
+        ");
+        $statusRows = $statusStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($statusRows as $row) {
+            $status = strtoupper(trim($row['employment_status'] ?? ''));
+            $count = (int)($row['total'] ?? 0);
+            if ($status === 'ACTIVE') {
+                $defaults['active_employees'] = $count;
+            } elseif ($status === 'TRIAL') {
+                $defaults['trial_employees'] = $count;
+            } elseif ($status === 'SUSPENDED') {
+                $defaults['suspended_employees'] = $count;
+            } elseif ($status === 'TERMINATED') {
+                $defaults['terminated_employees'] = $count;
+            }
+        }
+
+        $newHiresStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM employees e
+            INNER JOIN users u ON u.id = e.user_id
+            WHERE u.is_active = 1
+            AND DATE(e.hire_date) BETWEEN ? AND ?
+        ");
+        $newHiresStmt->execute([$startDate, $endDate]);
+        $defaults['new_hires'] = (int)$newHiresStmt->fetchColumn();
+
+        $terminationsStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM employees e
+            INNER JOIN users u ON u.id = e.user_id
+            WHERE u.is_active = 1
+            AND e.termination_date IS NOT NULL
+            AND DATE(e.termination_date) BETWEEN ? AND ?
+        ");
+        $terminationsStmt->execute([$startDate, $endDate]);
+        $defaults['terminations'] = (int)$terminationsStmt->fetchColumn();
+
+        $attendanceCountStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM attendance
+            WHERE DATE(timestamp) BETWEEN ? AND ?
+        ");
+        $attendanceCountStmt->execute([$startDate, $endDate]);
+        $defaults['attendance_records'] = (int)$attendanceCountStmt->fetchColumn();
+
+        $attendanceUsersStmt = $pdo->prepare("
+            SELECT COUNT(DISTINCT user_id)
+            FROM attendance
+            WHERE DATE(timestamp) BETWEEN ? AND ?
+        ");
+        $attendanceUsersStmt->execute([$startDate, $endDate]);
+        $defaults['attendance_users'] = (int)$attendanceUsersStmt->fetchColumn();
+
+        $absentStmt = $pdo->prepare("
+            SELECT COUNT(*)
+            FROM employees e
+            INNER JOIN users u ON u.id = e.user_id
+            WHERE u.is_active = 1
+            AND e.employment_status IN ('ACTIVE', 'TRIAL')
+            AND NOT EXISTS (
+                SELECT 1
+                FROM attendance a
+                WHERE a.user_id = u.id
+                AND DATE(a.timestamp) BETWEEN ? AND ?
+            )
+        ");
+        $absentStmt->execute([$startDate, $endDate]);
+        $defaults['absent_employees'] = (int)$absentStmt->fetchColumn();
+    } catch (Exception $e) {
+        return $defaults;
+    }
+
+    return $defaults;
+}
+
+/**
+ * Obtiene distribución de punches por tipo en el periodo.
+ */
+function getAttendanceTypeSummary($pdo, $startDate, $endDate) {
+    $summary = [
+        'total_punches' => 0,
+        'paid_punches' => 0,
+        'unpaid_punches' => 0,
+        'by_type' => []
+    ];
+
+    try {
+        $stmt = $pdo->prepare("
+            SELECT
+                UPPER(a.type) as slug,
+                COUNT(*) as total,
+                t.label,
+                t.color_start,
+                t.color_end,
+                t.is_paid
+            FROM attendance a
+            LEFT JOIN attendance_types t ON UPPER(t.slug) = UPPER(a.type)
+            WHERE DATE(a.timestamp) BETWEEN ? AND ?
+            GROUP BY UPPER(a.type), t.label, t.color_start, t.color_end, t.is_paid
+            ORDER BY total DESC
+        ");
+        $stmt->execute([$startDate, $endDate]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($rows as $row) {
+            $count = (int)($row['total'] ?? 0);
+            $isPaid = (int)($row['is_paid'] ?? 0);
+            $summary['total_punches'] += $count;
+            if ($isPaid === 1) {
+                $summary['paid_punches'] += $count;
+            } else {
+                $summary['unpaid_punches'] += $count;
+            }
+
+            $summary['by_type'][] = [
+                'slug' => $row['slug'],
+                'label' => $row['label'] ?: $row['slug'],
+                'count' => $count,
+                'is_paid' => $isPaid,
+                'color_start' => $row['color_start'] ?: '#64748b',
+                'color_end' => $row['color_end'] ?: '#475569'
+            ];
+        }
+    } catch (Exception $e) {
+        return $summary;
+    }
+
+    return $summary;
+}
+
+/**
+ * Obtiene resumen por departamento.
+ */
+function getDepartmentSummary($pdo) {
+    try {
+        $stmt = $pdo->query("
+            SELECT
+                d.id,
+                d.name,
+                COUNT(e.id) as employees,
+                SUM(CASE WHEN e.employment_status IN ('ACTIVE', 'TRIAL') THEN 1 ELSE 0 END) as active_employees
+            FROM departments d
+            LEFT JOIN employees e ON e.department_id = d.id
+            LEFT JOIN users u ON u.id = e.user_id AND u.is_active = 1
+            GROUP BY d.id, d.name
+            ORDER BY active_employees DESC, d.name ASC
+        ");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $noDeptStmt = $pdo->query("
+            SELECT COUNT(*) as employees,
+                   SUM(CASE WHEN e.employment_status IN ('ACTIVE','TRIAL') THEN 1 ELSE 0 END) as active_employees
+            FROM employees e
+            INNER JOIN users u ON u.id = e.user_id AND u.is_active = 1
+            WHERE e.department_id IS NULL
+        ");
+        $noDept = $noDeptStmt->fetch(PDO::FETCH_ASSOC);
+        if ($noDept && ((int)$noDept['employees'] > 0)) {
+            $rows[] = [
+                'id' => 0,
+                'name' => 'Sin departamento',
+                'employees' => (int)$noDept['employees'],
+                'active_employees' => (int)$noDept['active_employees']
+            ];
+        }
+
+        return $rows;
+    } catch (Exception $e) {
+        return [];
+    }
+}
+
+/**
+ * Construye listas top de campañas.
+ */
+function buildTopCampaigns($campaigns) {
+    $list = array_values($campaigns);
+
+    usort($list, function ($a, $b) {
+        $costA = ($a['total_cost_usd'] ?? 0) + ($a['total_cost_dop'] ?? 0);
+        $costB = ($b['total_cost_usd'] ?? 0) + ($b['total_cost_dop'] ?? 0);
+        return $costB <=> $costA;
+    });
+
+    $topByCost = array_slice($list, 0, 5);
+
+    usort($list, function ($a, $b) {
+        return ($b['total_hours'] ?? 0) <=> ($a['total_hours'] ?? 0);
+    });
+
+    $topByHours = array_slice($list, 0, 5);
+
+    return [
+        'by_cost' => $topByCost,
+        'by_hours' => $topByHours
+    ];
+}
+
+/**
+ * Obtiene métricas agregadas de calidad.
+ */
+function getQualityDashboardMetrics($qualityPdo, $startDate, $endDate) {
+    if (!$qualityPdo) {
+        return [
+            'available' => false,
+            'error' => 'No se pudo conectar con la base de calidad.'
+        ];
+    }
+
+    try {
+        $metricsStmt = $qualityPdo->prepare("
+            SELECT
+                COUNT(*) AS total_evaluations,
+                SUM(CASE WHEN call_id IS NOT NULL THEN 1 ELSE 0 END) AS audited_calls,
+                ROUND(AVG(percentage), 2) AS avg_percentage,
+                ROUND(MAX(percentage), 2) AS max_percentage,
+                ROUND(MIN(percentage), 2) AS min_percentage,
+                MAX(COALESCE(call_date, DATE(created_at))) AS last_eval_date,
+                COUNT(DISTINCT agent_id) AS agents_evaluated,
+                COUNT(DISTINCT campaign_id) AS campaigns_evaluated
+            FROM evaluations
+            WHERE DATE(created_at) BETWEEN ? AND ?
+        ");
+        $metricsStmt->execute([$startDate, $endDate]);
+        $metricsRow = $metricsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $aiStmt = $qualityPdo->prepare("
+            SELECT ROUND(AVG(ai.score), 2) AS avg_ai_score
+            FROM call_ai_analytics ai
+            INNER JOIN calls c ON c.id = ai.call_id
+            INNER JOIN evaluations e ON e.call_id = c.id
+            WHERE DATE(e.created_at) BETWEEN ? AND ?
+        ");
+        $aiStmt->execute([$startDate, $endDate]);
+        $avgAiScore = (float)($aiStmt->fetchColumn() ?: 0);
+
+        $callsStmt = $qualityPdo->prepare("
+            SELECT COUNT(*)
+            FROM calls
+            WHERE DATE(call_datetime) BETWEEN ? AND ?
+        ");
+        $callsStmt->execute([$startDate, $endDate]);
+        $totalCalls = (int)$callsStmt->fetchColumn();
+
+        $trendStmt = $qualityPdo->prepare("
+            SELECT DATE(created_at) as date,
+                   COUNT(*) as evaluations,
+                   ROUND(AVG(percentage), 2) as avg_score
+            FROM evaluations
+            WHERE DATE(created_at) BETWEEN ? AND ?
+            GROUP BY DATE(created_at)
+            ORDER BY DATE(created_at) ASC
+        ");
+        $trendStmt->execute([$startDate, $endDate]);
+        $trendRows = $trendStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $trendMap = [];
+        foreach ($trendRows as $row) {
+            $trendMap[$row['date']] = [
+                'date' => $row['date'],
+                'evaluations' => (int)$row['evaluations'],
+                'avg_score' => (float)$row['avg_score']
+            ];
+        }
+
+        $trend = [];
+        $period = new DatePeriod(
+            new DateTime($startDate),
+            new DateInterval('P1D'),
+            (new DateTime($endDate))->modify('+1 day')
+        );
+
+        foreach ($period as $date) {
+            $dateStr = $date->format('Y-m-d');
+            $trend[] = $trendMap[$dateStr] ?? [
+                'date' => $dateStr,
+                'evaluations' => 0,
+                'avg_score' => 0
+            ];
+        }
+
+        $campaignStmt = $qualityPdo->prepare("
+            SELECT
+                c.name as campaign_name,
+                COUNT(*) as evaluations,
+                ROUND(AVG(e.percentage), 2) as avg_score,
+                SUM(CASE WHEN e.call_id IS NOT NULL THEN 1 ELSE 0 END) AS audited_calls
+            FROM evaluations e
+            LEFT JOIN campaigns c ON c.id = e.campaign_id
+            WHERE DATE(e.created_at) BETWEEN ? AND ?
+            GROUP BY e.campaign_id, c.name
+            ORDER BY evaluations DESC
+            LIMIT 8
+        ");
+        $campaignStmt->execute([$startDate, $endDate]);
+        $campaigns = $campaignStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $topAgentsStmt = $qualityPdo->prepare("
+            SELECT
+                u.full_name,
+                u.username,
+                COUNT(*) as evaluations,
+                ROUND(AVG(e.percentage), 2) as avg_score
+            FROM evaluations e
+            INNER JOIN users u ON u.id = e.agent_id
+            WHERE DATE(e.created_at) BETWEEN ? AND ?
+            GROUP BY e.agent_id
+            ORDER BY avg_score DESC, evaluations DESC
+            LIMIT 5
+        ");
+        $topAgentsStmt->execute([$startDate, $endDate]);
+        $topAgents = $topAgentsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $bottomAgentsStmt = $qualityPdo->prepare("
+            SELECT
+                u.full_name,
+                u.username,
+                COUNT(*) as evaluations,
+                ROUND(AVG(e.percentage), 2) as avg_score
+            FROM evaluations e
+            INNER JOIN users u ON u.id = e.agent_id
+            WHERE DATE(e.created_at) BETWEEN ? AND ?
+            GROUP BY e.agent_id
+            ORDER BY avg_score ASC, evaluations DESC
+            LIMIT 5
+        ");
+        $bottomAgentsStmt->execute([$startDate, $endDate]);
+        $bottomAgents = $bottomAgentsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'available' => true,
+            'summary' => [
+                'total_evaluations' => (int)($metricsRow['total_evaluations'] ?? 0),
+                'audited_calls' => (int)($metricsRow['audited_calls'] ?? 0),
+                'avg_percentage' => (float)($metricsRow['avg_percentage'] ?? 0),
+                'max_percentage' => (float)($metricsRow['max_percentage'] ?? 0),
+                'min_percentage' => (float)($metricsRow['min_percentage'] ?? 0),
+                'last_eval_date' => $metricsRow['last_eval_date'] ?? null,
+                'agents_evaluated' => (int)($metricsRow['agents_evaluated'] ?? 0),
+                'campaigns_evaluated' => (int)($metricsRow['campaigns_evaluated'] ?? 0),
+                'avg_ai_score' => $avgAiScore,
+                'total_calls' => $totalCalls
+            ],
+            'trend' => $trend,
+            'by_campaign' => $campaigns,
+            'top_agents' => $topAgents,
+            'bottom_agents' => $bottomAgents
+        ];
+    } catch (Exception $e) {
+        return [
+            'available' => false,
             'error' => $e->getMessage()
         ];
     }
