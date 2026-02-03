@@ -734,7 +734,36 @@ if (!function_exists('createEmployeeSchedule')) {
             
             return (int) $pdo->lastInsertId();
         } catch (PDOException $e) {
-            return null;
+            try {
+                $stmt = $pdo->prepare("
+                    INSERT INTO employee_schedules (
+                        employee_id, user_id, schedule_name, entry_time, exit_time, 
+                        lunch_time, break_time, lunch_minutes, break_minutes, 
+                        scheduled_hours, is_active, effective_date, end_date, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+
+                $stmt->execute([
+                    $employeeId,
+                    $userId,
+                    $scheduleData['schedule_name'] ?? null,
+                    $scheduleData['entry_time'] ?? '10:00:00',
+                    $scheduleData['exit_time'] ?? '19:00:00',
+                    $scheduleData['lunch_time'] ?? '14:00:00',
+                    $scheduleData['break_time'] ?? '17:00:00',
+                    $scheduleData['lunch_minutes'] ?? 45,
+                    $scheduleData['break_minutes'] ?? 15,
+                    $scheduleData['scheduled_hours'] ?? 8.00,
+                    $scheduleData['is_active'] ?? 1,
+                    $scheduleData['effective_date'] ?? date('Y-m-d'),
+                    $scheduleData['end_date'] ?? null,
+                    $scheduleData['notes'] ?? null
+                ]);
+
+                return (int) $pdo->lastInsertId();
+            } catch (PDOException $fallbackError) {
+                return null;
+            }
         }
     }
 }

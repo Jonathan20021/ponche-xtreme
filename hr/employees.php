@@ -250,6 +250,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                 $scheduleAssignments = $decodedAssignments;
             }
         }
+        if (empty($scheduleAssignments) && $scheduleTemplateId) {
+            $stmt = $pdo->prepare("SELECT * FROM schedule_templates WHERE id = ? LIMIT 1");
+            $stmt->execute([$scheduleTemplateId]);
+            $template = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($template) {
+                $daysOfWeek = null;
+                if (!empty($_POST['schedule_days_edit']) && is_array($_POST['schedule_days_edit'])) {
+                    $days = array_filter(array_map('intval', $_POST['schedule_days_edit']));
+                    $daysOfWeek = $days ? implode(',', $days) : null;
+                }
+                $effectiveDate = !empty($_POST['assignment_effective_date_edit'])
+                    ? $_POST['assignment_effective_date_edit']
+                    : date('Y-m-d');
+                $endDate = !empty($_POST['assignment_end_date_edit']) ? $_POST['assignment_end_date_edit'] : null;
+                $scheduleAssignments[] = [
+                    'schedule_name' => $template['name'] ?? 'Horario',
+                    'entry_time' => $template['entry_time'] ?? null,
+                    'exit_time' => $template['exit_time'] ?? null,
+                    'lunch_time' => $template['lunch_time'] ?? null,
+                    'break_time' => $template['break_time'] ?? null,
+                    'lunch_minutes' => $template['lunch_minutes'] ?? 0,
+                    'break_minutes' => $template['break_minutes'] ?? 0,
+                    'scheduled_hours' => $template['scheduled_hours'] ?? 0,
+                    'effective_date' => $effectiveDate,
+                    'end_date' => $endDate,
+                    'notes' => $template['description'] ? "Asignado desde template: {$template['name']}" : null,
+                    'days_of_week' => $daysOfWeek
+                ];
+            }
+        }
 
         $oldSchedule = getEmployeeSchedule($pdo, $employeeId);
 
@@ -675,12 +705,12 @@ $terminatedEmployees = $pdo->query("
                 // Load current schedule AFTER modal is visible with longer delay
                 if (typeof loadEmployeeSchedule === 'function') {
                     setTimeout(() => {
-                        loadEmployeeSchedule(employee.id);
+                        loadEmployeeSchedule(employee.id, employee.user_id, employee.employee_code);
                     }, 200);
                 }
             };
             
-            window.loadEmployeeSchedule = function(employeeId) {
+            window.loadEmployeeSchedule = function(employeeId, userId, employeeCode) {
                 // Verify elements exist first
                 const scheduleInfo = document.getElementById('current_schedule_info');
                 const scheduleSelect = document.getElementById('edit_schedule_template_id');
@@ -702,7 +732,9 @@ $terminatedEmployees = $pdo->query("
                     return; // Exit if element doesn't exist
                 }
                 
-                fetch(`get_employee_schedule.php?employee_id=${employeeId}&include_all=1`)
+                const userParam = userId ? `&user_id=${userId}` : '';
+                const codeParam = employeeCode ? `&employee_code=${encodeURIComponent(employeeCode)}` : '';
+                fetch(`get_employee_schedule.php?employee_id=${employeeId}&include_all=1${userParam}${codeParam}`)
                     .then(response => response.json())
                     .then(data => {
                         // Double check element still exists
@@ -2005,25 +2037,25 @@ $terminatedEmployees = $pdo->query("
                         <label class="text-xs text-slate-400 block mb-2">Días de la semana (opcional)</label>
                         <div class="flex flex-wrap gap-2">
                             <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" value="1" data-schedule-day-edit> Lunes
+                                <input type="checkbox" name="schedule_days_edit[]" value="1" data-schedule-day-edit> Lunes
                             </label>
                             <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" value="2" data-schedule-day-edit> Martes
+                                <input type="checkbox" name="schedule_days_edit[]" value="2" data-schedule-day-edit> Martes
                             </label>
                             <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" value="3" data-schedule-day-edit> Miércoles
+                                <input type="checkbox" name="schedule_days_edit[]" value="3" data-schedule-day-edit> Miércoles
                             </label>
                             <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" value="4" data-schedule-day-edit> Jueves
+                                <input type="checkbox" name="schedule_days_edit[]" value="4" data-schedule-day-edit> Jueves
                             </label>
                             <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" value="5" data-schedule-day-edit> Viernes
+                                <input type="checkbox" name="schedule_days_edit[]" value="5" data-schedule-day-edit> Viernes
                             </label>
                             <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" value="6" data-schedule-day-edit> Sábado
+                                <input type="checkbox" name="schedule_days_edit[]" value="6" data-schedule-day-edit> Sábado
                             </label>
                             <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" value="7" data-schedule-day-edit> Domingo
+                                <input type="checkbox" name="schedule_days_edit[]" value="7" data-schedule-day-edit> Domingo
                             </label>
                         </div>
                         <p class="text-xs text-slate-500 mt-1">Si no seleccionas días, el horario aplicará todos los días.</p>

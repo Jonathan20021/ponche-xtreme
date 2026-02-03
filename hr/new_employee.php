@@ -51,6 +51,34 @@ if (isset($_POST['register'])) {
             $scheduleAssignments = $decodedAssignments;
         }
     }
+    if (empty($scheduleAssignments) && $schedule_template_id) {
+        $stmt = $pdo->prepare("SELECT * FROM schedule_templates WHERE id = ? LIMIT 1");
+        $stmt->execute([$schedule_template_id]);
+        $template = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($template) {
+            $daysOfWeek = null;
+            if (!empty($_POST['schedule_days_new']) && is_array($_POST['schedule_days_new'])) {
+                $days = array_filter(array_map('intval', $_POST['schedule_days_new']));
+                $daysOfWeek = $days ? implode(',', $days) : null;
+            }
+            $effectiveDate = !empty($_POST['assignment_effective_date']) ? $_POST['assignment_effective_date'] : $hire_date;
+            $endDate = !empty($_POST['assignment_end_date']) ? $_POST['assignment_end_date'] : null;
+            $scheduleAssignments[] = [
+                'schedule_name' => $template['name'] ?? 'Horario',
+                'entry_time' => $template['entry_time'] ?? null,
+                'exit_time' => $template['exit_time'] ?? null,
+                'lunch_time' => $template['lunch_time'] ?? null,
+                'break_time' => $template['break_time'] ?? null,
+                'lunch_minutes' => $template['lunch_minutes'] ?? 0,
+                'break_minutes' => $template['break_minutes'] ?? 0,
+                'scheduled_hours' => $template['scheduled_hours'] ?? 0,
+                'effective_date' => $effectiveDate,
+                'end_date' => $endDate,
+                'notes' => $template['description'] ? "Asignado desde template: {$template['name']}" : null,
+                'days_of_week' => $daysOfWeek
+            ];
+        }
+    }
     $password = !empty($_POST['password']) ? trim($_POST['password']) : 'defaultpassword';
     $role = !empty($_POST['role']) ? trim($_POST['role']) : 'AGENT';
     $hourly_rate_dop = !empty($_POST['hourly_rate_dop']) ? (float)$_POST['hourly_rate_dop'] : 0.00;
@@ -562,25 +590,25 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     <label class="text-xs text-slate-400 block mb-2">Días de la semana (opcional)</label>
                     <div class="flex flex-wrap gap-2">
                         <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                            <input type="checkbox" value="1" data-schedule-day-new> Lunes
+                            <input type="checkbox" name="schedule_days_new[]" value="1" data-schedule-day-new> Lunes
                         </label>
                         <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                            <input type="checkbox" value="2" data-schedule-day-new> Martes
+                            <input type="checkbox" name="schedule_days_new[]" value="2" data-schedule-day-new> Martes
                         </label>
                         <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                            <input type="checkbox" value="3" data-schedule-day-new> Miércoles
+                            <input type="checkbox" name="schedule_days_new[]" value="3" data-schedule-day-new> Miércoles
                         </label>
                         <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                            <input type="checkbox" value="4" data-schedule-day-new> Jueves
+                            <input type="checkbox" name="schedule_days_new[]" value="4" data-schedule-day-new> Jueves
                         </label>
                         <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                            <input type="checkbox" value="5" data-schedule-day-new> Viernes
+                            <input type="checkbox" name="schedule_days_new[]" value="5" data-schedule-day-new> Viernes
                         </label>
                         <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                            <input type="checkbox" value="6" data-schedule-day-new> Sábado
+                            <input type="checkbox" name="schedule_days_new[]" value="6" data-schedule-day-new> Sábado
                         </label>
                         <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                            <input type="checkbox" value="7" data-schedule-day-new> Domingo
+                            <input type="checkbox" name="schedule_days_new[]" value="7" data-schedule-day-new> Domingo
                         </label>
                     </div>
                     <p class="text-xs text-slate-500 mt-1">Si no seleccionas días, el horario aplicará todos los días.</p>
