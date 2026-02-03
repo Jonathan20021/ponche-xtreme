@@ -168,12 +168,17 @@ $empStmt = $pdo->query("SELECT id, full_name, username FROM users ORDER BY full_
 $employees = $empStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 // 2. Base Query Logic
-$usersQuery = "SELECT id, full_name, username, employee_code, department_id, role, hourly_rate, hourly_rate_dop FROM users"; // Added rates to select
+$usersQuery = "SELECT u.id, u.full_name, u.username, u.employee_code, u.department_id, u.role, u.hourly_rate, u.hourly_rate_dop, 
+    e.campaign_id, c.name as campaign_name, c.color as campaign_color 
+    FROM users u 
+    LEFT JOIN employees e ON e.user_id = u.id 
+    LEFT JOIN campaigns c ON c.id = e.campaign_id
+    WHERE u.is_active = 1";
 $params = [];
 $userIds = [];
 
 if ($employeeFilter !== 'all' && is_numeric($employeeFilter)) {
-    $usersQuery .= " WHERE id = ?";
+    $usersQuery .= " AND u.id = ?";
     $params[] = $employeeFilter;
 }
 $usersStmt = $pdo->prepare($usersQuery);
@@ -251,6 +256,9 @@ $totals = [
     'payroll_amount_dop' => 0.0
 ];
 
+// Campaign Hours Tracking
+$campaignHours = []; // campaign_id => ['scheduled_seconds' => X, 'real_net_seconds' => Y, 'payroll_seconds' => Z, 'campaign_name' => '', 'campaign_color' => '', 'employee_count' => 0]
+
 // Campaign Ops (Sales/Revenue/Volume)
 $campaignSalesRows = [];
 $campaignSalesTotals = [
@@ -273,16 +281,35 @@ $staffingSummary = [
 // Helper to resolve schedule from memory
 function resolveScheduleHours($map, $defaultConfig, $userId, $dateStr) {
     $totalHours = 0.0;
+    
+    // Get day of week from date (0=Sunday, 1=Monday, etc.)
+    $dayOfWeek = date('w', strtotime($dateStr));
+    // Convert to Spanish days used in system (Lunes, Martes, etc.)
+    $dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    $currentDay = $dayNames[$dayOfWeek];
 
     if (isset($map[$userId])) {
         foreach ($map[$userId] as $sch) {
-            // Check dates
-            // effective_date <= dateStr AND (end_date IS NULL OR end_date >= dateStr)
+            // Check dates: effective_date <= dateStr AND (end_date IS NULL OR end_date >= dateStr)
             $effDate = $sch['effective_date'] ?? '0000-00-00';
             $endDate = $sch['end_date'];
 
             if ($effDate <= $dateStr && ($endDate === null || $endDate >= $dateStr)) {
-                $totalHours += (float)($sch['scheduled_hours'] ?? 0);
+                // Check if this schedule applies to this day of week
+                $daysOfWeek = $sch['days_of_week'] ?? '';
+                
+                // If days_of_week is empty or null, assume it applies to all days
+                if (empty($daysOfWeek)) {
+                    $totalHours += (float)($sch['scheduled_hours'] ?? 0);
+                } else {
+                    // Check both formats: numeric (1,2,3) and text (Lunes,Martes,Miércoles)
+                    $matchesNumeric = strpos($daysOfWeek, (string)$dayOfWeek) !== false;
+                    $matchesText = strpos($daysOfWeek, $currentDay) !== false;
+                    
+                    if ($matchesNumeric || $matchesText) {
+                        $totalHours += (float)($sch['scheduled_hours'] ?? 0);
+                    }
+                }
             }
         }
     }
@@ -404,7 +431,9 @@ foreach ($users as $user) {
         'payroll_seconds' => $payrollSeconds,
         'scheduled_seconds' => $scheduledSeconds,
         'pay_usd' => $payUsd,
-        'pay_dop' => $payDop
+        'pay_dop' => $payDop,
+        'campaign_id' => $user['campaign_id'],
+        'campaign_name' => $user['campaign_name']
     ];
     
     $totals['real_gross_seconds'] += $realGrossSeconds;
@@ -413,6 +442,25 @@ foreach ($users as $user) {
     $totals['scheduled_seconds'] += $scheduledSeconds;
     $totals['payroll_amount_usd'] += $payUsd;
     $totals['payroll_amount_dop'] += $payDop;
+    
+    // Track hours by campaign
+    $campaignId = $user['campaign_id'];
+    if ($campaignId !== null) {
+        if (!isset($campaignHours[$campaignId])) {
+            $campaignHours[$campaignId] = [
+                'scheduled_seconds' => 0,
+                'real_net_seconds' => 0,
+                'payroll_seconds' => 0,
+                'campaign_name' => $user['campaign_name'] ?? 'Sin Nombre',
+                'campaign_color' => $user['campaign_color'] ?? '#64748b',
+                'employee_count' => 0
+            ];
+        }
+        $campaignHours[$campaignId]['scheduled_seconds'] += $scheduledSeconds;
+        $campaignHours[$campaignId]['real_net_seconds'] += $realNetSeconds;
+        $campaignHours[$campaignId]['payroll_seconds'] += $payrollSeconds;
+        $campaignHours[$campaignId]['employee_count']++;
+    }
 }
 
 // Campaign Ops data within selected range
@@ -585,6 +633,12 @@ include 'header.php';
                 class="px-5 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2">
                 <i class="fas fa-file-invoice-dollar"></i>
                 Payroll (TSS)
+            </button>
+            <button @click="activeTab = 'campaign_hours'"
+                :class="{ 'bg-indigo-600 text-white shadow-lg': activeTab === 'campaign_hours', 'text-slate-400 hover:text-white': activeTab !== 'campaign_hours' }"
+                class="px-5 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2">
+                <i class="fas fa-chart-pie"></i>
+                Campaign Hours
             </button>
             <button @click="activeTab = 'campaign_ops'"
                 :class="{ 'bg-amber-600 text-white shadow-lg': activeTab === 'campaign_ops', 'text-slate-400 hover:text-white': activeTab !== 'campaign_ops' }"
@@ -849,6 +903,80 @@ include 'header.php';
                                     <span class="<?= $color ?> font-medium font-mono text-xs">
                                         <?= $sign . formatDuration(abs($diff)) ?>
                                     </span>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB: CAMPAIGN HOURS -->
+        <div x-show="activeTab === 'campaign_hours'" style="display: none;" class="p-0">
+            <div class="p-6 border-b border-slate-700 bg-slate-800/50">
+                <h3 class="text-xl font-bold text-indigo-400">
+                    <i class="fas fa-chart-pie mr-2"></i> Horas por Campaña
+                </h3>
+                <p class="text-sm text-slate-400 mt-2">
+                    Distribución de horas planificadas, reales y pagables por campaña
+                </p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-900/50 text-slate-400 uppercase text-xs font-semibold">
+                        <tr>
+                            <th class="p-4">Campaña</th>
+                            <th class="p-4">Empleados</th>
+                            <th class="p-4">Horas Planificadas</th>
+                            <th class="p-4">Horas Reales (Net)</th>
+                            <th class="p-4">Horas Pagables</th>
+                            <th class="p-4">Adherencia</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+                        <?php if (empty($campaignHours)): ?>
+                            <tr><td colspan="6" class="p-8 text-center text-slate-500">
+                                No hay empleados asignados a campañas en el período seleccionado.
+                            </td></tr>
+                        <?php else: ?>
+                            <?php foreach ($campaignHours as $campaignId => $stats): ?>
+                            <?php 
+                                $schedHours = $stats['scheduled_seconds'];
+                                $realHours = $stats['real_net_seconds'];
+                                $payrollHours = $stats['payroll_seconds'];
+                                $adherence = $schedHours > 0 ? min(100, round(($realHours / $schedHours) * 100)) : 0;
+                                $barColor = $adherence >= 95 ? 'bg-emerald-500' : ($adherence >= 85 ? 'bg-amber-500' : 'bg-rose-500');
+                            ?>
+                            <tr class="hover:bg-slate-700/30 transition-colors">
+                                <td class="p-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-3 h-3 rounded-full" style="background-color: <?= htmlspecialchars($stats['campaign_color']) ?>"></div>
+                                        <div class="font-medium text-white"><?= htmlspecialchars($stats['campaign_name']) ?></div>
+                                    </div>
+                                </td>
+                                <td class="p-4">
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-700 text-slate-300 text-sm font-medium">
+                                        <i class="fas fa-users text-xs"></i>
+                                        <?= $stats['employee_count'] ?>
+                                    </span>
+                                </td>
+                                <td class="p-4">
+                                    <span class="font-mono text-violet-300"><?= formatDuration($schedHours) ?></span>
+                                </td>
+                                <td class="p-4">
+                                    <span class="font-mono text-cyan-300"><?= formatDuration($realHours) ?></span>
+                                </td>
+                                <td class="p-4">
+                                    <span class="font-mono text-emerald-300"><?= formatDuration($payrollHours) ?></span>
+                                </td>
+                                <td class="p-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-full max-w-[100px] h-2 bg-slate-700 rounded-full overflow-hidden">
+                                            <div class="h-full <?= $barColor ?>" style="width: <?= $adherence ?>%"></div>
+                                        </div>
+                                        <span class="text-xs font-bold <?= str_replace('bg-', 'text-', $barColor) ?>"><?= $adherence ?>%</span>
+                                    </div>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
