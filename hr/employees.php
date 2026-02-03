@@ -24,7 +24,7 @@ if (!function_exists('normalizeScheduleTimeValue')) {
 }
 
 // Handle employee schedule update
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) && !isset($_POST['update_employee'])) {
     $employeeId = (int)$_POST['employee_id'];
     $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
     $scheduleAssignmentsJson = trim($_POST['schedule_assignments_json'] ?? '');
