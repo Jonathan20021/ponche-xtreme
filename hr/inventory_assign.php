@@ -1,4 +1,9 @@
 <?php
+// Enable error reporting for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 session_start();
 require_once '../db.php';
 require_once '../lib/logging_functions.php';
@@ -87,12 +92,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Get Data - Get ALL active employees without limits
-$employees = $pdo->query("
-    SELECT id, first_name, last_name, employee_code, department 
-    FROM employees 
-    WHERE employment_status = 'ACTIVE' 
-    ORDER BY first_name, last_name
-")->fetchAll(PDO::FETCH_ASSOC);
+try {
+    // Try with department first
+    $employees = $pdo->query("
+        SELECT id, first_name, last_name, employee_code, 
+               COALESCE(department, '') as department 
+        FROM employees 
+        WHERE employment_status = 'ACTIVE' 
+        ORDER BY first_name, last_name
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    // Fallback without department if column doesn't exist
+    $employees = $pdo->query("
+        SELECT id, first_name, last_name, employee_code,
+               '' as department
+        FROM employees 
+        WHERE employment_status = 'ACTIVE' 
+        ORDER BY first_name, last_name
+    ")->fetchAll(PDO::FETCH_ASSOC);
+}
 
 // Get Item Types grouped by category
 $itemsQuery = $pdo->query("
