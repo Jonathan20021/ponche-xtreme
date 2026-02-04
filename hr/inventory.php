@@ -183,6 +183,21 @@ $stats = [
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../assets/css/theme.css" rel="stylesheet">
+    <style>
+        /* Modal styles to ensure visibility */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            z-index: 50;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background-color: #0f172a !important;
+            border: 1px solid #334155;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+    </style>
 </head>
 
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -471,10 +486,11 @@ $stats = [
 
     <!-- Edit Modal -->
     <div id="editModal"
-        class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 backdrop-blur-sm">
-        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button onclick="closeEditModal()" class="absolute top-4 right-4 text-slate-500 hover:text-white">
-                <i class="fas fa-times"></i>
+        class="modal-backdrop hidden flex items-center justify-center"
+        style="display: none;">
+        <div class="modal-content rounded-xl p-6 w-full max-w-2xl relative max-h-[90vh] overflow-y-auto">
+            <button onclick="closeEditModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+                <i class="fas fa-times text-xl"></i>
             </button>
 
             <h3 class="text-xl font-bold text-white mb-4"><i class="fas fa-edit mr-2"></i>Editar Artículo</h3>
@@ -536,10 +552,11 @@ $stats = [
 
     <!-- Return Modal -->
     <div id="returnModal"
-        class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 backdrop-blur-sm">
-        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl relative">
-            <button onclick="closeReturnModal()" class="absolute top-4 right-4 text-slate-500 hover:text-white">
-                <i class="fas fa-times"></i>
+        class="modal-backdrop hidden flex items-center justify-center"
+        style="display: none;">
+        <div class="modal-content rounded-xl p-6 w-full max-w-md relative">
+            <button onclick="closeReturnModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+                <i class="fas fa-times text-xl"></i>
             </button>
 
             <h3 class="text-xl font-bold text-white mb-4">Confirmar Devolución</h3>
@@ -576,22 +593,47 @@ $stats = [
             document.getElementById('edit_details').value = item.details || '';
             document.getElementById('edit_uuid').value = item.uuid || '';
             document.getElementById('edit_status').value = item.status;
-            document.getElementById('editModal').classList.remove('hidden');
+            
+            const modal = document.getElementById('editModal');
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
         }
 
         function closeEditModal() {
-            document.getElementById('editModal').classList.add('hidden');
+            const modal = document.getElementById('editModal');
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
         }
 
         function openReturnModal(id, name) {
             document.getElementById('return_inventory_id').value = id;
             document.getElementById('return_item_name').textContent = name;
-            document.getElementById('returnModal').classList.remove('hidden');
+            
+            const modal = document.getElementById('returnModal');
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
         }
 
         function closeReturnModal() {
-            document.getElementById('returnModal').classList.add('hidden');
+            const modal = document.getElementById('returnModal');
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
         }
+
+        // Close modals when clicking outside
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('editModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeEditModal();
+                }
+            });
+            
+            document.getElementById('returnModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeReturnModal();
+                }
+            });
+        });
     </script>
 </body>
 
