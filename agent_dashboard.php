@@ -329,36 +329,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
         ['type' => $typeSlug, 'ip_address' => $ip_address, 'authorization_code_id' => $authorizationCodeId]
     );
     
-    // Send Slack notification
-    $slack_webhook_url = 'https://hooks.slack.com/services/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';
-    $current_timestamp = date('Y-m-d H:i:s');
-    $color = sanitizeHexColorValue($selectedTypeMeta['color_start'] ?? null, '#6366F1');
-    
-    $message = [
-        "text" => "New Punch Recorded",
-        "attachments" => [
-            [
-                "color" => $color,
-                "fields" => [
-                    ["title" => "Full Name", "value" => $full_name, "short" => true],
-                    ["title" => "Username", "value" => $username, "short" => true],
-                    ["title" => "Type", "value" => "{$typeLabel} ({$typeSlug})", "short" => true],
-                    ["title" => "IP Address", "value" => $ip_address, "short" => true],
-                    ["title" => "Timestamp", "value" => $current_timestamp, "short" => true],
-                ]
-            ]
-        ]
-    ];
-    
-    $ch = curl_init($slack_webhook_url);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($message));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_exec($ch);
-    curl_close($ch);
-    
     // Set success message and redirect
     $_SESSION['punch_success'] = "¡Asistencia registrada exitosamente como {$typeLabel}!";
     header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
