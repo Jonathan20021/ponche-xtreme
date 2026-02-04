@@ -214,10 +214,10 @@ function formatDuration(?int $seconds): string
                 <p class="metric-sub">Rango de desempeño</p>
             </article>
             <article class="metric-card" style="--metric-start:#14b8a6; --metric-end:#0f766e;">
-                <div class="metric-icon"><i class="fas fa-robot"></i></div>
-                <p class="metric-label">Score AI</p>
+                <div class="metric-icon"><i class="fas fa-chart-bar"></i></div>
+                <p class="metric-label">Score Analítico</p>
                 <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_ai_score'], 2) ?></p>
-                <p class="metric-sub">Promedio analítica</p>
+                <p class="metric-sub">Promedio QA</p>
             </article>
             <article class="metric-card" style="--metric-start:#64748b; --metric-end:#334155;">
                 <div class="metric-icon"><i class="fas fa-calendar-alt"></i></div>
@@ -231,7 +231,7 @@ function formatDuration(?int $seconds): string
             <header class="flex items-center justify-between gap-4 mb-4">
                 <div>
                     <h2 class="text-lg font-semibold text-primary">Auditorías detalladas</h2>
-                    <p class="text-sm text-muted">Incluye resumen completo, análisis AI y audio.</p>
+                    <p class="text-sm text-muted">Incluye resumen completo, análisis QA y audio.</p>
                 </div>
                 <span class="badge badge--info"><?= count($qualityAudits) ?> registros</span>
             </header>
@@ -266,7 +266,7 @@ function formatDuration(?int $seconds): string
                                 <div class="flex flex-col gap-2 min-w-[260px]">
                                     <div class="text-sm text-slate-400">
                                         <div><strong>Duración:</strong> <?= htmlspecialchars(formatDuration($audit['duration_seconds'])) ?></div>
-                                        <div><strong>AI:</strong> <?= $audit['ai_score'] !== null ? number_format((float) $audit['ai_score'], 2) : 'N/A' ?></div>
+                                        <div><strong>Score QA:</strong> <?= $audit['ai_score'] !== null ? number_format((float) $audit['ai_score'], 2) : 'N/A' ?></div>
                                         <?php if (!empty($audit['customer_phone'])): ?>
                                             <div><strong>Cliente:</strong> <?= htmlspecialchars($audit['customer_phone']) ?></div>
                                         <?php endif; ?>
@@ -306,7 +306,7 @@ function formatDuration(?int $seconds): string
 
                             <?php if (!empty($metricsArray)): ?>
                                 <div class="mt-4">
-                                    <h4 class="text-sm font-semibold text-primary mb-2">Métricas AI</h4>
+                                    <h4 class="text-sm font-semibold text-primary mb-2">Métricas de Análisis</h4>
                                     <div class="flex flex-wrap gap-2">
                                         <?php foreach ($metricsArray as $key => $value): ?>
                                             <?php if (is_scalar($value)): ?>

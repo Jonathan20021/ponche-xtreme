@@ -871,10 +871,10 @@ $chartColorsJson = json_encode($chartColors);
                     <p class="metric-sub">Rango de desempeño</p>
                 </div>
                 <div class="metric-card" style="--metric-start: #14b8a6; --metric-end: #0f766e;">
-                    <div class="metric-icon"><i class="fas fa-robot"></i></div>
-                    <p class="metric-label">Score AI</p>
+                    <div class="metric-icon"><i class="fas fa-chart-bar"></i></div>
+                    <p class="metric-label">Score Analítico</p>
                     <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_ai_score'], 2) ?></p>
-                    <p class="metric-sub">Promedio analítica</p>
+                    <p class="metric-sub">Promedio QA</p>
                 </div>
                 <div class="metric-card" style="--metric-start: #64748b; --metric-end: #334155;">
                     <div class="metric-icon"><i class="fas fa-calendar-alt"></i></div>
@@ -900,7 +900,7 @@ $chartColorsJson = json_encode($chartColors);
                         <th>Fecha</th>
                         <th>Campaña</th>
                         <th>Score</th>
-                        <th>AI</th>
+                        <th>Score QA</th>
                         <th>Resumen</th>
                         <th>Audio</th>
                     </tr>
