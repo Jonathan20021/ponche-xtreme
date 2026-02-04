@@ -86,8 +86,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get Data
-$employees = $pdo->query("SELECT id, first_name, last_name, employee_code FROM employees WHERE employment_status = 'ACTIVE' ORDER BY first_name")->fetchAll(PDO::FETCH_ASSOC);
+// Get Data - Get ALL active employees without limits
+$employees = $pdo->query("
+    SELECT id, first_name, last_name, employee_code, department 
+    FROM employees 
+    WHERE employment_status = 'ACTIVE' 
+    ORDER BY first_name, last_name
+")->fetchAll(PDO::FETCH_ASSOC);
 
 // Get Item Types grouped by category
 $itemsQuery = $pdo->query("
@@ -111,7 +116,39 @@ while ($row = $itemsQuery->fetch(PDO::FETCH_ASSOC)) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="../assets/css/theme.css" rel="stylesheet">
+    <style>
+        .select2-container--default .select2-selection--single {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            height: 48px;
+            padding: 8px;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: white;
+            line-height: 32px;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 46px;
+        }
+        .select2-dropdown {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+        }
+        .select2-container--default .select2-results__option {
+            color: #cbd5e1;
+        }
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #0891b2;
+        }
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+        }
+    </style>
 </head>
 
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -140,18 +177,22 @@ while ($row = $itemsQuery->fetch(PDO::FETCH_ASSOC)) {
             <div class="glass-card p-6">
                 <form method="POST">
                     <div class="form-group mb-4">
-                        <label class="block text-slate-300 mb-2">Empleado</label>
-                        <select name="employee_id"
+                        <label class="block text-slate-300 mb-2">Empleado *</label>
+                        <select name="employee_id" id="employee_id"
                             class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-500"
                             required>
-                            <option value="">Seleccionar Empleado...</option>
+                            <option value="">Buscar y seleccionar empleado...</option>
                             <?php foreach ($employees as $emp): ?>
                                 <option value="<?= $emp['id'] ?>" <?= (isset($employeeId) && $employeeId == $emp['id']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($emp['first_name'] . ' ' . $emp['last_name']) ?> (
-                                    <?= $emp['employee_code'] ?>)
+                                    <?= htmlspecialchars($emp['first_name'] . ' ' . $emp['last_name']) ?> - 
+                                    <?= htmlspecialchars($emp['employee_code']) ?> 
+                                    <?= !empty($emp['department']) ? '(' . htmlspecialchars($emp['department']) . ')' : '' ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <small class="text-slate-500 text-xs mt-1 block">
+                            <i class="fas fa-info-circle"></i> Escribe para buscar por nombre, código o departamento
+                        </small>
                     </div>
 
                     <div class="form-group mb-4">
@@ -207,6 +248,27 @@ while ($row = $itemsQuery->fetch(PDO::FETCH_ASSOC)) {
             </div>
         </div>
     </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Initialize Select2 for employee selection
+            $('#employee_id').select2({
+                placeholder: 'Buscar y seleccionar empleado...',
+                allowClear: true,
+                width: '100%',
+                language: {
+                    noResults: function() {
+                        return "No se encontraron empleados";
+                    },
+                    searching: function() {
+                        return "Buscando...";
+                    }
+                }
+            });
+        });
+    </script>
 </body>
 
 </html>

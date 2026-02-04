@@ -9,6 +9,42 @@ ensurePermission('hr_employees', '../unauthorized.php');
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
+// Handle Edit Item
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_item'])) {
+    $inventoryId = (int) $_POST['inventory_id'];
+    $details = trim($_POST['details']);
+    $uuid = trim($_POST['uuid']) ?: null;
+    $status = $_POST['status'];
+    $notes = trim($_POST['notes']);
+
+    try {
+        $stmt = $pdo->prepare("
+            UPDATE employee_inventory 
+            SET details = ?, uuid = ?, status = ?, notes = CONCAT(COALESCE(notes, ''), '\n[Editado: ', NOW(), '] ', ?)
+            WHERE id = ?
+        ");
+        $stmt->execute([$details, $uuid, $status, $notes, $inventoryId]);
+        $successMsg = "Artículo actualizado correctamente.";
+
+        if (function_exists('log_custom_action')) {
+            log_custom_action(
+                $pdo,
+                $_SESSION['user_id'] ?? null,
+                $_SESSION['full_name'] ?? 'Sistema',
+                $_SESSION['role'] ?? 'system',
+                'inventory',
+                'update',
+                "Inventario editado ID: $inventoryId",
+                'employee_inventory',
+                $inventoryId,
+                ['details' => $details, 'status' => $status]
+            );
+        }
+    } catch (Exception $e) {
+        $errorMsg = "Error al actualizar artículo: " . $e->getMessage();
+    }
+}
+
 // Handle return item
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['return_item'])) {
     $inventoryId = (int) $_POST['inventory_id'];
@@ -101,6 +137,23 @@ if ($employeeIdFilter > 0) {
 }
 
 $query .= " ORDER BY ei.assigned_date DESC";
+
+// Pagination
+$itemsPerPage = 20;
+$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$offset = ($page - 1) * $itemsPerPage;
+
+// Count total records
+$countQuery = "SELECT COUNT(*) FROM (" . $query . ") as total_count";
+$countStmt = $pdo->prepare($countQuery);
+$countStmt->execute($params);
+$totalItems = $countStmt->fetchColumn();
+$totalPages = ceil($totalItems / $itemsPerPage);
+
+// Add pagination to query
+$query .= " LIMIT ? OFFSET ?";
+$params[] = $itemsPerPage;
+$params[] = $offset;
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -338,14 +391,22 @@ $stats = [
                                         </span>
                                     </td>
                                     <td class="p-4 text-right">
-                                        <?php if ($item['status'] === 'ASSIGNED'): ?>
+                                        <div class="flex gap-2 justify-end">
                                             <button
-                                                onclick="openReturnModal(<?= (int) $item['id'] ?>, <?= json_encode($item['item_name']) ?>)"
-                                                class="text-green-400 hover:text-green-300 transition-colors"
-                                                title="Marcar Devuelto">
-                                                <i class="fas fa-undo"></i>
+                                                onclick="openEditModal(<?= htmlspecialchars(json_encode($item), ENT_QUOTES, 'UTF-8') ?>)"
+                                                class="text-blue-400 hover:text-blue-300 transition-colors"
+                                                title="Editar">
+                                                <i class="fas fa-edit"></i>
                                             </button>
-                                        <?php endif; ?>
+                                            <?php if ($item['status'] === 'ASSIGNED'): ?>
+                                                <button
+                                                    onclick="openReturnModal(<?= (int) $item['id'] ?>, <?= json_encode($item['item_name']) ?>)"
+                                                    class="text-green-400 hover:text-green-300 transition-colors"
+                                                    title="Marcar Devuelto">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -353,6 +414,123 @@ $stats = [
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination -->
+            <?php if ($totalPages > 1): ?>
+                <div class="flex justify-center items-center gap-2 p-4 border-t border-slate-700">
+                    <?php if ($page > 1): ?>
+                        <a href="?<?= http_build_query(array_merge($_GET, ['page' => $page - 1])) ?>"
+                            class="px-3 py-2 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors">
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </a>
+                    <?php endif; ?>
+
+                    <div class="flex gap-1">
+                        <?php
+                        $startPage = max(1, $page - 2);
+                        $endPage = min($totalPages, $page + 2);
+                        
+                        if ($startPage > 1): ?>
+                            <a href="?<?= http_build_query(array_merge($_GET, ['page' => 1])) ?>"
+                                class="px-3 py-2 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors">1</a>
+                            <?php if ($startPage > 2): ?>
+                                <span class="px-3 py-2 text-slate-500">...</span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+
+                        <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                            <a href="?<?= http_build_query(array_merge($_GET, ['page' => $i])) ?>"
+                                class="px-3 py-2 rounded transition-colors <?= $i === $page ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700' ?>">
+                                <?= $i ?>
+                            </a>
+                        <?php endfor; ?>
+
+                        <?php if ($endPage < $totalPages): ?>
+                            <?php if ($endPage < $totalPages - 1): ?>
+                                <span class="px-3 py-2 text-slate-500">...</span>
+                            <?php endif; ?>
+                            <a href="?<?= http_build_query(array_merge($_GET, ['page' => $totalPages])) ?>"
+                                class="px-3 py-2 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors"><?= $totalPages ?></a>
+                        <?php endif; ?>
+                    </div>
+
+                    <?php if ($page < $totalPages): ?>
+                        <a href="?<?= http_build_query(array_merge($_GET, ['page' => $page + 1])) ?>"
+                            class="px-3 py-2 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors">
+                            Siguiente <i class="fas fa-chevron-right"></i>
+                        </a>
+                    <?php endif; ?>
+
+                    <span class="ml-4 text-slate-400 text-sm">
+                        Página <?= $page ?> de <?= $totalPages ?> (<?= $totalItems ?> registros)
+                    </span>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal"
+        class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button onclick="closeEditModal()" class="absolute top-4 right-4 text-slate-500 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <h3 class="text-xl font-bold text-white mb-4"><i class="fas fa-edit mr-2"></i>Editar Artículo</h3>
+
+            <form method="POST">
+                <input type="hidden" name="edit_item" value="1">
+                <input type="hidden" name="inventory_id" id="edit_inventory_id">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label class="text-slate-300">Empleado</label>
+                        <input type="text" id="edit_employee_name" readonly
+                            class="w-full bg-slate-700 border-slate-600 rounded text-slate-400 cursor-not-allowed">
+                    </div>
+                    <div class="form-group">
+                        <label class="text-slate-300">Artículo</label>
+                        <input type="text" id="edit_item_name" readonly
+                            class="w-full bg-slate-700 border-slate-600 rounded text-slate-400 cursor-not-allowed">
+                    </div>
+                </div>
+
+                <div class="form-group mb-4">
+                    <label class="text-slate-300">Detalles / Descripción *</label>
+                    <input type="text" name="details" id="edit_details" required
+                        class="w-full bg-slate-800 border-slate-700 rounded text-white">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label class="text-slate-300">Código / Serial / Tag</label>
+                        <input type="text" name="uuid" id="edit_uuid"
+                            class="w-full bg-slate-800 border-slate-700 rounded text-white">
+                    </div>
+                    <div class="form-group">
+                        <label class="text-slate-300">Estado *</label>
+                        <select name="status" id="edit_status" required
+                            class="w-full bg-slate-800 border-slate-700 rounded text-white">
+                            <option value="ASSIGNED">Asignado</option>
+                            <option value="RETURNED">Devuelto</option>
+                            <option value="LOST">Perdido</option>
+                            <option value="DAMAGED">Dañado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group mb-6">
+                    <label class="text-slate-300">Notas de edición</label>
+                    <textarea name="notes" class="w-full bg-slate-800 border-slate-700 rounded text-white"
+                        rows="2" placeholder="Describe los cambios realizados..."></textarea>
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeEditModal()" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary"><i class="fas fa-save mr-2"></i>Guardar Cambios</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -391,6 +569,20 @@ $stats = [
     </div>
 
     <script>
+        function openEditModal(item) {
+            document.getElementById('edit_inventory_id').value = item.id;
+            document.getElementById('edit_employee_name').value = item.employee_name + ' (' + item.employee_code + ')';
+            document.getElementById('edit_item_name').value = item.item_name;
+            document.getElementById('edit_details').value = item.details || '';
+            document.getElementById('edit_uuid').value = item.uuid || '';
+            document.getElementById('edit_status').value = item.status;
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
         function openReturnModal(id, name) {
             document.getElementById('return_inventory_id').value = id;
             document.getElementById('return_item_name').textContent = name;
