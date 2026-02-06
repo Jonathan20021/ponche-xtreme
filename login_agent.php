@@ -60,46 +60,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/theme.css" rel="stylesheet">
-    <title>Acceso de Agentes</title>
+    <title>Acceso de Agentes - Evallish BPO</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
-    <div class="login-wrapper">
-        <div class="login-card glass-card" style="width: min(400px, 100%);">
-            <div class="text-center mb-5">
-                <span class="tag-pill">Acceso agente</span>
-                <h2 class="mt-3 font-semibold text-white">Bienvenido de nuevo</h2>
-                <p class="text-sm text-slate-400">Ingresa tu usuario y contraseña para registrar tus actividades.</p>
+    <div class="split-login-container">
+        <div class="split-login-wrapper">
+            <!-- Left Panel - Brand -->
+            <div class="split-panel brand-panel">
+                <div class="brand-content">
+                    <img src="assets/logo.png" alt="Evallish BPO" class="panel-logo">
+                    <h1 class="panel-title">Portal de<br>Agentes</h1>
+                    <p class="panel-description">Registra tus entradas, salidas y actividades diarias de manera rápida y sencilla.</p>
+                    
+                    <div class="features-list">
+                        <div class="feature-item">
+                            <i class="fas fa-fingerprint"></i>
+                            <span>Registro rápido de asistencia</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-calendar-check"></i>
+                            <span>Consulta tu historial</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-mobile-alt"></i>
+                            <span>Acceso desde cualquier dispositivo</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <?php if ($error): ?>
-                <div class="status-banner error"><?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
-            <form method="POST" class="space-y-4">
-                <div class="form-group">
-                    <label for="username">Usuario</label>
-                    <input type="text" name="username" id="username" autocomplete="username" required placeholder="ej. agente01">
+            
+            <!-- Right Panel - Login Form -->
+            <div class="split-panel form-panel">
+                <div class="form-content">
+                    <div class="form-icon">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    
+                    <div class="form-header">
+                        <span class="form-welcome">Bienvenido</span>
+                        <h2 class="form-title">Acceso al sistema</h2>
+                        <p class="form-subtitle">Ingresa tus credenciales para continuar</p>
+                    </div>
+                    
+                    <?php if ($error): ?>
+                        <div class="form-error">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span><?= htmlspecialchars($error) ?></span>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <form method="POST" class="split-form">
+                        <div class="form-field-split">
+                            <label for="username">Usuario</label>
+                            <input 
+                                type="text" 
+                                name="username" 
+                                id="username" 
+                                autocomplete="username" 
+                                required 
+                                placeholder="usuario@empresa"
+                            >
+                        </div>
+                        
+                        <div class="form-field-split">
+                            <label for="password">Contraseña</label>
+                            <input 
+                                type="password" 
+                                name="password" 
+                                id="password" 
+                                autocomplete="current-password" 
+                                required 
+                                placeholder="••••••••"
+                            >
+                        </div>
+                        
+                        <button type="submit" class="split-submit-btn">
+                            Iniciar sesión
+                        </button>
+                        
+                        <a href="password_recovery_agent.php" class="split-forgot-link">
+                            <i class="fas fa-key"></i>
+                            ¿Olvidaste tu contraseña?
+                        </a>
+                    </form>
+                    
+                    <form action="theme_toggle.php" method="post" class="theme-switch-inline">
+                        <button type="submit" class="theme-btn-inline">
+                            <i class="fas fa-adjust"></i>
+                            <?= htmlspecialchars($themeLabel) ?>
+                        </button>
+                    </form>
+                    
+                    <div class="form-footer-text">
+                        <p>&copy; 2026 Evallish BPO. Todos los derechos reservados.</p>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="password">Contraseña</label>
-                    <input type="password" name="password" id="password" autocomplete="current-password" required placeholder="Tu contraseña">
-                </div>
-                <button type="submit" class="w-full btn-primary justify-center">
-                    <i class="fas fa-sign-in-alt"></i>
-                    Entrar
-                </button>
-                <div class="text-center mt-3">
-                    <a href="password_recovery_agent.php" class="text-sm text-blue-400 hover:text-blue-300">
-                        <i class="fas fa-key"></i>
-                        ¿Olvidaste tu contraseña?
-                    </a>
-                </div>
-            </form>
+            </div>
         </div>
-        <form action="theme_toggle.php" method="post" class="mt-6">
-            <button type="submit" class="btn-secondary px-4 py-2 rounded-lg inline-flex items-center gap-2">
-                <i class="fas fa-adjust text-sm"></i>
-                <span><?= htmlspecialchars($themeLabel) ?></span>
-            </button>
-        </form>
     </div>
 </body>
 </html>

@@ -82,41 +82,111 @@ if (isset($_POST['login'])) {
         $error = "Credenciales invalidas.";
     }
 }
-
-include 'header.php';
 ?>
-    <section class="login-wrapper">
-        <div class="login-card glass-card">
-            <div class="text-center mb-5">
-                <span class="tag-pill">Portal Administrativo</span>
-                <h2 class="mt-3 font-semibold text-white text-balance">Inicia sesion para acceder al panel de control</h2>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/theme.css" rel="stylesheet">
+    <title>Evallish BPO - Sistema de Control de Asistencia</title>
+</head>
+<body>
+    <div class="split-login-container">
+        <div class="split-login-wrapper">
+            <!-- Left Panel - Brand -->
+            <div class="split-panel brand-panel">
+                <div class="brand-content">
+                    <img src="assets/logo.png" alt="Evallish BPO" class="panel-logo">
+                    <h1 class="panel-title">Sistema de Control<br>de Asistencia</h1>
+                    <p class="panel-description">Gestiona entradas, salidas y registros de personal con precisión y eficiencia.</p>
+                    
+                    <div class="features-list">
+                        <div class="feature-item">
+                            <i class="fas fa-clock"></i>
+                            <span>Registro en tiempo real</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Reportes y analíticas avanzadas</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Sistema seguro y confiable</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <?php if (isset($error)): ?>
-                <div class="status-banner error"><?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
-            <form method="POST" class="space-y-4">
-                <div class="form-group">
-                    <label for="username">Usuario</label>
-                    <input type="text" name="username" id="username" autocomplete="username" required placeholder="ej. admin">
+            
+            <!-- Right Panel - Login Form -->
+            <div class="split-panel form-panel">
+                <div class="form-content">
+                    <div class="form-icon">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    
+                    <div class="form-header">
+                        <span class="form-welcome">Bienvenido</span>
+                        <h2 class="form-title">Acceso al sistema</h2>
+                        <p class="form-subtitle">Ingresa tus credenciales para continuar</p>
+                    </div>
+                    
+                    <?php if (isset($error)): ?>
+                        <div class="form-error">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span><?= htmlspecialchars($error) ?></span>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <form method="POST" class="split-form">
+                        <div class="form-field-split">
+                            <label for="username">Usuario</label>
+                            <input 
+                                type="text" 
+                                name="username" 
+                                id="username" 
+                                autocomplete="username" 
+                                required 
+                                placeholder="usuario@empresa"
+                            >
+                        </div>
+                        
+                        <div class="form-field-split">
+                            <label for="password">Contraseña</label>
+                            <input 
+                                type="password" 
+                                name="password" 
+                                id="password" 
+                                autocomplete="current-password" 
+                                required 
+                                placeholder="••••••••"
+                            >
+                        </div>
+                        
+                        <button type="submit" name="login" class="split-submit-btn">
+                            Iniciar sesión
+                        </button>
+                        
+                        <a href="password_recovery.php" class="split-forgot-link">
+                            <i class="fas fa-key"></i>
+                            ¿Olvidaste tu contraseña?
+                        </a>
+                    </form>
+                    
+                    <div class="form-footer-text">
+                        <p>&copy; 2026 Evallish BPO. Todos los derechos reservados.</p>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="password">Contrasena</label>
-                    <input type="password" name="password" id="password" autocomplete="current-password" required placeholder="Tu contrasena">
-                </div>
-                <button type="submit" name="login" class="w-full btn-primary justify-center">
-                    <i class="fas fa-unlock-alt"></i>
-                    Ingresar
-                </button>
-                <div class="text-center mt-3">
-                    <a href="password_recovery.php" class="text-sm text-blue-400 hover:text-blue-300">
-                        <i class="fas fa-key"></i>
-                        ¿Olvidaste tu contraseña?
-                    </a>
-                </div>
-            </form>
+            </div>
         </div>
-    </section>
-<?php include 'footer.php'; ?>
+    </div>
+</body>
+</html>
 
 
 

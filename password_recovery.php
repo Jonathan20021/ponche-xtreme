@@ -105,6 +105,7 @@ if (!in_array($theme, ['dark', 'light'], true)) {
     $theme = 'dark';
 }
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
+$themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -116,51 +117,77 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="assets/css/theme.css" rel="stylesheet">
+    <link href="assets/css/theme.css?v=<?= time() ?>" rel="stylesheet">
     <title>Recuperar Contraseña - Administración</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
-    <div class="login-wrapper">
-        <div class="login-card glass-card" style="width: min(450px, 100%);">
-            <div class="text-center mb-5">
-                <span class="tag-pill">
-                    <i class="fas fa-key"></i>
-                    Recuperar Contraseña
-                </span>
-                <h2 class="mt-3 font-semibold text-white">
-                    <?= $step === 'verify' ? 'Verifica tu Identidad' : 'Nueva Contraseña' ?>
-                </h2>
-                <p class="text-sm text-slate-400">
-                    <?= $step === 'verify' 
-                        ? 'Ingresa tu usuario y número de cédula para verificar tu identidad.' 
-                        : 'Ingresa tu nueva contraseña.' ?>
-                </p>
+    <div class="split-login-container">
+        <div class="split-login-wrapper">
+            <!-- Left Panel - Brand -->
+            <div class="split-panel brand-panel">
+                <div class="brand-content">
+                    <img src="assets/logo.png" alt="Evallish BPO" class="panel-logo">
+                    <h1 class="panel-title">Recuperación<br>de Contraseña</h1>
+                    <p class="panel-description">Sigue los pasos para restablecer tu contraseña de forma segura.</p>
+                    
+                    <div class="features-list">
+                        <div class="feature-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Verificación de identidad segura</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-lock"></i>
+                            <span>Proceso protegido y confidencial</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Rápido y fácil de completar</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             
+            <!-- Right Panel - Recovery Form -->
+            <div class="split-panel form-panel">
+                <div class="form-content">
+                    <div class="form-icon">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    
+                    <div class="form-header">
+                        <span class="form-welcome"><?= $step === 'verify' ? 'Paso 1 de 2' : 'Paso 2 de 2' ?></span>
+                        <h2 class="form-title"><?= $step === 'verify' ? 'Verifica tu identidad' : 'Nueva contraseña' ?></h2>
+                        <p class="form-subtitle">
+                            <?= $step === 'verify' 
+                                ? 'Ingresa tu usuario y número de cédula' 
+                                : 'Crea tu nueva contraseña segura' ?>
+                        </p>
+                    </div>
+            
             <?php if ($error): ?>
-                <div class="status-banner error">
-                    <i class="fas fa-exclamation-circle"></i>
+                <div class="alert alert-danger" role="alert" style="margin-bottom: 1.5rem;">
+                    <i class="fas fa-exclamation-circle" style="margin-right: 0.5rem;"></i>
                     <?= htmlspecialchars($error) ?>
                 </div>
             <?php endif; ?>
             
             <?php if ($success): ?>
-                <div class="status-banner success">
-                    <i class="fas fa-check-circle"></i>
+                <div class="alert alert-success" role="alert" style="margin-bottom: 1.5rem;">
+                    <i class="fas fa-check-circle" style="margin-right: 0.5rem;"></i>
                     <?= htmlspecialchars($success) ?>
                 </div>
-                <div class="mt-4 text-center">
-                    <a href="index.php" class="btn-primary inline-flex items-center gap-2">
+                <div style="text-align: center; margin-top: 1.5rem;">
+                    <a href="index.php" class="split-submit-btn" style="display: inline-flex; text-decoration: none; width: auto; padding: 0.875rem 2rem;">
                         <i class="fas fa-sign-in-alt"></i>
                         Ir a Iniciar Sesión
                     </a>
                 </div>
             <?php elseif ($step === 'verify'): ?>
                 <!-- Step 1: Verify Identity -->
-                <form method="POST" class="space-y-4">
-                    <div class="form-group">
+                <form method="POST" action="">
+                    <div class="form-field-split">
                         <label for="username">
-                            <i class="fas fa-user mr-1"></i>
+                            <i class="fas fa-user"></i>
                             Usuario
                         </label>
                         <input 
@@ -168,13 +195,13 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                             name="username" 
                             id="username" 
                             required 
-                            placeholder="ej. admin"
+                            placeholder="Ingresa tu usuario"
                             autocomplete="username">
                     </div>
                     
-                    <div class="form-group">
+                    <div class="form-field-split">
                         <label for="id_card_number">
-                            <i class="fas fa-id-card mr-1"></i>
+                            <i class="fas fa-id-card"></i>
                             Número de Cédula
                         </label>
                         <input 
@@ -182,22 +209,22 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                             name="id_card_number" 
                             id="id_card_number" 
                             required 
-                            placeholder="00000000000"
+                            placeholder="Ej: 12345678901"
                             pattern="\d{11}"
                             title="Ingresa 11 dígitos">
-                        <p class="text-xs text-slate-400 mt-1">
+                        <small style="display: block; margin-top: 0.5rem; font-size: 0.75rem; color: #94a3b8;">
                             <i class="fas fa-info-circle"></i>
                             Ingresa los 11 dígitos de tu cédula (sin guiones)
-                        </p>
+                        </small>
                     </div>
                     
-                    <button type="submit" name="verify_identity" class="w-full btn-primary justify-center">
+                    <button type="submit" name="verify_identity" class="split-submit-btn">
                         <i class="fas fa-check-circle"></i>
                         Verificar Identidad
                     </button>
                     
-                    <div class="text-center mt-3">
-                        <a href="index.php" class="text-sm text-slate-400 hover:text-blue-400">
+                    <div style="text-align: center; margin-top: 1.5rem;">
+                        <a href="index.php" class="split-forgot-link">
                             <i class="fas fa-arrow-left"></i>
                             Volver al inicio de sesión
                         </a>
@@ -205,18 +232,18 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                 </form>
             <?php else: ?>
                 <!-- Step 2: Reset Password -->
-                <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mb-4">
-                    <p class="text-sm text-blue-300">
-                        <i class="fas fa-user-check mr-2"></i>
+                <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
+                    <p style="font-size: 0.875rem; color: #93c5fd; margin: 0;">
+                        <i class="fas fa-user-check" style="margin-right: 0.5rem;"></i>
                         Identidad verificada: <strong><?= htmlspecialchars($_SESSION['reset_username'] ?? '') ?></strong>
-                        <span class="ml-2 text-xs bg-blue-500/20 px-2 py-1 rounded"><?= htmlspecialchars($_SESSION['reset_role'] ?? '') ?></span>
+                        <span style="margin-left: 0.5rem; font-size: 0.75rem; background: rgba(59, 130, 246, 0.2); padding: 0.25rem 0.5rem; border-radius: 6px;"><?= htmlspecialchars($_SESSION['reset_role'] ?? '') ?></span>
                     </p>
                 </div>
                 
-                <form method="POST" class="space-y-4">
-                    <div class="form-group">
+                <form method="POST" action="">
+                    <div class="form-field-split">
                         <label for="new_password">
-                            <i class="fas fa-lock mr-1"></i>
+                            <i class="fas fa-lock"></i>
                             Nueva Contraseña
                         </label>
                         <input 
@@ -229,9 +256,9 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                             autocomplete="new-password">
                     </div>
                     
-                    <div class="form-group">
+                    <div class="form-field-split">
                         <label for="confirm_password">
-                            <i class="fas fa-lock mr-1"></i>
+                            <i class="fas fa-lock"></i>
                             Confirmar Contraseña
                         </label>
                         <input 
@@ -244,32 +271,72 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                             autocomplete="new-password">
                     </div>
                     
-                    <div class="bg-slate-700/30 rounded-lg p-3">
-                        <p class="text-xs text-slate-300">
-                            <i class="fas fa-shield-alt text-blue-400 mr-2"></i>
+                    <div style="background: rgba(51, 65, 85, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
+                        <p style="font-size: 0.75rem; color: #cbd5e1; margin: 0 0 0.5rem 0;">
+                            <i class="fas fa-shield-alt" style="color: #60a5fa; margin-right: 0.5rem;"></i>
                             <strong>Requisitos de contraseña:</strong>
                         </p>
-                        <ul class="text-xs text-slate-400 mt-2 ml-6 space-y-1">
-                            <li>• Mínimo 6 caracteres</li>
-                            <li>• Evita usar información personal obvia</li>
-                            <li>• Combina letras y números para mayor seguridad</li>
+                        <ul style="font-size: 0.75rem; color: #94a3b8; margin: 0; padding-left: 1.5rem; line-height: 1.6;">
+                            <li>Mínimo 6 caracteres</li>
+                            <li>Evita usar información personal obvia</li>
+                            <li>Combina letras y números para mayor seguridad</li>
                         </ul>
                     </div>
                     
-                    <button type="submit" name="reset_password" class="w-full btn-primary justify-center">
+                    <button type="submit" name="reset_password" class="split-submit-btn">
                         <i class="fas fa-save"></i>
                         Cambiar Contraseña
                     </button>
                     
-                    <div class="text-center mt-3">
-                        <a href="index.php" class="text-sm text-slate-400 hover:text-blue-400">
+                    <div style="text-align: center; margin-top: 1.5rem;">
+                        <a href="index.php" class="split-forgot-link">
                             <i class="fas fa-times"></i>
                             Cancelar
                         </a>
                     </div>
                 </form>
             <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
+    
+    <!-- Theme Toggle Button -->
+    <button id="theme-toggle" class="theme-toggle-btn" aria-label="<?= htmlspecialchars($themeLabel) ?>">
+        <i class="fas fa-<?= $theme === 'light' ? 'moon' : 'sun' ?>"></i>
+    </button>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const themeToggle = document.getElementById('theme-toggle');
+        
+        if (themeToggle) {
+            themeToggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Enviar solicitud al servidor para cambiar el tema
+                fetch('theme_toggle.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'ajax=1'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Recargar la página para aplicar el nuevo tema
+                        location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // Recargar de todos modos si hay error
+                    location.reload();
+                });
+            });
+        }
+    });
+    </script>
 </body>
 </html>
