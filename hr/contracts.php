@@ -100,6 +100,18 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
 
                     <div>
                         <label class="block text-slate-300 font-semibold mb-2">
+                            <i class="fas fa-file-invoice-dollar mr-2"></i>Tipo de Pago
+                        </label>
+                        <select name="payment_type" required
+                                class="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500">
+                            <option value="">Seleccione tipo de pago...</option>
+                            <option value="por_hora">Por Hora</option>
+                            <option value="mensual">Salario Mensual Fijo</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-2">
                             <i class="fas fa-money-bill-wave mr-2"></i>Salario (RD$)
                         </label>
                         <input type="number" name="salary" step="0.01" required
@@ -199,7 +211,11 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                                     </td>
                                     <td class="py-3 px-4 text-green-400 font-semibold">
                                         <?php if ($contractType === 'TRABAJO'): ?>
-                                            RD$ <?= number_format($contract['salary'], 2) ?>
+                                            <?php 
+                                                $paymentType = $contract['payment_type'] ?? 'mensual';
+                                                $paymentLabel = $paymentType === 'por_hora' ? '/hora' : '/mes';
+                                            ?>
+                                            RD$ <?= number_format($contract['salary'], 2) ?> <span class="text-xs text-slate-400"><?= $paymentLabel ?></span>
                                         <?php else: ?>
                                             <span class="text-slate-500">N/A</span>
                                         <?php endif; ?>

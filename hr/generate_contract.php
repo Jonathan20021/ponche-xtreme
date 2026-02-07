@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 error_log("Contract generation started for: " . ($_POST['employee_name'] ?? 'unknown'));
 
 // Validate required fields
-$requiredFields = ['employee_name', 'id_card', 'province', 'position', 'salary', 'work_schedule', 'contract_date', 'city'];
+$requiredFields = ['employee_name', 'id_card', 'province', 'position', 'salary', 'payment_type', 'work_schedule', 'contract_date', 'city'];
 foreach ($requiredFields as $field) {
     if (!isset($_POST[$field]) || trim($_POST[$field]) === '') {
         die("Error: El campo '$field' es requerido.");
@@ -34,6 +34,7 @@ $idCard = trim($_POST['id_card']);
 $province = trim($_POST['province']);
 $position = trim($_POST['position']);
 $salary = (float)$_POST['salary'];
+$paymentType = trim($_POST['payment_type']);
 $workSchedule = trim($_POST['work_schedule']);
 $contractDate = $_POST['contract_date'];
 $city = trim($_POST['city']);
@@ -45,10 +46,17 @@ error_log("Processing contract: Action=$action, Employee=$employeeName");
 $contractType = ($action === 'confidentiality') ? 'CONFIDENCIALIDAD' : 'TRABAJO';
 
 try {
+    // Check if payment_type column exists, if not add it
+    try {
+        $pdo->exec("ALTER TABLE employment_contracts ADD COLUMN payment_type VARCHAR(20) DEFAULT 'mensual' AFTER salary");
+    } catch (PDOException $e) {
+        // Column might already exist, ignore error
+    }
+    
     $insertStmt = $pdo->prepare("
         INSERT INTO employment_contracts 
-        (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        (employee_id, employee_name, id_card, province, contract_date, salary, payment_type, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ");
     $insertStmt->execute([
         $employeeName,
@@ -56,6 +64,7 @@ try {
         $province,
         $contractDate,
         $salary,
+        $paymentType,
         $workSchedule,
         $city,
         $contractType,
@@ -191,7 +200,18 @@ $html .= <<<HTML
 
     <p><strong>PÁRRAFO III:</strong> Es entendido y acordado que el <strong>EMPLEADO</strong> ha sido evaluado y aprobado en el idioma <strong>Español</strong>. En tal sentido <strong>EL EMPLEADOR</strong> reconoce y acepta que <strong>EL EMPLEADOR</strong> podrá solicitarle que preste los servicios contratados en el idioma indicado anteriormente o cualquier línea de negocios siempre que no se vean disminuidos sus ingresos salariales por hora de labor rendida. La negativa del <strong>EMPLEADO</strong> a prestar los servicios en cualquier de estos idiomas se considerará una insubordinación y desobediencia a su empleador respecto del servicio contratado.</p>
 
-    <p><strong>SEGUNDO:</strong> Como contraprestación a los servicios laborales prestados <strong>EL EMPLEADO</strong> recibirá de <strong>EL EMPLEADOR</strong> la suma de RD$ <strong>$salary</strong> Pesos Dominicanos con 00/100 (RD$ $salary), a ser pagada de acuerdo con el horario de trabajo establecido por el <strong>EMPLEADOR</strong>. Sin que en ningún caso el total devengado dentro de un mes sea inferior al salario mínimo base legalmente establecido a este tipo de empresa.</p>
+    <p><strong>SEGUNDO:</strong> Como contraprestación a los servicios laborales prestados <strong>EL EMPLEADO</strong> recibirá de <strong>EL EMPLEADOR</strong> la suma de RD$ <strong>$salary</strong> Pesos Dominicanos HTML;
+
+if ($paymentType === 'por_hora') {
+    $html .= <<<HTML
+ por cada <strong>hora laborada</strong> (RD$ $salary/hora)HTML;
+} else {
+    $html .= <<<HTML
+ <strong>mensuales fijos</strong> (RD$ $salary/mes)HTML;
+}
+
+$html .= <<<HTML
+, a ser pagada de acuerdo con el horario de trabajo establecido por el <strong>EMPLEADOR</strong>. Sin que en ningún caso el total devengado dentro de un mes sea inferior al salario mínimo base legalmente establecido a este tipo de empresa.</p>
 
     <p><strong>TERCERO: EL EMPLEADO</strong> desempeñará su labor dentro del período de tiempo establecido por el artículo 147 del Código de Trabajo, de 44 horas semanalmente con días libres y turnos rotativos en horarios de <strong>$workSchedule</strong>, establecido por <strong>EL EMPLEADOR</strong>, según el Código Laboral.</p>
 
