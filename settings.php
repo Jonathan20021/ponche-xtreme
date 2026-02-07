@@ -29,6 +29,7 @@ $sections = [
     'download_excel_daily' => ['label' => 'Exportar Excel Diario', 'category' => 'Registros y Reportes', 'icon' => 'fa-file-excel', 'description' => 'Exportación diaria a Excel'],
     'wfm_report' => ['label' => 'Reporte WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-chart-area', 'description' => 'Reporte de WFM (Punch vs Payroll)'],
     'wfm_planning' => ['label' => 'Planificacion WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-calendar-check', 'description' => 'Pronostico, dimensionamiento y alertas intradia'],
+    'vicidial_reports' => ['label' => 'Reportes Vicidial', 'category' => 'Registros y Reportes', 'icon' => 'fa-phone-volume', 'description' => 'Estadísticas de Login y Actividad de Agentes Vicidial'],
 
     // Attendance
     'register_attendance' => ['label' => 'Registrar Horas', 'category' => 'Asistencia', 'icon' => 'fa-calendar-plus', 'description' => 'Registro de horas administrativas'],
@@ -1256,7 +1257,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 <option value="">Selecciona un departamento</option>
                                 <?php foreach ($departments as $department): ?>
                                     <option value="<?= (int) $department['id'] ?>">
-                                        <?= htmlspecialchars($department['name']) ?></option>
+                                        <?= htmlspecialchars($department['name']) ?>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                             <?php if (empty($departments)): ?>
@@ -1270,7 +1272,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                     <option value="">Sin asignar</option>
                                     <?php foreach ($campaigns as $campaign): ?>
                                         <option value="<?= (int) $campaign['id'] ?>">
-                                            <?= htmlspecialchars($campaign['name']) ?></option>
+                                            <?= htmlspecialchars($campaign['name']) ?>
+                                        </option>
                                     <?php endforeach; ?>
                                 </select>
                                 <?php if (empty($campaigns)): ?>
@@ -1732,8 +1735,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                     <td class="font-medium"><?= htmlspecialchars($authCode['code_name']) ?></td>
                                     <td>
                                         <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                                                    <?= htmlspecialchars($authCode['code']) ?>
-                                                </code>
+                                                            <?= htmlspecialchars($authCode['code']) ?>
+                                                        </code>
                                     </td>
                                     <td>
                                         <span class="badge badge-primary">
@@ -2139,7 +2142,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                         </td>
                                         <td>
                                             <div class="font-semibold text-primary">
-                                                <?= htmlspecialchars($user['username']) ?></div>
+                                                <?= htmlspecialchars($user['username']) ?>
+                                            </div>
                                             <?php if (!empty($user['role_label'])): ?>
                                                 <div class="text-muted text-xs"><?= htmlspecialchars($user['role_label']) ?>
                                                 </div>
@@ -2215,7 +2219,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                             <p class="text-muted text-xs mt-1">Se mantiene si se deja vacio.</p>
                                         </td>
                                         <td class="text-muted text-xs">
-                                            <?= htmlspecialchars(date('d/m/Y', strtotime($user['created_at']))) ?></td>
+                                            <?= htmlspecialchars(date('d/m/Y', strtotime($user['created_at']))) ?>
+                                        </td>
                                         <td>
                                             <div class="flex flex-col gap-2">
                                                 <?php if (!$isCurrentUser): ?>
@@ -2421,7 +2426,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                             <td class="text-muted text-xs"><?= htmlspecialchars($history['notes'] ?? '-') ?>
                                             </td>
                                             <td class="text-muted text-xs">
-                                                <?= htmlspecialchars($history['created_by_username'] ?? 'Sistema') ?></td>
+                                                <?= htmlspecialchars($history['created_by_username'] ?? 'Sistema') ?>
+                                            </td>
                                             <td class="text-muted text-xs">
                                                 <?= htmlspecialchars(date('d/m/Y H:i', strtotime($history['created_at']))) ?>
                                             </td>
@@ -2681,7 +2687,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                             </div>
                                             <div class="flex-1">
                                                 <h4 class="text-primary text-base font-semibold mb-1">
-                                                    <?= htmlspecialchars($label) ?></h4>
+                                                    <?= htmlspecialchars($label) ?>
+                                                </h4>
                                                 <p class="text-muted text-xs mb-2"><?= htmlspecialchars($description) ?></p>
                                                 <p
                                                     class="text-muted text-xs font-mono bg-slate-900/50 inline-block px-2 py-1 rounded">
