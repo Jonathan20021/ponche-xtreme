@@ -47,34 +47,7 @@ $status_history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $hr_users = $pdo->query("SELECT id, full_name as name FROM users WHERE role IN ('Admin', 'HR') ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
 
-$extraData = [
-    'cedula' => $application['cedula'] ?? '',
-    'telefonos' => $application['phone'] ?? '',
-    'sector' => $application['sector_residencia'] ?? '',
-    'aplicacion_previa' => $application['applied_before'] ?? '',
-    'aplicacion_previa_detalles' => $application['applied_before_details'] ?? '',
-    'fuente' => $application['source'] ?? '',
-    'fuente_otro' => $application['source_other'] ?? '',
-    'conoce_empresa' => $application['knows_company'] ?? '',
-    'motivo_interes' => $application['interest_reason'] ?? '',
-    'idioma' => $application['application_language'] ?? '',
-    'horario_disponible' => $application['availability_time'] ?? '',
-    'preferencia_horario' => $application['availability_preference'] ?? '',
-    'horario_entrenamiento' => $application['training_schedule'] ?? '',
-    'acepta_rotacion' => $application['agrees_rotating_days'] ?? '',
-    'fines_semana' => $application['weekend_holidays'] ?? '',
-    'empleado_actual' => $application['currently_employed'] ?? '',
-    'empleo_actual_detalle' => $application['current_employment_details'] ?? '',
-    'exp_reciente_empresa' => $application['recent_company'] ?? '',
-    'exp_reciente_puesto' => $application['recent_role'] ?? '',
-    'exp_reciente_anios' => $application['recent_years'] ?? '',
-    'exp_reciente_salario' => $application['recent_last_salary'] ?? '',
-    'exp_call_center' => $application['has_call_center_experience'] ?? '',
-    'call_center_nombre' => $application['call_center_name'] ?? '',
-    'call_center_puesto' => $application['call_center_role'] ?? '',
-    'call_center_salario' => $application['call_center_salary'] ?? '',
-];
-
+// Parse JSON payload if exists
 $formPayload = null;
 if (!empty($application['cover_letter'])) {
     $decodedPayload = json_decode($application['cover_letter'], true);
@@ -83,22 +56,81 @@ if (!empty($application['cover_letter'])) {
     }
 }
 
+// Helper function to get value from JSON or field
+$getValue = function($fieldValue, $jsonPath) use ($formPayload) {
+    if (!empty($fieldValue)) {
+        return $fieldValue;
+    }
+    if ($formPayload && !empty($jsonPath)) {
+        $keys = explode('.', $jsonPath);
+        $value = $formPayload;
+        foreach ($keys as $key) {
+            if (is_array($value) && isset($value[$key])) {
+                $value = $value[$key];
+            } else {
+                return '';
+            }
+        }
+        return $value;
+    }
+    return '';
+};
+
+$extraData = [
+    'cedula' => $getValue($application['cedula'], 'cedula'),
+    'telefonos' => $getValue($application['phone'], 'telefono'),
+    'sector' => $getValue($application['sector_residencia'], null),
+    'aplicacion_previa' => $getValue($application['applied_before'], null),
+    'aplicacion_previa_detalles' => $getValue($application['applied_before_details'], null),
+    'fuente' => $getValue($application['source'], null),
+    'fuente_otro' => $getValue($application['source_other'], null),
+    'conoce_empresa' => $getValue($application['knows_company'], null),
+    'motivo_interes' => $getValue($application['interest_reason'], null),
+    'idioma' => $getValue($application['application_language'], null),
+    'horario_disponible' => $getValue($application['availability_time'], null),
+    'preferencia_horario' => $getValue($application['availability_preference'], null),
+    'horario_entrenamiento' => $getValue($application['training_schedule'], null),
+    'acepta_rotacion' => $getValue($application['agrees_rotating_days'], null),
+    'fines_semana' => $getValue($application['weekend_holidays'], null),
+    'empleado_actual' => $getValue($application['currently_employed'], null),
+    'empleo_actual_detalle' => $getValue($application['current_employment_details'], null),
+    'exp_reciente_empresa' => $getValue($application['recent_company'], 'experiencias.0.empresa'),
+    'exp_reciente_puesto' => $getValue($application['recent_role'], 'experiencias.0.cargo'),
+    'exp_reciente_anios' => $getValue($application['recent_years'], 'experiencias.0.tiempo'),
+    'exp_reciente_salario' => $getValue($application['recent_last_salary'], 'experiencias.0.sueldo'),
+    'exp_call_center' => $getValue($application['has_call_center_experience'], null),
+    'call_center_nombre' => $getValue($application['call_center_name'], null),
+    'call_center_puesto' => $getValue($application['call_center_role'], null),
+    'call_center_salario' => $getValue($application['call_center_salary'], null),
+];
+
 
 $displayName = trim(($application['first_name'] ?? '') . ' ' . ($application['last_name'] ?? ''));
+if ($displayName === '' && $formPayload) {
+    $displayName = trim(($formPayload['nombres'] ?? '') . ' ' . ($formPayload['apellido_paterno'] ?? '') . ' ' . ($formPayload['apellido_materno'] ?? ''));
+}
 if ($displayName === '') {
     $displayName = $application['candidate_name'] ?? 'N/A';
 }
-$displayPhone = !empty($application['phone']) ? $application['phone'] : 'N/A';
-$displayEmail = !empty($application['email']) ? $application['email'] : 'sin-correo@evallish.local';
-$displayEducation = !empty($application['education_level']) ? $application['education_level'] : 'N/A';
-$displayYears = !empty($application['years_of_experience']) ? $application['years_of_experience'] : ($application['recent_years'] ?? '');
+$displayPhone = !empty($application['phone']) ? $application['phone'] : ($formPayload['telefono'] ?? 'N/A');
+$displayEmail = !empty($application['email']) && $application['email'] !== 'sin-correo@evallish.local' ? $application['email'] : 'sin-correo@evallish.local';
+$displayEducation = !empty($application['education_level']) ? $application['education_level'] : (
+    $formPayload && !empty($formPayload['educacion']['nivel']) 
+        ? (is_array($formPayload['educacion']['nivel']) ? implode(', ', $formPayload['educacion']['nivel']) : $formPayload['educacion']['nivel'])
+        : 'N/A'
+);
+$displayYears = !empty($application['years_of_experience']) ? $application['years_of_experience'] : (
+    $formPayload && !empty($formPayload['experiencias'][0]['tiempo'])
+        ? $formPayload['experiencias'][0]['tiempo']
+        : ($application['recent_years'] ?? '')
+);
 $displayYears = $displayYears !== '' ? $displayYears : 'N/A';
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
 $status_labels = [
     'new' => 'Nueva',
-    'reviewing' => 'En Revisión',
+    'reviewing' => 'En Revisiï¿½n',
     'shortlisted' => 'Preseleccionado',
     'interview_scheduled' => 'Entrevista Agendada',
     'interviewed' => 'Entrevistado',
@@ -178,7 +210,7 @@ require_once '../header.php';
                 <div class="bg-indigo-50/10 border border-indigo-500/30 rounded-lg p-4 mb-4">
                     <p class="text-sm text-indigo-300">
                         <i class="fas fa-info-circle mr-2"></i>
-                        Este candidato aplicó a múltiples vacantes con el mismo CV usando el código: <strong><?php echo htmlspecialchars($application['application_code']); ?></strong>
+                        Este candidato aplicï¿½ a mï¿½ltiples vacantes con el mismo CV usando el cï¿½digo: <strong><?php echo htmlspecialchars($application['application_code']); ?></strong>
                     </p>
                 </div>
                 <div class="space-y-3">
@@ -187,7 +219,7 @@ require_once '../header.php';
                         'full_time' => 'Tiempo Completo',
                         'part_time' => 'Medio Tiempo',
                         'contract' => 'Contrato',
-                        'internship' => 'Pasantía'
+                        'internship' => 'Pasantï¿½a'
                     ];
                     foreach ($other_applications as $other_app): 
                     ?>
@@ -253,16 +285,28 @@ require_once '../header.php';
                         <label class="text-sm text-slate-400">Anios de Experiencia</label>
                         <p class="text-white font-medium"><?php echo htmlspecialchars($displayYears); ?></p>
                     </div>
-                    <?php if (!empty($application['current_position'])): ?>
+                    <?php 
+                        $currentPosition = $application['current_position'];
+                        if (empty($currentPosition) && $formPayload && !empty($formPayload['experiencias'][0]['cargo'])) {
+                            $currentPosition = $formPayload['experiencias'][0]['cargo'];
+                        }
+                        if (!empty($currentPosition)): 
+                    ?>
                     <div>
                         <label class="text-sm text-slate-400">Puesto Actual</label>
-                        <p class="text-white font-medium"><?php echo htmlspecialchars($application['current_position']); ?></p>
+                        <p class="text-white font-medium"><?php echo htmlspecialchars($currentPosition); ?></p>
                     </div>
                     <?php endif; ?>
-                    <?php if (!empty($application['current_company'])): ?>
+                    <?php 
+                        $currentCompany = $application['current_company'];
+                        if (empty($currentCompany) && $formPayload && !empty($formPayload['experiencias'][0]['empresa'])) {
+                            $currentCompany = $formPayload['experiencias'][0]['empresa'];
+                        }
+                        if (!empty($currentCompany)): 
+                    ?>
                     <div>
                         <label class="text-sm text-slate-400">Empresa Actual</label>
-                        <p class="text-white font-medium"><?php echo htmlspecialchars($application['current_company']); ?></p>
+                        <p class="text-white font-medium"><?php echo htmlspecialchars($currentCompany); ?></p>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -339,32 +383,84 @@ require_once '../header.php';
                             return $value;
                         };
 
+                        // Helper to get data from JSON when field is empty
+                        $getFieldOrJson = function($fieldValue, $jsonKey, $subKey = null) use ($formPayload) {
+                            if (!empty($fieldValue) && !is_array($fieldValue)) {
+                                return $fieldValue;
+                            }
+                            if ($formPayload && isset($formPayload[$jsonKey])) {
+                                $value = $formPayload[$jsonKey];
+                                if ($subKey !== null && is_array($value) && isset($value[$subKey])) {
+                                    $subValue = $value[$subKey];
+                                    // Ensure we return a string
+                                    return is_array($subValue) ? '' : (string)$subValue;
+                                }
+                                // If value is an array, convert to string or return empty
+                                if (is_array($value)) {
+                                    // Try to convert array to readable string
+                                    $filtered = array_filter($value, function($v) { 
+                                        return !is_array($v) && $v !== '' && $v !== null; 
+                                    });
+                                    return !empty($filtered) ? implode(', ', $filtered) : '';
+                                }
+                                return (string)$value;
+                            }
+                            return '';
+                        };
+
                         $source = $application['source'] ?? '';
                         if (!empty($application['source_other']) && strtolower($source) === 'otro') {
                             $source = 'Otro: ' . $application['source_other'];
+                        } elseif (empty($source) && $formPayload && !empty($formPayload['adicional']['medio_vacante'])) {
+                            $medioVacante = $formPayload['adicional']['medio_vacante'];
+                            $source = is_array($medioVacante) ? implode(', ', $medioVacante) : $medioVacante;
+                        }
+
+                        // Extract availability info from JSON if needed
+                        $horarioDisponible = $application['availability_time'] ?? '';
+                        if (empty($horarioDisponible) && $formPayload && !empty($formPayload['disponibilidad'])) {
+                            $disp = $formPayload['disponibilidad'];
+                            $opciones = [];
+                            if (($disp['turno_rotativo'] ?? '') === 'SI') $opciones[] = 'Turno rotativo';
+                            if (($disp['lunes_viernes'] ?? '') === 'SI') $opciones[] = 'Lunes a viernes';
+                            if (($disp['otro'] ?? '') === 'SI' && !empty($disp['otro_texto'])) $opciones[] = $disp['otro_texto'];
+                            $horarioDisponible = implode(', ', $opciones);
+                        }
+
+                        // Extract employment status from experiences
+                        $empleadoActualmente = $application['currently_employed'] ?? '';
+                        $detalleEmpleoActual = $application['current_employment_details'] ?? '';
+                        if (empty($empleadoActualmente) && $formPayload && !empty($formPayload['experiencias'][0]['empresa'])) {
+                            $empleadoActualmente = 'SI'; // Assumed if they have recent experience
                         }
 
                         $details = [
-                            'Cedula' => $application['cedula'] ?? '',
+                            'Cedula' => $getFieldOrJson($application['cedula'], 'cedula'),
                             'Telefono(s)' => $displayPhone,
-                            'Sector de residencia' => $application['sector_residencia'] ?? '',
+                            'Direccion' => $getFieldOrJson($application['address'], 'direccion'),
+                            'Sector de residencia' => $getFieldOrJson($application['sector_residencia'], 'sector_residencia'),
+                            'Fecha de nacimiento' => $getFieldOrJson($application['date_of_birth'], 'fecha_nacimiento'),
+                            'Edad' => $getFieldOrJson('', 'edad'),
+                            'Sexo' => $getFieldOrJson('', 'sexo'),
+                            'Estado civil' => $getFieldOrJson('', 'estado_civil'),
                             'Aplicacion previa' => $formatYesNo($application['applied_before'] ?? ''),
                             'Detalle aplicacion previa' => $application['applied_before_details'] ?? '',
                             'Como se entero' => $source,
                             'Conoce la empresa' => $formatYesNo($application['knows_company'] ?? ''),
                             'Motivo de interes' => $application['interest_reason'] ?? '',
                             'Idioma de aplicacion' => $application['application_language'] ?? '',
-                            'Horario disponible' => $application['availability_time'] ?? '',
+                            'Horario disponible' => $horarioDisponible,
                             'Preferencia de horario' => $application['availability_preference'] ?? '',
                             'Horario de entrenamiento' => $application['training_schedule'] ?? '',
                             'Acepta rotacion de libres' => $formatYesNo($application['agrees_rotating_days'] ?? ''),
                             'Fines de semana/feriados' => $formatYesNo($application['weekend_holidays'] ?? ''),
-                            'Empleado actualmente' => $formatYesNo($application['currently_employed'] ?? ''),
-                            'Detalle empleo actual' => $application['current_employment_details'] ?? '',
-                            'Empresa reciente' => $application['recent_company'] ?? '',
-                            'Puesto reciente' => $application['recent_role'] ?? '',
-                            'Anios de experiencia reciente' => $application['recent_years'] ?? '',
-                            'Ultimo salario reciente' => $application['recent_last_salary'] ?? '',
+                            'Empleado actualmente' => $formatYesNo($empleadoActualmente),
+                            'Detalle empleo actual' => $detalleEmpleoActual,
+                            'Empresa reciente' => $getFieldOrJson($application['recent_company'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['empresa']) ? $formPayload['experiencias'][0]['empresa'] : ''),
+                            'Puesto reciente' => $getFieldOrJson($application['recent_role'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['cargo']) ? $formPayload['experiencias'][0]['cargo'] : ''),
+                            'Anios de experiencia reciente' => $getFieldOrJson($application['recent_years'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['tiempo']) ? $formPayload['experiencias'][0]['tiempo'] : ''),
+                            'Ultimo salario reciente' => $getFieldOrJson($application['recent_last_salary'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['sueldo']) ? $formPayload['experiencias'][0]['sueldo'] : ''),
+                            'Expectativas salariales' => $getFieldOrJson($application['expected_salary'], 'adicional', 'expectativas_salariales') ?: ($formPayload && !empty($formPayload['adicional']['expectativas_salariales']) ? $formPayload['adicional']['expectativas_salariales'] : ''),
                             'Experiencia en call center' => $formatYesNo($application['has_call_center_experience'] ?? ''),
                             'Ultimo call center' => $application['call_center_name'] ?? '',
                             'Puesto en call center' => $application['call_center_role'] ?? '',
@@ -372,6 +468,12 @@ require_once '../header.php';
                         ];
 
                         foreach ($details as $label => $value):
+                            // Ensure value is a string
+                            if (is_array($value)) {
+                                $value = implode(', ', array_filter($value, function($v) { 
+                                    return !is_array($v) && $v !== '' && $v !== null; 
+                                }));
+                            }
                             $display = ($value !== '' && $value !== null) ? $value : 'N/A';
                     ?>
                         <div>
@@ -882,7 +984,7 @@ require_once '../header.php';
                 </div>
                 <div class="space-y-3">
                     <?php if (empty($comments)): ?>
-                        <p class="text-slate-400 text-center py-4">No hay comentarios aún</p>
+                        <p class="text-slate-400 text-center py-4">No hay comentarios aï¿½n</p>
                     <?php else: ?>
                         <?php foreach ($comments as $comment): ?>
                             <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
@@ -969,7 +1071,7 @@ require_once '../header.php';
         <div class="space-y-6">
             <!-- Quick Actions -->
             <div class="glass-card">
-                <h3 class="text-lg font-semibold text-white mb-4">Acciones Rápidas</h3>
+                <h3 class="text-lg font-semibold text-white mb-4">Acciones Rï¿½pidas</h3>
                 <div class="space-y-2">
                     <button type="button" class="btn-primary w-full justify-center" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
                         <i class="fas fa-exchange-alt"></i>
@@ -989,7 +1091,7 @@ require_once '../header.php';
             <!-- Rating -->
             <?php if ($application['overall_rating']): ?>
             <div class="glass-card">
-                <h3 class="text-lg font-semibold text-white mb-3">Calificación</h3>
+                <h3 class="text-lg font-semibold text-white mb-3">Calificaciï¿½n</h3>
                 <div class="flex gap-1 text-2xl">
                     <?php for ($i = 1; $i <= 5; $i++): ?>
                         <i class="fas fa-star <?php echo $i <= $application['overall_rating'] ? 'text-yellow-400' : 'text-slate-600'; ?>"></i>
@@ -1031,7 +1133,7 @@ require_once '../header.php';
                     <input type="hidden" name="application_id" value="<?php echo $application_id; ?>">
                     <select class="form-select mb-3" name="new_status" required>
                         <option value="new">Nueva</option>
-                        <option value="reviewing">En Revisión</option>
+                        <option value="reviewing">En Revisiï¿½n</option>
                         <option value="shortlisted">Preseleccionado</option>
                         <option value="interview_scheduled">Entrevista Agendada</option>
                         <option value="interviewed">Entrevistado</option>
@@ -1087,7 +1189,7 @@ require_once '../header.php';
                         <label>Tipo</label>
                         <select class="form-select" name="interview_type" required>
                             <option value="phone_screening">Llamada de Filtro</option>
-                            <option value="technical">Técnica</option>
+                            <option value="technical">Tï¿½cnica</option>
                             <option value="hr">RRHH</option>
                             <option value="manager">Gerente</option>
                             <option value="final">Final</option>
@@ -1098,11 +1200,11 @@ require_once '../header.php';
                         <input type="datetime-local" class="form-control" name="interview_date" required>
                     </div>
                     <div class="mb-3">
-                        <label>Duración (minutos)</label>
+                        <label>Duraciï¿½n (minutos)</label>
                         <input type="number" class="form-control" name="duration_minutes" value="60">
                     </div>
                     <div class="mb-3">
-                        <label>Ubicación / Link</label>
+                        <label>Ubicaciï¿½n / Link</label>
                         <input type="text" class="form-control" name="location">
                     </div>
                     <div class="mb-3">
