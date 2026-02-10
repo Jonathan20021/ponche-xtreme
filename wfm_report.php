@@ -280,14 +280,14 @@ $staffingSummary = [
 
 // Helper to resolve schedule from memory
 function resolveScheduleHours($map, $defaultConfig, $userId, $dateStr) {
-    $totalHours = 0.0;
-    
     // Get day of week from date (0=Sunday, 1=Monday, etc.)
     $dayOfWeek = date('w', strtotime($dateStr));
     // Convert to Spanish days used in system (Lunes, Martes, etc.)
     $dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     $currentDay = $dayNames[$dayOfWeek];
 
+    // Schedules are already sorted by effective_date DESC
+    // We need to find the FIRST (most recent) schedule that applies to this date
     if (isset($map[$userId])) {
         foreach ($map[$userId] as $sch) {
             // Check dates: effective_date <= dateStr AND (end_date IS NULL OR end_date >= dateStr)
@@ -300,33 +300,37 @@ function resolveScheduleHours($map, $defaultConfig, $userId, $dateStr) {
                 
                 // If days_of_week is empty or null, assume it applies to all days
                 if (empty($daysOfWeek)) {
-                    $totalHours += (float)($sch['scheduled_hours'] ?? 0);
+                    return (float)($sch['scheduled_hours'] ?? 0);
                 } else {
                     // Check both formats: numeric (1,2,3) and text (Lunes,Martes,Miércoles)
                     $matchesNumeric = strpos($daysOfWeek, (string)$dayOfWeek) !== false;
                     $matchesText = strpos($daysOfWeek, $currentDay) !== false;
                     
                     if ($matchesNumeric || $matchesText) {
-                        $totalHours += (float)($sch['scheduled_hours'] ?? 0);
+                        return (float)($sch['scheduled_hours'] ?? 0);
                     }
                 }
             }
         }
     }
 
-    if ($totalHours > 0) {
-        return $totalHours;
+    // If employee has custom schedules but none matched, return 0
+    // (e.g., day before effective_date, or weekend when only weekdays are scheduled)
+    if (isset($map[$userId]) && !empty($map[$userId])) {
+        return 0.0;
     }
 
-    // Fallback global
+    // Fallback to global schedule only if employee has NO custom schedules at all
     return (float)($defaultConfig['scheduled_hours'] ?? 8.0);
 }
 
+// Create array of dates once (DatePeriod can only be iterated once)
 $dateRangeIter = new DatePeriod(
     new DateTime($startDate),
     new DateInterval('P1D'),
     (new DateTime($endDate))->modify('+1 day')
 );
+$datesArray = iterator_to_array($dateRangeIter);
 
 foreach ($users as $user) {
     $userId = $user['id'];
@@ -334,7 +338,7 @@ foreach ($users as $user) {
 
     // --- LOGIC: SCHEDULER (LO PLANIFICADO) ---
     $scheduledSeconds = 0;
-    foreach ($dateRangeIter as $dt) {
+    foreach ($datesArray as $dt) {
         $dateStr = $dt->format('Y-m-d');
         // Optimized resolve
         $hours = resolveScheduleHours($userSchedulesMap, $globalScheduleConfig, $userId, $dateStr);
