@@ -33,7 +33,7 @@ $employeeName = trim($_POST['employee_name']);
 $idCard = trim($_POST['id_card']);
 $province = trim($_POST['province']);
 $position = trim($_POST['position']);
-$salary = (float)$_POST['salary'];
+$salary = (float) $_POST['salary'];
 $paymentType = trim($_POST['payment_type']);
 $workSchedule = trim($_POST['work_schedule']);
 $contractDate = $_POST['contract_date'];
@@ -52,7 +52,7 @@ try {
     } catch (PDOException $e) {
         // Column might already exist, ignore error
     }
-    
+
     $insertStmt = $pdo->prepare("
         INSERT INTO employment_contracts 
         (employee_id, employee_name, id_card, province, contract_date, salary, payment_type, work_schedule, city, contract_type, created_by, created_at)
@@ -70,7 +70,7 @@ try {
         $contractType,
         $_SESSION['user_id']
     ]);
-    
+
     $contractId = $pdo->lastInsertId();
     error_log("Contract saved to database with ID: $contractId");
 } catch (PDOException $e) {
@@ -81,12 +81,21 @@ try {
 // Format date for contract
 $dateObj = new DateTime($contractDate);
 $months = [
-    1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril',
-    5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
-    9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre'
+    1 => 'enero',
+    2 => 'febrero',
+    3 => 'marzo',
+    4 => 'abril',
+    5 => 'mayo',
+    6 => 'junio',
+    7 => 'julio',
+    8 => 'agosto',
+    9 => 'septiembre',
+    10 => 'octubre',
+    11 => 'noviembre',
+    12 => 'diciembre'
 ];
 $day = $dateObj->format('d');
-$month = $months[(int)$dateObj->format('m')];
+$month = $months[(int) $dateObj->format('m')];
 $year = $dateObj->format('Y');
 
 // Prepare logo for embedding in PDF
@@ -213,6 +222,7 @@ if ($paymentType === 'por_hora') {
 $html .= <<<HTML
 , a ser pagada de acuerdo con el horario de trabajo establecido por el <strong>EMPLEADOR</strong>. Sin que en ningún caso el total devengado dentro de un mes sea inferior al salario mínimo base legalmente establecido a este tipo de empresa.</p>
 
+
     <p><strong>TERCERO: EL EMPLEADO</strong> desempeñará su labor dentro del período de tiempo establecido por el artículo 147 del Código de Trabajo, de 44 horas semanalmente con días libres y turnos rotativos en horarios de <strong>$workSchedule</strong>, establecido por <strong>EL EMPLEADOR</strong>, según el Código Laboral.</p>
 
     <p><strong>PÁRRAFO:</strong> De conformidad con lo anterior, es entendido entre las partes que el servicio que presta el <strong>EMPLEADOR</strong> es un servicio telefónico, razón por la cual la empresa no está obligada a tener sus operaciones los días legalmente declarados no laborables, según lo establece el artículo 169 del Código Laboral.</p>
@@ -321,7 +331,7 @@ if ($action === 'confidentiality') {
         $contractDate,
         $_SESSION['user_id']
     ]);
-    
+
     // Redirect to confidentiality contract generator
     $_SESSION['contract_data'] = [
         'employee_name' => $employeeName,
@@ -365,16 +375,16 @@ try {
     $options->set('isHtml5ParserEnabled', true);
     $options->set('isRemoteEnabled', true);
     $options->set('defaultFont', 'Times New Roman');
-    
+
     $dompdf = new Dompdf($options);
     $dompdf->loadHtml($html);
     $dompdf->setPaper('Letter', 'portrait');
     $dompdf->render();
-    
+
     // Output PDF
     $filename = 'Contrato_Trabajo_' . str_replace(' ', '_', $employeeName) . '_' . date('Y-m-d') . '.pdf';
     $dompdf->stream($filename, ['Attachment' => false]);
-    
+
     error_log("Contract generated successfully: $filename");
 } catch (Exception $e) {
     error_log("Error generating contract: " . $e->getMessage());
