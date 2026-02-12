@@ -23,19 +23,30 @@ $contractDate = $contractData['contract_date'];
 // Format date for contract
 $dateObj = new DateTime($contractDate);
 $months = [
-    1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril',
-    5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
-    9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre'
+    1 => 'enero',
+    2 => 'febrero',
+    3 => 'marzo',
+    4 => 'abril',
+    5 => 'mayo',
+    6 => 'junio',
+    7 => 'julio',
+    8 => 'agosto',
+    9 => 'septiembre',
+    10 => 'octubre',
+    11 => 'noviembre',
+    12 => 'diciembre'
 ];
 $day = $dateObj->format('d');
-$month = $months[(int)$dateObj->format('m')];
+$month = $months[(int) $dateObj->format('m')];
 $year = $dateObj->format('Y');
 
-// Prepare logo for embedding in PDF
-$logoPath = dirname(__DIR__) . '/assets/logo.png';
+// Prepare logo for embedding in PDF (only if GD is enabled)
 $logoData = '';
-if (file_exists($logoPath)) {
-    $logoData = base64_encode(file_get_contents($logoPath));
+if (extension_loaded('gd')) {
+    $logoPath = dirname(__DIR__) . '/assets/logo.png';
+    if (file_exists($logoPath)) {
+        $logoData = base64_encode(file_get_contents($logoPath));
+    }
 }
 
 // Generate HTML for Confidentiality Contract PDF

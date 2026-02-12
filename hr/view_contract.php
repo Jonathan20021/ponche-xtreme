@@ -8,7 +8,7 @@ use Dompdf\Options;
 
 ensurePermission('hr_employees', '../unauthorized.php');
 
-$contractId = (int)$_GET['id'];
+$contractId = (int) $_GET['id'];
 
 // Get contract details
 $stmt = $pdo->prepare("
@@ -26,19 +26,39 @@ if (!$contract) {
 // Format date for contract
 $dateObj = new DateTime($contract['contract_date']);
 $months = [
-    1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril',
-    5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
-    9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre'
+    1 => 'enero',
+    2 => 'febrero',
+    3 => 'marzo',
+    4 => 'abril',
+    5 => 'mayo',
+    6 => 'junio',
+    7 => 'julio',
+    8 => 'agosto',
+    9 => 'septiembre',
+    10 => 'octubre',
+    11 => 'noviembre',
+    12 => 'diciembre'
 ];
 $day = $dateObj->format('d');
-$month = $months[(int)$dateObj->format('m')];
+$month = $months[(int) $dateObj->format('m')];
 $year = $dateObj->format('Y');
 
 $employeeName = $contract['employee_name'];
 $idCard = $contract['id_card'];
 $province = $contract['province'];
-$salary = number_format($contract['salary'], 2);
+$position = $contract['position'] ?? 'Representante de Servicios';
+$salary = $contract['salary'];
+$paymentType = $contract['payment_type'] ?? 'mensual';
 $workSchedule = $contract['work_schedule'];
+
+// Prepare logo for embedding in PDF (only if GD is enabled)
+$logoData = '';
+if (extension_loaded('gd')) {
+    $logoPath = dirname(__DIR__) . '/assets/logo.png';
+    if (file_exists($logoPath)) {
+        $logoData = base64_encode(file_get_contents($logoPath));
+    }
+}
 
 // Generate HTML for PDF (same as generate_contract.php)
 $html = <<<HTML
@@ -56,6 +76,14 @@ $html = <<<HTML
             line-height: 1.5;
             text-align: justify;
             color: #000;
+        }
+        .header-logo {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header-logo img {
+            max-height: 60px;
+            width: auto;
         }
         h1 {
             text-align: center;
@@ -111,21 +139,42 @@ $html = <<<HTML
     </style>
 </head>
 <body>
+HTML;
+
+if ($logoData) {
+    $html .= <<<HTML
+    <div class="header-logo">
+        <img src="data:image/png;base64,$logoData" alt="Evallish BPO Logo">
+    </div>
+HTML;
+}
+
+$html .= <<<HTML
     <h1>CONTRATO DE TRABAJO</h1>
     
     <p><strong>ENTRE: EVALLISH SRL</strong>, empresa constituida y existente de conformidad con las leyes dominicanas, identificada con el RNC No. 1-32637453, con su domicilio principal y asiento social en la Calle 6 No. 6, Reparto Conet de esta ciudad de Santiago, debidamente representada por el señor <strong>Hugo Antonio Hidalgo Núñez</strong>, dominicano, mayor de edad, casado, empresario, portador de la cédula de identidad No.031-0411132-7, domiciliado y residente en esta ciudad la cual sociedad en lo adelante del presente contrato, se denominará <strong>EL EMPLEADOR</strong>; y de la otra parte <strong>$employeeName</strong>, dominicano(a), mayor de edad, (a), residente de la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>, provisto de la cédula de identidad y electoral <strong>No. $idCard</strong> domiciliado(a) y residente en la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>.</p>
 
     <p class="section-title">SE HA PACTADO LO SIGUIENTE:</p>
 
-    <p><strong>PRIMERO: EL EMPLEADO</strong> se compromete formalmente a prestar sus servicios a <strong>EL EMPLEADOR</strong>, en el desempeño del cargo de <strong>Representante de Servicios</strong>, y en tal calidad, se compromete asimismo a representar a <strong>EL EMPLEADOR</strong> dentro del marco del ejercicio de sus funciones.</p>
+    <p><strong>PRIMERO: EL EMPLEADO</strong> se compromete formalmente a prestar sus servicios a <strong>EL EMPLEADOR</strong>, en el desempeño del cargo de <strong>$position</strong>, y en tal calidad, se compromete asimismo a representar a <strong>EL EMPLEADOR</strong> dentro del marco del ejercicio de sus funciones.</p>
 
-    <p><strong>PÁRRAFO I:</strong> Se entiende por Representante de Servicios, la persona con dominio fluido del idioma español, que presta los servicios de asistencia, ventas, encuestas o soporte, vía telefónica o por cualquier otro medio físico o electrónico, a los usuarios o consumidores finales de los clientes que contratan los servicios de <strong>EL EMPLEADOR</strong> de conformidad a los procedimientos y normas dictadas de tiempo en tiempo por la empresa.</p>
+    <p><strong>PÁRRAFO I:</strong> El empleado prestará los servicios de asistencia, ventas, encuestas o soporte, vía telefónica o por cualquier otro medio físico o electrónico, a los usuarios o consumidores finales de los clientes que contratan los servicios de <strong>EL EMPLEADOR</strong> de conformidad a los procedimientos y normas dictadas de tiempo en tiempo por la empresa.</p>
 
     <p><strong>PÁRRAFO II:</strong> Es entendido y acordado entre las partes que <strong>EL EMPLEADO</strong> deberá dar asistencia al Centro Central en cualquier de las líneas de negocios que requiera <strong>EL EMPLEADOR</strong>, siempre y cuando no se vean afectadas negativamente las condiciones salariales vigentes al momento de solicitar el cambio o trato de negocios o proyectos <strong>EL EMPLEADO</strong> reconoce y acepta que negarse a ejecutar dicho cambio se considerará un acto de desobediencia a <strong>EL EMPLEADOR</strong>, sus gerentes, supervisores o representantes respecto del servicio contratado, lo que constituirá una causal de terminación del contrato de trabajo por la vía del despido, según lo establecido la legislación laboral vigente.</p>
 
     <p><strong>PÁRRAFO III:</strong> Es entendido y acordado que el <strong>EMPLEADO</strong> ha sido evaluado y aprobado en el idioma <strong>Español</strong>. En tal sentido <strong>EL EMPLEADOR</strong> reconoce y acepta que <strong>EL EMPLEADOR</strong> podrá solicitarle que preste los servicios contratados en el idioma indicado anteriormente o cualquier línea de negocios siempre que no se vean disminuidos sus ingresos salariales por hora de labor rendida. La negativa del <strong>EMPLEADO</strong> a prestar los servicios en cualquier de estos idiomas se considerará una insubordinación y desobediencia a su empleador respecto del servicio contratado.</p>
 
-    <p><strong>SEGUNDO:</strong> Como contraprestación a los servicios laborales prestados <strong>EL EMPLEADO</strong> recibirá de <strong>EL EMPLEADOR</strong> la suma de RD$ <strong>$salary</strong> Pesos Dominicanos con 00/100 (RD$ $salary), a ser pagada de acuerdo con el horario de trabajo establecido por el <strong>EMPLEADOR</strong>. Sin que en ningún caso el total devengado dentro de un mes sea inferior al salario mínimo base legalmente establecido a este tipo de empresa.</p>
+    <p><strong>SEGUNDO:</strong> Como contraprestación a los servicios laborales prestados <strong>EL EMPLEADO</strong> recibirá de <strong>EL EMPLEADOR</strong> la suma de RD$ <strong>$salary</strong> Pesos Dominicanos 
+HTML;
+
+if ($paymentType === 'por_hora') {
+    $html .= " por cada <strong>hora laborada</strong> (RD$ $salary/hora)";
+} else {
+    $html .= " <strong>mensuales fijos</strong> (RD$ $salary/mes)";
+}
+
+$html .= <<<HTML
+, a ser pagada de acuerdo con el horario de trabajo establecido por el <strong>EMPLEADOR</strong>. Sin que en ningún caso el total devengado dentro de un mes sea inferior al salario mínimo base legalmente establecido a este tipo de empresa.</p>
 
     <p><strong>TERCERO: EL EMPLEADO</strong> desempeñará su labor dentro del período de tiempo establecido por el artículo 147 del Código de Trabajo, de 44 horas semanalmente con días libres y turnos rotativos en horarios de <strong>$workSchedule</strong>, establecido por <strong>EL EMPLEADOR</strong>, según el Código Laboral.</p>
 

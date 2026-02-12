@@ -55,13 +55,14 @@ try {
 
     $insertStmt = $pdo->prepare("
         INSERT INTO employment_contracts 
-        (employee_id, employee_name, id_card, province, contract_date, salary, payment_type, work_schedule, city, contract_type, created_by, created_at)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        (employee_id, employee_name, id_card, province, position, contract_date, salary, payment_type, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ");
     $insertStmt->execute([
         $employeeName,
         $idCard,
         $province,
+        $position,
         $contractDate,
         $salary,
         $paymentType,
@@ -98,11 +99,13 @@ $day = $dateObj->format('d');
 $month = $months[(int) $dateObj->format('m')];
 $year = $dateObj->format('Y');
 
-// Prepare logo for embedding in PDF
-$logoPath = dirname(__DIR__) . '/assets/logo.png';
+// Prepare logo for embedding in PDF (only if GD is enabled)
 $logoData = '';
-if (file_exists($logoPath)) {
-    $logoData = base64_encode(file_get_contents($logoPath));
+if (extension_loaded('gd')) {
+    $logoPath = dirname(__DIR__) . '/assets/logo.png';
+    if (file_exists($logoPath)) {
+        $logoData = base64_encode(file_get_contents($logoPath));
+    }
 }
 
 // Generate HTML for PDF
@@ -209,14 +212,13 @@ $html .= <<<HTML
 
     <p><strong>PÁRRAFO III:</strong> Es entendido y acordado que el <strong>EMPLEADO</strong> ha sido evaluado y aprobado en el idioma <strong>Español</strong>. En tal sentido <strong>EL EMPLEADOR</strong> reconoce y acepta que <strong>EL EMPLEADOR</strong> podrá solicitarle que preste los servicios contratados en el idioma indicado anteriormente o cualquier línea de negocios siempre que no se vean disminuidos sus ingresos salariales por hora de labor rendida. La negativa del <strong>EMPLEADO</strong> a prestar los servicios en cualquier de estos idiomas se considerará una insubordinación y desobediencia a su empleador respecto del servicio contratado.</p>
 
-    <p><strong>SEGUNDO:</strong> Como contraprestación a los servicios laborales prestados <strong>EL EMPLEADO</strong> recibirá de <strong>EL EMPLEADOR</strong> la suma de RD$ <strong>$salary</strong> Pesos Dominicanos HTML;
+    <p><strong>SEGUNDO:</strong> Como contraprestación a los servicios laborales prestados <strong>EL EMPLEADO</strong> recibirá de <strong>EL EMPLEADOR</strong> la suma de RD$ <strong>$salary</strong> Pesos Dominicanos 
+HTML;
 
 if ($paymentType === 'por_hora') {
-    $html .= <<<HTML
- por cada <strong>hora laborada</strong> (RD$ $salary/hora)HTML;
+    $html .= " por cada <strong>hora laborada</strong> (RD$ $salary/hora)";
 } else {
-    $html .= <<<HTML
- <strong>mensuales fijos</strong> (RD$ $salary/mes)HTML;
+    $html .= " <strong>mensuales fijos</strong> (RD$ $salary/mes)";
 }
 
 $html .= <<<HTML
