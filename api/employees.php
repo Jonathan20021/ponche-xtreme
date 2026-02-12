@@ -42,13 +42,13 @@ try {
         case 'quick_assign':
             $userId = $_SESSION['user_id'];
             $employeeId = intval($_POST['employee_id'] ?? 0);
-            $campaignId = !empty($_POST['campaign_id']) ? intval($_POST['campaign_id']) : null;
-            $supervisorId = !empty($_POST['supervisor_id']) ? intval($_POST['supervisor_id']) : null;
-            
+            $campaignId = !empty($_POST['campaign_id']) && (int) $_POST['campaign_id'] > 0 ? intval($_POST['campaign_id']) : null;
+            $supervisorId = !empty($_POST['supervisor_id']) && (int) $_POST['supervisor_id'] > 0 ? intval($_POST['supervisor_id']) : null;
+
             if (!$employeeId) {
                 throw new Exception('ID de empleado inválido');
             }
-            
+
             // Verify employee exists
             $checkStmt = $pdo->prepare("SELECT id FROM employees WHERE id = ?");
             $checkStmt->execute([$employeeId]);
@@ -68,8 +68,18 @@ try {
             $updateStmt->bindValue(':supervisor_id', $supervisorId, $supervisorId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
             $updateStmt->bindValue(':employee_id', $employeeId, PDO::PARAM_INT);
 
-            if (!$updateStmt->execute()) {
-                throw new Exception('Error al actualizar empleado');
+            try {
+                if (!$updateStmt->execute()) {
+                    throw new Exception('Error al actualizar empleado');
+                }
+            } catch (PDOException $e) {
+                error_log("FOREIGN KEY ERROR in api/employees.php (quick_assign): " . $e->getMessage());
+                error_log("Parameters: " . json_encode([
+                    'employee_id' => $employeeId,
+                    'campaign_id' => $campaignId,
+                    'supervisor_id' => $supervisorId
+                ]));
+                throw new Exception('Error de base de datos al asignar campaign/supervisor: ' . $e->getMessage());
             }
 
             // Log the action
@@ -84,13 +94,13 @@ try {
                 $_SESSION['role'] ?? 'Desconocido',
                 $description
             ]);
-            
+
             echo json_encode([
                 'success' => true,
                 'message' => 'Asignación actualizada correctamente'
             ]);
             break;
-            
+
         default:
             throw new Exception('Acción no válida');
     }

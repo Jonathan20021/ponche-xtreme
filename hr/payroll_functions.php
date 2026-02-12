@@ -7,7 +7,8 @@
 /**
  * Obtiene las tasas de descuentos desde la base de datos
  */
-function getDeductionRates($pdo) {
+function getDeductionRates($pdo)
+{
     static $rates = null;
     if ($rates === null) {
         $stmt = $pdo->query("SELECT code, employee_percentage, employer_percentage, is_active FROM payroll_deduction_config");
@@ -22,9 +23,11 @@ function getDeductionRates($pdo) {
 /**
  * Calcula el AFP (Administradora de Fondos de Pensiones)
  */
-function calculateAFP($pdo, $grossSalary, $isEmployer = false) {
+function calculateAFP($pdo, $grossSalary, $isEmployer = false)
+{
     $rates = getDeductionRates($pdo);
-    if (!$rates['AFP']['is_active']) return 0.00;
+    if (!$rates['AFP']['is_active'])
+        return 0.00;
     $rate = $isEmployer ? $rates['AFP']['employer_percentage'] : $rates['AFP']['employee_percentage'];
     return round($grossSalary * ($rate / 100), 2);
 }
@@ -32,9 +35,11 @@ function calculateAFP($pdo, $grossSalary, $isEmployer = false) {
 /**
  * Calcula el SFS (Seguro Familiar de Salud)
  */
-function calculateSFS($pdo, $grossSalary, $isEmployer = false) {
+function calculateSFS($pdo, $grossSalary, $isEmployer = false)
+{
     $rates = getDeductionRates($pdo);
-    if (!$rates['SFS']['is_active']) return 0.00;
+    if (!$rates['SFS']['is_active'])
+        return 0.00;
     $rate = $isEmployer ? $rates['SFS']['employer_percentage'] : $rates['SFS']['employee_percentage'];
     return round($grossSalary * ($rate / 100), 2);
 }
@@ -42,9 +47,11 @@ function calculateSFS($pdo, $grossSalary, $isEmployer = false) {
 /**
  * Calcula el SRL (Seguro de Riesgos Laborales)
  */
-function calculateSRL($pdo, $grossSalary) {
+function calculateSRL($pdo, $grossSalary)
+{
     $rates = getDeductionRates($pdo);
-    if (!$rates['SRL']['is_active']) return 0.00;
+    if (!$rates['SRL']['is_active'])
+        return 0.00;
     $rate = $rates['SRL']['employer_percentage'];
     return round($grossSalary * ($rate / 100), 2);
 }
@@ -52,9 +59,11 @@ function calculateSRL($pdo, $grossSalary) {
 /**
  * Calcula INFOTEP
  */
-function calculateINFOTEP($pdo, $grossSalary) {
+function calculateINFOTEP($pdo, $grossSalary)
+{
     $rates = getDeductionRates($pdo);
-    if (!$rates['INFOTEP']['is_active']) return 0.00;
+    if (!$rates['INFOTEP']['is_active'])
+        return 0.00;
     $rate = $rates['INFOTEP']['employer_percentage'];
     return round($grossSalary * ($rate / 100), 2);
 }
@@ -67,13 +76,14 @@ function calculateINFOTEP($pdo, $grossSalary) {
  * - RD$624,329.01 - RD$867,123.00: RD$31,216 + 20% sobre excedente
  * - Más de RD$867,123.01: RD$79,775 + 25% sobre excedente
  */
-function calculateISR($monthlyGrossSalary) {
+function calculateISR($monthlyGrossSalary)
+{
     // Convertir a salario anual
     $annualSalary = $monthlyGrossSalary * 12;
-    
+
     // Aplicar escala progresiva
     $isr = 0;
-    
+
     if ($annualSalary <= 416220.00) {
         // Exento
         $isr = 0;
@@ -90,17 +100,18 @@ function calculateISR($monthlyGrossSalary) {
         $excess = $annualSalary - 867123.00;
         $isr = 79775.00 + ($excess * 0.25);
     }
-    
+
     // Convertir a mensual
     $monthlyISR = $isr / 12;
-    
+
     return round($monthlyISR, 2);
 }
 
 /**
  * Calcula todos los descuentos de un empleado
  */
-function calculateAllDeductions($pdo, $grossSalary, $customDeductions = []) {
+function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [])
+{
     $deductions = [
         'afp_employee' => calculateAFP($pdo, $grossSalary, false),
         'sfs_employee' => calculateSFS($pdo, $grossSalary, false),
@@ -108,7 +119,7 @@ function calculateAllDeductions($pdo, $grossSalary, $customDeductions = []) {
         'custom_deductions' => 0,
         'total_deductions' => 0
     ];
-    
+
     // Sumar descuentos personalizados
     foreach ($customDeductions as $deduction) {
         if ($deduction['is_active']) {
@@ -119,21 +130,22 @@ function calculateAllDeductions($pdo, $grossSalary, $customDeductions = []) {
             }
         }
     }
-    
+
     // Total de descuentos
-    $deductions['total_deductions'] = 
-        $deductions['afp_employee'] + 
-        $deductions['sfs_employee'] + 
-        $deductions['isr'] + 
+    $deductions['total_deductions'] =
+        $deductions['afp_employee'] +
+        $deductions['sfs_employee'] +
+        $deductions['isr'] +
         $deductions['custom_deductions'];
-    
+
     return $deductions;
 }
 
 /**
  * Calcula todos los aportes del empleador
  */
-function calculateEmployerContributions($pdo, $grossSalary) {
+function calculateEmployerContributions($pdo, $grossSalary)
+{
     return [
         'afp_employer' => calculateAFP($pdo, $grossSalary, true),
         'sfs_employer' => calculateSFS($pdo, $grossSalary, true),
@@ -146,14 +158,16 @@ function calculateEmployerContributions($pdo, $grossSalary) {
 /**
  * Calcula el salario neto
  */
-function calculateNetSalary($grossSalary, $deductions) {
+function calculateNetSalary($grossSalary, $deductions)
+{
     return round($grossSalary - $deductions['total_deductions'], 2);
 }
 
 /**
  * Obtiene descuentos personalizados de un empleado
  */
-function getEmployeeCustomDeductions($pdo, $employeeId) {
+function getEmployeeCustomDeductions($pdo, $employeeId)
+{
     $stmt = $pdo->prepare("
         SELECT ed.*, pdc.name as config_name, pdc.type as config_type
         FROM employee_deductions ed
@@ -170,7 +184,8 @@ function getEmployeeCustomDeductions($pdo, $employeeId) {
 /**
  * Calcula nómina completa para un empleado
  */
-function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
+function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
+{
     // Obtener datos del empleado
     $empStmt = $pdo->prepare("
         SELECT e.*, u.hourly_rate, u.monthly_salary, u.hourly_rate_dop, u.monthly_salary_dop, 
@@ -182,11 +197,11 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
     ");
     $empStmt->execute([$employeeId]);
     $employee = $empStmt->fetch(PDO::FETCH_ASSOC);
-    
+
     if (!$employee) {
         return null;
     }
-    
+
     // Obtener datos del periodo (cacheado por llamada)
     static $periodCache = [];
     if (!isset($periodCache[$periodId])) {
@@ -199,12 +214,12 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
     // Calcular salario base usando la moneda preferida del empleado
     $preferredCurrency = $employee['preferred_currency'] ?? 'USD';
     $preferredCurrency = strtoupper(trim($preferredCurrency));
-    $hourlyRateUsd = (float)$employee['hourly_rate'];
-    $hourlyRateDop = (float)$employee['hourly_rate_dop'];
-    $monthlySalaryUsd = (float)$employee['monthly_salary'];
-    $monthlySalaryDop = (float)$employee['monthly_salary_dop'];
-    $dailySalaryUsd = (float)$employee['daily_salary_usd'];
-    $dailySalaryDop = (float)$employee['daily_salary_dop'];
+    $hourlyRateUsd = (float) $employee['hourly_rate'];
+    $hourlyRateDop = (float) $employee['hourly_rate_dop'];
+    $monthlySalaryUsd = (float) $employee['monthly_salary'];
+    $monthlySalaryDop = (float) $employee['monthly_salary_dop'];
+    $dailySalaryUsd = (float) $employee['daily_salary_usd'];
+    $dailySalaryDop = (float) $employee['daily_salary_dop'];
 
     if ($preferredCurrency === 'DOP') {
         $hourlyRate = $hourlyRateDop;
@@ -238,7 +253,7 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
             $dailySalary = convertCurrency($pdo, $dailySalaryDop, 'DOP', 'USD');
         }
     }
-    $overtimeMultiplier = (float)($employee['overtime_multiplier'] ?? 1.5);
+    $overtimeMultiplier = (float) ($employee['overtime_multiplier'] ?? 1.5);
     $compensationType = strtolower(trim($employee['compensation_type'] ?? 'hourly'));
     $role = strtoupper(trim($employee['role'] ?? ''));
     if ($compensationType === '' || $compensationType === 'hourly') {
@@ -246,11 +261,17 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
             $compensationType = 'fixed';
         }
     }
-    
+
+    // Safeguard: Ensure hourly rate is reasonable if compensation is fixed
+    // If hourly rate is 0 or >= monthly salary, calculate it based on standard factor (23.83 days/month, 8 hours/day)
+    if ($compensationType === 'fixed' && ($hourlyRate <= 0 || $hourlyRate >= $monthlySalary)) {
+        $hourlyRate = round($monthlySalary / 23.83 / 8, 2);
+    }
+
     // Calcular ingresos
-    $regularHours = (float)($hoursData['regular_hours'] ?? 0);
-    $overtimeHours = (float)($hoursData['overtime_hours'] ?? 0);
-    $daysWorked = (int)($hoursData['days_worked'] ?? 0);
+    $regularHours = (float) ($hoursData['regular_hours'] ?? 0);
+    $overtimeHours = (float) ($hoursData['overtime_hours'] ?? 0);
+    $daysWorked = (int) ($hoursData['days_worked'] ?? 0);
 
     $regularPay = 0.0;
     $baseSalary = 0.0;
@@ -262,13 +283,15 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
                 $prorationFactor = 0.5;
             } elseif ($period['period_type'] === 'WEEKLY') {
                 $prorationFactor = 0.25;
-            } elseif ($period['period_type'] !== 'MONTHLY'
+            } elseif (
+                $period['period_type'] !== 'MONTHLY'
                 && !empty($period['start_date'])
-                && !empty($period['end_date'])) {
+                && !empty($period['end_date'])
+            ) {
                 $startDate = new DateTime($period['start_date']);
                 $endDate = new DateTime($period['end_date']);
                 $periodDays = $startDate->diff($endDate)->days + 1;
-                $daysInMonth = (int)$startDate->format('t');
+                $daysInMonth = (int) $startDate->format('t');
                 if ($periodDays > 0 && $daysInMonth > 0) {
                     $prorationFactor = $periodDays / $daysInMonth;
                 }
@@ -288,26 +311,26 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
     $bonuses = $hoursData['bonuses'] ?? 0;
     $commissions = $hoursData['commissions'] ?? 0;
     $otherIncome = $hoursData['other_income'] ?? 0;
-    
+
     $grossSalary = $regularPay + $overtimePay + $bonuses + $commissions + $otherIncome;
-    
+
     // Obtener descuentos personalizados
     $customDeductions = getEmployeeCustomDeductions($pdo, $employeeId);
-    
+
     // Calcular descuentos
     $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions);
-    
+
     // Calcular aportes empleador
     $employerContributions = calculateEmployerContributions($pdo, $grossSalary);
-    $employerContributions['total_employer'] = 
+    $employerContributions['total_employer'] =
         $employerContributions['afp_employer'] +
         $employerContributions['sfs_employer'] +
         $employerContributions['srl_employer'] +
         $employerContributions['infotep_employer'];
-    
+
     // Calcular neto
     $netSalary = calculateNetSalary($grossSalary, $deductions);
-    
+
     return [
         'employee_id' => $employeeId,
         'base_salary' => $baseSalary,
@@ -336,14 +359,16 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData) {
 /**
  * Formatea montos para República Dominicana
  */
-function formatDOP($amount) {
+function formatDOP($amount)
+{
     return 'RD$' . number_format($amount, 2);
 }
 
 /**
  * Genera resumen de TSS (Tesorería de la Seguridad Social)
  */
-function generateTSSReport($pdo, $periodId) {
+function generateTSSReport($pdo, $periodId)
+{
     $stmt = $pdo->prepare("
         SELECT 
             e.employee_code,
@@ -368,7 +393,8 @@ function generateTSSReport($pdo, $periodId) {
 /**
  * Genera resumen de DGII (Dirección General de Impuestos Internos)
  */
-function generateDGIIReport($pdo, $periodId) {
+function generateDGIIReport($pdo, $periodId)
+{
     $stmt = $pdo->prepare("
         SELECT 
             e.employee_code,

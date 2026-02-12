@@ -25,8 +25,8 @@ if (!function_exists('normalizeScheduleTimeValue')) {
 
 // Handle employee schedule update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) && !isset($_POST['update_employee'])) {
-    $employeeId = (int)$_POST['employee_id'];
-    $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
+    $employeeId = (int) $_POST['employee_id'];
+    $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int) $_POST['schedule_template_id'] : null;
     $scheduleAssignmentsJson = trim($_POST['schedule_assignments_json'] ?? '');
     $scheduleAssignments = [];
     if ($scheduleAssignmentsJson !== '') {
@@ -35,18 +35,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) &&
             $scheduleAssignments = $decodedAssignments;
         }
     }
-    
+
     try {
         // Get user_id from employee
         $stmt = $pdo->prepare("SELECT user_id, first_name, last_name FROM employees WHERE id = ?");
         $stmt->execute([$employeeId]);
         $empData = $stmt->fetch(PDO::FETCH_ASSOC);
         $userId = $empData['user_id'] ?? null;
-        
+
         if ($userId) {
             // Get old schedule for logging
             $oldSchedule = getEmployeeSchedule($pdo, $employeeId);
-            
+
             // Deactivate existing schedules
             deactivateEmployeeSchedules($pdo, $employeeId);
 
@@ -71,12 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) &&
                 }
                 $successMsg = "Horarios actualizados correctamente.";
             } elseif ($scheduleTemplateId) {
-                createEmployeeScheduleFromTemplate($pdo, $employeeId, (int)$userId, $scheduleTemplateId);
+                createEmployeeScheduleFromTemplate($pdo, $employeeId, (int) $userId, $scheduleTemplateId);
                 $successMsg = "Horario actualizado correctamente.";
             } else {
                 $successMsg = "Horario eliminado. El empleado usará el horario global del sistema.";
             }
-            
+
             // Log schedule change
             $employeeName = trim(($empData['first_name'] ?? '') . ' ' . ($empData['last_name'] ?? ''));
             log_schedule_changed(
@@ -99,16 +99,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) &&
 
 // Handle employee update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
-    $employeeId = (int)$_POST['employee_id'];
-    
+    $employeeId = (int) $_POST['employee_id'];
+
     $pdo->beginTransaction();
-    
+
     try {
         // Get old employee data for logging
         $oldDataStmt = $pdo->prepare("SELECT * FROM employees WHERE id = ?");
         $oldDataStmt->execute([$employeeId]);
         $oldData = $oldDataStmt->fetch(PDO::FETCH_ASSOC);
-        
+
         // Prepare all employee data
         $data = [
             'first_name' => trim($_POST['first_name']),
@@ -118,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             'mobile' => trim($_POST['mobile']) ?: null,
             'birth_date' => $_POST['birth_date'] ?: null,
             'position' => trim($_POST['position']) ?: null,
-            'department_id' => !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null,
+            'department_id' => !empty($_POST['department_id']) && (int) $_POST['department_id'] > 0 ? (int) $_POST['department_id'] : null,
             'hire_date' => $_POST['hire_date'] ?: null,
             'termination_date' => $_POST['termination_date'] ?: null,
             'employment_status' => $_POST['employment_status'],
@@ -137,10 +137,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             'emergency_contact_relationship' => trim($_POST['emergency_contact_relationship']) ?: null,
             'notes' => trim($_POST['notes']) ?: null,
             'id_card_number' => trim($_POST['id_card_number']) ?: null,
-            'bank_id' => !empty($_POST['bank_id']) ? (int)$_POST['bank_id'] : null,
+            'bank_id' => !empty($_POST['bank_id']) && (int) $_POST['bank_id'] > 0 ? (int) $_POST['bank_id'] : null,
             'bank_account_number' => trim($_POST['bank_account_number']) ?: null,
-            'supervisor_id' => !empty($_POST['supervisor_id']) ? (int)$_POST['supervisor_id'] : null,
-            'campaign_id' => !empty($_POST['campaign_id']) ? (int)$_POST['campaign_id'] : null,
+            'supervisor_id' => !empty($_POST['supervisor_id']) && (int) $_POST['supervisor_id'] > 0 ? (int) $_POST['supervisor_id'] : null,
+            'campaign_id' => !empty($_POST['campaign_id']) && (int) $_POST['campaign_id'] > 0 ? (int) $_POST['campaign_id'] : null,
         ];
 
         if (!array_key_exists('supervisor_id', $_POST)) {
@@ -149,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
         if (!array_key_exists('campaign_id', $_POST)) {
             $data['campaign_id'] = $oldData['campaign_id'] ?? null;
         }
-        
+
         // Handle photo upload
         $photoPath = null;
         if (isset($_FILES['employee_photo']) && $_FILES['employee_photo']['error'] === UPLOAD_ERR_OK) {
@@ -157,26 +157,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0755, true);
             }
-            
+
             // Get current employee code
             $empStmt = $pdo->prepare("SELECT employee_code FROM employees WHERE id = ?");
             $empStmt->execute([$employeeId]);
             $empCode = $empStmt->fetchColumn();
-            
+
             $fileExtension = strtolower(pathinfo($_FILES['employee_photo']['name'], PATHINFO_EXTENSION));
             $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
-            
+
             if (in_array($fileExtension, $allowedExtensions)) {
                 $fileName = $empCode . '_' . time() . '.' . $fileExtension;
                 $targetPath = $uploadDir . $fileName;
-                
+
                 if (move_uploaded_file($_FILES['employee_photo']['tmp_name'], $targetPath)) {
                     $photoPath = 'uploads/employee_photos/' . $fileName;
                     $data['photo_path'] = $photoPath;
                 }
             }
         }
-        
+
         // Update employees table with ALL fields
         $updateSql = "
             UPDATE employees SET
@@ -189,41 +189,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?,
                 notes = ?, id_card_number = ?, bank_id = ?, bank_account_number = ?,
                 supervisor_id = ?, campaign_id = ?";
-        
+
         $updateParams = [
-            $data['first_name'], $data['last_name'], $data['email'], $data['phone'], $data['mobile'],
-            $data['birth_date'], $data['position'], $data['department_id'], $data['hire_date'], $data['termination_date'],
-            $data['employment_status'], $data['employment_type'],
-            $data['address'], $data['city'], $data['state'], $data['postal_code'],
-            $data['identification_type'], $data['identification_number'],
-            $data['blood_type'], $data['marital_status'], $data['gender'],
-            $data['emergency_contact_name'], $data['emergency_contact_phone'], $data['emergency_contact_relationship'],
-            $data['notes'], $data['id_card_number'], $data['bank_id'], $data['bank_account_number'],
-            $data['supervisor_id'], $data['campaign_id']
+            $data['first_name'],
+            $data['last_name'],
+            $data['email'],
+            $data['phone'],
+            $data['mobile'],
+            $data['birth_date'],
+            $data['position'],
+            $data['department_id'],
+            $data['hire_date'],
+            $data['termination_date'],
+            $data['employment_status'],
+            $data['employment_type'],
+            $data['address'],
+            $data['city'],
+            $data['state'],
+            $data['postal_code'],
+            $data['identification_type'],
+            $data['identification_number'],
+            $data['blood_type'],
+            $data['marital_status'],
+            $data['gender'],
+            $data['emergency_contact_name'],
+            $data['emergency_contact_phone'],
+            $data['emergency_contact_relationship'],
+            $data['notes'],
+            $data['id_card_number'],
+            $data['bank_id'],
+            $data['bank_account_number'],
+            $data['supervisor_id'],
+            $data['campaign_id']
         ];
-        
+
         if (isset($data['photo_path'])) {
             $updateSql .= ", photo_path = ?";
             $updateParams[] = $data['photo_path'];
         }
-        
+
         $updateSql .= ", updated_at = NOW() WHERE id = ?";
         $updateParams[] = $employeeId;
-        
-        $stmt = $pdo->prepare($updateSql);
-        $stmt->execute($updateParams);
-        
+
+        try {
+            $stmt = $pdo->prepare($updateSql);
+            $stmt->execute($updateParams);
+        } catch (PDOException $e) {
+            error_log("FOREIGN KEY ERROR in employees.php (employees table update): " . $e->getMessage());
+            error_log("Parameters: " . json_encode([
+                'employeeId' => $employeeId,
+                'department_id' => $data['department_id'],
+                'bank_id' => $data['bank_id'],
+                'supervisor_id' => $data['supervisor_id'],
+                'campaign_id' => $data['campaign_id']
+            ]));
+            throw $e;
+        }
+
         // Sync to users table with all compensation fields
         $fullName = $data['first_name'] . ' ' . $data['last_name'];
         $compensationType = !empty($_POST['compensation_type']) ? trim($_POST['compensation_type']) : 'hourly';
-        $hourlyRate = !empty($_POST['hourly_rate']) ? (float)$_POST['hourly_rate'] : 0.00;
-        $hourlyRateDop = !empty($_POST['hourly_rate_dop']) ? (float)$_POST['hourly_rate_dop'] : 0.00;
-        $monthlySalaryUsd = !empty($_POST['monthly_salary_usd']) ? (float)$_POST['monthly_salary_usd'] : 0.00;
-        $monthlySalaryDop = !empty($_POST['monthly_salary_dop']) ? (float)$_POST['monthly_salary_dop'] : 0.00;
-        $dailySalaryUsd = !empty($_POST['daily_salary_usd']) ? (float)$_POST['daily_salary_usd'] : 0.00;
-        $dailySalaryDop = !empty($_POST['daily_salary_dop']) ? (float)$_POST['daily_salary_dop'] : 0.00;
+        $hourlyRate = !empty($_POST['hourly_rate']) ? (float) $_POST['hourly_rate'] : 0.00;
+        $hourlyRateDop = !empty($_POST['hourly_rate_dop']) ? (float) $_POST['hourly_rate_dop'] : 0.00;
+        $monthlySalaryUsd = !empty($_POST['monthly_salary_usd']) ? (float) $_POST['monthly_salary_usd'] : 0.00;
+        $monthlySalaryDop = !empty($_POST['monthly_salary_dop']) ? (float) $_POST['monthly_salary_dop'] : 0.00;
+        $dailySalaryUsd = !empty($_POST['daily_salary_usd']) ? (float) $_POST['daily_salary_usd'] : 0.00;
+        $dailySalaryDop = !empty($_POST['daily_salary_dop']) ? (float) $_POST['daily_salary_dop'] : 0.00;
         $preferredCurrency = !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD';
-        
+
         $userStmt = $pdo->prepare("
             UPDATE users SET 
                 full_name = ?, 
@@ -241,7 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
         $userStmt->execute([$fullName, $compensationType, $hourlyRate, $hourlyRateDop, $monthlySalaryUsd, $monthlySalaryDop, $dailySalaryUsd, $dailySalaryDop, $preferredCurrency, $data['department_id'], $employeeId]);
 
         // Update employee schedule if changed
-        $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int)$_POST['schedule_template_id'] : null;
+        $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int) $_POST['schedule_template_id'] : null;
         $scheduleAssignmentsJson = trim($_POST['schedule_assignments_json'] ?? '');
         $scheduleAssignments = [];
         if ($scheduleAssignmentsJson !== '') {
@@ -313,7 +346,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                     createEmployeeSchedule($pdo, $employeeId, (int) $userIdForSchedule, $scheduleData);
                 }
             } elseif ($scheduleTemplateId) {
-                createEmployeeScheduleFromTemplate($pdo, $employeeId, (int)$userIdForSchedule, $scheduleTemplateId);
+                createEmployeeScheduleFromTemplate($pdo, $employeeId, (int) $userIdForSchedule, $scheduleTemplateId);
             }
 
             $employeeName = trim($data['first_name'] . ' ' . $data['last_name']);
@@ -328,10 +361,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                 ['schedule_template_id' => $scheduleTemplateId, 'schedule_assignments' => $scheduleAssignments]
             );
         }
-        
+
         // Log employee update
         log_employee_updated($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $oldData, $data);
-        
+
         $pdo->commit();
         $successMsg = "Empleado actualizado correctamente. Los cambios se sincronizaron con el usuario.";
     } catch (Exception $e) {
@@ -341,7 +374,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reinstate_employee'])) {
-    $employeeId = (int)($_POST['employee_id'] ?? 0);
+    $employeeId = (int) ($_POST['employee_id'] ?? 0);
     try {
         $stmt = $pdo->prepare("UPDATE employees SET employment_status = 'ACTIVE', termination_date = NULL, updated_at = NOW() WHERE id = ?");
         $stmt->execute([$employeeId]);
@@ -352,7 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reinstate_employee'])
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_employee'])) {
-    $employeeId = (int)($_POST['employee_id'] ?? 0);
+    $employeeId = (int) ($_POST['employee_id'] ?? 0);
     try {
         $stmt = $pdo->prepare("DELETE FROM employees WHERE id = ?");
         $stmt->execute([$employeeId]);
@@ -403,7 +436,7 @@ if ($statusFilter !== 'all') {
 
 if ($departmentFilter !== 'all') {
     $query .= " AND e.department_id = ?";
-    $params[] = (int)$departmentFilter;
+    $params[] = (int) $departmentFilter;
 }
 
 if ($searchQuery !== '') {
@@ -476,6 +509,7 @@ $terminatedEmployees = $pdo->query("
 ?>
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -487,9 +521,10 @@ $terminatedEmployees = $pdo->query("
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../assets/css/theme.css" rel="stylesheet">
 </head>
+
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <?php include '../header.php'; ?>
-    
+
     <div class="container mx-auto px-4 py-8">
         <!-- Header -->
         <div class="flex justify-between items-center mb-8">
@@ -528,7 +563,8 @@ $terminatedEmployees = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">Total</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['total'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center"
+                        style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
                         <i class="fas fa-users text-white text-xl"></i>
                     </div>
                 </div>
@@ -540,7 +576,8 @@ $terminatedEmployees = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">Activos</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['active'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center"
+                        style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
                         <i class="fas fa-user-check text-white text-xl"></i>
                     </div>
                 </div>
@@ -552,7 +589,8 @@ $terminatedEmployees = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">En Prueba</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['trial'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center"
+                        style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
                         <i class="fas fa-user-clock text-white text-xl"></i>
                     </div>
                 </div>
@@ -564,7 +602,8 @@ $terminatedEmployees = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">Terminados/Eliminados</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['terminated'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center"
+                        style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
                         <i class="fas fa-user-times text-white text-xl"></i>
                     </div>
                 </div>
@@ -576,7 +615,8 @@ $terminatedEmployees = $pdo->query("
             <form method="GET" class="flex flex-wrap gap-4 items-end">
                 <div class="form-group flex-1 min-w-[200px]">
                     <label for="search">Buscar</label>
-                    <input type="text" id="search" name="search" value="<?= htmlspecialchars($searchQuery) ?>" placeholder="Nombre, código o usuario...">
+                    <input type="text" id="search" name="search" value="<?= htmlspecialchars($searchQuery) ?>"
+                        placeholder="Nombre, código o usuario...">
                 </div>
                 <div class="form-group flex-1 min-w-[150px]">
                     <label for="status">Estado</label>
@@ -584,8 +624,10 @@ $terminatedEmployees = $pdo->query("
                         <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>Todos</option>
                         <option value="active" <?= $statusFilter === 'active' ? 'selected' : '' ?>>Activos</option>
                         <option value="trial" <?= $statusFilter === 'trial' ? 'selected' : '' ?>>En Prueba</option>
-                        <option value="suspended" <?= $statusFilter === 'suspended' ? 'selected' : '' ?>>Suspendidos</option>
-                        <option value="terminated" <?= $statusFilter === 'terminated' ? 'selected' : '' ?>>Terminados/Eliminados</option>
+                        <option value="suspended" <?= $statusFilter === 'suspended' ? 'selected' : '' ?>>Suspendidos
+                        </option>
+                        <option value="terminated" <?= $statusFilter === 'terminated' ? 'selected' : '' ?>>
+                            Terminados/Eliminados</option>
                     </select>
                 </div>
                 <div class="form-group flex-1 min-w-[150px]">
@@ -611,172 +653,172 @@ $terminatedEmployees = $pdo->query("
         </div>
 
         <script>
-        (function() {
-            // Helper function para asignar valores de forma segura
-            function setValue(id, value) {
-                const element = document.getElementById(id);
-                if (element) {
-                    element.value = value || '';
-                }
-            }
-            
-            // Hacer funciones globales
-            window.editEmployee = function(button) {
-                const employee = JSON.parse(button.dataset.employee);
-                
-                // Basic Info
-                setValue('edit_employee_id', employee.id);
-                setValue('edit_first_name', employee.first_name);
-                setValue('edit_last_name', employee.last_name);
-                setValue('edit_email', employee.email);
-                setValue('edit_phone', employee.phone);
-                setValue('edit_mobile', employee.mobile);
-                setValue('edit_birth_date', employee.birth_date);
-                
-                // Employment Info
-                setValue('edit_position', employee.position);
-                setValue('edit_department_id', employee.department_id);
-                setValue('edit_hire_date', employee.hire_date);
-                setValue('edit_termination_date', employee.termination_date);
-                setValue('edit_employment_status', employee.employment_status || 'ACTIVE');
-                setValue('edit_employment_type', employee.employment_type || 'FULL_TIME');
-                
-                // Compensation Info
-                setValue('edit_compensation_type', employee.compensation_type || 'hourly');
-                setValue('edit_hourly_rate', employee.hourly_rate);
-                setValue('edit_hourly_rate_dop', employee.hourly_rate_dop);
-                setValue('edit_monthly_salary_usd', employee.monthly_salary);
-                setValue('edit_monthly_salary_dop', employee.monthly_salary_dop);
-                setValue('edit_daily_salary_usd', employee.daily_salary_usd);
-                setValue('edit_daily_salary_dop', employee.daily_salary_dop);
-                setValue('edit_preferred_currency', employee.preferred_currency || 'USD');
-                
-                // Toggle compensation fields based on type
-                if (typeof toggleEditCompensationFields === 'function') {
-                    toggleEditCompensationFields();
-                }
-                
-                // Address Info
-                setValue('edit_address', employee.address);
-                setValue('edit_city', employee.city);
-                setValue('edit_state', employee.state);
-                setValue('edit_postal_code', employee.postal_code);
-                
-                // Identification
-                setValue('edit_identification_type', employee.identification_type);
-                setValue('edit_identification_number', employee.identification_number);
-                
-                // Personal Details
-                setValue('edit_blood_type', employee.blood_type);
-                setValue('edit_marital_status', employee.marital_status);
-                setValue('edit_gender', employee.gender);
-                
-                // Emergency Contact
-                setValue('edit_emergency_contact_name', employee.emergency_contact_name);
-                setValue('edit_emergency_contact_phone', employee.emergency_contact_phone);
-                setValue('edit_emergency_contact_relationship', employee.emergency_contact_relationship);
-                
-                // Notes
-                setValue('edit_notes', employee.notes);
-                
-                // Banking Info
-                setValue('edit_id_card_number', employee.id_card_number);
-                setValue('edit_bank_id', employee.bank_id);
-                setValue('edit_bank_account_number', employee.bank_account_number);
-                
-                // Photo Preview
-                const photoPreview = document.getElementById('current_photo_preview');
-                if (photoPreview) {
-                    if (employee.photo_path) {
-                        photoPreview.innerHTML = '<img src="../' + employee.photo_path + '" alt="Foto actual" class="w-24 h-24 rounded-lg object-cover border-2 border-blue-500">';
-                    } else {
-                        photoPreview.innerHTML = '<p class="text-slate-400 text-sm">Sin foto actual</p>';
+            (function () {
+                // Helper function para asignar valores de forma segura
+                function setValue(id, value) {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.value = value || '';
                     }
                 }
-                
-                // Show modal first
-                const editModal = document.getElementById('editModal');
-                if (editModal) {
-                    editModal.classList.remove('hidden');
-                    // Prevent body scroll when modal is open
-                    document.body.style.overflow = 'hidden';
-                }
-                
-                // Load current schedule AFTER modal is visible with longer delay
-                if (typeof loadEmployeeSchedule === 'function') {
-                    setTimeout(() => {
-                        loadEmployeeSchedule(employee.id, employee.user_id, employee.employee_code);
-                    }, 200);
-                }
-            };
-            
-            window.loadEmployeeSchedule = function(employeeId, userId, employeeCode) {
-                // Verify elements exist first
-                const scheduleInfo = document.getElementById('current_schedule_info');
-                const scheduleSelect = document.getElementById('edit_schedule_template_id');
-                const assignmentList = document.getElementById('schedule_assignments_list');
-                const assignmentsInput = document.getElementById('schedule_assignments_json_edit');
-                const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
-                const endDateInput = document.getElementById('assignment_end_date_edit');
-                const todayValue = new Date().toISOString().slice(0, 10);
 
-                if (effectiveDateInput && !effectiveDateInput.value) {
-                    effectiveDateInput.value = todayValue;
-                }
-                if (endDateInput) {
-                    endDateInput.value = endDateInput.value || '';
-                }
-                
-                if (!scheduleInfo) {
-                    console.warn('Schedule info element not found in modal');
-                    return; // Exit if element doesn't exist
-                }
-                
-                const userParam = userId ? `&user_id=${userId}` : '';
-                const codeParam = employeeCode ? `&employee_code=${encodeURIComponent(employeeCode)}` : '';
-                fetch(`get_employee_schedule.php?employee_id=${employeeId}&include_all=1${userParam}${codeParam}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        // Double check element still exists
-                        const info = document.getElementById('current_schedule_info');
-                        const select = document.getElementById('edit_schedule_template_id');
-                        const list = document.getElementById('schedule_assignments_list');
-                        const input = document.getElementById('schedule_assignments_json_edit');
-                        
-                        if (!info) return; // Exit if element disappeared
-                        
-                        window.scheduleAssignmentsEdit = Array.isArray(data.schedules)
-                            ? data.schedules.map(schedule => ({
-                                schedule_name: schedule.schedule_name || 'Horario Personalizado',
-                                entry_time: schedule.entry_time,
-                                exit_time: schedule.exit_time,
-                                lunch_time: schedule.lunch_time,
-                                break_time: schedule.break_time,
-                                lunch_minutes: schedule.lunch_minutes,
-                                break_minutes: schedule.break_minutes,
-                                scheduled_hours: schedule.scheduled_hours,
-                                effective_date: schedule.effective_date,
-                                end_date: schedule.end_date,
-                                notes: schedule.notes || null,
-                                days_of_week: schedule.days_of_week || null,
-                                entry_time_display: schedule.entry_time_display,
-                                exit_time_display: schedule.exit_time_display
-                            }))
-                            : [];
+                // Hacer funciones globales
+                window.editEmployee = function (button) {
+                    const employee = JSON.parse(button.dataset.employee);
 
-                        if (typeof renderScheduleAssignmentsEdit === 'function') {
-                            renderScheduleAssignmentsEdit();
-                        } else if (input) {
-                            input.value = JSON.stringify(window.scheduleAssignmentsEdit || []);
+                    // Basic Info
+                    setValue('edit_employee_id', employee.id);
+                    setValue('edit_first_name', employee.first_name);
+                    setValue('edit_last_name', employee.last_name);
+                    setValue('edit_email', employee.email);
+                    setValue('edit_phone', employee.phone);
+                    setValue('edit_mobile', employee.mobile);
+                    setValue('edit_birth_date', employee.birth_date);
+
+                    // Employment Info
+                    setValue('edit_position', employee.position);
+                    setValue('edit_department_id', employee.department_id);
+                    setValue('edit_hire_date', employee.hire_date);
+                    setValue('edit_termination_date', employee.termination_date);
+                    setValue('edit_employment_status', employee.employment_status || 'ACTIVE');
+                    setValue('edit_employment_type', employee.employment_type || 'FULL_TIME');
+
+                    // Compensation Info
+                    setValue('edit_compensation_type', employee.compensation_type || 'hourly');
+                    setValue('edit_hourly_rate', employee.hourly_rate);
+                    setValue('edit_hourly_rate_dop', employee.hourly_rate_dop);
+                    setValue('edit_monthly_salary_usd', employee.monthly_salary);
+                    setValue('edit_monthly_salary_dop', employee.monthly_salary_dop);
+                    setValue('edit_daily_salary_usd', employee.daily_salary_usd);
+                    setValue('edit_daily_salary_dop', employee.daily_salary_dop);
+                    setValue('edit_preferred_currency', employee.preferred_currency || 'USD');
+
+                    // Toggle compensation fields based on type
+                    if (typeof toggleEditCompensationFields === 'function') {
+                        toggleEditCompensationFields();
+                    }
+
+                    // Address Info
+                    setValue('edit_address', employee.address);
+                    setValue('edit_city', employee.city);
+                    setValue('edit_state', employee.state);
+                    setValue('edit_postal_code', employee.postal_code);
+
+                    // Identification
+                    setValue('edit_identification_type', employee.identification_type);
+                    setValue('edit_identification_number', employee.identification_number);
+
+                    // Personal Details
+                    setValue('edit_blood_type', employee.blood_type);
+                    setValue('edit_marital_status', employee.marital_status);
+                    setValue('edit_gender', employee.gender);
+
+                    // Emergency Contact
+                    setValue('edit_emergency_contact_name', employee.emergency_contact_name);
+                    setValue('edit_emergency_contact_phone', employee.emergency_contact_phone);
+                    setValue('edit_emergency_contact_relationship', employee.emergency_contact_relationship);
+
+                    // Notes
+                    setValue('edit_notes', employee.notes);
+
+                    // Banking Info
+                    setValue('edit_id_card_number', employee.id_card_number);
+                    setValue('edit_bank_id', employee.bank_id);
+                    setValue('edit_bank_account_number', employee.bank_account_number);
+
+                    // Photo Preview
+                    const photoPreview = document.getElementById('current_photo_preview');
+                    if (photoPreview) {
+                        if (employee.photo_path) {
+                            photoPreview.innerHTML = '<img src="../' + employee.photo_path + '" alt="Foto actual" class="w-24 h-24 rounded-lg object-cover border-2 border-blue-500">';
+                        } else {
+                            photoPreview.innerHTML = '<p class="text-slate-400 text-sm">Sin foto actual</p>';
                         }
+                    }
 
-                        if (data.schedule) {
-                            const schedule = data.schedule;
-                            const scheduleLabel = schedule.schedule_name || 'Horario Personalizado';
-                            const countLabel = schedule.schedule_count && schedule.schedule_count > 1
-                                ? ` (${schedule.schedule_count} horarios)`
-                                : '';
-                            info.innerHTML = `
+                    // Show modal first
+                    const editModal = document.getElementById('editModal');
+                    if (editModal) {
+                        editModal.classList.remove('hidden');
+                        // Prevent body scroll when modal is open
+                        document.body.style.overflow = 'hidden';
+                    }
+
+                    // Load current schedule AFTER modal is visible with longer delay
+                    if (typeof loadEmployeeSchedule === 'function') {
+                        setTimeout(() => {
+                            loadEmployeeSchedule(employee.id, employee.user_id, employee.employee_code);
+                        }, 200);
+                    }
+                };
+
+                window.loadEmployeeSchedule = function (employeeId, userId, employeeCode) {
+                    // Verify elements exist first
+                    const scheduleInfo = document.getElementById('current_schedule_info');
+                    const scheduleSelect = document.getElementById('edit_schedule_template_id');
+                    const assignmentList = document.getElementById('schedule_assignments_list');
+                    const assignmentsInput = document.getElementById('schedule_assignments_json_edit');
+                    const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
+                    const endDateInput = document.getElementById('assignment_end_date_edit');
+                    const todayValue = new Date().toISOString().slice(0, 10);
+
+                    if (effectiveDateInput && !effectiveDateInput.value) {
+                        effectiveDateInput.value = todayValue;
+                    }
+                    if (endDateInput) {
+                        endDateInput.value = endDateInput.value || '';
+                    }
+
+                    if (!scheduleInfo) {
+                        console.warn('Schedule info element not found in modal');
+                        return; // Exit if element doesn't exist
+                    }
+
+                    const userParam = userId ? `&user_id=${userId}` : '';
+                    const codeParam = employeeCode ? `&employee_code=${encodeURIComponent(employeeCode)}` : '';
+                    fetch(`get_employee_schedule.php?employee_id=${employeeId}&include_all=1${userParam}${codeParam}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            // Double check element still exists
+                            const info = document.getElementById('current_schedule_info');
+                            const select = document.getElementById('edit_schedule_template_id');
+                            const list = document.getElementById('schedule_assignments_list');
+                            const input = document.getElementById('schedule_assignments_json_edit');
+
+                            if (!info) return; // Exit if element disappeared
+
+                            window.scheduleAssignmentsEdit = Array.isArray(data.schedules)
+                                ? data.schedules.map(schedule => ({
+                                    schedule_name: schedule.schedule_name || 'Horario Personalizado',
+                                    entry_time: schedule.entry_time,
+                                    exit_time: schedule.exit_time,
+                                    lunch_time: schedule.lunch_time,
+                                    break_time: schedule.break_time,
+                                    lunch_minutes: schedule.lunch_minutes,
+                                    break_minutes: schedule.break_minutes,
+                                    scheduled_hours: schedule.scheduled_hours,
+                                    effective_date: schedule.effective_date,
+                                    end_date: schedule.end_date,
+                                    notes: schedule.notes || null,
+                                    days_of_week: schedule.days_of_week || null,
+                                    entry_time_display: schedule.entry_time_display,
+                                    exit_time_display: schedule.exit_time_display
+                                }))
+                                : [];
+
+                            if (typeof renderScheduleAssignmentsEdit === 'function') {
+                                renderScheduleAssignmentsEdit();
+                            } else if (input) {
+                                input.value = JSON.stringify(window.scheduleAssignmentsEdit || []);
+                            }
+
+                            if (data.schedule) {
+                                const schedule = data.schedule;
+                                const scheduleLabel = schedule.schedule_name || 'Horario Personalizado';
+                                const countLabel = schedule.schedule_count && schedule.schedule_count > 1
+                                    ? ` (${schedule.schedule_count} horarios)`
+                                    : '';
+                                info.innerHTML = `
                                 <div class="text-green-400">
                                     <i class="fas fa-check-circle mr-2"></i>
                                     <strong>Horario Actual:</strong> ${scheduleLabel}${countLabel}
@@ -787,98 +829,98 @@ $terminatedEmployees = $pdo->query("
                                     (${Number(schedule.scheduled_hours || 0).toFixed(2)} horas)
                                 </div>
                             `;
-                            if (select) select.value = '';
-                        } else {
-                            info.innerHTML = `
+                                if (select) select.value = '';
+                            } else {
+                                info.innerHTML = `
                                 <div class="text-slate-400">
                                     <i class="fas fa-info-circle mr-2"></i>
                                     Usando horario global del sistema
                                 </div>
                             `;
-                            if (select) select.value = '';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error loading schedule:', error);
-                        // Safely try to update error message
-                        const info = document.getElementById('current_schedule_info');
-                        if (info) {
-                            info.innerHTML = `
+                                if (select) select.value = '';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading schedule:', error);
+                            // Safely try to update error message
+                            const info = document.getElementById('current_schedule_info');
+                            if (info) {
+                                info.innerHTML = `
                                 <div class="text-slate-400">
                                     <i class="fas fa-exclamation-triangle mr-2"></i>
                                     No se pudo cargar el horario actual
                                 </div>
                             `;
-                        }
-                    });
-            };
-
-            window.scheduleAssignmentsEdit = [];
-
-            function escapeHtml(value) {
-                const text = String(value ?? '');
-                return text
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#039;');
-            }
-
-            function formatTimeLabel(timeStr) {
-                if (!timeStr) return '';
-                const parts = timeStr.split(':');
-                if (parts.length < 2) return timeStr;
-                let hour = parseInt(parts[0], 10);
-                const minutes = parts[1];
-                if (Number.isNaN(hour)) return timeStr;
-                const ampm = hour >= 12 ? 'PM' : 'AM';
-                hour = hour % 12;
-                if (hour === 0) hour = 12;
-                return `${hour}:${minutes} ${ampm}`;
-            }
-
-            function formatDaysLabel(daysValue) {
-                if (!daysValue) return 'Todos los días';
-                const map = {
-                    1: 'Lun',
-                    2: 'Mar',
-                    3: 'Mié',
-                    4: 'Jue',
-                    5: 'Vie',
-                    6: 'Sáb',
-                    7: 'Dom'
+                            }
+                        });
                 };
-                const parts = daysValue.split(',').map(value => map[parseInt(value, 10)]).filter(Boolean);
-                return parts.length ? parts.join(', ') : 'Todos los días';
-            }
 
-            window.renderScheduleAssignmentsEdit = function() {
-                const list = document.getElementById('schedule_assignments_list');
-                const input = document.getElementById('schedule_assignments_json_edit');
-                if (!list) return;
+                window.scheduleAssignmentsEdit = [];
 
-                const assignments = Array.isArray(window.scheduleAssignmentsEdit)
-                    ? window.scheduleAssignmentsEdit
-                    : [];
-
-                if (input) {
-                    input.value = JSON.stringify(assignments);
+                function escapeHtml(value) {
+                    const text = String(value ?? '');
+                    return text
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
                 }
 
-                if (assignments.length === 0) {
-                    list.innerHTML = '<div class="text-slate-400 text-sm">Sin horarios asignados (usa el horario global o agrega uno)</div>';
-                    return;
+                function formatTimeLabel(timeStr) {
+                    if (!timeStr) return '';
+                    const parts = timeStr.split(':');
+                    if (parts.length < 2) return timeStr;
+                    let hour = parseInt(parts[0], 10);
+                    const minutes = parts[1];
+                    if (Number.isNaN(hour)) return timeStr;
+                    const ampm = hour >= 12 ? 'PM' : 'AM';
+                    hour = hour % 12;
+                    if (hour === 0) hour = 12;
+                    return `${hour}:${minutes} ${ampm}`;
                 }
 
-                list.innerHTML = assignments.map((assignment, index) => {
-                    const entryLabel = assignment.entry_time_display || formatTimeLabel(assignment.entry_time);
-                    const exitLabel = assignment.exit_time_display || formatTimeLabel(assignment.exit_time);
-                    const dateLabel = assignment.effective_date
-                        ? `${assignment.effective_date}${assignment.end_date ? ' → ' + assignment.end_date : ''}`
-                        : 'Sin fecha';
-                    const daysLabel = formatDaysLabel(assignment.days_of_week);
-                    return `
+                function formatDaysLabel(daysValue) {
+                    if (!daysValue) return 'Todos los días';
+                    const map = {
+                        1: 'Lun',
+                        2: 'Mar',
+                        3: 'Mié',
+                        4: 'Jue',
+                        5: 'Vie',
+                        6: 'Sáb',
+                        7: 'Dom'
+                    };
+                    const parts = daysValue.split(',').map(value => map[parseInt(value, 10)]).filter(Boolean);
+                    return parts.length ? parts.join(', ') : 'Todos los días';
+                }
+
+                window.renderScheduleAssignmentsEdit = function () {
+                    const list = document.getElementById('schedule_assignments_list');
+                    const input = document.getElementById('schedule_assignments_json_edit');
+                    if (!list) return;
+
+                    const assignments = Array.isArray(window.scheduleAssignmentsEdit)
+                        ? window.scheduleAssignmentsEdit
+                        : [];
+
+                    if (input) {
+                        input.value = JSON.stringify(assignments);
+                    }
+
+                    if (assignments.length === 0) {
+                        list.innerHTML = '<div class="text-slate-400 text-sm">Sin horarios asignados (usa el horario global o agrega uno)</div>';
+                        return;
+                    }
+
+                    list.innerHTML = assignments.map((assignment, index) => {
+                        const entryLabel = assignment.entry_time_display || formatTimeLabel(assignment.entry_time);
+                        const exitLabel = assignment.exit_time_display || formatTimeLabel(assignment.exit_time);
+                        const dateLabel = assignment.effective_date
+                            ? `${assignment.effective_date}${assignment.end_date ? ' → ' + assignment.end_date : ''}`
+                            : 'Sin fecha';
+                        const daysLabel = formatDaysLabel(assignment.days_of_week);
+                        return `
                         <div class="flex items-start justify-between gap-3 p-3 bg-slate-800/60 rounded-lg">
                             <div>
                                 <div class="text-slate-200 font-medium">
@@ -896,521 +938,521 @@ $terminatedEmployees = $pdo->query("
                             </button>
                         </div>
                     `;
-                }).join('');
-            };
-
-            window.addScheduleAssignmentEdit = function() {
-                const select = document.getElementById('edit_schedule_template_id');
-                const endDateInput = document.getElementById('assignment_end_date_edit');
-                const dayInputs = document.querySelectorAll('[data-schedule-day-edit]');
-
-                if (!select || !select.value) {
-                    alert('Selecciona un turno para agregar.');
-                    return;
-                }
-
-                const assignment = buildAssignmentFromSelectionEdit();
-                if (!assignment) {
-                    alert('No se pudo construir el horario seleccionado.');
-                    return;
-                }
-
-                window.scheduleAssignmentsEdit = window.scheduleAssignmentsEdit || [];
-                window.scheduleAssignmentsEdit.push(assignment);
-                renderScheduleAssignmentsEdit();
-
-                select.value = '';
-                dayInputs.forEach(input => {
-                    input.checked = false;
-                });
-                if (endDateInput) {
-                    endDateInput.value = '';
-                }
-            };
-
-            window.removeScheduleAssignmentEdit = function(index) {
-                if (!Array.isArray(window.scheduleAssignmentsEdit)) {
-                    window.scheduleAssignmentsEdit = [];
-                }
-                window.scheduleAssignmentsEdit.splice(index, 1);
-                renderScheduleAssignmentsEdit();
-            };
-
-            function collectSelectedDaysEdit() {
-                const dayInputs = document.querySelectorAll('[data-schedule-day-edit]');
-                const selectedDays = Array.from(dayInputs)
-                    .filter(input => input.checked)
-                    .map(input => input.value)
-                    .join(',');
-                return selectedDays !== '' ? selectedDays : null;
-            }
-
-            function buildAssignmentFromSelectionEdit() {
-                const select = document.getElementById('edit_schedule_template_id');
-                if (!select || !select.value) {
-                    return null;
-                }
-                const option = select.options[select.selectedIndex];
-                if (!option) {
-                    return null;
-                }
-                const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
-                const endDateInput = document.getElementById('assignment_end_date_edit');
-                const effectiveDate = effectiveDateInput && effectiveDateInput.value
-                    ? effectiveDateInput.value
-                    : new Date().toISOString().slice(0, 10);
-                const endDate = endDateInput && endDateInput.value ? endDateInput.value : null;
-
-                return {
-                    schedule_name: option.dataset.name || option.textContent.trim() || 'Horario',
-                    entry_time: option.dataset.entry || null,
-                    exit_time: option.dataset.exit || null,
-                    lunch_time: option.dataset.lunch || null,
-                    break_time: option.dataset.break || null,
-                    lunch_minutes: parseInt(option.dataset.lunchMinutes || '0', 10) || 0,
-                    break_minutes: parseInt(option.dataset.breakMinutes || '0', 10) || 0,
-                    scheduled_hours: parseFloat(option.dataset.hours || '0') || 0,
-                    effective_date: effectiveDate,
-                    end_date: endDate,
-                    notes: option.dataset.name ? `Asignado desde template: ${option.dataset.name}` : null,
-                    days_of_week: collectSelectedDaysEdit(),
-                    entry_time_display: null,
-                    exit_time_display: null
+                    }).join('');
                 };
-            }
 
-            document.getElementById('editForm')?.addEventListener('submit', function() {
-                if (!Array.isArray(window.scheduleAssignmentsEdit)) {
-                    window.scheduleAssignmentsEdit = [];
-                }
-                if (window.scheduleAssignmentsEdit.length === 0) {
+                window.addScheduleAssignmentEdit = function () {
+                    const select = document.getElementById('edit_schedule_template_id');
+                    const endDateInput = document.getElementById('assignment_end_date_edit');
+                    const dayInputs = document.querySelectorAll('[data-schedule-day-edit]');
+
+                    if (!select || !select.value) {
+                        alert('Selecciona un turno para agregar.');
+                        return;
+                    }
+
                     const assignment = buildAssignmentFromSelectionEdit();
-                    if (assignment) {
-                        window.scheduleAssignmentsEdit.push(assignment);
+                    if (!assignment) {
+                        alert('No se pudo construir el horario seleccionado.');
+                        return;
                     }
-                }
-                if (typeof renderScheduleAssignmentsEdit === 'function') {
+
+                    window.scheduleAssignmentsEdit = window.scheduleAssignmentsEdit || [];
+                    window.scheduleAssignmentsEdit.push(assignment);
                     renderScheduleAssignmentsEdit();
-                }
-            });
-            
-            var isEditModeEdit = false;
-            var editingScheduleIdEdit = null;
 
-            window.updateScheduleButtonsEdit = function() {
-                const select = document.getElementById('edit_schedule_template_id');
-                const editBtn = document.getElementById('editScheduleBtnEdit');
-                const deleteBtn = document.getElementById('deleteScheduleBtnEdit');
-                
-                if (select.value && select.value !== '') {
-                    editBtn.classList.remove('hidden');
-                    deleteBtn.classList.remove('hidden');
-                } else {
-                    editBtn.classList.add('hidden');
-                    deleteBtn.classList.add('hidden');
-                }
-            };
-
-            window.openNewScheduleModalEdit = function() {
-                isEditModeEdit = false;
-                editingScheduleIdEdit = null;
-                document.getElementById('newScheduleModalEdit').classList.remove('hidden');
-                document.getElementById('newScheduleFormEdit').reset();
-                document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
-                document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-clock text-blue-400 mr-2"></i>Crear Nuevo Turno';
-            };
-
-            window.editSelectedScheduleEdit = function() {
-                const select = document.getElementById('edit_schedule_template_id');
-                const scheduleId = select.value;
-                
-                if (!scheduleId) return;
-                
-                fetch('../get_schedule_template.php?id=' + scheduleId)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            const template = data.template;
-                            isEditModeEdit = true;
-                            editingScheduleIdEdit = template.id;
-                            
-                            document.getElementById('new_schedule_name_edit').value = template.name;
-                            document.getElementById('new_schedule_description_edit').value = template.description || '';
-                            document.getElementById('new_entry_time_edit').value = template.entry_time.substring(0, 5);
-                            document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
-                            document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
-                            document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '17:00';
-                            
-                            document.getElementById('newScheduleModalEdit').classList.remove('hidden');
-                            document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
-                            document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-edit text-blue-400 mr-2"></i>Editar Turno: ' + template.name;
-                        } else {
-                            alert('Error: ' + data.error);
-                        }
-                    })
-                    .catch(error => {
-                        alert('Error al cargar el turno: ' + error.message);
+                    select.value = '';
+                    dayInputs.forEach(input => {
+                        input.checked = false;
                     });
-            };
-
-            window.deleteSelectedScheduleEdit = function() {
-                const select = document.getElementById('edit_schedule_template_id');
-                const scheduleId = select.value;
-                const scheduleName = select.options[select.selectedIndex].text;
-                
-                if (!scheduleId) return;
-                
-                if (!confirm('¿Estás seguro de que deseas eliminar el turno "' + scheduleName + '"?\n\nEsta acción no se puede deshacer.')) {
-                    return;
-                }
-                
-                const formData = new FormData();
-                formData.append('id', scheduleId);
-                
-                fetch('../delete_schedule_template.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        select.remove(select.selectedIndex);
-                        updateScheduleButtonsEdit();
-                        alert(data.message);
-                    } else {
-                        alert('Error: ' + data.error);
+                    if (endDateInput) {
+                        endDateInput.value = '';
                     }
-                })
-                .catch(error => {
-                    alert('Error al eliminar el turno: ' + error.message);
-                });
-            };
+                };
 
-            window.closeNewScheduleModalEdit = function() {
-                document.getElementById('newScheduleModalEdit').classList.add('hidden');
-                isEditModeEdit = false;
-                editingScheduleIdEdit = null;
-            };
+                window.removeScheduleAssignmentEdit = function (index) {
+                    if (!Array.isArray(window.scheduleAssignmentsEdit)) {
+                        window.scheduleAssignmentsEdit = [];
+                    }
+                    window.scheduleAssignmentsEdit.splice(index, 1);
+                    renderScheduleAssignmentsEdit();
+                };
 
-            window.saveNewScheduleEdit = function(event) {
-                event.preventDefault();
-                
-                const form = event.target;
-                const formData = new FormData(form);
-                const messageDiv = document.getElementById('scheduleFormMessageEdit');
-                
-                if (isEditModeEdit && editingScheduleIdEdit) {
-                    formData.append('id', editingScheduleIdEdit);
+                function collectSelectedDaysEdit() {
+                    const dayInputs = document.querySelectorAll('[data-schedule-day-edit]');
+                    const selectedDays = Array.from(dayInputs)
+                        .filter(input => input.checked)
+                        .map(input => input.value)
+                        .join(',');
+                    return selectedDays !== '' ? selectedDays : null;
                 }
-                
-                messageDiv.className = 'status-banner mb-4';
-                messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
-                messageDiv.classList.remove('hidden');
-                
-                const endpoint = isEditModeEdit ? '../update_schedule_template.php' : '../save_schedule_template.php';
-                
-                fetch(endpoint, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        messageDiv.className = 'status-banner success mb-4';
-                        messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
-                        
-                        const select = document.getElementById('edit_schedule_template_id');
-                        const template = data.template;
-                        const entryTime = new Date('2000-01-01 ' + template.entry_time);
-                        const exitTime = new Date('2000-01-01 ' + template.exit_time);
-                        const timeInfo = entryTime.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'}) + 
-                                       ' - ' + exitTime.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
-                        
-                        if (isEditModeEdit) {
-                            const option = select.querySelector('option[value="' + template.id + '"]');
-                            if (option) {
-                                option.textContent = template.name + ' (' + timeInfo + ')';
+
+                function buildAssignmentFromSelectionEdit() {
+                    const select = document.getElementById('edit_schedule_template_id');
+                    if (!select || !select.value) {
+                        return null;
+                    }
+                    const option = select.options[select.selectedIndex];
+                    if (!option) {
+                        return null;
+                    }
+                    const effectiveDateInput = document.getElementById('assignment_effective_date_edit');
+                    const endDateInput = document.getElementById('assignment_end_date_edit');
+                    const effectiveDate = effectiveDateInput && effectiveDateInput.value
+                        ? effectiveDateInput.value
+                        : new Date().toISOString().slice(0, 10);
+                    const endDate = endDateInput && endDateInput.value ? endDateInput.value : null;
+
+                    return {
+                        schedule_name: option.dataset.name || option.textContent.trim() || 'Horario',
+                        entry_time: option.dataset.entry || null,
+                        exit_time: option.dataset.exit || null,
+                        lunch_time: option.dataset.lunch || null,
+                        break_time: option.dataset.break || null,
+                        lunch_minutes: parseInt(option.dataset.lunchMinutes || '0', 10) || 0,
+                        break_minutes: parseInt(option.dataset.breakMinutes || '0', 10) || 0,
+                        scheduled_hours: parseFloat(option.dataset.hours || '0') || 0,
+                        effective_date: effectiveDate,
+                        end_date: endDate,
+                        notes: option.dataset.name ? `Asignado desde template: ${option.dataset.name}` : null,
+                        days_of_week: collectSelectedDaysEdit(),
+                        entry_time_display: null,
+                        exit_time_display: null
+                    };
+                }
+
+                document.getElementById('editForm')?.addEventListener('submit', function () {
+                    if (!Array.isArray(window.scheduleAssignmentsEdit)) {
+                        window.scheduleAssignmentsEdit = [];
+                    }
+                    if (window.scheduleAssignmentsEdit.length === 0) {
+                        const assignment = buildAssignmentFromSelectionEdit();
+                        if (assignment) {
+                            window.scheduleAssignmentsEdit.push(assignment);
+                        }
+                    }
+                    if (typeof renderScheduleAssignmentsEdit === 'function') {
+                        renderScheduleAssignmentsEdit();
+                    }
+                });
+
+                var isEditModeEdit = false;
+                var editingScheduleIdEdit = null;
+
+                window.updateScheduleButtonsEdit = function () {
+                    const select = document.getElementById('edit_schedule_template_id');
+                    const editBtn = document.getElementById('editScheduleBtnEdit');
+                    const deleteBtn = document.getElementById('deleteScheduleBtnEdit');
+
+                    if (select.value && select.value !== '') {
+                        editBtn.classList.remove('hidden');
+                        deleteBtn.classList.remove('hidden');
+                    } else {
+                        editBtn.classList.add('hidden');
+                        deleteBtn.classList.add('hidden');
+                    }
+                };
+
+                window.openNewScheduleModalEdit = function () {
+                    isEditModeEdit = false;
+                    editingScheduleIdEdit = null;
+                    document.getElementById('newScheduleModalEdit').classList.remove('hidden');
+                    document.getElementById('newScheduleFormEdit').reset();
+                    document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
+                    document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-clock text-blue-400 mr-2"></i>Crear Nuevo Turno';
+                };
+
+                window.editSelectedScheduleEdit = function () {
+                    const select = document.getElementById('edit_schedule_template_id');
+                    const scheduleId = select.value;
+
+                    if (!scheduleId) return;
+
+                    fetch('../get_schedule_template.php?id=' + scheduleId)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                const template = data.template;
+                                isEditModeEdit = true;
+                                editingScheduleIdEdit = template.id;
+
+                                document.getElementById('new_schedule_name_edit').value = template.name;
+                                document.getElementById('new_schedule_description_edit').value = template.description || '';
+                                document.getElementById('new_entry_time_edit').value = template.entry_time.substring(0, 5);
+                                document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
+                                document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
+                                document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '17:00';
+
+                                document.getElementById('newScheduleModalEdit').classList.remove('hidden');
+                                document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
+                                document.querySelector('#newScheduleModalEdit h3').innerHTML = '<i class="fas fa-edit text-blue-400 mr-2"></i>Editar Turno: ' + template.name;
+                            } else {
+                                alert('Error: ' + data.error);
                             }
-                        } else {
-                            const option = document.createElement('option');
-                            option.value = template.id;
-                            option.textContent = template.name + ' (' + timeInfo + ')';
-                            option.selected = true;
-                            select.appendChild(option);
-                        }
-                        
-                        updateScheduleButtonsEdit();
-                        
-                        setTimeout(() => {
-                            closeNewScheduleModalEdit();
-                        }, 1000);
-                    } else {
-                        messageDiv.className = 'status-banner error mb-4';
-                        messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
-                    }
-                })
-                .catch(error => {
-                    messageDiv.className = 'status-banner error mb-4';
-                    messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar el turno';
-                    console.error('Error:', error);
-                });
-            };
-            
-            document.getElementById('newScheduleModalEdit')?.addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeNewScheduleModalEdit();
-                }
-            });
-            
-            window.toggleEditCompensationFields = function() {
-                const compensationTypeEl = document.getElementById('edit_compensation_type');
-                if (!compensationTypeEl) return;
-                
-                const compensationType = compensationTypeEl.value;
-                const hourlyFields = document.getElementById('edit_hourly_fields');
-                const fixedFields = document.getElementById('edit_fixed_fields');
-                const dailyFields = document.getElementById('edit_daily_fields');
-                
-                if (!hourlyFields || !fixedFields || !dailyFields) return;
-                
-                hourlyFields.classList.add('hidden');
-                fixedFields.classList.add('hidden');
-                dailyFields.classList.add('hidden');
-                
-                if (compensationType === 'hourly') {
-                    hourlyFields.classList.remove('hidden');
-                } else if (compensationType === 'fixed') {
-                    fixedFields.classList.remove('hidden');
-                } else if (compensationType === 'daily') {
-                    dailyFields.classList.remove('hidden');
-                }
-            };
-            
-            window.openEditCreateCampaignModal = function() {
-                document.getElementById('editCampaignModal').classList.remove('hidden');
-            };
-            
-            window.closeEditCampaignModal = function() {
-                document.getElementById('editCampaignModal').classList.add('hidden');
-                document.getElementById('editCampaignForm').reset();
-            };
-            
-            window.saveEditCampaign = function() {
-                const form = document.getElementById('editCampaignForm');
-                const formData = new FormData(form);
-                
-                const messageDiv = document.getElementById('editCampaignMessage');
-                messageDiv.className = 'status-banner mb-4';
-                messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creando campaña...';
-                messageDiv.classList.remove('hidden');
-                
-                fetch('../api/campaigns.php?action=create', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        messageDiv.className = 'status-banner success mb-4';
-                        messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Campaña creada exitosamente';
-                        
-                        const select = document.getElementById('edit_campaign_id');
-                        const option = document.createElement('option');
-                        option.value = data.campaign.id;
-                        option.textContent = data.campaign.name;
-                        option.selected = true;
-                        select.appendChild(option);
-                        
-                        setTimeout(() => {
-                            closeEditCampaignModal();
-                        }, 1000);
-                    } else {
-                        messageDiv.className = 'status-banner error mb-4';
-                        messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
-                    }
-                })
-                .catch(error => {
-                    messageDiv.className = 'status-banner error mb-4';
-                    messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al crear la campaña';
-                    console.error('Error:', error);
-                });
-            };
-
-            function setQuickAssignMessage(type, text) {
-                const messageContainer = document.getElementById('quickAssignMessage');
-                if (!messageContainer) return;
-
-                const classMap = {
-                    loading: 'status-banner mb-4',
-                    success: 'status-banner success mb-4',
-                    error: 'status-banner error mb-4'
-                };
-                const iconMap = {
-                    loading: 'fas fa-spinner fa-spin mr-2',
-                    success: 'fas fa-check-circle mr-2',
-                    error: 'fas fa-exclamation-circle mr-2'
+                        })
+                        .catch(error => {
+                            alert('Error al cargar el turno: ' + error.message);
+                        });
                 };
 
-                messageContainer.className = classMap[type] || 'status-banner mb-4';
-                messageContainer.innerHTML = '<i class="' + (iconMap[type] || 'fas fa-info-circle mr-2') + '"></i>' + text;
-                messageContainer.classList.remove('hidden');
-            }
+                window.deleteSelectedScheduleEdit = function () {
+                    const select = document.getElementById('edit_schedule_template_id');
+                    const scheduleId = select.value;
+                    const scheduleName = select.options[select.selectedIndex].text;
 
-            function resetQuickAssignMessage() {
-                const messageContainer = document.getElementById('quickAssignMessage');
-                if (!messageContainer) return;
-                messageContainer.className = 'hidden';
-                messageContainer.innerHTML = '';
-            }
+                    if (!scheduleId) return;
 
-            window.quickAssign = function(button) {
-                const modal = document.getElementById('quickAssignModal');
-                const form = document.getElementById('quickAssignForm');
-                const employeeIdInput = document.getElementById('quick_assign_employee_id');
-
-                if (!button || !modal || !form || !employeeIdInput) {
-                    console.warn('Quick assign modal elements are missing.');
-                    return;
-                }
-
-                const employee = JSON.parse(button.dataset.employee);
-                form.reset();
-                resetQuickAssignMessage();
-
-                const nameEl = document.getElementById('quick_assign_employee_name');
-                const metaEl = document.getElementById('quick_assign_employee_meta');
-                const campaignSelect = document.getElementById('quick_assign_campaign_id');
-                const supervisorSelect = document.getElementById('quick_assign_supervisor_id');
-                const submitBtn = document.getElementById('quickAssignSubmit');
-
-                const fullName = ((employee.first_name || '') + ' ' + (employee.last_name || '')).trim() || 'Empleado';
-                if (nameEl) {
-                    nameEl.textContent = fullName;
-                }
-
-                if (metaEl) {
-                    const bits = [];
-                    if (employee.employee_code) {
-                        bits.push('#' + employee.employee_code);
+                    if (!confirm('¿Estás seguro de que deseas eliminar el turno "' + scheduleName + '"?\n\nEsta acción no se puede deshacer.')) {
+                        return;
                     }
-                    if (employee.department_name) {
-                        bits.push(employee.department_name);
+
+                    const formData = new FormData();
+                    formData.append('id', scheduleId);
+
+                    fetch('../delete_schedule_template.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                select.remove(select.selectedIndex);
+                                updateScheduleButtonsEdit();
+                                alert(data.message);
+                            } else {
+                                alert('Error: ' + data.error);
+                            }
+                        })
+                        .catch(error => {
+                            alert('Error al eliminar el turno: ' + error.message);
+                        });
+                };
+
+                window.closeNewScheduleModalEdit = function () {
+                    document.getElementById('newScheduleModalEdit').classList.add('hidden');
+                    isEditModeEdit = false;
+                    editingScheduleIdEdit = null;
+                };
+
+                window.saveNewScheduleEdit = function (event) {
+                    event.preventDefault();
+
+                    const form = event.target;
+                    const formData = new FormData(form);
+                    const messageDiv = document.getElementById('scheduleFormMessageEdit');
+
+                    if (isEditModeEdit && editingScheduleIdEdit) {
+                        formData.append('id', editingScheduleIdEdit);
                     }
-                    metaEl.textContent = bits.join(' - ');
+
+                    messageDiv.className = 'status-banner mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
+                    messageDiv.classList.remove('hidden');
+
+                    const endpoint = isEditModeEdit ? '../update_schedule_template.php' : '../save_schedule_template.php';
+
+                    fetch(endpoint, {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                messageDiv.className = 'status-banner success mb-4';
+                                messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
+
+                                const select = document.getElementById('edit_schedule_template_id');
+                                const template = data.template;
+                                const entryTime = new Date('2000-01-01 ' + template.entry_time);
+                                const exitTime = new Date('2000-01-01 ' + template.exit_time);
+                                const timeInfo = entryTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
+                                    ' - ' + exitTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+                                if (isEditModeEdit) {
+                                    const option = select.querySelector('option[value="' + template.id + '"]');
+                                    if (option) {
+                                        option.textContent = template.name + ' (' + timeInfo + ')';
+                                    }
+                                } else {
+                                    const option = document.createElement('option');
+                                    option.value = template.id;
+                                    option.textContent = template.name + ' (' + timeInfo + ')';
+                                    option.selected = true;
+                                    select.appendChild(option);
+                                }
+
+                                updateScheduleButtonsEdit();
+
+                                setTimeout(() => {
+                                    closeNewScheduleModalEdit();
+                                }, 1000);
+                            } else {
+                                messageDiv.className = 'status-banner error mb-4';
+                                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
+                            }
+                        })
+                        .catch(error => {
+                            messageDiv.className = 'status-banner error mb-4';
+                            messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al guardar el turno';
+                            console.error('Error:', error);
+                        });
+                };
+
+                document.getElementById('newScheduleModalEdit')?.addEventListener('click', function (e) {
+                    if (e.target === this) {
+                        closeNewScheduleModalEdit();
+                    }
+                });
+
+                window.toggleEditCompensationFields = function () {
+                    const compensationTypeEl = document.getElementById('edit_compensation_type');
+                    if (!compensationTypeEl) return;
+
+                    const compensationType = compensationTypeEl.value;
+                    const hourlyFields = document.getElementById('edit_hourly_fields');
+                    const fixedFields = document.getElementById('edit_fixed_fields');
+                    const dailyFields = document.getElementById('edit_daily_fields');
+
+                    if (!hourlyFields || !fixedFields || !dailyFields) return;
+
+                    hourlyFields.classList.add('hidden');
+                    fixedFields.classList.add('hidden');
+                    dailyFields.classList.add('hidden');
+
+                    if (compensationType === 'hourly') {
+                        hourlyFields.classList.remove('hidden');
+                    } else if (compensationType === 'fixed') {
+                        fixedFields.classList.remove('hidden');
+                    } else if (compensationType === 'daily') {
+                        dailyFields.classList.remove('hidden');
+                    }
+                };
+
+                window.openEditCreateCampaignModal = function () {
+                    document.getElementById('editCampaignModal').classList.remove('hidden');
+                };
+
+                window.closeEditCampaignModal = function () {
+                    document.getElementById('editCampaignModal').classList.add('hidden');
+                    document.getElementById('editCampaignForm').reset();
+                };
+
+                window.saveEditCampaign = function () {
+                    const form = document.getElementById('editCampaignForm');
+                    const formData = new FormData(form);
+
+                    const messageDiv = document.getElementById('editCampaignMessage');
+                    messageDiv.className = 'status-banner mb-4';
+                    messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creando campaña...';
+                    messageDiv.classList.remove('hidden');
+
+                    fetch('../api/campaigns.php?action=create', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                messageDiv.className = 'status-banner success mb-4';
+                                messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Campaña creada exitosamente';
+
+                                const select = document.getElementById('edit_campaign_id');
+                                const option = document.createElement('option');
+                                option.value = data.campaign.id;
+                                option.textContent = data.campaign.name;
+                                option.selected = true;
+                                select.appendChild(option);
+
+                                setTimeout(() => {
+                                    closeEditCampaignModal();
+                                }, 1000);
+                            } else {
+                                messageDiv.className = 'status-banner error mb-4';
+                                messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + data.error;
+                            }
+                        })
+                        .catch(error => {
+                            messageDiv.className = 'status-banner error mb-4';
+                            messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error al crear la campaña';
+                            console.error('Error:', error);
+                        });
+                };
+
+                function setQuickAssignMessage(type, text) {
+                    const messageContainer = document.getElementById('quickAssignMessage');
+                    if (!messageContainer) return;
+
+                    const classMap = {
+                        loading: 'status-banner mb-4',
+                        success: 'status-banner success mb-4',
+                        error: 'status-banner error mb-4'
+                    };
+                    const iconMap = {
+                        loading: 'fas fa-spinner fa-spin mr-2',
+                        success: 'fas fa-check-circle mr-2',
+                        error: 'fas fa-exclamation-circle mr-2'
+                    };
+
+                    messageContainer.className = classMap[type] || 'status-banner mb-4';
+                    messageContainer.innerHTML = '<i class="' + (iconMap[type] || 'fas fa-info-circle mr-2') + '"></i>' + text;
+                    messageContainer.classList.remove('hidden');
                 }
 
-                employeeIdInput.value = employee.id || '';
-
-                if (campaignSelect) {
-                    campaignSelect.value = employee.campaign_id ? String(employee.campaign_id) : '';
+                function resetQuickAssignMessage() {
+                    const messageContainer = document.getElementById('quickAssignMessage');
+                    if (!messageContainer) return;
+                    messageContainer.className = 'hidden';
+                    messageContainer.innerHTML = '';
                 }
 
-                if (supervisorSelect) {
-                    supervisorSelect.value = employee.supervisor_id ? String(employee.supervisor_id) : '';
-                }
+                window.quickAssign = function (button) {
+                    const modal = document.getElementById('quickAssignModal');
+                    const form = document.getElementById('quickAssignForm');
+                    const employeeIdInput = document.getElementById('quick_assign_employee_id');
 
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
-                }
+                    if (!button || !modal || !form || !employeeIdInput) {
+                        console.warn('Quick assign modal elements are missing.');
+                        return;
+                    }
 
-                modal.classList.remove('hidden');
-                document.body.style.overflow = 'hidden';
-            };
+                    const employee = JSON.parse(button.dataset.employee);
+                    form.reset();
+                    resetQuickAssignMessage();
 
-            window.closeQuickAssignModal = function() {
-                const modal = document.getElementById('quickAssignModal');
-                if (!modal) return;
-                modal.classList.add('hidden');
-                document.body.style.overflow = 'auto';
-            };
+                    const nameEl = document.getElementById('quick_assign_employee_name');
+                    const metaEl = document.getElementById('quick_assign_employee_meta');
+                    const campaignSelect = document.getElementById('quick_assign_campaign_id');
+                    const supervisorSelect = document.getElementById('quick_assign_supervisor_id');
+                    const submitBtn = document.getElementById('quickAssignSubmit');
 
-            function handleQuickAssignSubmit(event) {
-                event.preventDefault();
+                    const fullName = ((employee.first_name || '') + ' ' + (employee.last_name || '')).trim() || 'Empleado';
+                    if (nameEl) {
+                        nameEl.textContent = fullName;
+                    }
 
-                const form = event.target;
-                const submitBtn = document.getElementById('quickAssignSubmit');
-
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando...';
-                }
-
-                setQuickAssignMessage('loading', 'Guardando asignaci&oacute;n...');
-
-                fetch('../api/employees.php?action=quick_assign', {
-                    method: 'POST',
-                    body: new FormData(form)
-                })
-                .then(async response => {
-                    const data = await response.json().catch(() => ({ success: false, error: 'Respuesta no valida del servidor' }));
-                    return { ok: response.ok, data };
-                })
-                .then(result => {
-                    if (result.ok && result.data.success) {
-                        setQuickAssignMessage('success', result.data.message || 'Asignaci&oacute;n actualizada correctamente');
-                        setTimeout(() => window.location.reload(), 1000);
-                    } else {
-                        setQuickAssignMessage('error', result.data.error || 'No se pudo actualizar la asignaci&oacute;n');
-                        if (submitBtn) {
-                            submitBtn.disabled = false;
-                            submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
+                    if (metaEl) {
+                        const bits = [];
+                        if (employee.employee_code) {
+                            bits.push('#' + employee.employee_code);
                         }
+                        if (employee.department_name) {
+                            bits.push(employee.department_name);
+                        }
+                        metaEl.textContent = bits.join(' - ');
                     }
-                })
-                .catch(error => {
-                    console.error('Quick assign error:', error);
-                    setQuickAssignMessage('error', 'Error de comunicaci&oacute;n con el servidor');
+
+                    employeeIdInput.value = employee.id || '';
+
+                    if (campaignSelect) {
+                        campaignSelect.value = employee.campaign_id ? String(employee.campaign_id) : '';
+                    }
+
+                    if (supervisorSelect) {
+                        supervisorSelect.value = employee.supervisor_id ? String(employee.supervisor_id) : '';
+                    }
+
                     if (submitBtn) {
                         submitBtn.disabled = false;
                         submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
                     }
+
+                    modal.classList.remove('hidden');
+                    document.body.style.overflow = 'hidden';
+                };
+
+                window.closeQuickAssignModal = function () {
+                    const modal = document.getElementById('quickAssignModal');
+                    if (!modal) return;
+                    modal.classList.add('hidden');
+                    document.body.style.overflow = 'auto';
+                };
+
+                function handleQuickAssignSubmit(event) {
+                    event.preventDefault();
+
+                    const form = event.target;
+                    const submitBtn = document.getElementById('quickAssignSubmit');
+
+                    if (submitBtn) {
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando...';
+                    }
+
+                    setQuickAssignMessage('loading', 'Guardando asignaci&oacute;n...');
+
+                    fetch('../api/employees.php?action=quick_assign', {
+                        method: 'POST',
+                        body: new FormData(form)
+                    })
+                        .then(async response => {
+                            const data = await response.json().catch(() => ({ success: false, error: 'Respuesta no valida del servidor' }));
+                            return { ok: response.ok, data };
+                        })
+                        .then(result => {
+                            if (result.ok && result.data.success) {
+                                setQuickAssignMessage('success', result.data.message || 'Asignaci&oacute;n actualizada correctamente');
+                                setTimeout(() => window.location.reload(), 1000);
+                            } else {
+                                setQuickAssignMessage('error', result.data.error || 'No se pudo actualizar la asignaci&oacute;n');
+                                if (submitBtn) {
+                                    submitBtn.disabled = false;
+                                    submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Quick assign error:', error);
+                            setQuickAssignMessage('error', 'Error de comunicaci&oacute;n con el servidor');
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
+                            }
+                        });
+                }
+
+                document.addEventListener('DOMContentLoaded', function () {
+                    const modal = document.getElementById('quickAssignModal');
+                    if (modal) {
+                        modal.addEventListener('click', function (e) {
+                            if (e.target === modal) {
+                                window.closeQuickAssignModal();
+                            }
+                        });
+                    }
+
+                    const form = document.getElementById('quickAssignForm');
+                    if (form) {
+                        form.addEventListener('submit', handleQuickAssignSubmit);
+                    }
                 });
-            }
-
-            document.addEventListener('DOMContentLoaded', function() {
-                const modal = document.getElementById('quickAssignModal');
-                if (modal) {
-                    modal.addEventListener('click', function(e) {
-                        if (e.target === modal) {
-                            window.closeQuickAssignModal();
-                        }
-                    });
-                }
-
-                const form = document.getElementById('quickAssignForm');
-                if (form) {
-                    form.addEventListener('submit', handleQuickAssignSubmit);
-                }
-            });
-        })();
+            })();
         </script>
 
         <script>
-        function openTerminatedEmployees() {
-            const modal = document.getElementById('terminatedEmployeesModal');
-            if (modal) {
-                modal.classList.remove('hidden');
-                document.body.style.overflow = 'hidden';
+            function openTerminatedEmployees() {
+                const modal = document.getElementById('terminatedEmployeesModal');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                    document.body.style.overflow = 'hidden';
+                }
             }
-        }
-        function closeTerminatedEmployees() {
-            const modal = document.getElementById('terminatedEmployeesModal');
-            if (modal) {
-                modal.classList.add('hidden');
-                document.body.style.overflow = 'auto';
+            function closeTerminatedEmployees() {
+                const modal = document.getElementById('terminatedEmployeesModal');
+                if (modal) {
+                    modal.classList.add('hidden');
+                    document.body.style.overflow = 'auto';
+                }
             }
-        }
-        document.addEventListener('DOMContentLoaded', function() {
-            const modal = document.getElementById('terminatedEmployeesModal');
-            if (modal) {
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) {
-                        closeTerminatedEmployees();
-                    }
-                });
-            }
-        });
+            document.addEventListener('DOMContentLoaded', function () {
+                const modal = document.getElementById('terminatedEmployeesModal');
+                if (modal) {
+                    modal.addEventListener('click', function (e) {
+                        if (e.target === modal) {
+                            closeTerminatedEmployees();
+                        }
+                    });
+                }
+            });
         </script>
 
         <!-- Employees Grid -->
@@ -1434,15 +1476,16 @@ $terminatedEmployees = $pdo->query("
                         ];
                         $statusColor = $statusColors[$employee['employment_status']] ?? 'bg-gray-500';
                         ?>
-                        <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-blue-500 transition-all">
+                        <div
+                            class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-blue-500 transition-all">
                             <div class="flex items-start gap-3 mb-3">
                                 <?php if (!empty($employee['photo_path']) && file_exists('../' . $employee['photo_path'])): ?>
-                                    <img src="../<?= htmlspecialchars($employee['photo_path']) ?>" 
-                                         alt="<?= htmlspecialchars($employee['first_name']) ?>" 
-                                         class="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-blue-500">
+                                    <img src="../<?= htmlspecialchars($employee['photo_path']) ?>"
+                                        alt="<?= htmlspecialchars($employee['first_name']) ?>"
+                                        class="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-blue-500">
                                 <?php else: ?>
-                                    <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0" 
-                                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                                    <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
+                                        style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
                                         <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
                                     </div>
                                 <?php endif; ?>
@@ -1451,7 +1494,8 @@ $terminatedEmployees = $pdo->query("
                                         <?= htmlspecialchars($employee['first_name'] . ' ' . $employee['last_name']) ?>
                                     </h3>
                                     <p class="text-slate-400 text-sm"><?= htmlspecialchars($employee['employee_code']) ?></p>
-                                    <span class="inline-block px-2 py-1 rounded text-xs font-semibold text-white mt-1 <?= $statusColor ?>">
+                                    <span
+                                        class="inline-block px-2 py-1 rounded text-xs font-semibold text-white mt-1 <?= $statusColor ?>">
                                         <?= htmlspecialchars($employee['employment_status']) ?>
                                     </span>
                                 </div>
@@ -1473,7 +1517,8 @@ $terminatedEmployees = $pdo->query("
                                 <?php if ($employee['campaign_name']): ?>
                                     <p class="text-slate-300">
                                         <i class="fas fa-bullhorn text-purple-400 mr-2 w-4"></i>
-                                        <span class="px-2 py-0.5 rounded text-xs" style="background-color: <?= htmlspecialchars($employee['campaign_color']) ?>20; color: <?= htmlspecialchars($employee['campaign_color']) ?>;">
+                                        <span class="px-2 py-0.5 rounded text-xs"
+                                            style="background-color: <?= htmlspecialchars($employee['campaign_color']) ?>20; color: <?= htmlspecialchars($employee['campaign_color']) ?>;">
                                             <?= htmlspecialchars($employee['campaign_name']) ?>
                                         </span>
                                     </p>
@@ -1507,7 +1552,7 @@ $terminatedEmployees = $pdo->query("
                                     $currency = $employee['preferred_currency'] ?? 'USD';
                                     $compensationType = $employee['compensation_type'] ?? 'hourly';
                                     $currencySymbol = $currency === 'DOP' ? 'RD$' : '$';
-                                    
+
                                     if ($compensationType === 'hourly') {
                                         $rate = $currency === 'DOP' ? $employee['hourly_rate_dop'] : $employee['hourly_rate'];
                                         echo $currencySymbol . number_format($rate, 2) . '/hr';
@@ -1523,20 +1568,17 @@ $terminatedEmployees = $pdo->query("
                             </div>
 
                             <div class="flex gap-2">
-                                <button type="button" 
-                                        onclick="quickAssign(this)" 
-                                        data-employee='<?= json_encode($employee) ?>'
-                                        class="btn-secondary text-xs px-2 py-1" 
-                                        title="Asignar Campaña/Supervisor">
+                                <button type="button" onclick="quickAssign(this)" data-employee='<?= json_encode($employee) ?>'
+                                    class="btn-secondary text-xs px-2 py-1" title="Asignar Campaña/Supervisor">
                                     <i class="fas fa-user-tag"></i>
                                 </button>
-                                <button type="button" onclick="editEmployee(this)" 
-                                        data-employee='<?= json_encode($employee) ?>' 
-                                        class="btn-primary text-sm flex-1">
+                                <button type="button" onclick="editEmployee(this)" data-employee='<?= json_encode($employee) ?>'
+                                    class="btn-primary text-sm flex-1">
                                     <i class="fas fa-edit"></i>
                                     Editar
                                 </button>
-                                <a href="employee_profile.php?id=<?= $employee['id'] ?>" class="btn-secondary text-sm flex-1 text-center">
+                                <a href="employee_profile.php?id=<?= $employee['id'] ?>"
+                                    class="btn-secondary text-sm flex-1 text-center">
                                     <i class="fas fa-eye"></i>
                                     Ver
                                 </a>
@@ -1548,9 +1590,12 @@ $terminatedEmployees = $pdo->query("
         </div>
     </div>
 
-    <div id="terminatedEmployeesModal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
-        <div class="glass-card w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl relative max-h-[85vh] flex flex-col rounded-2xl border border-white/10 shadow-2xl my-6">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 sticky top-0 bg-slate-900/70 backdrop-blur z-10">
+    <div id="terminatedEmployeesModal"
+        class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto">
+        <div
+            class="glass-card w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl relative max-h-[85vh] flex flex-col rounded-2xl border border-white/10 shadow-2xl my-6">
+            <div
+                class="flex items-center justify-between px-4 py-3 border-b border-white/10 sticky top-0 bg-slate-900/70 backdrop-blur z-10">
                 <h3 class="text-xl font-semibold text-white">
                     <i class="fas fa-user-times text-red-400 mr-2"></i>
                     Empleados Terminados/Eliminados
@@ -1561,69 +1606,76 @@ $terminatedEmployees = $pdo->query("
             </div>
 
             <div class="flex-1 overflow-y-auto">
-            <?php if (empty($terminatedEmployees)): ?>
-                <p class="text-slate-400 text-center py-8">No hay empleados terminados o eliminados.</p>
-            <?php else: ?>
-                <div class="overflow-x-auto">
-                    <table class="table-auto text-sm w-full min-w-[750px]">
-                        <thead class="sticky top-0 bg-slate-900/80 backdrop-blur border-b border-white/10">
-                            <tr>
-                                <th class="text-left p-3 text-slate-300 font-medium">Colaborador</th>
-                                <th class="text-left p-3 text-slate-300 font-medium">Código</th>
-                                <th class="text-left p-3 text-slate-300 font-medium">Departamento</th>
-                                <th class="text-left p-3 text-slate-300 font-medium">Fecha Terminación</th>
-                                <th class="text-left p-3 text-slate-300 font-medium">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($terminatedEmployees as $emp): ?>
-                                <tr class="border-b border-slate-800/60 hover:bg-slate-800/40">
-                                    <td class="p-3 text-white">
-                                        <?= htmlspecialchars(($emp['first_name'] ?? '') . ' ' . ($emp['last_name'] ?? '')) ?>
-                                    </td>
-                                    <td class="p-3 text-slate-300">
-                                        <?= htmlspecialchars($emp['employee_code'] ?? '') ?>
-                                    </td>
-                                    <td class="p-3 text-slate-300">
-                                        <?= htmlspecialchars($emp['department_name'] ?? '') ?>
-                                    </td>
-                                    <td class="p-3 text-slate-300">
-                                        <?= !empty($emp['termination_date']) ? date('d/m/Y', strtotime($emp['termination_date'])) : '—' ?>
-                                    </td>
-                                    <td class="p-3">
-                                        <div class="flex flex-wrap gap-2 items-center">
-                                            <a href="employee_profile.php?id=<?= (int)$emp['id'] ?>" class="btn-secondary text-xs px-2 py-1">
-                                                <i class="fas fa-eye"></i> Ver
-                                            </a>
-                                            <button type="button" onclick="editEmployee(this)" data-employee='<?= json_encode($emp) ?>' class="btn-primary text-xs px-2 py-1">
-                                                <i class="fas fa-edit"></i> Editar
-                                            </button>
-                                            <form method="POST" onsubmit="return confirm('¿Reintegrar este empleado?')">
-                                                <input type="hidden" name="employee_id" value="<?= (int)$emp['id'] ?>">
-                                                <button type="submit" name="reinstate_employee" value="1" class="btn-secondary text-xs px-2 py-1">
-                                                    <i class="fas fa-undo"></i> Reintegrar
-                                                </button>
-                                            </form>
-                                            <form method="POST" onsubmit="return confirm('¿Eliminar permanentemente este empleado?')">
-                                                <input type="hidden" name="employee_id" value="<?= (int)$emp['id'] ?>">
-                                                <button type="submit" name="delete_employee" value="1" class="btn-secondary text-xs text-red-400 px-2 py-1">
-                                                    <i class="fas fa-trash"></i> Eliminar
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </td>
+                <?php if (empty($terminatedEmployees)): ?>
+                    <p class="text-slate-400 text-center py-8">No hay empleados terminados o eliminados.</p>
+                <?php else: ?>
+                    <div class="overflow-x-auto">
+                        <table class="table-auto text-sm w-full min-w-[750px]">
+                            <thead class="sticky top-0 bg-slate-900/80 backdrop-blur border-b border-white/10">
+                                <tr>
+                                    <th class="text-left p-3 text-slate-300 font-medium">Colaborador</th>
+                                    <th class="text-left p-3 text-slate-300 font-medium">Código</th>
+                                    <th class="text-left p-3 text-slate-300 font-medium">Departamento</th>
+                                    <th class="text-left p-3 text-slate-300 font-medium">Fecha Terminación</th>
+                                    <th class="text-left p-3 text-slate-300 font-medium">Acciones</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($terminatedEmployees as $emp): ?>
+                                    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40">
+                                        <td class="p-3 text-white">
+                                            <?= htmlspecialchars(($emp['first_name'] ?? '') . ' ' . ($emp['last_name'] ?? '')) ?>
+                                        </td>
+                                        <td class="p-3 text-slate-300">
+                                            <?= htmlspecialchars($emp['employee_code'] ?? '') ?>
+                                        </td>
+                                        <td class="p-3 text-slate-300">
+                                            <?= htmlspecialchars($emp['department_name'] ?? '') ?>
+                                        </td>
+                                        <td class="p-3 text-slate-300">
+                                            <?= !empty($emp['termination_date']) ? date('d/m/Y', strtotime($emp['termination_date'])) : '—' ?>
+                                        </td>
+                                        <td class="p-3">
+                                            <div class="flex flex-wrap gap-2 items-center">
+                                                <a href="employee_profile.php?id=<?= (int) $emp['id'] ?>"
+                                                    class="btn-secondary text-xs px-2 py-1">
+                                                    <i class="fas fa-eye"></i> Ver
+                                                </a>
+                                                <button type="button" onclick="editEmployee(this)"
+                                                    data-employee='<?= json_encode($emp) ?>'
+                                                    class="btn-primary text-xs px-2 py-1">
+                                                    <i class="fas fa-edit"></i> Editar
+                                                </button>
+                                                <form method="POST" onsubmit="return confirm('¿Reintegrar este empleado?')">
+                                                    <input type="hidden" name="employee_id" value="<?= (int) $emp['id'] ?>">
+                                                    <button type="submit" name="reinstate_employee" value="1"
+                                                        class="btn-secondary text-xs px-2 py-1">
+                                                        <i class="fas fa-undo"></i> Reintegrar
+                                                    </button>
+                                                </form>
+                                                <form method="POST"
+                                                    onsubmit="return confirm('¿Eliminar permanentemente este empleado?')">
+                                                    <input type="hidden" name="employee_id" value="<?= (int) $emp['id'] ?>">
+                                                    <button type="submit" name="delete_employee" value="1"
+                                                        class="btn-secondary text-xs text-red-400 px-2 py-1">
+                                                        <i class="fas fa-trash"></i> Eliminar
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 
     <!-- Quick Assign Modal -->
-    <div id="quickAssignModal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+    <div id="quickAssignModal"
+        class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
         <div class="glass-card w-full max-w-xl relative">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-xl font-semibold text-white">
@@ -1642,7 +1694,8 @@ $terminatedEmployees = $pdo->query("
 
                 <div class="bg-slate-900/50 rounded-lg p-4">
                     <p class="text-sm text-slate-400 uppercase tracking-wide mb-1">Empleado</p>
-                    <p id="quick_assign_employee_name" class="text-lg font-semibold text-white">Selecciona un empleado</p>
+                    <p id="quick_assign_employee_name" class="text-lg font-semibold text-white">Selecciona un empleado
+                    </p>
                     <p id="quick_assign_employee_meta" class="text-slate-400 text-sm"></p>
                 </div>
 
@@ -1694,7 +1747,8 @@ $terminatedEmployees = $pdo->query("
     </div>
 
     <!-- Edit Employee Modal -->
-    <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50" style="overflow-y: scroll; padding: 2rem;">
+    <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50"
+        style="overflow-y: scroll; padding: 2rem;">
         <div class="glass-card max-w-5xl mx-auto">
             <h3 class="text-xl font-semibold text-white mb-6">
                 <i class="fas fa-user-edit text-blue-400 mr-2"></i>
@@ -1704,7 +1758,7 @@ $terminatedEmployees = $pdo->query("
                 <input type="hidden" name="update_employee" value="1">
                 <input type="hidden" name="update_schedule" value="1">
                 <input type="hidden" name="employee_id" id="edit_employee_id">
-                
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div class="form-group">
                         <label for="edit_first_name">Nombre *</label>
@@ -1790,58 +1844,65 @@ $terminatedEmployees = $pdo->query("
                     <i class="fas fa-dollar-sign text-blue-400 mr-2"></i>
                     Compensación y Salario
                 </h4>
-                
+
                 <div class="form-group mb-4">
                     <label for="edit_compensation_type">Tipo de Compensación *</label>
-                    <select id="edit_compensation_type" name="compensation_type" onchange="toggleEditCompensationFields()" required>
+                    <select id="edit_compensation_type" name="compensation_type"
+                        onchange="toggleEditCompensationFields()" required>
                         <option value="hourly">Salario por Hora</option>
                         <option value="fixed">Salario Fijo (Mensual)</option>
                         <option value="daily">Salario Diario</option>
                     </select>
                 </div>
-                
+
                 <!-- Campos para Salario por Hora -->
                 <div id="edit_hourly_fields" class="edit-compensation-fields mb-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="form-group">
                             <label for="edit_hourly_rate">Tarifa por hora (USD)</label>
-                            <input type="number" id="edit_hourly_rate" name="hourly_rate" step="0.01" min="0" placeholder="0.00">
+                            <input type="number" id="edit_hourly_rate" name="hourly_rate" step="0.01" min="0"
+                                placeholder="0.00">
                         </div>
                         <div class="form-group">
                             <label for="edit_hourly_rate_dop">Tarifa por hora (DOP)</label>
-                            <input type="number" id="edit_hourly_rate_dop" name="hourly_rate_dop" step="0.01" min="0" placeholder="0.00">
+                            <input type="number" id="edit_hourly_rate_dop" name="hourly_rate_dop" step="0.01" min="0"
+                                placeholder="0.00">
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Campos para Salario Fijo -->
                 <div id="edit_fixed_fields" class="edit-compensation-fields hidden mb-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="form-group">
                             <label for="edit_monthly_salary_usd">Salario mensual (USD)</label>
-                            <input type="number" id="edit_monthly_salary_usd" name="monthly_salary_usd" step="0.01" min="0" placeholder="0.00">
+                            <input type="number" id="edit_monthly_salary_usd" name="monthly_salary_usd" step="0.01"
+                                min="0" placeholder="0.00">
                         </div>
                         <div class="form-group">
                             <label for="edit_monthly_salary_dop">Salario mensual (DOP)</label>
-                            <input type="number" id="edit_monthly_salary_dop" name="monthly_salary_dop" step="0.01" min="0" placeholder="0.00">
+                            <input type="number" id="edit_monthly_salary_dop" name="monthly_salary_dop" step="0.01"
+                                min="0" placeholder="0.00">
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Campos para Salario Diario -->
                 <div id="edit_daily_fields" class="edit-compensation-fields hidden mb-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="form-group">
                             <label for="edit_daily_salary_usd">Salario diario (USD)</label>
-                            <input type="number" id="edit_daily_salary_usd" name="daily_salary_usd" step="0.01" min="0" placeholder="0.00">
+                            <input type="number" id="edit_daily_salary_usd" name="daily_salary_usd" step="0.01" min="0"
+                                placeholder="0.00">
                         </div>
                         <div class="form-group">
                             <label for="edit_daily_salary_dop">Salario diario (DOP)</label>
-                            <input type="number" id="edit_daily_salary_dop" name="daily_salary_dop" step="0.01" min="0" placeholder="0.00">
+                            <input type="number" id="edit_daily_salary_dop" name="daily_salary_dop" step="0.01" min="0"
+                                placeholder="0.00">
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="form-group mb-4">
                     <label for="edit_preferred_currency">Moneda Preferida</label>
                     <select id="edit_preferred_currency" name="preferred_currency">
@@ -1935,13 +1996,15 @@ $terminatedEmployees = $pdo->query("
                     </div>
                     <div class="form-group">
                         <label for="edit_emergency_contact_relationship">Relación</label>
-                        <input type="text" id="edit_emergency_contact_relationship" name="emergency_contact_relationship" placeholder="Ej: Madre, Esposo/a">
+                        <input type="text" id="edit_emergency_contact_relationship"
+                            name="emergency_contact_relationship" placeholder="Ej: Madre, Esposo/a">
                     </div>
                 </div>
 
                 <div class="form-group mb-6">
                     <label for="edit_notes">Notas</label>
-                    <textarea id="edit_notes" name="notes" rows="3" placeholder="Notas adicionales sobre el empleado..."></textarea>
+                    <textarea id="edit_notes" name="notes" rows="3"
+                        placeholder="Notas adicionales sobre el empleado..."></textarea>
                 </div>
 
                 <h4 class="text-lg font-semibold text-white mb-3 mt-6">
@@ -1965,13 +2028,15 @@ $terminatedEmployees = $pdo->query("
                 </div>
                 <div class="form-group mb-4">
                     <label for="edit_bank_account_number">Número de Cuenta Bancaria</label>
-                    <input type="text" id="edit_bank_account_number" name="bank_account_number" placeholder="Número de cuenta">
+                    <input type="text" id="edit_bank_account_number" name="bank_account_number"
+                        placeholder="Número de cuenta">
                 </div>
 
                 <div class="form-group mb-6">
                     <label for="edit_employee_photo">Foto del Empleado</label>
                     <div id="current_photo_preview" class="mb-2"></div>
-                    <input type="file" id="edit_employee_photo" name="employee_photo" accept="image/jpeg,image/png,image/gif,image/jpg" class="block w-full text-sm text-slate-400
+                    <input type="file" id="edit_employee_photo" name="employee_photo"
+                        accept="image/jpeg,image/png,image/gif,image/jpg" class="block w-full text-sm text-slate-400
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-lg file:border-0
                         file:text-sm file:font-semibold
@@ -1988,10 +2053,11 @@ $terminatedEmployees = $pdo->query("
                 <div class="form-group mb-4">
                     <label for="edit_schedule_template_id">Turno / Horario</label>
                     <div class="flex gap-2">
-                        <select id="edit_schedule_template_id" name="schedule_template_id" class="flex-1" onchange="updateScheduleButtonsEdit()">
+                        <select id="edit_schedule_template_id" name="schedule_template_id" class="flex-1"
+                            onchange="updateScheduleButtonsEdit()">
                             <option value="">Usar horario global del sistema</option>
                             <?php foreach ($scheduleTemplates as $template): ?>
-                                <?php 
+                                <?php
                                 $timeInfo = date('g:i A', strtotime($template['entry_time'])) . ' - ' . date('g:i A', strtotime($template['exit_time']));
                                 ?>
                                 <option value="<?= $template['id'] ?>"
@@ -2007,13 +2073,17 @@ $terminatedEmployees = $pdo->query("
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <button type="button" onclick="openNewScheduleModalEdit()" class="btn-secondary px-3 whitespace-nowrap" title="Crear nuevo turno">
+                        <button type="button" onclick="openNewScheduleModalEdit()"
+                            class="btn-secondary px-3 whitespace-nowrap" title="Crear nuevo turno">
                             <i class="fas fa-plus"></i>
                         </button>
-                        <button type="button" id="editScheduleBtnEdit" onclick="editSelectedScheduleEdit()" class="btn-secondary px-3 whitespace-nowrap hidden" title="Editar turno seleccionado">
+                        <button type="button" id="editScheduleBtnEdit" onclick="editSelectedScheduleEdit()"
+                            class="btn-secondary px-3 whitespace-nowrap hidden" title="Editar turno seleccionado">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button type="button" id="deleteScheduleBtnEdit" onclick="deleteSelectedScheduleEdit()" class="btn-secondary px-3 whitespace-nowrap hidden" title="Eliminar turno seleccionado" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                        <button type="button" id="deleteScheduleBtnEdit" onclick="deleteSelectedScheduleEdit()"
+                            class="btn-secondary px-3 whitespace-nowrap hidden" title="Eliminar turno seleccionado"
+                            style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -2036,29 +2106,44 @@ $terminatedEmployees = $pdo->query("
                     <div class="mt-3">
                         <label class="text-xs text-slate-400 block mb-2">Días de la semana (opcional)</label>
                         <div class="flex flex-wrap gap-2">
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" name="schedule_days_edit[]" value="1" data-schedule-day-edit> Lunes
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" name="schedule_days_edit[]" value="1" data-schedule-day-edit>
+                                Lunes
                             </label>
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" name="schedule_days_edit[]" value="2" data-schedule-day-edit> Martes
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" name="schedule_days_edit[]" value="2" data-schedule-day-edit>
+                                Martes
                             </label>
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" name="schedule_days_edit[]" value="3" data-schedule-day-edit> Miércoles
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" name="schedule_days_edit[]" value="3" data-schedule-day-edit>
+                                Miércoles
                             </label>
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" name="schedule_days_edit[]" value="4" data-schedule-day-edit> Jueves
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" name="schedule_days_edit[]" value="4" data-schedule-day-edit>
+                                Jueves
                             </label>
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" name="schedule_days_edit[]" value="5" data-schedule-day-edit> Viernes
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" name="schedule_days_edit[]" value="5" data-schedule-day-edit>
+                                Viernes
                             </label>
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" name="schedule_days_edit[]" value="6" data-schedule-day-edit> Sábado
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" name="schedule_days_edit[]" value="6" data-schedule-day-edit>
+                                Sábado
                             </label>
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
-                                <input type="checkbox" name="schedule_days_edit[]" value="7" data-schedule-day-edit> Domingo
+                            <label
+                                class="inline-flex items-center gap-2 text-xs text-slate-200 bg-slate-800/60 px-3 py-2 rounded-lg">
+                                <input type="checkbox" name="schedule_days_edit[]" value="7" data-schedule-day-edit>
+                                Domingo
                             </label>
                         </div>
-                        <p class="text-xs text-slate-500 mt-1">Si no seleccionas días, el horario aplicará todos los días.</p>
+                        <p class="text-xs text-slate-500 mt-1">Si no seleccionas días, el horario aplicará todos los
+                            días.</p>
                     </div>
                     <p class="text-xs text-slate-400 mt-1">
                         <i class="fas fa-info-circle"></i>
@@ -2074,7 +2159,9 @@ $terminatedEmployees = $pdo->query("
                         <i class="fas fa-save"></i>
                         Guardar Cambios
                     </button>
-                    <button type="button" onclick="document.getElementById('editModal').classList.add('hidden'); document.body.style.overflow = 'auto';" class="btn-secondary flex-1">
+                    <button type="button"
+                        onclick="document.getElementById('editModal').classList.add('hidden'); document.body.style.overflow = 'auto';"
+                        class="btn-secondary flex-1">
                         <i class="fas fa-times"></i>
                         Cancelar
                     </button>
@@ -2084,17 +2171,18 @@ $terminatedEmployees = $pdo->query("
     </div>
 
     <script>
-    // Close modal when clicking outside
-    document.getElementById('editModal')?.addEventListener('click', function(e) {
-        if (e.target === this) {
-            this.classList.add('hidden');
-            document.body.style.overflow = 'auto';
-        }
-    });
+        // Close modal when clicking outside
+        document.getElementById('editModal')?.addEventListener('click', function (e) {
+            if (e.target === this) {
+                this.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }
+        });
     </script>
 
     <!-- Modal para crear nuevo turno -->
-    <div id="newScheduleModalEdit" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+    <div id="newScheduleModalEdit"
+        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
         <div class="glass-card m-4" style="width: min(600px, 95%); max-height: 90vh; overflow-y: auto;">
             <h3 class="text-xl font-semibold text-white mb-4">
                 <i class="fas fa-clock text-blue-400 mr-2"></i>
@@ -2103,12 +2191,14 @@ $terminatedEmployees = $pdo->query("
             <form id="newScheduleFormEdit" onsubmit="saveNewScheduleEdit(event)">
                 <div class="form-group mb-4">
                     <label for="new_schedule_name_edit">Nombre del Turno *</label>
-                    <input type="text" id="new_schedule_name_edit" name="name" required placeholder="Ej: Turno Especial 8am-5pm">
+                    <input type="text" id="new_schedule_name_edit" name="name" required
+                        placeholder="Ej: Turno Especial 8am-5pm">
                 </div>
 
                 <div class="form-group mb-4">
                     <label for="new_schedule_description_edit">Descripción</label>
-                    <textarea id="new_schedule_description_edit" name="description" rows="2" placeholder="Descripción opcional del turno"></textarea>
+                    <textarea id="new_schedule_description_edit" name="description" rows="2"
+                        placeholder="Descripción opcional del turno"></textarea>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -2144,7 +2234,8 @@ $terminatedEmployees = $pdo->query("
                     </div>
                     <div class="form-group">
                         <label for="new_scheduled_hours_edit">Horas Programadas</label>
-                        <input type="number" id="new_scheduled_hours_edit" name="scheduled_hours" step="0.25" min="0" value="8.00">
+                        <input type="number" id="new_scheduled_hours_edit" name="scheduled_hours" step="0.25" min="0"
+                            value="8.00">
                     </div>
                 </div>
 
@@ -2174,33 +2265,32 @@ $terminatedEmployees = $pdo->query("
                 </h3>
                 <button type="button" class="close-modal" onclick="closeEditCampaignModal()">&times;</button>
             </div>
-            
+
             <div id="editCampaignMessage" class="hidden"></div>
-            
+
             <form id="editCampaignForm" onsubmit="event.preventDefault(); saveEditCampaign();">
                 <div class="form-group">
                     <label for="edit_campaign_name">Nombre *</label>
-                    <input type="text" id="edit_campaign_name" name="name" required 
-                           placeholder="Nombre de la campaña">
+                    <input type="text" id="edit_campaign_name" name="name" required placeholder="Nombre de la campaña">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="edit_campaign_code">Código *</label>
-                    <input type="text" id="edit_campaign_code" name="code" required 
-                           placeholder="Código único (ej: SALES-2024)" maxlength="50">
+                    <input type="text" id="edit_campaign_code" name="code" required
+                        placeholder="Código único (ej: SALES-2024)" maxlength="50">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="edit_campaign_description">Descripción</label>
-                    <textarea id="edit_campaign_description" name="description" rows="3" 
-                              placeholder="Descripción de la campaña"></textarea>
+                    <textarea id="edit_campaign_description" name="description" rows="3"
+                        placeholder="Descripción de la campaña"></textarea>
                 </div>
-                
+
                 <div class="form-group">
                     <label for="edit_campaign_color">Color</label>
                     <input type="color" id="edit_campaign_color" name="color" value="#3b82f6">
                 </div>
-                
+
                 <div class="form-actions">
                     <button type="button" onclick="closeEditCampaignModal()" class="btn-secondary">
                         <i class="fas fa-times mr-2"></i>Cancelar
