@@ -314,7 +314,8 @@ include 'header.php';
                                     <td class="py-3 px-4 text-right text-slate-200"><?= number_format($row['total_calls']) ?>
                                     </td>
                                     <td class="py-3 px-4 text-right text-green-400 font-semibold">
-                                        <?= number_format($conversions) ?></td>
+                                        <?= number_format($conversions) ?>
+                                    </td>
                                     <td class="py-3 px-4 text-right">
                                         <span
                                             class="<?= $conversionRate >= 10 ? 'text-green-400' : ($conversionRate >= 5 ? 'text-yellow-400' : 'text-red-400') ?> font-semibold">
@@ -353,6 +354,7 @@ include 'header.php';
                             <th class="text-right py-3 px-4 text-slate-300 font-semibold">Registros</th>
                             <th class="text-left py-3 px-4 text-slate-300 font-semibold">Subido Por</th>
                             <th class="text-left py-3 px-4 text-slate-300 font-semibold">Fecha Subida</th>
+                            <th class="text-center py-3 px-4 text-slate-300 font-semibold">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -361,11 +363,21 @@ include 'header.php';
                                 <td class="py-3 px-4 text-slate-200"><?= htmlspecialchars($upload['filename']) ?></td>
                                 <td class="py-3 px-4 text-slate-300"><?= htmlspecialchars($upload['upload_date']) ?></td>
                                 <td class="py-3 px-4 text-right text-slate-300">
-                                    <?= number_format($upload['record_count']) ?></td>
+                                    <?= number_format($upload['record_count']) ?>
+                                </td>
                                 <td class="py-3 px-4 text-slate-300"><?= htmlspecialchars($upload['username'] ?? 'N/A') ?>
                                 </td>
                                 <td class="py-3 px-4 text-slate-400">
-                                    <?= date('Y-m-d H:i', strtotime($upload['created_at'])) ?></td>
+                                    <?= date('Y-m-d H:i', strtotime($upload['created_at'])) ?>
+                                </td>
+                                <td class="py-3 px-4 text-center">
+                                    <button
+                                        @click="deleteUpload(<?= $upload['id'] ?>, '<?= htmlspecialchars($upload['filename']) ?>')"
+                                        class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-all">
+                                        <i class="fas fa-trash mr-1"></i>
+                                        Eliminar
+                                    </button>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -668,6 +680,33 @@ include 'header.php';
 
             exportToExcel() {
                 window.location.href = `api/vicidial_export.php?start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&campaign=<?= $campaign ?>`;
+            },
+
+            async deleteUpload(uploadId, filename) {
+                if (!confirm(`¿Estás seguro de que deseas eliminar la subida "${filename}"?\n\nEsto eliminará todos los registros asociados a esta subida.`)) {
+                    return;
+                }
+
+                try {
+                    const formData = new FormData();
+                    formData.append('upload_id', uploadId);
+
+                    const response = await fetch('api/vicidial_delete.php', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(data.message + (data.deleted_records ? ` (${data.deleted_records} registros eliminados)` : ''));
+                        window.location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                } catch (error) {
+                    alert('Error al eliminar la subida: ' + error.message);
+                }
             }
         }
     }
