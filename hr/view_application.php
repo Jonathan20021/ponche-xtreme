@@ -57,7 +57,7 @@ if (!empty($application['cover_letter'])) {
 }
 
 // Helper function to get value from JSON or field
-$getValue = function($fieldValue, $jsonPath) use ($formPayload) {
+$getValue = function ($fieldValue, $jsonPath) use ($formPayload) {
     if (!empty($fieldValue)) {
         return $fieldValue;
     }
@@ -76,33 +76,6 @@ $getValue = function($fieldValue, $jsonPath) use ($formPayload) {
     return '';
 };
 
-$extraData = [
-    'cedula' => $getValue($application['cedula'], 'cedula'),
-    'telefonos' => $getValue($application['phone'], 'telefono'),
-    'sector' => $getValue($application['sector_residencia'], null),
-    'aplicacion_previa' => $getValue($application['applied_before'], null),
-    'aplicacion_previa_detalles' => $getValue($application['applied_before_details'], null),
-    'fuente' => $getValue($application['source'], null),
-    'fuente_otro' => $getValue($application['source_other'], null),
-    'conoce_empresa' => $getValue($application['knows_company'], null),
-    'motivo_interes' => $getValue($application['interest_reason'], null),
-    'idioma' => $getValue($application['application_language'], null),
-    'horario_disponible' => $getValue($application['availability_time'], null),
-    'preferencia_horario' => $getValue($application['availability_preference'], null),
-    'horario_entrenamiento' => $getValue($application['training_schedule'], null),
-    'acepta_rotacion' => $getValue($application['agrees_rotating_days'], null),
-    'fines_semana' => $getValue($application['weekend_holidays'], null),
-    'empleado_actual' => $getValue($application['currently_employed'], null),
-    'empleo_actual_detalle' => $getValue($application['current_employment_details'], null),
-    'exp_reciente_empresa' => $getValue($application['recent_company'], 'experiencias.0.empresa'),
-    'exp_reciente_puesto' => $getValue($application['recent_role'], 'experiencias.0.cargo'),
-    'exp_reciente_anios' => $getValue($application['recent_years'], 'experiencias.0.tiempo'),
-    'exp_reciente_salario' => $getValue($application['recent_last_salary'], 'experiencias.0.sueldo'),
-    'exp_call_center' => $getValue($application['has_call_center_experience'], null),
-    'call_center_nombre' => $getValue($application['call_center_name'], null),
-    'call_center_puesto' => $getValue($application['call_center_role'], null),
-    'call_center_salario' => $getValue($application['call_center_salary'], null),
-];
 
 
 $displayName = trim(($application['first_name'] ?? '') . ' ' . ($application['last_name'] ?? ''));
@@ -115,14 +88,14 @@ if ($displayName === '') {
 $displayPhone = !empty($application['phone']) ? $application['phone'] : ($formPayload['telefono'] ?? 'N/A');
 $displayEmail = !empty($application['email']) && $application['email'] !== 'sin-correo@evallish.local' ? $application['email'] : 'sin-correo@evallish.local';
 $displayEducation = !empty($application['education_level']) ? $application['education_level'] : (
-    $formPayload && !empty($formPayload['educacion']['nivel']) 
-        ? (is_array($formPayload['educacion']['nivel']) ? implode(', ', $formPayload['educacion']['nivel']) : $formPayload['educacion']['nivel'])
-        : 'N/A'
+    $formPayload && !empty($formPayload['educacion']['nivel'])
+    ? (is_array($formPayload['educacion']['nivel']) ? implode(', ', $formPayload['educacion']['nivel']) : $formPayload['educacion']['nivel'])
+    : 'N/A'
 );
 $displayYears = !empty($application['years_of_experience']) ? $application['years_of_experience'] : (
     $formPayload && !empty($formPayload['experiencias'][0]['tiempo'])
-        ? $formPayload['experiencias'][0]['tiempo']
-        : ($application['recent_years'] ?? '')
+    ? $formPayload['experiencias'][0]['tiempo']
+    : ($application['recent_years'] ?? '')
 );
 $displayYears = $displayYears !== '' ? $displayYears : 'N/A';
 $theme = $_SESSION['theme'] ?? 'dark';
@@ -151,9 +124,11 @@ require_once '../header.php';
     .modal {
         display: none !important;
     }
+
     .modal.show {
         display: block !important;
     }
+
     .modal-backdrop {
         background-color: rgba(0, 0, 0, 0.5);
     }
@@ -166,7 +141,7 @@ require_once '../header.php';
             <i class="fas fa-arrow-left"></i>
             Volver a Solicitudes
         </a>
-        
+
         <div class="glass-card p-6">
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div>
@@ -202,64 +177,66 @@ require_once '../header.php';
         <div class="lg:col-span-2 space-y-6">
             <!-- Other Applied Positions -->
             <?php if (!empty($other_applications)): ?>
-            <div class="glass-card">
-                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-briefcase text-indigo-400"></i>
-                    Otras Vacantes Aplicadas (<?php echo count($other_applications); ?>)
-                </h3>
-                <div class="bg-indigo-50/10 border border-indigo-500/30 rounded-lg p-4 mb-4">
-                    <p class="text-sm text-indigo-300">
-                        <i class="fas fa-info-circle mr-2"></i>
-                        Este candidato aplic� a m�ltiples vacantes con el mismo CV usando el c�digo: <strong><?php echo htmlspecialchars($application['application_code']); ?></strong>
-                    </p>
-                </div>
-                <div class="space-y-3">
-                    <?php 
-                    $employment_types = [
-                        'full_time' => 'Tiempo Completo',
-                        'part_time' => 'Medio Tiempo',
-                        'contract' => 'Contrato',
-                        'internship' => 'Pasant�a'
-                    ];
-                    foreach ($other_applications as $other_app): 
-                    ?>
-                        <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-indigo-500/50 transition-colors">
-                            <div class="flex justify-between items-start gap-4">
-                                <div class="flex-1">
-                                    <h4 class="font-semibold text-white mb-2 flex items-center gap-2">
-                                        <i class="fas fa-briefcase text-indigo-400 text-sm"></i>
-                                        <?php echo htmlspecialchars($other_app['job_title']); ?>
-                                    </h4>
-                                    <div class="flex flex-wrap gap-3 text-sm text-slate-400">
-                                        <span class="flex items-center gap-1">
-                                            <i class="fas fa-building text-xs"></i>
-                                            <?php echo htmlspecialchars($other_app['department']); ?>
-                                        </span>
-                                        <span class="flex items-center gap-1">
-                                            <i class="fas fa-map-marker-alt text-xs"></i>
-                                            <?php echo htmlspecialchars($other_app['location']); ?>
-                                        </span>
-                                        <span class="flex items-center gap-1">
-                                            <i class="fas fa-clock text-xs"></i>
-                                            <?php echo $employment_types[$other_app['employment_type']] ?? $other_app['employment_type']; ?>
-                                        </span>
-                                    </div>
-                                </div>
-                                <div class="flex flex-col items-end gap-2">
-                                    <span class="status-badge-recruitment status-<?php echo $other_app['status']; ?>">
-                                        <?php echo $status_labels[$other_app['status']]; ?>
-                                    </span>
-                                    <a href="view_application.php?id=<?php echo $other_app['id']; ?>" 
-                                       class="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1">
-                                        <span>Ver detalles</span>
-                                        <i class="fas fa-arrow-right text-xs"></i>
-                                    </a>
-                                </div>
-                            </div>
+                    <div class="glass-card">
+                        <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                            <i class="fas fa-briefcase text-indigo-400"></i>
+                            Otras Vacantes Aplicadas (<?php echo count($other_applications); ?>)
+                        </h3>
+                        <div class="bg-indigo-50/10 border border-indigo-500/30 rounded-lg p-4 mb-4">
+                            <p class="text-sm text-indigo-300">
+                                <i class="fas fa-info-circle mr-2"></i>
+                                Este candidato aplic� a m�ltiples vacantes con el mismo CV usando el c�digo:
+                                <strong><?php echo htmlspecialchars($application['application_code']); ?></strong>
+                            </p>
                         </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
+                        <div class="space-y-3">
+                            <?php
+                            $employment_types = [
+                                'full_time' => 'Tiempo Completo',
+                                'part_time' => 'Medio Tiempo',
+                                'contract' => 'Contrato',
+                                'internship' => 'Pasant�a'
+                            ];
+                            foreach ($other_applications as $other_app):
+                                ?>
+                                    <div
+                                        class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-indigo-500/50 transition-colors">
+                                        <div class="flex justify-between items-start gap-4">
+                                            <div class="flex-1">
+                                                <h4 class="font-semibold text-white mb-2 flex items-center gap-2">
+                                                    <i class="fas fa-briefcase text-indigo-400 text-sm"></i>
+                                                    <?php echo htmlspecialchars($other_app['job_title']); ?>
+                                                </h4>
+                                                <div class="flex flex-wrap gap-3 text-sm text-slate-400">
+                                                    <span class="flex items-center gap-1">
+                                                        <i class="fas fa-building text-xs"></i>
+                                                        <?php echo htmlspecialchars($other_app['department']); ?>
+                                                    </span>
+                                                    <span class="flex items-center gap-1">
+                                                        <i class="fas fa-map-marker-alt text-xs"></i>
+                                                        <?php echo htmlspecialchars($other_app['location']); ?>
+                                                    </span>
+                                                    <span class="flex items-center gap-1">
+                                                        <i class="fas fa-clock text-xs"></i>
+                                                        <?php echo $employment_types[$other_app['employment_type']] ?? $other_app['employment_type']; ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-col items-end gap-2">
+                                                <span class="status-badge-recruitment status-<?php echo $other_app['status']; ?>">
+                                                    <?php echo $status_labels[$other_app['status']]; ?>
+                                                </span>
+                                                <a href="view_application.php?id=<?php echo $other_app['id']; ?>"
+                                                    class="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1">
+                                                    <span>Ver detalles</span>
+                                                    <i class="fas fa-arrow-right text-xs"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
             <?php endif; ?>
 
             <!-- Personal Information -->
@@ -285,39 +262,45 @@ require_once '../header.php';
                         <label class="text-sm text-slate-400">Anios de Experiencia</label>
                         <p class="text-white font-medium"><?php echo htmlspecialchars($displayYears); ?></p>
                     </div>
-                    <?php 
-                        $currentPosition = $application['current_position'];
-                        if (empty($currentPosition) && $formPayload && !empty($formPayload['experiencias'][0]['cargo'])) {
-                            $currentPosition = $formPayload['experiencias'][0]['cargo'];
-                        }
-                        if (!empty($currentPosition)): 
-                    ?>
-                    <div>
-                        <label class="text-sm text-slate-400">Puesto Actual</label>
-                        <p class="text-white font-medium"><?php echo htmlspecialchars($currentPosition); ?></p>
-                    </div>
+                    <?php
+                    $currentPosition = $application['current_position'];
+                    if (empty($currentPosition) && $formPayload && !empty($formPayload['experiencias'][0]['cargo'])) {
+                        $currentPosition = $formPayload['experiencias'][0]['cargo'];
+                    }
+                    if (!empty($currentPosition)):
+                        ?>
+                            <div>
+                                <label class="text-sm text-slate-400">Puesto Actual</label>
+                                <p class="text-white font-medium"><?php echo htmlspecialchars($currentPosition); ?></p>
+                            </div>
                     <?php endif; ?>
-                    <?php 
-                        $currentCompany = $application['current_company'];
-                        if (empty($currentCompany) && $formPayload && !empty($formPayload['experiencias'][0]['empresa'])) {
-                            $currentCompany = $formPayload['experiencias'][0]['empresa'];
-                        }
-                        if (!empty($currentCompany)): 
-                    ?>
-                    <div>
-                        <label class="text-sm text-slate-400">Empresa Actual</label>
-                        <p class="text-white font-medium"><?php echo htmlspecialchars($currentCompany); ?></p>
-                    </div>
+                    <?php
+                    $currentCompany = $application['current_company'];
+                    if (empty($currentCompany) && $formPayload && !empty($formPayload['experiencias'][0]['empresa'])) {
+                        $currentCompany = $formPayload['experiencias'][0]['empresa'];
+                    }
+                    if (!empty($currentCompany)):
+                        ?>
+                            <div>
+                                <label class="text-sm text-slate-400">Empresa Actual</label>
+                                <p class="text-white font-medium"><?php echo htmlspecialchars($currentCompany); ?></p>
+                            </div>
                     <?php endif; ?>
                 </div>
                 <?php if ($application['cv_path']): ?>
-                <div class="mt-4">
-                    <a href="../<?php echo htmlspecialchars($application['cv_path']); ?>" target="_blank" 
-                       class="btn-success inline-flex items-center gap-2">
-                        <i class="fas fa-download"></i>
-                        Descargar CV
-                    </a>
-                </div>
+                        <div class="mt-4 flex items-center gap-3">
+                            <a href="../<?php echo htmlspecialchars($application['cv_path']); ?>" target="_blank"
+                                class="btn-success inline-flex items-center gap-2">
+                                <i class="fas fa-download"></i>
+                                Descargar CV
+                            </a>
+                            <?php if (!empty($application['cv_filename'])): ?>
+                                    <span class="text-slate-400 text-sm">
+                                        <i class="fas fa-file-alt mr-1"></i>
+                                        <?php echo htmlspecialchars($application['cv_filename']); ?>
+                                    </span>
+                            <?php endif; ?>
+                        </div>
                 <?php endif; ?>
             </div>
 
@@ -328,645 +311,628 @@ require_once '../header.php';
                     Resultados de la evaluacion
                 </h3>
                 <?php
-                    $evalLabels = [
-                        'acceptable' => 'Aceptable',
-                        'rejected' => 'Rechazado',
-                        'consideration' => 'En consideracion',
-                        'interview' => 'Citado a entrevista'
-                    ];
-                    $evalResult = $application['evaluation_result'] ?? '';
-                    $evalDatetime = $application['evaluation_datetime'] ?? '';
-                    $evalComments = $application['evaluation_comments'] ?? '';
-                    $evalInterviewer = $application['evaluation_interviewer'] ?? '';
-                    $evalInterviewDate = $application['evaluation_interview_date'] ?? '';
+                $evalLabels = [
+                    'acceptable' => 'Aceptable',
+                    'rejected' => 'Rechazado',
+                    'consideration' => 'En consideracion',
+                    'interview' => 'Citado a entrevista'
+                ];
+                $evalResult = $application['evaluation_result'] ?? '';
+                $evalDatetime = $application['evaluation_datetime'] ?? '';
+                $evalComments = $application['evaluation_comments'] ?? '';
+                $evalInterviewer = $application['evaluation_interviewer'] ?? '';
+                $evalInterviewDate = $application['evaluation_interview_date'] ?? '';
                 ?>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-white">
                     <div>
                         <label class="text-sm text-slate-400">Resultado</label>
-                        <p class="font-medium"><?php echo $evalResult ? ($evalLabels[$evalResult] ?? $evalResult) : 'No registrado'; ?></p>
+                        <p class="font-medium">
+                            <?php echo $evalResult ? ($evalLabels[$evalResult] ?? $evalResult) : 'No registrado'; ?></p>
                     </div>
                     <div>
                         <label class="text-sm text-slate-400">Fecha/Hora de evaluacion</label>
-                        <p class="font-medium"><?php echo $evalDatetime ? date('d/m/Y H:i', strtotime($evalDatetime)) : 'No registrado'; ?></p>
+                        <p class="font-medium">
+                            <?php echo $evalDatetime ? date('d/m/Y H:i', strtotime($evalDatetime)) : 'No registrado'; ?>
+                        </p>
                     </div>
                     <div>
                         <label class="text-sm text-slate-400">Comentarios</label>
-                        <p class="font-medium whitespace-pre-line"><?php echo $evalComments ? htmlspecialchars($evalComments) : 'No registrado'; ?></p>
+                        <p class="font-medium whitespace-pre-line">
+                            <?php echo $evalComments ? htmlspecialchars($evalComments) : 'No registrado'; ?></p>
                     </div>
                     <div>
                         <label class="text-sm text-slate-400">Entrevistador</label>
-                        <p class="font-medium"><?php echo $evalInterviewer ? htmlspecialchars($evalInterviewer) : 'No registrado'; ?></p>
+                        <p class="font-medium">
+                            <?php echo $evalInterviewer ? htmlspecialchars($evalInterviewer) : 'No registrado'; ?></p>
                     </div>
                     <div>
                         <label class="text-sm text-slate-400">Fecha</label>
-                        <p class="font-medium"><?php echo $evalInterviewDate ? date('d/m/Y', strtotime($evalInterviewDate)) : 'No registrado'; ?></p>
+                        <p class="font-medium">
+                            <?php echo $evalInterviewDate ? date('d/m/Y', strtotime($evalInterviewDate)) : 'No registrado'; ?>
+                        </p>
                     </div>
                 </div>
             </div>
 
-            <!-- Detalle de Aplicacion -->
-            <div class="glass-card">
-                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-list text-indigo-400"></i>
-                    Detalle de Aplicacion
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-white">
-                    <?php
-                        $formatYesNo = function($value) {
-                            $v = strtoupper(trim((string)$value));
-                            if ($v === 'SI' || $v === 'YES' || $v === '1') {
+            <?php if (!empty($formPayload)): ?>
+                    <div class="glass-card">
+                        <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                            <i class="fas fa-file-alt text-indigo-400"></i>
+                            Solicitud de Empleo
+                        </h3>
+                        <?php
+                        $payload = $formPayload;
+                        $value = function ($key, $default = '') use ($payload) {
+                            $keys = explode('.', $key);
+                            $current = $payload;
+                            foreach ($keys as $k) {
+                                if (is_array($current) && isset($current[$k])) {
+                                    $current = $current[$k];
+                                } else {
+                                    return $default;
+                                }
+                            }
+                            return $current;
+                        };
+                        $display = function ($val) {
+                            return ($val !== '' && $val !== null) ? $val : 'N/A';
+                        };
+                        $yesNo = function ($val) {
+                            $v = strtoupper(trim((string) $val));
+                            if ($v == 'SI' || $v == 'YES' || $v == '1') {
                                 return 'SI';
                             }
-                            if ($v === 'NO' || $v === '0') {
+                            if ($v == 'NO' || $v == '0') {
                                 return 'NO';
                             }
-                            return $value;
+                            return $val;
                         };
-
-                        // Helper to get data from JSON when field is empty
-                        $getFieldOrJson = function($fieldValue, $jsonKey, $subKey = null) use ($formPayload) {
-                            if (!empty($fieldValue) && !is_array($fieldValue)) {
-                                return $fieldValue;
-                            }
-                            if ($formPayload && isset($formPayload[$jsonKey])) {
-                                $value = $formPayload[$jsonKey];
-                                if ($subKey !== null && is_array($value) && isset($value[$subKey])) {
-                                    $subValue = $value[$subKey];
-                                    // Ensure we return a string
-                                    return is_array($subValue) ? '' : (string)$subValue;
-                                }
-                                // If value is an array, convert to string or return empty
-                                if (is_array($value)) {
-                                    // Try to convert array to readable string
-                                    $filtered = array_filter($value, function($v) { 
-                                        return !is_array($v) && $v !== '' && $v !== null; 
-                                    });
-                                    return !empty($filtered) ? implode(', ', $filtered) : '';
-                                }
-                                return (string)$value;
-                            }
-                            return '';
-                        };
-
-                        $source = $application['source'] ?? '';
-                        if (!empty($application['source_other']) && strtolower($source) === 'otro') {
-                            $source = 'Otro: ' . $application['source_other'];
-                        } elseif (empty($source) && $formPayload && !empty($formPayload['adicional']['medio_vacante'])) {
-                            $medioVacante = $formPayload['adicional']['medio_vacante'];
-                            $source = is_array($medioVacante) ? implode(', ', $medioVacante) : $medioVacante;
-                        }
-
-                        // Extract availability info from JSON if needed
-                        $horarioDisponible = $application['availability_time'] ?? '';
-                        if (empty($horarioDisponible) && $formPayload && !empty($formPayload['disponibilidad'])) {
-                            $disp = $formPayload['disponibilidad'];
-                            $opciones = [];
-                            if (($disp['turno_rotativo'] ?? '') === 'SI') $opciones[] = 'Turno rotativo';
-                            if (($disp['lunes_viernes'] ?? '') === 'SI') $opciones[] = 'Lunes a viernes';
-                            if (($disp['otro'] ?? '') === 'SI' && !empty($disp['otro_texto'])) $opciones[] = $disp['otro_texto'];
-                            $horarioDisponible = implode(', ', $opciones);
-                        }
-
-                        // Extract employment status from experiences
-                        $empleadoActualmente = $application['currently_employed'] ?? '';
-                        $detalleEmpleoActual = $application['current_employment_details'] ?? '';
-                        if (empty($empleadoActualmente) && $formPayload && !empty($formPayload['experiencias'][0]['empresa'])) {
-                            $empleadoActualmente = 'SI'; // Assumed if they have recent experience
-                        }
-
-                        $details = [
-                            'Cedula' => $getFieldOrJson($application['cedula'], 'cedula'),
-                            'Telefono(s)' => $displayPhone,
-                            'Direccion' => $getFieldOrJson($application['address'], 'direccion'),
-                            'Sector de residencia' => $getFieldOrJson($application['sector_residencia'], 'sector_residencia'),
-                            'Fecha de nacimiento' => $getFieldOrJson($application['date_of_birth'], 'fecha_nacimiento'),
-                            'Edad' => $getFieldOrJson('', 'edad'),
-                            'Sexo' => $getFieldOrJson('', 'sexo'),
-                            'Estado civil' => $getFieldOrJson('', 'estado_civil'),
-                            'Aplicacion previa' => $formatYesNo($application['applied_before'] ?? ''),
-                            'Detalle aplicacion previa' => $application['applied_before_details'] ?? '',
-                            'Como se entero' => $source,
-                            'Conoce la empresa' => $formatYesNo($application['knows_company'] ?? ''),
-                            'Motivo de interes' => $application['interest_reason'] ?? '',
-                            'Idioma de aplicacion' => $application['application_language'] ?? '',
-                            'Horario disponible' => $horarioDisponible,
-                            'Preferencia de horario' => $application['availability_preference'] ?? '',
-                            'Horario de entrenamiento' => $application['training_schedule'] ?? '',
-                            'Acepta rotacion de libres' => $formatYesNo($application['agrees_rotating_days'] ?? ''),
-                            'Fines de semana/feriados' => $formatYesNo($application['weekend_holidays'] ?? ''),
-                            'Empleado actualmente' => $formatYesNo($empleadoActualmente),
-                            'Detalle empleo actual' => $detalleEmpleoActual,
-                            'Empresa reciente' => $getFieldOrJson($application['recent_company'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['empresa']) ? $formPayload['experiencias'][0]['empresa'] : ''),
-                            'Puesto reciente' => $getFieldOrJson($application['recent_role'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['cargo']) ? $formPayload['experiencias'][0]['cargo'] : ''),
-                            'Anios de experiencia reciente' => $getFieldOrJson($application['recent_years'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['tiempo']) ? $formPayload['experiencias'][0]['tiempo'] : ''),
-                            'Ultimo salario reciente' => $getFieldOrJson($application['recent_last_salary'], 'experiencias', 0) ?: ($formPayload && !empty($formPayload['experiencias'][0]['sueldo']) ? $formPayload['experiencias'][0]['sueldo'] : ''),
-                            'Expectativas salariales' => $getFieldOrJson($application['expected_salary'], 'adicional', 'expectativas_salariales') ?: ($formPayload && !empty($formPayload['adicional']['expectativas_salariales']) ? $formPayload['adicional']['expectativas_salariales'] : ''),
-                            'Experiencia en call center' => $formatYesNo($application['has_call_center_experience'] ?? ''),
-                            'Ultimo call center' => $application['call_center_name'] ?? '',
-                            'Puesto en call center' => $application['call_center_role'] ?? '',
-                            'Salario en call center' => $application['call_center_salary'] ?? '',
-                        ];
-
-                        foreach ($details as $label => $value):
-                            // Ensure value is a string
-                            if (is_array($value)) {
-                                $value = implode(', ', array_filter($value, function($v) { 
-                                    return !is_array($v) && $v !== '' && $v !== null; 
-                                }));
-                            }
-                            $display = ($value !== '' && $value !== null) ? $value : 'N/A';
-                    ?>
-                        <div>
-                            <label class="text-sm text-slate-400"><?php echo htmlspecialchars($label); ?></label>
-                            <p class="font-medium"><?php echo htmlspecialchars($display); ?></p>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-            <?php if (!empty($formPayload)): ?>
-            <div class="glass-card">
-                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-file-alt text-indigo-400"></i>
-                    Formulario de Solicitud (Nuevo)
-                </h3>
-                <?php
-                    $payload = $formPayload;
-                    $value = function ($key, $default = '') use ($payload) {
-                        return $payload[$key] ?? $default;
-                    };
-                    $display = function ($val) {
-                        return ($val !== '' && $val !== null) ? $val : 'N/A';
-                    };
-                    $yesNo = function ($val) {
-                        $v = strtoupper(trim((string)$val));
-                        if ($v == 'SI' || $v == 'YES' || $v == '1') {
-                            return 'SI';
-                        }
-                        if ($v == 'NO' || $v == '0') {
-                            return 'NO';
-                        }
-                        return $val;
-                    };
-                ?>
-                <div class="space-y-6 text-white">
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Datos personales</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ?>
+                        <div class="space-y-6 text-white">
                             <div>
-                                <label class="text-sm text-slate-400">Puesto aplicado</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('puesto_aplicado'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Serie</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('serie'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Cedula</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('cedula'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Telefono</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('telefono'))); ?></p>
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="text-sm text-slate-400">Direccion</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('direccion'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Apellido paterno</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('apellido_paterno'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Apellido materno</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('apellido_materno'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Nombre(s)</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('nombres'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Apodo</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('apodo'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Fecha de nacimiento</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('fecha_nacimiento'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Edad</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('edad'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Lugar de nacimiento</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('lugar_nacimiento'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Pais de nacimiento</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('pais_nacimiento'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Nacionalidad</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('nacionalidad'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Sexo</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('sexo'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Estado civil</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('estado_civil'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Tipo de sangre</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('tipo_sangre'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Estatura</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('estatura'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Peso</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('peso'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Con quien vive</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('vive_con'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Personas dependen</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('personas_dependen'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Tiene hijos</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('tiene_hijos')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Edad de hijos</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('edad_hijos'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Casa propia</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('casa_propia')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Personas vive</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('personas_vive'))); ?></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Disponibilidad de horario</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-sm text-slate-400">Turno rotativo</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('disponibilidad_turno_rotativo')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Lunes a viernes</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('disponibilidad_lunes_viernes')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Otra disponibilidad</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('disponibilidad_otro')))); ?></p>
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="text-sm text-slate-400">Detalle otro</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('disponibilidad_otro_texto'))); ?></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Modalidad de trabajo solicitada</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-sm text-slate-400">Presencial</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('modalidad_presencial')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Hibrida</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('modalidad_hibrida')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Remota</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('modalidad_remota')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Otra modalidad</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('modalidad_otro')))); ?></p>
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="text-sm text-slate-400">Detalle otra modalidad</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('modalidad_otro_texto'))); ?></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Transporte</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-sm text-slate-400">Carro publico</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('transporte_carro')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Motoconcho</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('transporte_moto')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">A pie</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('transporte_pie')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Otro</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('transporte_otro')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Detalle otro</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('transporte_otro_texto'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Detalles traslado</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('transporte_detalles'))); ?></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Ultimo nivel academico</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-sm text-slate-400">Primaria</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('nivel_primaria')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Bachillerato</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('nivel_bachillerato')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Estudiante universitario</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('nivel_estudiante')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Tecnico</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('nivel_tecnico')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Tecnico detalle</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('nivel_tecnico_detalle'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Carrera completa</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('nivel_carrera_completa')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Carrera detalle</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('nivel_carrera_detalle'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Postgrado</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('nivel_postgrado')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Postgrado detalle</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('nivel_postgrado_detalle'))); ?></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Estudios actuales</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-sm text-slate-400">Estudia actualmente</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('estudia_actualmente')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Que estudia</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('que_estudia'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Donde estudia</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('donde_estudia'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Horario de clases</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('horario_clases'))); ?></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Otros cursos</h4>
-                        <div class="space-y-2">
-                            <?php
-                                $otrosCursos = $payload['otros_cursos'] ?? [];
-                                $mostrarCursos = false;
-                                if (is_array($otrosCursos)) {
-                                    foreach ($otrosCursos as $curso) {
-                                        if (!empty($curso['curso']) || !empty($curso['institucion']) || !empty($curso['fecha'])) {
-                                            $mostrarCursos = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            ?>
-                            <?php if ($mostrarCursos): ?>
-                                <?php foreach ($otrosCursos as $curso): ?>
-                                    <?php if (empty($curso['curso']) && empty($curso['institucion']) && empty($curso['fecha'])) continue; ?>
-                                    <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-                                        <p class="font-medium"><?php echo htmlspecialchars($display($curso['curso'] ?? '')); ?></p>
-                                        <p class="text-sm text-slate-400"><?php echo htmlspecialchars($display($curso['institucion'] ?? '')); ?></p>
-                                        <p class="text-sm text-slate-400"><?php echo htmlspecialchars($display($curso['fecha'] ?? '')); ?></p>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Datos personales</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-slate-400">Puesto aplicado</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('puesto_aplicado'))); ?></p>
                                     </div>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <p class="text-slate-400">N/A</p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Idiomas</h4>
-                        <div class="space-y-2">
-                            <?php
-                                $idiomas = $payload['idiomas'] ?? [];
-                                $mostrarIdiomas = false;
-                                if (is_array($idiomas)) {
-                                    foreach ($idiomas as $idioma) {
-                                        if (!empty($idioma['idioma']) || !empty($idioma['habla']) || !empty($idioma['lee']) || !empty($idioma['escribe'])) {
-                                            $mostrarIdiomas = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            ?>
-                            <?php if ($mostrarIdiomas): ?>
-                                <?php foreach ($idiomas as $idioma): ?>
-                                    <?php if (empty($idioma['idioma']) && empty($idioma['habla']) && empty($idioma['lee']) && empty($idioma['escribe'])) continue; ?>
-                                    <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-                                        <p class="font-medium"><?php echo htmlspecialchars($display($idioma['idioma'] ?? '')); ?></p>
-                                        <p class="text-sm text-slate-400">Habla: <?php echo htmlspecialchars($display($idioma['habla'] ?? '')); ?> | Lee: <?php echo htmlspecialchars($display($idioma['lee'] ?? '')); ?> | Escribe: <?php echo htmlspecialchars($display($idioma['escribe'] ?? '')); ?></p>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Serie</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('serie'))); ?></p>
                                     </div>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <p class="text-slate-400">N/A</p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Experiencias laborales</h4>
-                        <div class="space-y-4">
-                            <?php
-                                $experiencias = [
-                                    [
-                                        'empresa' => $value('exp1_empresa'),
-                                        'superior' => $value('exp1_superior'),
-                                        'tiempo' => $value('exp1_tiempo'),
-                                        'telefono' => $value('exp1_telefono'),
-                                        'cargo' => $value('exp1_cargo'),
-                                        'sueldo' => $value('exp1_sueldo'),
-                                        'tareas' => $value('exp1_tareas'),
-                                        'razon' => $value('exp1_razon_salida'),
-                                    ],
-                                    [
-                                        'empresa' => $value('exp2_empresa'),
-                                        'superior' => $value('exp2_superior'),
-                                        'tiempo' => $value('exp2_tiempo'),
-                                        'telefono' => $value('exp2_telefono'),
-                                        'cargo' => $value('exp2_cargo'),
-                                        'sueldo' => $value('exp2_sueldo'),
-                                        'tareas' => $value('exp2_tareas'),
-                                        'razon' => $value('exp2_razon_salida'),
-                                    ]
-                                ];
-                            ?>
-                            <?php foreach ($experiencias as $idx => $exp): ?>
-                                <?php if (empty($exp['empresa']) && empty($exp['cargo']) && empty($exp['superior']) && empty($exp['tiempo'])) continue; ?>
-                                <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-                                    <h5 class="font-semibold text-white mb-2">Experiencia <?php echo $idx + 1; ?></h5>
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div>
-                                            <label class="text-sm text-slate-400">Empresa</label>
-                                            <p class="font-medium"><?php echo htmlspecialchars($display($exp['empresa'])); ?></p>
-                                        </div>
-                                        <div>
-                                            <label class="text-sm text-slate-400">Cargo</label>
-                                            <p class="font-medium"><?php echo htmlspecialchars($display($exp['cargo'])); ?></p>
-                                        </div>
-                                        <div>
-                                            <label class="text-sm text-slate-400">Superior inmediato</label>
-                                            <p class="font-medium"><?php echo htmlspecialchars($display($exp['superior'])); ?></p>
-                                        </div>
-                                        <div>
-                                            <label class="text-sm text-slate-400">Tiempo trabajado</label>
-                                            <p class="font-medium"><?php echo htmlspecialchars($display($exp['tiempo'])); ?></p>
-                                        </div>
-                                        <div>
-                                            <label class="text-sm text-slate-400">Telefono</label>
-                                            <p class="font-medium"><?php echo htmlspecialchars($display($exp['telefono'])); ?></p>
-                                        </div>
-                                        <div>
-                                            <label class="text-sm text-slate-400">Sueldo</label>
-                                            <p class="font-medium"><?php echo htmlspecialchars($display($exp['sueldo'])); ?></p>
-                                        </div>
-                                        <div class="md:col-span-2">
-                                            <label class="text-sm text-slate-400">Tareas principales</label>
-                                            <p class="font-medium whitespace-pre-line"><?php echo htmlspecialchars($display($exp['tareas'])); ?></p>
-                                        </div>
-                                        <div class="md:col-span-2">
-                                            <label class="text-sm text-slate-400">Razon de salida</label>
-                                            <p class="font-medium whitespace-pre-line"><?php echo htmlspecialchars($display($exp['razon'])); ?></p>
-                                        </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Cedula</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('cedula'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Telefono</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('telefono'))); ?></p>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="text-sm text-slate-400">Direccion</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('direccion'))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Apellido paterno</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('apellido_paterno'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Apellido materno</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('apellido_materno'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Nombre(s)</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('nombres'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Apodo</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('apodo'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Fecha de nacimiento</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('fecha_nacimiento'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Edad</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('edad'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Lugar de nacimiento</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('lugar_nacimiento'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Pais de nacimiento</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('pais_nacimiento'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Nacionalidad</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('nacionalidad'))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Sexo</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('sexo'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Estado civil</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('estado_civil'))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Tipo de sangre</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('tipo_sangre'))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Estatura</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('estatura'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Peso</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('peso'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Con quien vive</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('vive_con'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Personas dependen</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('personas_dependen'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Tiene hijos</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('tiene_hijos')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Edad de hijos</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('edad_hijos'))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Casa propia</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('casa_propia')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Personas vive</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('personas_vive'))); ?></p>
                                     </div>
                                 </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
+                            </div>
 
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Informacion adicional</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="text-sm text-slate-400">Mayor logro</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('mayor_logro'))); ?></p>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Disponibilidad de horario</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-slate-400">Turno rotativo</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('disponibilidad.turno_rotativo')))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Lunes a viernes</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('disponibilidad.lunes_viernes')))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Otra disponibilidad</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('disponibilidad.otro')))); ?></p>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="text-sm text-slate-400">Detalle otro</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('disponibilidad.otro_texto'))); ?></p>
+                                    </div>
+                                </div>
                             </div>
+
                             <div>
-                                <label class="text-sm text-slate-400">Expectativas salariales</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('expectativas_salariales'))); ?></p>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Modalidad de trabajo solicitada</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-slate-400">Presencial</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('modalidad.presencial')))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Hibrida</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('modalidad.hibrida')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Remota</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('modalidad.remota')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Otra modalidad</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('modalidad.otro')))); ?></p>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="text-sm text-slate-400">Detalle otra modalidad</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('modalidad.otro_texto'))); ?></p>
+                                    </div>
+                                </div>
                             </div>
+
                             <div>
-                                <label class="text-sm text-slate-400">Incapacidad</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('incapacidad')))); ?></p>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Transporte</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-slate-400">Carro publico</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('transporte.carro_publico')))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Motoconcho</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('transporte.motoconcho')))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">A pie</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('transporte.a_pie')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Otro</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('transporte.otro')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Detalle otro</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('transporte.otro_texto'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Detalles traslado</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('transporte.detalles'))); ?></p>
+                                    </div>
+                                </div>
                             </div>
+
                             <div>
-                                <label class="text-sm text-slate-400">Incapacidad cual</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('incapacidad_cual'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Horas extras</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('horas_extras')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Dias fiestas</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('dias_fiestas')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Conoce empleado</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($yesNo($value('conoce_empleado')))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Nombre empleado</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('conoce_empleado_nombre'))); ?></p>
-                            </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Medio vacante</label>
-                                <p class="font-medium">
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Ultimo nivel academico</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <?php
-                                        $medioVacante = $payload['medio_vacante'] ?? [];
-                                        if (!is_array($medioVacante)) {
-                                            $medioVacante = [$medioVacante];
-                                        }
-                                        $medioTexto = !empty($medioVacante) ? implode(', ', $medioVacante) : '';
-                                        if (!empty($payload['medio_vacante_otro_texto'])) {
-                                            $medioTexto = $medioTexto !== '' ? $medioTexto . ' / ' . $payload['medio_vacante_otro_texto'] : $payload['medio_vacante_otro_texto'];
+                                        $nivelesEducacion = $value('educacion.nivel', []);
+                                        if (!is_array($nivelesEducacion)) $nivelesEducacion = [];
+                                        $hasPrimaria = false; $hasBachillerato = false; $hasEstudiante = false;
+                                        $hasTecnico = false; $hasCarrera = false; $hasPostgrado = false;
+                                        foreach ($nivelesEducacion as $niv) {
+                                            $nivLower = strtolower($niv);
+                                            if (strpos($nivLower, 'primaria') !== false) $hasPrimaria = true;
+                                            if (strpos($nivLower, 'bachillerato') !== false) $hasBachillerato = true;
+                                            if (strpos($nivLower, 'estudiante') !== false) $hasEstudiante = true;
+                                            if (strpos($nivLower, 'tecnico') !== false || strpos($nivLower, 'técnico') !== false) $hasTecnico = true;
+                                            if (strpos($nivLower, 'carrera') !== false) $hasCarrera = true;
+                                            if (strpos($nivLower, 'postgrado') !== false || strpos($nivLower, 'maestria') !== false) $hasPostgrado = true;
                                         }
                                     ?>
-                                    <?php echo htmlspecialchars($display($medioTexto)); ?>
-                                </p>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Primaria</label>
+                                        <p class="font-medium"><?php echo $hasPrimaria ? 'SI' : 'NO'; ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Bachillerato</label>
+                                        <p class="font-medium"><?php echo $hasBachillerato ? 'SI' : 'NO'; ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Estudiante universitario</label>
+                                        <p class="font-medium"><?php echo $hasEstudiante ? 'SI' : 'NO'; ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Tecnico</label>
+                                        <p class="font-medium"><?php echo $hasTecnico ? 'SI' : 'NO'; ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Tecnico detalle</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('educacion.nivel_tecnico_detalle'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Carrera completa</label>
+                                        <p class="font-medium"><?php echo $hasCarrera ? 'SI' : 'NO'; ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Carrera detalle</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('educacion.nivel_carrera_detalle'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Postgrado</label>
+                                        <p class="font-medium"><?php echo $hasPostgrado ? 'SI' : 'NO'; ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Postgrado detalle</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('educacion.nivel_postgrado_detalle'))); ?></p>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <label class="text-sm text-slate-400">Firma solicitante</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('firma_solicitante'))); ?></p>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div>
-                        <h4 class="text-lg font-semibold text-indigo-200 mb-3">Para uso exclusivo del evaluador</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="text-sm text-slate-400">Nombre del evaluador</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('evaluador_nombre'))); ?></p>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Estudios actuales</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-slate-400">Estudia actualmente</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('educacion.estudia_actualmente')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Que estudia</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('educacion.que_estudia'))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Donde estudia</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('educacion.donde_estudia'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Horario de clases</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('educacion.horario_clases'))); ?></p>
+                                    </div>
+                                </div>
                             </div>
+
                             <div>
-                                <label class="text-sm text-slate-400">Fecha de evaluacion</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('evaluacion_fecha'))); ?></p>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Otros cursos</h4>
+                                <div class="space-y-2">
+                                    <?php
+                                    $otrosCursos = $value('educacion.otros_cursos', []);
+                                    $mostrarCursos = false;
+                                    if (is_array($otrosCursos)) {
+                                        foreach ($otrosCursos as $curso) {
+                                            if (!empty($curso['curso']) || !empty($curso['institucion']) || !empty($curso['fecha'])) {
+                                                $mostrarCursos = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    ?>
+                                    <?php if ($mostrarCursos): ?>
+                                            <?php foreach ($otrosCursos as $curso): ?>
+                                                    <?php if (empty($curso['curso']) && empty($curso['institucion']) && empty($curso['fecha']))
+                                                        continue; ?>
+                                                    <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                                                        <p class="font-medium"><?php echo htmlspecialchars($display($curso['curso'] ?? '')); ?>
+                                                        </p>
+                                                        <p class="text-sm text-slate-400">
+                                                            <?php echo htmlspecialchars($display($curso['institucion'] ?? '')); ?></p>
+                                                        <p class="text-sm text-slate-400">
+                                                            <?php echo htmlspecialchars($display($curso['fecha'] ?? '')); ?></p>
+                                                    </div>
+                                            <?php endforeach; ?>
+                                    <?php else: ?>
+                                            <p class="text-slate-400">N/A</p>
+                                    <?php endif; ?>
+                                </div>
                             </div>
+
                             <div>
-                                <label class="text-sm text-slate-400">Puesto</label>
-                                <p class="font-medium"><?php echo htmlspecialchars($display($value('evaluador_puesto'))); ?></p>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Idiomas</h4>
+                                <div class="space-y-2">
+                                    <?php
+                                    $idiomas = $payload['idiomas'] ?? [];
+                                    $mostrarIdiomas = false;
+                                    if (is_array($idiomas)) {
+                                        foreach ($idiomas as $idioma) {
+                                            if (!empty($idioma['idioma']) || !empty($idioma['habla']) || !empty($idioma['lee']) || !empty($idioma['escribe'])) {
+                                                $mostrarIdiomas = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    ?>
+                                    <?php if ($mostrarIdiomas): ?>
+                                            <?php foreach ($idiomas as $idioma): ?>
+                                                    <?php if (empty($idioma['idioma']) && empty($idioma['habla']) && empty($idioma['lee']) && empty($idioma['escribe']))
+                                                        continue; ?>
+                                                    <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                                                        <p class="font-medium">
+                                                            <?php echo htmlspecialchars($display($idioma['idioma'] ?? '')); ?></p>
+                                                        <p class="text-sm text-slate-400">Habla:
+                                                            <?php echo htmlspecialchars($display($idioma['habla'] ?? '')); ?> | Lee:
+                                                            <?php echo htmlspecialchars($display($idioma['lee'] ?? '')); ?> | Escribe:
+                                                            <?php echo htmlspecialchars($display($idioma['escribe'] ?? '')); ?></p>
+                                                    </div>
+                                            <?php endforeach; ?>
+                                    <?php else: ?>
+                                            <p class="text-slate-400">N/A</p>
+                                    <?php endif; ?>
+                                </div>
                             </div>
-                            <div class="md:col-span-2">
-                                <label class="text-sm text-slate-400">Observaciones entrevista</label>
-                                <p class="font-medium whitespace-pre-line"><?php echo htmlspecialchars($display($value('observaciones_entrevista'))); ?></p>
+
+                            <div>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Experiencias laborales</h4>
+                                <div class="space-y-4">
+                                    <?php
+                                    $experiencias = [
+                                        [
+                                            'empresa' => $value('experiencias.0.empresa'),
+                                            'superior' => $value('experiencias.0.superior'),
+                                            'tiempo' => $value('experiencias.0.tiempo'),
+                                            'telefono' => $value('experiencias.0.telefono'),
+                                            'cargo' => $value('experiencias.0.cargo'),
+                                            'sueldo' => $value('experiencias.0.sueldo'),
+                                            'tareas' => $value('experiencias.0.tareas'),
+                                            'razon' => $value('experiencias.0.razon_salida'),
+                                        ],
+                                        [
+                                            'empresa' => $value('experiencias.1.empresa'),
+                                            'superior' => $value('experiencias.1.superior'),
+                                            'tiempo' => $value('experiencias.1.tiempo'),
+                                            'telefono' => $value('experiencias.1.telefono'),
+                                            'cargo' => $value('experiencias.1.cargo'),
+                                            'sueldo' => $value('experiencias.1.sueldo'),
+                                            'tareas' => $value('experiencias.1.tareas'),
+                                            'razon' => $value('experiencias.1.razon_salida'),
+                                        ]
+                                    ];
+                                    ?>
+                                    <?php foreach ($experiencias as $idx => $exp): ?>
+                                            <?php if (empty($exp['empresa']) && empty($exp['cargo']) && empty($exp['superior']) && empty($exp['tiempo']))
+                                                continue; ?>
+                                            <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                                                <h5 class="font-semibold text-white mb-2">Experiencia <?php echo $idx + 1; ?></h5>
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label class="text-sm text-slate-400">Empresa</label>
+                                                        <p class="font-medium">
+                                                            <?php echo htmlspecialchars($display($exp['empresa'])); ?></p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="text-sm text-slate-400">Cargo</label>
+                                                        <p class="font-medium"><?php echo htmlspecialchars($display($exp['cargo'])); ?>
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="text-sm text-slate-400">Superior inmediato</label>
+                                                        <p class="font-medium">
+                                                            <?php echo htmlspecialchars($display($exp['superior'])); ?></p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="text-sm text-slate-400">Tiempo trabajado</label>
+                                                        <p class="font-medium"><?php echo htmlspecialchars($display($exp['tiempo'])); ?>
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="text-sm text-slate-400">Telefono</label>
+                                                        <p class="font-medium">
+                                                            <?php echo htmlspecialchars($display($exp['telefono'])); ?></p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="text-sm text-slate-400">Sueldo</label>
+                                                        <p class="font-medium"><?php echo htmlspecialchars($display($exp['sueldo'])); ?>
+                                                        </p>
+                                                    </div>
+                                                    <div class="md:col-span-2">
+                                                        <label class="text-sm text-slate-400">Tareas principales</label>
+                                                        <p class="font-medium whitespace-pre-line">
+                                                            <?php echo htmlspecialchars($display($exp['tareas'])); ?></p>
+                                                    </div>
+                                                    <div class="md:col-span-2">
+                                                        <label class="text-sm text-slate-400">Razon de salida</label>
+                                                        <p class="font-medium whitespace-pre-line">
+                                                            <?php echo htmlspecialchars($display($exp['razon'])); ?></p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Informacion adicional</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-slate-400">Mayor logro</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('adicional.mayor_logro'))); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Expectativas salariales</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('adicional.expectativas_salariales'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Incapacidad</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('adicional.incapacidad')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Incapacidad cual</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('adicional.incapacidad_cual'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Horas extras</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('adicional.horas_extras')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Dias fiestas</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('adicional.dias_fiestas')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Conoce empleado</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('adicional.conoce_empleado')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Nombre empleado</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('adicional.conoce_empleado_nombre'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Medio vacante</label>
+                                        <p class="font-medium">
+                                            <?php
+                                            $medioVacante = $value('adicional.medio_vacante', []);
+                                            if (!is_array($medioVacante)) {
+                                                $medioVacante = [$medioVacante];
+                                            }
+                                            $medioTexto = !empty($medioVacante) ? implode(', ', $medioVacante) : '';
+                                            $medioOtro = $value('adicional.medio_vacante_otro');
+                                            if (!empty($medioOtro)) {
+                                                $medioTexto = $medioTexto !== '' ? $medioTexto . ' / ' . $medioOtro : $medioOtro;
+                                            }
+                                            ?>
+                                            <?php echo htmlspecialchars($display($medioTexto)); ?>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Firma solicitante</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('adicional.firma'))); ?></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 class="text-lg font-semibold text-indigo-200 mb-3">Para uso exclusivo del evaluador</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="text-sm text-slate-400">Nombre del evaluador</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('evaluador.nombre'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Fecha de evaluacion</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('evaluador.fecha'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Puesto</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('evaluador.puesto'))); ?></p>
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="text-sm text-slate-400">Observaciones entrevista</label>
+                                        <p class="font-medium whitespace-pre-line">
+                                            <?php echo htmlspecialchars($display($value('evaluador.observaciones'))); ?></p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
             <?php endif; ?>
 
 
@@ -984,86 +950,91 @@ require_once '../header.php';
                 </div>
                 <div class="space-y-3">
                     <?php if (empty($comments)): ?>
-                        <p class="text-slate-400 text-center py-4">No hay comentarios a�n</p>
+                            <p class="text-slate-400 text-center py-4">No hay comentarios a�n</p>
                     <?php else: ?>
-                        <?php foreach ($comments as $comment): ?>
-                            <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                                <div class="flex justify-between items-start mb-2">
-                                    <div>
-                                        <span class="font-semibold text-white"><?php echo htmlspecialchars($comment['user_name']); ?></span>
-                                        <?php if ($comment['is_internal']): ?>
-                                            <span class="ml-2 text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded">Interno</span>
-                                        <?php endif; ?>
+                            <?php foreach ($comments as $comment): ?>
+                                    <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <div>
+                                                <span
+                                                    class="font-semibold text-white"><?php echo htmlspecialchars($comment['user_name']); ?></span>
+                                                <?php if ($comment['is_internal']): ?>
+                                                        <span
+                                                            class="ml-2 text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded">Interno</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <span
+                                                class="text-sm text-slate-400"><?php echo date('d/m/Y H:i', strtotime($comment['created_at'])); ?></span>
+                                        </div>
+                                        <p class="text-slate-300"><?php echo nl2br(htmlspecialchars($comment['comment'])); ?></p>
                                     </div>
-                                    <span class="text-sm text-slate-400"><?php echo date('d/m/Y H:i', strtotime($comment['created_at'])); ?></span>
-                                </div>
-                                <p class="text-slate-300"><?php echo nl2br(htmlspecialchars($comment['comment'])); ?></p>
-                            </div>
-                        <?php endforeach; ?>
+                            <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
             </div>
 
             <!-- Interviews -->
             <?php if (!empty($interviews)): ?>
-            <div class="glass-card">
-                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-calendar-alt text-indigo-400"></i>
-                    Entrevistas (<?php echo count($interviews); ?>)
-                </h3>
-                <div class="space-y-3">
-                    <?php foreach ($interviews as $interview): ?>
-                        <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <h4 class="font-semibold text-white"><?php echo ucfirst(str_replace('_', ' ', $interview['interview_type'])); ?></h4>
-                                    <p class="text-slate-400 text-sm mt-1">
-                                        <i class="fas fa-calendar mr-1"></i>
-                                        <?php echo date('d/m/Y H:i', strtotime($interview['interview_date'])); ?>
-                                    </p>
-                                    <?php if ($interview['location']): ?>
-                                        <p class="text-slate-400 text-sm">
-                                            <i class="fas fa-map-marker-alt mr-1"></i>
-                                            <?php echo htmlspecialchars($interview['location']); ?>
-                                        </p>
-                                    <?php endif; ?>
-                                </div>
-                                <span class="status-badge-recruitment status-<?php echo $interview['status']; ?>">
-                                    <?php echo ucfirst($interview['status']); ?>
-                                </span>
-                            </div>
+                    <div class="glass-card">
+                        <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                            <i class="fas fa-calendar-alt text-indigo-400"></i>
+                            Entrevistas (<?php echo count($interviews); ?>)
+                        </h3>
+                        <div class="space-y-3">
+                            <?php foreach ($interviews as $interview): ?>
+                                    <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                                        <div class="flex justify-between items-start">
+                                            <div>
+                                                <h4 class="font-semibold text-white">
+                                                    <?php echo ucfirst(str_replace('_', ' ', $interview['interview_type'])); ?></h4>
+                                                <p class="text-slate-400 text-sm mt-1">
+                                                    <i class="fas fa-calendar mr-1"></i>
+                                                    <?php echo date('d/m/Y H:i', strtotime($interview['interview_date'])); ?>
+                                                </p>
+                                                <?php if ($interview['location']): ?>
+                                                        <p class="text-slate-400 text-sm">
+                                                            <i class="fas fa-map-marker-alt mr-1"></i>
+                                                            <?php echo htmlspecialchars($interview['location']); ?>
+                                                        </p>
+                                                <?php endif; ?>
+                                            </div>
+                                            <span class="status-badge-recruitment status-<?php echo $interview['status']; ?>">
+                                                <?php echo ucfirst($interview['status']); ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                            <?php endforeach; ?>
                         </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
+                    </div>
             <?php endif; ?>
 
             <!-- Status History -->
             <?php if (!empty($status_history)): ?>
-            <div class="glass-card">
-                <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-history text-indigo-400"></i>
-                    Historial de Estados
-                </h3>
-                <div class="space-y-2">
-                    <?php foreach ($status_history as $history): ?>
-                        <div class="flex items-start gap-3 text-sm">
-                            <div class="w-2 h-2 rounded-full bg-indigo-500 mt-2"></div>
-                            <div class="flex-1">
-                                <p class="text-white">
-                                    <span class="font-medium"><?php echo $status_labels[$history['old_status']] ?? $history['old_status']; ?></span>
-                                    <i class="fas fa-arrow-right mx-2 text-slate-500"></i>
-                                    <span class="font-medium"><?php echo $status_labels[$history['new_status']]; ?></span>
-                                </p>
-                                <p class="text-slate-400 text-xs mt-1">
-                                    <?php echo htmlspecialchars($history['changed_by_name']); ?>
-                                    <?php echo date('d/m/Y H:i', strtotime($history['changed_at'])); ?>
-                                </p>
-                            </div>
+                    <div class="glass-card">
+                        <h3 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                            <i class="fas fa-history text-indigo-400"></i>
+                            Historial de Estados
+                        </h3>
+                        <div class="space-y-2">
+                            <?php foreach ($status_history as $history): ?>
+                                    <div class="flex items-start gap-3 text-sm">
+                                        <div class="w-2 h-2 rounded-full bg-indigo-500 mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-white">
+                                                <span
+                                                    class="font-medium"><?php echo $status_labels[$history['old_status']] ?? $history['old_status']; ?></span>
+                                                <i class="fas fa-arrow-right mx-2 text-slate-500"></i>
+                                                <span class="font-medium"><?php echo $status_labels[$history['new_status']]; ?></span>
+                                            </p>
+                                            <p class="text-slate-400 text-xs mt-1">
+                                                <?php echo htmlspecialchars($history['changed_by_name']); ?>
+                                                <?php echo date('d/m/Y H:i', strtotime($history['changed_at'])); ?>
+                                            </p>
+                                        </div>
+                                    </div>
+                            <?php endforeach; ?>
                         </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
+                    </div>
             <?php endif; ?>
         </div>
 
@@ -1073,15 +1044,18 @@ require_once '../header.php';
             <div class="glass-card">
                 <h3 class="text-lg font-semibold text-white mb-4">Acciones R�pidas</h3>
                 <div class="space-y-2">
-                    <button type="button" class="btn-primary w-full justify-center" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
+                    <button type="button" class="btn-primary w-full justify-center" data-bs-toggle="modal"
+                        data-bs-target="#updateStatusModal">
                         <i class="fas fa-exchange-alt"></i>
                         Cambiar Estado
                     </button>
-                    <button type="button" class="btn-secondary w-full justify-center" data-bs-toggle="modal" data-bs-target="#scheduleInterviewModal">
+                    <button type="button" class="btn-secondary w-full justify-center" data-bs-toggle="modal"
+                        data-bs-target="#scheduleInterviewModal">
                         <i class="fas fa-calendar-plus"></i>
                         Agendar Entrevista
                     </button>
-                    <button type="button" class="btn-secondary w-full justify-center" data-bs-toggle="modal" data-bs-target="#addCommentModal">
+                    <button type="button" class="btn-secondary w-full justify-center" data-bs-toggle="modal"
+                        data-bs-target="#addCommentModal">
                         <i class="fas fa-comment"></i>
                         Agregar Comentario
                     </button>
@@ -1090,27 +1064,29 @@ require_once '../header.php';
 
             <!-- Rating -->
             <?php if ($application['overall_rating']): ?>
-            <div class="glass-card">
-                <h3 class="text-lg font-semibold text-white mb-3">Calificaci�n</h3>
-                <div class="flex gap-1 text-2xl">
-                    <?php for ($i = 1; $i <= 5; $i++): ?>
-                        <i class="fas fa-star <?php echo $i <= $application['overall_rating'] ? 'text-yellow-400' : 'text-slate-600'; ?>"></i>
-                    <?php endfor; ?>
-                </div>
-            </div>
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-white mb-3">Calificaci�n</h3>
+                        <div class="flex gap-1 text-2xl">
+                            <?php for ($i = 1; $i <= 5; $i++): ?>
+                                    <i
+                                        class="fas fa-star <?php echo $i <= $application['overall_rating'] ? 'text-yellow-400' : 'text-slate-600'; ?>"></i>
+                            <?php endfor; ?>
+                        </div>
+                    </div>
             <?php endif; ?>
 
             <!-- Assigned To -->
             <?php if ($application['assigned_to_name']): ?>
-            <div class="glass-card">
-                <h3 class="text-lg font-semibold text-white mb-3">Asignado a</h3>
-                <div class="flex items-center gap-2">
-                    <div class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center">
-                        <i class="fas fa-user text-white"></i>
+                    <div class="glass-card">
+                        <h3 class="text-lg font-semibold text-white mb-3">Asignado a</h3>
+                        <div class="flex items-center gap-2">
+                            <div class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center">
+                                <i class="fas fa-user text-white"></i>
+                            </div>
+                            <span
+                                class="text-white font-medium"><?php echo htmlspecialchars($application['assigned_to_name']); ?></span>
+                        </div>
                     </div>
-                    <span class="text-white font-medium"><?php echo htmlspecialchars($application['assigned_to_name']); ?></span>
-                </div>
-            </div>
             <?php endif; ?>
         </div>
     </div>
@@ -1121,7 +1097,8 @@ require_once '../header.php';
 <?php require_once '../footer.php'; ?>
 
 <!-- Modals -->
-<div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
+<div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <form action="update_application_status.php" method="POST">
@@ -1164,7 +1141,8 @@ require_once '../header.php';
                     <textarea class="form-control mb-3" name="comment" required rows="4"></textarea>
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="is_internal" value="1" id="isInternal">
-                        <label class="form-check-label" for="isInternal">Comentario interno (no visible para el candidato)</label>
+                        <label class="form-check-label" for="isInternal">Comentario interno (no visible para el
+                            candidato)</label>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1175,7 +1153,8 @@ require_once '../header.php';
     </div>
 </div>
 
-<div class="modal fade" id="scheduleInterviewModal" tabindex="-1" aria-labelledby="scheduleInterviewModalLabel" aria-hidden="true">
+<div class="modal fade" id="scheduleInterviewModal" tabindex="-1" aria-labelledby="scheduleInterviewModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <form action="schedule_interview.php" method="POST">
@@ -1219,6 +1198,3 @@ require_once '../header.php';
         </div>
     </div>
 </div>
-
-
-
