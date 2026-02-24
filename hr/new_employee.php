@@ -11,19 +11,6 @@ $success = null;
 $error = null;
 $emailWarning = null;
 
-if (!function_exists('normalizeScheduleTimeValue')) {
-    function normalizeScheduleTimeValue(?string $value, string $fallback): string
-    {
-        $value = trim((string) $value);
-        if ($value === '') {
-            $value = $fallback;
-        }
-        if (strlen($value) === 5) {
-            $value .= ':00';
-        }
-        return $value;
-    }
-}
 
 if (isset($_POST['register'])) {
     $username = trim($_POST['username'] ?? '');

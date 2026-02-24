@@ -25,10 +25,11 @@ try {
 
 // MySQLi connection - Lazy loaded
 if (!function_exists('getMysqli')) {
-    function getMysqli() {
+    function getMysqli()
+    {
         global $host, $username, $password, $dbname;
         static $mysqli = null;
-        
+
         if ($mysqli === null) {
             $mysqli = new mysqli($host, $username, $password, $dbname);
             if ($mysqli->connect_error) {
@@ -37,8 +38,25 @@ if (!function_exists('getMysqli')) {
             $mysqli->set_charset("utf8mb4");
             $mysqli->query("SET time_zone = '-04:00'");
         }
-        
+
         return $mysqli;
+    }
+}
+
+if (!function_exists('normalizeScheduleTimeValue')) {
+    /**
+     * Standardizes a time value to HH:MM:SS format.
+     */
+    function normalizeScheduleTimeValue(?string $value, string $fallback): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            $value = $fallback;
+        }
+        if (strlen($value) === 5) {
+            $value .= ':00';
+        }
+        return $value;
     }
 }
 
@@ -546,7 +564,7 @@ if (!function_exists('getAllBanks')) {
                 $sql .= " WHERE is_active = 1";
             }
             $sql .= " ORDER BY name";
-            
+
             $stmt = $pdo->query($sql);
             return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (PDOException $e) {
@@ -585,7 +603,7 @@ if (!function_exists('getAllScheduleTemplates')) {
                 $sql .= " WHERE is_active = 1";
             }
             $sql .= " ORDER BY name";
-            
+
             $stmt = $pdo->query($sql);
             return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (PDOException $e) {
@@ -713,7 +731,7 @@ if (!function_exists('createEmployeeSchedule')) {
                     scheduled_hours, is_active, effective_date, end_date, notes, days_of_week
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            
+
             $stmt->execute([
                 $employeeId,
                 $userId,
@@ -731,8 +749,14 @@ if (!function_exists('createEmployeeSchedule')) {
                 $scheduleData['notes'] ?? null,
                 $scheduleData['days_of_week'] ?? null
             ]);
-            
-            return (int) $pdo->lastInsertId();
+
+            $newId = (int) $pdo->lastInsertId();
+
+            // Sync to users table for quick reference
+            $userUpdate = $pdo->prepare("UPDATE users SET schedule_id = ? WHERE id = ?");
+            $userUpdate->execute([$newId, $userId]);
+
+            return $newId;
         } catch (PDOException $e) {
             try {
                 $stmt = $pdo->prepare("
@@ -760,7 +784,13 @@ if (!function_exists('createEmployeeSchedule')) {
                     $scheduleData['notes'] ?? null
                 ]);
 
-                return (int) $pdo->lastInsertId();
+                $newId = (int) $pdo->lastInsertId();
+
+                // Sync to users table for quick reference
+                $userUpdate = $pdo->prepare("UPDATE users SET schedule_id = ? WHERE id = ?");
+                $userUpdate->execute([$newId, $userId]);
+
+                return $newId;
             } catch (PDOException $fallbackError) {
                 return null;
             }
@@ -779,11 +809,11 @@ if (!function_exists('createEmployeeScheduleFromTemplate')) {
             $stmt = $pdo->prepare("SELECT * FROM schedule_templates WHERE id = ?");
             $stmt->execute([$templateId]);
             $template = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$template) {
                 return null;
             }
-            
+
             // Create schedule from template
             $scheduleData = [
                 'schedule_name' => $template['name'],
@@ -798,7 +828,7 @@ if (!function_exists('createEmployeeScheduleFromTemplate')) {
                 'effective_date' => $effectiveDate ?? date('Y-m-d'),
                 'notes' => 'Creado desde template: ' . $template['name']
             ];
-            
+
             return createEmployeeSchedule($pdo, $employeeId, $userId, $scheduleData);
         } catch (PDOException $e) {
             return null;
@@ -822,7 +852,7 @@ if (!function_exists('updateEmployeeSchedule')) {
                     updated_at = NOW()
                 WHERE id = ?
             ");
-            
+
             return $stmt->execute([
                 $scheduleData['schedule_name'] ?? null,
                 $scheduleData['entry_time'] ?? '10:00:00',
@@ -932,14 +962,14 @@ if (!function_exists('getSystemSetting')) {
             $stmt = $pdo->prepare("SELECT setting_value, setting_type FROM system_settings WHERE setting_key = ?");
             $stmt->execute([$key]);
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$result) {
                 return $default;
             }
-            
+
             $value = $result['setting_value'];
             $type = $result['setting_type'] ?? 'string';
-            
+
             // Cast to appropriate type
             switch ($type) {
                 case 'number':
@@ -964,7 +994,7 @@ if (!function_exists('getExchangeRate')) {
      */
     function getExchangeRate(PDO $pdo): float
     {
-        return (float)getSystemSetting($pdo, 'exchange_rate_usd_to_dop', 58.50);
+        return (float) getSystemSetting($pdo, 'exchange_rate_usd_to_dop', 58.50);
     }
 }
 
@@ -982,24 +1012,24 @@ if (!function_exists('convertCurrency')) {
     {
         $fromCurrency = strtoupper($fromCurrency);
         $toCurrency = strtoupper($toCurrency);
-        
+
         // No conversion needed if same currency
         if ($fromCurrency === $toCurrency) {
             return $amount;
         }
-        
+
         $exchangeRate = getExchangeRate($pdo);
-        
+
         // Convert USD to DOP
         if ($fromCurrency === 'USD' && $toCurrency === 'DOP') {
             return $amount * $exchangeRate;
         }
-        
+
         // Convert DOP to USD
         if ($fromCurrency === 'DOP' && $toCurrency === 'USD') {
             return $amount / $exchangeRate;
         }
-        
+
         // Invalid currency combination
         return $amount;
     }

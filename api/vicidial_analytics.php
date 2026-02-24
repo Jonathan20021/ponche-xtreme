@@ -16,6 +16,17 @@ $startDate = $_GET['start_date'] ?? date('Y-m-01');
 $endDate = $_GET['end_date'] ?? date('Y-m-t');
 $campaign = $_GET['campaign'] ?? '';
 
+// Keep original range dates for available_dates query
+$rangeStartDate = $startDate;
+$rangeEndDate = $endDate;
+
+// Daily date override: when a specific day is selected, restrict range to that single day
+$dailyDate = $_GET['daily_date'] ?? '';
+if ($dailyDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dailyDate)) {
+    $startDate = $dailyDate;
+    $endDate = $dailyDate;
+}
+
 try {
     switch ($action) {
         case 'kpis':
@@ -44,6 +55,10 @@ try {
 
         case 'campaigns':
             echo json_encode(getCampaigns($pdo, $startDate, $endDate));
+            break;
+
+        case 'available_dates':
+            echo json_encode(getAvailableDates($pdo, $rangeStartDate, $rangeEndDate));
             break;
 
         default:
@@ -435,6 +450,25 @@ function getCampaigns($pdo, $startDate, $endDate)
     return [
         'success' => true,
         'campaigns' => $campaigns
+    ];
+}
+
+/**
+ * Get Available Dates (all distinct upload dates in the database)
+ */
+function getAvailableDates($pdo, $startDate, $endDate)
+{
+    $stmt = $pdo->query("
+        SELECT DISTINCT upload_date
+        FROM vicidial_login_stats
+        ORDER BY upload_date DESC
+    ");
+
+    $dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    return [
+        'success' => true,
+        'dates' => $dates
     ];
 }
 ?>

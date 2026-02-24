@@ -56,7 +56,6 @@ try {
                 throw new Exception('Empleado no encontrado');
             }
 
-            // Update employee
             $updateStmt = $pdo->prepare("
                 UPDATE employees
                 SET campaign_id = :campaign_id,
@@ -68,18 +67,25 @@ try {
             $updateStmt->bindValue(':supervisor_id', $supervisorId, $supervisorId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
             $updateStmt->bindValue(':employee_id', $employeeId, PDO::PARAM_INT);
 
-            try {
-                if (!$updateStmt->execute()) {
-                    throw new Exception('Error al actualizar empleado');
+            if (!$updateStmt->execute()) {
+                throw new Exception('Error al actualizar empleado');
+            }
+
+            // Handle schedule assignment if provided
+            $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int) $_POST['schedule_template_id'] : null;
+            if ($scheduleTemplateId) {
+                // Get user_id for the employee
+                $userStmt = $pdo->prepare("SELECT user_id FROM employees WHERE id = ?");
+                $userStmt->execute([$employeeId]);
+                $userLocalId = $userStmt->fetchColumn();
+
+                if ($userLocalId) {
+                    // Deactivate old schedules
+                    deactivateEmployeeSchedules($pdo, $employeeId);
+
+                    // Create new schedule from template
+                    createEmployeeScheduleFromTemplate($pdo, $employeeId, (int) $userLocalId, $scheduleTemplateId);
                 }
-            } catch (PDOException $e) {
-                error_log("FOREIGN KEY ERROR in api/employees.php (quick_assign): " . $e->getMessage());
-                error_log("Parameters: " . json_encode([
-                    'employee_id' => $employeeId,
-                    'campaign_id' => $campaignId,
-                    'supervisor_id' => $supervisorId
-                ]));
-                throw new Exception('Error de base de datos al asignar campaign/supervisor: ' . $e->getMessage());
             }
 
             // Log the action

@@ -9,6 +9,13 @@ ensurePermission('vicidial_reports');
 $startDate = $_GET['start_date'] ?? date('Y-m-01');
 $endDate = $_GET['end_date'] ?? date('Y-m-t');
 $campaign = $_GET['campaign'] ?? '';
+$dailyDate = $_GET['daily_date'] ?? '';
+
+// Daily date override
+if ($dailyDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dailyDate)) {
+    $startDate = $dailyDate;
+    $endDate = $dailyDate;
+}
 
 // Fetch data for the report
 $campaignFilter = $campaign ? "AND current_user_group = :campaign" : "";
@@ -157,6 +164,36 @@ include 'header.php';
                 </button>
             </div>
         </form>
+    </div>
+
+    <!-- Daily Date Navigation Bar -->
+    <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4 mb-6">
+        <div class="flex items-center gap-3 mb-3">
+            <i class="fas fa-calendar-day text-cyan-400"></i>
+            <h3 class="text-sm font-semibold text-slate-300">Vista Diaria</h3>
+            <span x-show="dailyDate" class="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded-full">
+                Mostrando: <span x-text="dailyDate"></span>
+            </span>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center">
+            <button @click="selectDay('')"
+                :class="!dailyDate ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25' : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'"
+                class="px-4 py-2 rounded-lg text-sm font-semibold transition-all">
+                <i class="fas fa-layer-group mr-1"></i>
+                Ver Todo
+            </button>
+            <div class="w-px h-6 bg-slate-600"></div>
+            <template x-for="date in availableDates" :key="date">
+                <button @click="selectDay(date)"
+                    :class="dailyDate === date ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/25' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 hover:text-slate-200'"
+                    class="px-3 py-2 rounded-lg text-sm font-medium transition-all">
+                    <span x-text="formatDateLabel(date)"></span>
+                </button>
+            </template>
+            <span x-show="availableDates.length === 0" class="text-sm text-slate-500 italic">
+                No hay fechas disponibles en este rango
+            </span>
+        </div>
     </div>
 
     <!-- Tabs Navigation -->
@@ -556,17 +593,56 @@ include 'header.php';
             periodInfo: { current: '', previous: '' },
             rankings: [],
             selectedAgent: null,
+            dailyDate: '<?= htmlspecialchars($dailyDate) ?>',
+            availableDates: [],
 
             init() {
+                this.loadAvailableDates();
                 this.loadAnalytics();
+            },
+
+            async loadAvailableDates() {
+                try {
+                    const params = new URLSearchParams({
+                        start_date: '<?= $_GET['start_date'] ?? date('Y-m-01') ?>',
+                        end_date: '<?= $_GET['end_date'] ?? date('Y-m-t') ?>'
+                    });
+                    const response = await fetch(`api/vicidial_analytics.php?action=available_dates&${params}`);
+                    const data = await response.json();
+                    if (data.success) {
+                        this.availableDates = data.dates;
+                    }
+                } catch (error) {
+                    console.error('Error loading available dates:', error);
+                }
+            },
+
+            selectDay(date) {
+                const url = new URL(window.location.href);
+                if (date) {
+                    url.searchParams.set('daily_date', date);
+                } else {
+                    url.searchParams.delete('daily_date');
+                }
+                window.location.href = url.toString();
+            },
+
+            formatDateLabel(dateStr) {
+                const date = new Date(dateStr + 'T12:00:00');
+                const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`;
             },
 
             async loadAnalytics() {
                 const params = new URLSearchParams({
-                    start_date: '<?= $startDate ?>',
-                    end_date: '<?= $endDate ?>',
+                    start_date: '<?= $_GET['start_date'] ?? date('Y-m-01') ?>',
+                    end_date: '<?= $_GET['end_date'] ?? date('Y-m-t') ?>',
                     campaign: '<?= $campaign ?>'
                 });
+                if (this.dailyDate) {
+                    params.set('daily_date', this.dailyDate);
+                }
 
                 try {
                     // Load KPIs
@@ -679,7 +755,11 @@ include 'header.php';
             },
 
             exportToExcel() {
-                window.location.href = `api/vicidial_export.php?start_date=<?= $startDate ?>&end_date=<?= $endDate ?>&campaign=<?= $campaign ?>`;
+                let url = `api/vicidial_export.php?start_date=<?= $_GET['start_date'] ?? date('Y-m-01') ?>&end_date=<?= $_GET['end_date'] ?? date('Y-m-t') ?>&campaign=<?= $campaign ?>`;
+                if (this.dailyDate) {
+                    url += `&daily_date=${this.dailyDate}`;
+                }
+                window.location.href = url;
             },
 
             async deleteUpload(uploadId, filename) {

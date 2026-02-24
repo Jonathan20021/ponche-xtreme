@@ -9,19 +9,6 @@ ensurePermission('hr_employees', '../unauthorized.php');
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
-if (!function_exists('normalizeScheduleTimeValue')) {
-    function normalizeScheduleTimeValue(?string $value, string $fallback): string
-    {
-        $value = trim((string) $value);
-        if ($value === '') {
-            $value = $fallback;
-        }
-        if (strlen($value) === 5) {
-            $value .= ':00';
-        }
-        return $value;
-    }
-}
 
 // Handle employee schedule update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) && !isset($_POST['update_employee'])) {
@@ -1134,6 +1121,44 @@ $terminatedEmployees = $pdo->query("
                     editingScheduleIdEdit = null;
                 };
 
+                function updateScheduledHoursEdit() {
+                    const entryTime = document.getElementById('new_entry_time_edit')?.value;
+                    const exitTime = document.getElementById('new_exit_time_edit')?.value;
+                    const lunchMinutes = parseInt(document.getElementById('new_lunch_minutes_edit')?.value || '0', 10);
+                    const breakMinutes = parseInt(document.getElementById('new_break_minutes_edit')?.value || '0', 10);
+                    const hoursInput = document.getElementById('new_scheduled_hours_edit');
+
+                    if (!entryTime || !exitTime || !hoursInput) return;
+
+                    const start = new Date('2000-01-01 ' + entryTime);
+                    let end = new Date('2000-01-01 ' + exitTime);
+
+                    if (end <= start) {
+                        end.setDate(end.getDate() + 1);
+                    }
+
+                    const diffMs = end - start;
+                    const diffHrs = diffMs / (1000 * 60 * 60);
+                    const netHrs = diffHrs - (lunchMinutes + breakMinutes) / 60;
+
+                    hoursInput.value = Math.max(0, netHrs).toFixed(2);
+                }
+
+                document.addEventListener('DOMContentLoaded', function () {
+                    const inputs = [
+                        'new_entry_time_edit',
+                        'new_exit_time_edit',
+                        'new_lunch_minutes_edit',
+                        'new_break_minutes_edit'
+                    ];
+                    inputs.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            el.addEventListener('input', updateScheduledHoursEdit);
+                        }
+                    });
+                });
+
                 window.saveNewScheduleEdit = function (event) {
                     event.preventDefault();
 
@@ -1351,6 +1376,11 @@ $terminatedEmployees = $pdo->query("
                         supervisorSelect.value = employee.supervisor_id ? String(employee.supervisor_id) : '';
                     }
 
+                    const scheduleSelect = document.getElementById('quick_assign_schedule_template_id');
+                    if (scheduleSelect) {
+                        scheduleSelect.value = ''; // Reset to "No cambiar horario" by default
+                    }
+
                     if (submitBtn) {
                         submitBtn.disabled = false;
                         submitBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar';
@@ -1463,129 +1493,129 @@ $terminatedEmployees = $pdo->query("
             </h2>
 
             <?php if (empty($employees)): ?>
-                <p class="text-slate-400 text-center py-8">No se encontraron empleados.</p>
+                    <p class="text-slate-400 text-center py-8">No se encontraron empleados.</p>
             <?php else: ?>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <?php foreach ($employees as $employee): ?>
-                        <?php
-                        $statusColors = [
-                            'ACTIVE' => 'bg-green-500',
-                            'TRIAL' => 'bg-yellow-500',
-                            'SUSPENDED' => 'bg-orange-500',
-                            'TERMINATED' => 'bg-red-500'
-                        ];
-                        $statusColor = $statusColors[$employee['employment_status']] ?? 'bg-gray-500';
-                        ?>
-                        <div
-                            class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-blue-500 transition-all">
-                            <div class="flex items-start gap-3 mb-3">
-                                <?php if (!empty($employee['photo_path']) && file_exists('../' . $employee['photo_path'])): ?>
-                                    <img src="../<?= htmlspecialchars($employee['photo_path']) ?>"
-                                        alt="<?= htmlspecialchars($employee['first_name']) ?>"
-                                        class="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-blue-500">
-                                <?php else: ?>
-                                    <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
-                                        style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
-                                        <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
-                                    </div>
-                                <?php endif; ?>
-                                <div class="flex-1 min-w-0">
-                                    <h3 class="text-lg font-semibold text-white truncate">
-                                        <?= htmlspecialchars($employee['first_name'] . ' ' . $employee['last_name']) ?>
-                                    </h3>
-                                    <p class="text-slate-400 text-sm"><?= htmlspecialchars($employee['employee_code']) ?></p>
-                                    <span
-                                        class="inline-block px-2 py-1 rounded text-xs font-semibold text-white mt-1 <?= $statusColor ?>">
-                                        <?= htmlspecialchars($employee['employment_status']) ?>
-                                    </span>
-                                </div>
-                            </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <?php foreach ($employees as $employee): ?>
+                                                <?php
+                                                $statusColors = [
+                                                    'ACTIVE' => 'bg-green-500',
+                                                    'TRIAL' => 'bg-yellow-500',
+                                                    'SUSPENDED' => 'bg-orange-500',
+                                                    'TERMINATED' => 'bg-red-500'
+                                                ];
+                                                $statusColor = $statusColors[$employee['employment_status']] ?? 'bg-gray-500';
+                                                ?>
+                                                <div
+                                                    class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-blue-500 transition-all">
+                                                    <div class="flex items-start gap-3 mb-3">
+                                                        <?php if (!empty($employee['photo_path']) && file_exists('../' . $employee['photo_path'])): ?>
+                                                                        <img src="../<?= htmlspecialchars($employee['photo_path']) ?>"
+                                                                            alt="<?= htmlspecialchars($employee['first_name']) ?>"
+                                                                            class="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-blue-500">
+                                                        <?php else: ?>
+                                                                        <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
+                                                                            style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                                                                            <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
+                                                                        </div>
+                                                        <?php endif; ?>
+                                                        <div class="flex-1 min-w-0">
+                                                            <h3 class="text-lg font-semibold text-white truncate">
+                                                                <?= htmlspecialchars($employee['first_name'] . ' ' . $employee['last_name']) ?>
+                                                            </h3>
+                                                            <p class="text-slate-400 text-sm"><?= htmlspecialchars($employee['employee_code']) ?></p>
+                                                            <span
+                                                                class="inline-block px-2 py-1 rounded text-xs font-semibold text-white mt-1 <?= $statusColor ?>">
+                                                                <?= htmlspecialchars($employee['employment_status']) ?>
+                                                            </span>
+                                                        </div>
+                                                    </div>
 
-                            <div class="space-y-2 text-sm mb-3">
-                                <?php if ($employee['position']): ?>
-                                    <p class="text-slate-300">
-                                        <i class="fas fa-briefcase text-indigo-400 mr-2 w-4"></i>
-                                        <?= htmlspecialchars($employee['position']) ?>
-                                    </p>
-                                <?php endif; ?>
-                                <?php if ($employee['department_name']): ?>
-                                    <p class="text-slate-300">
-                                        <i class="fas fa-building text-blue-400 mr-2 w-4"></i>
-                                        <?= htmlspecialchars($employee['department_name']) ?>
-                                    </p>
-                                <?php endif; ?>
-                                <?php if ($employee['campaign_name']): ?>
-                                    <p class="text-slate-300">
-                                        <i class="fas fa-bullhorn text-purple-400 mr-2 w-4"></i>
-                                        <span class="px-2 py-0.5 rounded text-xs"
-                                            style="background-color: <?= htmlspecialchars($employee['campaign_color']) ?>20; color: <?= htmlspecialchars($employee['campaign_color']) ?>;">
-                                            <?= htmlspecialchars($employee['campaign_name']) ?>
-                                        </span>
-                                    </p>
-                                <?php endif; ?>
-                                <?php if ($employee['supervisor_name']): ?>
-                                    <p class="text-slate-300">
-                                        <i class="fas fa-user-tie text-yellow-400 mr-2 w-4"></i>
-                                        <?= htmlspecialchars($employee['supervisor_name']) ?>
-                                    </p>
-                                <?php endif; ?>
-                                <?php if ($employee['email']): ?>
-                                    <p class="text-slate-300 truncate">
-                                        <i class="fas fa-envelope text-green-400 mr-2 w-4"></i>
-                                        <?= htmlspecialchars($employee['email']) ?>
-                                    </p>
-                                <?php endif; ?>
-                                <?php if ($employee['phone']): ?>
-                                    <p class="text-slate-300">
-                                        <i class="fas fa-phone text-purple-400 mr-2 w-4"></i>
-                                        <?= htmlspecialchars($employee['phone']) ?>
-                                    </p>
-                                <?php endif; ?>
-                                <p class="text-slate-300">
-                                    <i class="fas fa-calendar text-orange-400 mr-2 w-4"></i>
-                                    Ingreso: <?= date('d/m/Y', strtotime($employee['hire_date'])) ?>
-                                </p>
-                                <p class="text-slate-300">
-                                    <i class="fas fa-dollar-sign text-green-400 mr-2 w-4"></i>
-                                    <?php
-                                    // Display salary based on preferred currency and compensation type
-                                    $currency = $employee['preferred_currency'] ?? 'USD';
-                                    $compensationType = $employee['compensation_type'] ?? 'hourly';
-                                    $currencySymbol = $currency === 'DOP' ? 'RD$' : '$';
+                                                    <div class="space-y-2 text-sm mb-3">
+                                                        <?php if ($employee['position']): ?>
+                                                                        <p class="text-slate-300">
+                                                                            <i class="fas fa-briefcase text-indigo-400 mr-2 w-4"></i>
+                                                                            <?= htmlspecialchars($employee['position']) ?>
+                                                                        </p>
+                                                        <?php endif; ?>
+                                                        <?php if ($employee['department_name']): ?>
+                                                                        <p class="text-slate-300">
+                                                                            <i class="fas fa-building text-blue-400 mr-2 w-4"></i>
+                                                                            <?= htmlspecialchars($employee['department_name']) ?>
+                                                                        </p>
+                                                        <?php endif; ?>
+                                                        <?php if ($employee['campaign_name']): ?>
+                                                                        <p class="text-slate-300">
+                                                                            <i class="fas fa-bullhorn text-purple-400 mr-2 w-4"></i>
+                                                                            <span class="px-2 py-0.5 rounded text-xs"
+                                                                                style="background-color: <?= htmlspecialchars($employee['campaign_color']) ?>20; color: <?= htmlspecialchars($employee['campaign_color']) ?>;">
+                                                                                <?= htmlspecialchars($employee['campaign_name']) ?>
+                                                                            </span>
+                                                                        </p>
+                                                        <?php endif; ?>
+                                                        <?php if ($employee['supervisor_name']): ?>
+                                                                        <p class="text-slate-300">
+                                                                            <i class="fas fa-user-tie text-yellow-400 mr-2 w-4"></i>
+                                                                            <?= htmlspecialchars($employee['supervisor_name']) ?>
+                                                                        </p>
+                                                        <?php endif; ?>
+                                                        <?php if ($employee['email']): ?>
+                                                                        <p class="text-slate-300 truncate">
+                                                                            <i class="fas fa-envelope text-green-400 mr-2 w-4"></i>
+                                                                            <?= htmlspecialchars($employee['email']) ?>
+                                                                        </p>
+                                                        <?php endif; ?>
+                                                        <?php if ($employee['phone']): ?>
+                                                                        <p class="text-slate-300">
+                                                                            <i class="fas fa-phone text-purple-400 mr-2 w-4"></i>
+                                                                            <?= htmlspecialchars($employee['phone']) ?>
+                                                                        </p>
+                                                        <?php endif; ?>
+                                                        <p class="text-slate-300">
+                                                            <i class="fas fa-calendar text-orange-400 mr-2 w-4"></i>
+                                                            Ingreso: <?= date('d/m/Y', strtotime($employee['hire_date'])) ?>
+                                                        </p>
+                                                        <p class="text-slate-300">
+                                                            <i class="fas fa-dollar-sign text-green-400 mr-2 w-4"></i>
+                                                            <?php
+                                                            // Display salary based on preferred currency and compensation type
+                                                            $currency = $employee['preferred_currency'] ?? 'USD';
+                                                            $compensationType = $employee['compensation_type'] ?? 'hourly';
+                                                            $currencySymbol = $currency === 'DOP' ? 'RD$' : '$';
 
-                                    if ($compensationType === 'hourly') {
-                                        $rate = $currency === 'DOP' ? $employee['hourly_rate_dop'] : $employee['hourly_rate'];
-                                        echo $currencySymbol . number_format($rate, 2) . '/hr';
-                                    } elseif ($compensationType === 'fixed') {
-                                        $salary = $currency === 'DOP' ? $employee['monthly_salary_dop'] : $employee['monthly_salary'];
-                                        echo $currencySymbol . number_format($salary, 2) . '/mes';
-                                    } elseif ($compensationType === 'daily') {
-                                        $salary = $currency === 'DOP' ? $employee['daily_salary_dop'] : $employee['daily_salary_usd'];
-                                        echo $currencySymbol . number_format($salary, 2) . '/día';
-                                    }
-                                    ?>
-                                </p>
-                            </div>
+                                                            if ($compensationType === 'hourly') {
+                                                                $rate = $currency === 'DOP' ? $employee['hourly_rate_dop'] : $employee['hourly_rate'];
+                                                                echo $currencySymbol . number_format($rate, 2) . '/hr';
+                                                            } elseif ($compensationType === 'fixed') {
+                                                                $salary = $currency === 'DOP' ? $employee['monthly_salary_dop'] : $employee['monthly_salary'];
+                                                                echo $currencySymbol . number_format($salary, 2) . '/mes';
+                                                            } elseif ($compensationType === 'daily') {
+                                                                $salary = $currency === 'DOP' ? $employee['daily_salary_dop'] : $employee['daily_salary_usd'];
+                                                                echo $currencySymbol . number_format($salary, 2) . '/día';
+                                                            }
+                                                            ?>
+                                                        </p>
+                                                    </div>
 
-                            <div class="flex gap-2">
-                                <button type="button" onclick="quickAssign(this)" data-employee='<?= json_encode($employee) ?>'
-                                    class="btn-secondary text-xs px-2 py-1" title="Asignar Campaña/Supervisor">
-                                    <i class="fas fa-user-tag"></i>
-                                </button>
-                                <button type="button" onclick="editEmployee(this)" data-employee='<?= json_encode($employee) ?>'
-                                    class="btn-primary text-sm flex-1">
-                                    <i class="fas fa-edit"></i>
-                                    Editar
-                                </button>
-                                <a href="employee_profile.php?id=<?= $employee['id'] ?>"
-                                    class="btn-secondary text-sm flex-1 text-center">
-                                    <i class="fas fa-eye"></i>
-                                    Ver
-                                </a>
+                                                    <div class="flex gap-2">
+                                                        <button type="button" onclick="quickAssign(this)" data-employee='<?= json_encode($employee) ?>'
+                                                            class="btn-secondary text-xs px-2 py-1" title="Asignar Campaña/Supervisor">
+                                                            <i class="fas fa-user-tag"></i>
+                                                        </button>
+                                                        <button type="button" onclick="editEmployee(this)" data-employee='<?= json_encode($employee) ?>'
+                                                            class="btn-primary text-sm flex-1">
+                                                            <i class="fas fa-edit"></i>
+                                                            Editar
+                                                        </button>
+                                                        <a href="employee_profile.php?id=<?= $employee['id'] ?>"
+                                                            class="btn-secondary text-sm flex-1 text-center">
+                                                            <i class="fas fa-eye"></i>
+                                                            Ver
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                <?php endforeach; ?>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
             <?php endif; ?>
         </div>
     </div>
@@ -1607,67 +1637,67 @@ $terminatedEmployees = $pdo->query("
 
             <div class="flex-1 overflow-y-auto">
                 <?php if (empty($terminatedEmployees)): ?>
-                    <p class="text-slate-400 text-center py-8">No hay empleados terminados o eliminados.</p>
+                                <p class="text-slate-400 text-center py-8">No hay empleados terminados o eliminados.</p>
                 <?php else: ?>
-                    <div class="overflow-x-auto">
-                        <table class="table-auto text-sm w-full min-w-[750px]">
-                            <thead class="sticky top-0 bg-slate-900/80 backdrop-blur border-b border-white/10">
-                                <tr>
-                                    <th class="text-left p-3 text-slate-300 font-medium">Colaborador</th>
-                                    <th class="text-left p-3 text-slate-300 font-medium">Código</th>
-                                    <th class="text-left p-3 text-slate-300 font-medium">Departamento</th>
-                                    <th class="text-left p-3 text-slate-300 font-medium">Fecha Terminación</th>
-                                    <th class="text-left p-3 text-slate-300 font-medium">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($terminatedEmployees as $emp): ?>
-                                    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40">
-                                        <td class="p-3 text-white">
-                                            <?= htmlspecialchars(($emp['first_name'] ?? '') . ' ' . ($emp['last_name'] ?? '')) ?>
-                                        </td>
-                                        <td class="p-3 text-slate-300">
-                                            <?= htmlspecialchars($emp['employee_code'] ?? '') ?>
-                                        </td>
-                                        <td class="p-3 text-slate-300">
-                                            <?= htmlspecialchars($emp['department_name'] ?? '') ?>
-                                        </td>
-                                        <td class="p-3 text-slate-300">
-                                            <?= !empty($emp['termination_date']) ? date('d/m/Y', strtotime($emp['termination_date'])) : '—' ?>
-                                        </td>
-                                        <td class="p-3">
-                                            <div class="flex flex-wrap gap-2 items-center">
-                                                <a href="employee_profile.php?id=<?= (int) $emp['id'] ?>"
-                                                    class="btn-secondary text-xs px-2 py-1">
-                                                    <i class="fas fa-eye"></i> Ver
-                                                </a>
-                                                <button type="button" onclick="editEmployee(this)"
-                                                    data-employee='<?= json_encode($emp) ?>'
-                                                    class="btn-primary text-xs px-2 py-1">
-                                                    <i class="fas fa-edit"></i> Editar
-                                                </button>
-                                                <form method="POST" onsubmit="return confirm('¿Reintegrar este empleado?')">
-                                                    <input type="hidden" name="employee_id" value="<?= (int) $emp['id'] ?>">
-                                                    <button type="submit" name="reinstate_employee" value="1"
-                                                        class="btn-secondary text-xs px-2 py-1">
-                                                        <i class="fas fa-undo"></i> Reintegrar
-                                                    </button>
-                                                </form>
-                                                <form method="POST"
-                                                    onsubmit="return confirm('¿Eliminar permanentemente este empleado?')">
-                                                    <input type="hidden" name="employee_id" value="<?= (int) $emp['id'] ?>">
-                                                    <button type="submit" name="delete_employee" value="1"
-                                                        class="btn-secondary text-xs text-red-400 px-2 py-1">
-                                                        <i class="fas fa-trash"></i> Eliminar
-                                                    </button>
-                                                </form>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
+                                <div class="overflow-x-auto">
+                                    <table class="table-auto text-sm w-full min-w-[750px]">
+                                        <thead class="sticky top-0 bg-slate-900/80 backdrop-blur border-b border-white/10">
+                                            <tr>
+                                                <th class="text-left p-3 text-slate-300 font-medium">Colaborador</th>
+                                                <th class="text-left p-3 text-slate-300 font-medium">Código</th>
+                                                <th class="text-left p-3 text-slate-300 font-medium">Departamento</th>
+                                                <th class="text-left p-3 text-slate-300 font-medium">Fecha Terminación</th>
+                                                <th class="text-left p-3 text-slate-300 font-medium">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($terminatedEmployees as $emp): ?>
+                                                            <tr class="border-b border-slate-800/60 hover:bg-slate-800/40">
+                                                                <td class="p-3 text-white">
+                                                                    <?= htmlspecialchars(($emp['first_name'] ?? '') . ' ' . ($emp['last_name'] ?? '')) ?>
+                                                                </td>
+                                                                <td class="p-3 text-slate-300">
+                                                                    <?= htmlspecialchars($emp['employee_code'] ?? '') ?>
+                                                                </td>
+                                                                <td class="p-3 text-slate-300">
+                                                                    <?= htmlspecialchars($emp['department_name'] ?? '') ?>
+                                                                </td>
+                                                                <td class="p-3 text-slate-300">
+                                                                    <?= !empty($emp['termination_date']) ? date('d/m/Y', strtotime($emp['termination_date'])) : '—' ?>
+                                                                </td>
+                                                                <td class="p-3">
+                                                                    <div class="flex flex-wrap gap-2 items-center">
+                                                                        <a href="employee_profile.php?id=<?= (int) $emp['id'] ?>"
+                                                                            class="btn-secondary text-xs px-2 py-1">
+                                                                            <i class="fas fa-eye"></i> Ver
+                                                                        </a>
+                                                                        <button type="button" onclick="editEmployee(this)"
+                                                                            data-employee='<?= json_encode($emp) ?>'
+                                                                            class="btn-primary text-xs px-2 py-1">
+                                                                            <i class="fas fa-edit"></i> Editar
+                                                                        </button>
+                                                                        <form method="POST" onsubmit="return confirm('¿Reintegrar este empleado?')">
+                                                                            <input type="hidden" name="employee_id" value="<?= (int) $emp['id'] ?>">
+                                                                            <button type="submit" name="reinstate_employee" value="1"
+                                                                                class="btn-secondary text-xs px-2 py-1">
+                                                                                <i class="fas fa-undo"></i> Reintegrar
+                                                                            </button>
+                                                                        </form>
+                                                                        <form method="POST"
+                                                                            onsubmit="return confirm('¿Eliminar permanentemente este empleado?')">
+                                                                            <input type="hidden" name="employee_id" value="<?= (int) $emp['id'] ?>">
+                                                                            <button type="submit" name="delete_employee" value="1"
+                                                                                class="btn-secondary text-xs text-red-400 px-2 py-1">
+                                                                                <i class="fas fa-trash"></i> Eliminar
+                                                                            </button>
+                                                                        </form>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -1705,12 +1735,12 @@ $terminatedEmployees = $pdo->query("
                         <select id="quick_assign_campaign_id" name="campaign_id">
                             <option value="">Sin campa&ntilde;a</option>
                             <?php foreach ($quickAssignCampaigns as $campaign): ?>
-                                <option value="<?= htmlspecialchars($campaign['id']) ?>">
-                                    <?= htmlspecialchars($campaign['name']) ?>
-                                    <?php if (!empty($campaign['code'])): ?>
-                                        (<?= htmlspecialchars($campaign['code']) ?>)
-                                    <?php endif; ?>
-                                </option>
+                                            <option value="<?= htmlspecialchars($campaign['id']) ?>">
+                                                <?= htmlspecialchars($campaign['name']) ?>
+                                                <?php if (!empty($campaign['code'])): ?>
+                                                                (<?= htmlspecialchars($campaign['code']) ?>)
+                                                <?php endif; ?>
+                                            </option>
                             <?php endforeach; ?>
                         </select>
                         <p class="text-xs text-slate-400 mt-1">Selecciona la campa&ntilde;a que deseas asignar.</p>
@@ -1720,16 +1750,29 @@ $terminatedEmployees = $pdo->query("
                         <select id="quick_assign_supervisor_id" name="supervisor_id">
                             <option value="">Sin supervisor</option>
                             <?php foreach ($quickAssignSupervisors as $supervisor): ?>
-                                <option value="<?= htmlspecialchars($supervisor['id']) ?>">
-                                    <?= htmlspecialchars($supervisor['full_name']) ?>
-                                    <?php if (!empty($supervisor['role'])): ?>
-                                        (<?= htmlspecialchars($supervisor['role']) ?>)
-                                    <?php endif; ?>
-                                </option>
+                                            <option value="<?= htmlspecialchars($supervisor['id']) ?>">
+                                                <?= htmlspecialchars($supervisor['full_name']) ?>
+                                                <?php if (!empty($supervisor['role'])): ?>
+                                                                (<?= htmlspecialchars($supervisor['role']) ?>)
+                                                <?php endif; ?>
+                                            </option>
                             <?php endforeach; ?>
                         </select>
                         <p class="text-xs text-slate-400 mt-1">Supervisor responsable del empleado.</p>
                     </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="quick_assign_schedule_template_id">Horario (Opcional)</label>
+                    <select id="quick_assign_schedule_template_id" name="schedule_template_id">
+                        <option value="">No cambiar horario</option>
+                        <?php foreach ($scheduleTemplates as $template): ?>
+                                        <option value="<?= htmlspecialchars($template['id']) ?>">
+                                            <?= htmlspecialchars($template['name']) ?> (<?= date('g:i A', strtotime($template['entry_time'])) ?> - <?= date('g:i A', strtotime($template['exit_time'])) ?>)
+                                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="text-xs text-slate-400 mt-1">Si seleccionas un horario, se aplicar&aacute; inmediatamente con fecha de hoy.</p>
                 </div>
 
                 <div class="flex gap-3">
@@ -1802,7 +1845,7 @@ $terminatedEmployees = $pdo->query("
                         <select id="edit_department_id" name="department_id">
                             <option value="">Sin departamento</option>
                             <?php foreach ($departments as $dept): ?>
-                                <option value="<?= $dept['id'] ?>"><?= htmlspecialchars($dept['name']) ?></option>
+                                            <option value="<?= $dept['id'] ?>"><?= htmlspecialchars($dept['name']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -2021,7 +2064,7 @@ $terminatedEmployees = $pdo->query("
                         <select id="edit_bank_id" name="bank_id">
                             <option value="">Sin banco</option>
                             <?php foreach ($banks as $bank): ?>
-                                <option value="<?= $bank['id'] ?>"><?= htmlspecialchars($bank['name']) ?></option>
+                                            <option value="<?= $bank['id'] ?>"><?= htmlspecialchars($bank['name']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -2057,20 +2100,20 @@ $terminatedEmployees = $pdo->query("
                             onchange="updateScheduleButtonsEdit()">
                             <option value="">Usar horario global del sistema</option>
                             <?php foreach ($scheduleTemplates as $template): ?>
-                                <?php
-                                $timeInfo = date('g:i A', strtotime($template['entry_time'])) . ' - ' . date('g:i A', strtotime($template['exit_time']));
-                                ?>
-                                <option value="<?= $template['id'] ?>"
-                                    data-name="<?= htmlspecialchars($template['name'], ENT_QUOTES, 'UTF-8') ?>"
-                                    data-entry="<?= htmlspecialchars($template['entry_time'], ENT_QUOTES, 'UTF-8') ?>"
-                                    data-exit="<?= htmlspecialchars($template['exit_time'], ENT_QUOTES, 'UTF-8') ?>"
-                                    data-lunch="<?= htmlspecialchars($template['lunch_time'], ENT_QUOTES, 'UTF-8') ?>"
-                                    data-break="<?= htmlspecialchars($template['break_time'], ENT_QUOTES, 'UTF-8') ?>"
-                                    data-lunch-minutes="<?= htmlspecialchars((string) $template['lunch_minutes'], ENT_QUOTES, 'UTF-8') ?>"
-                                    data-break-minutes="<?= htmlspecialchars((string) $template['break_minutes'], ENT_QUOTES, 'UTF-8') ?>"
-                                    data-hours="<?= htmlspecialchars((string) $template['scheduled_hours'], ENT_QUOTES, 'UTF-8') ?>">
-                                    <?= htmlspecialchars($template['name']) ?> (<?= $timeInfo ?>)
-                                </option>
+                                            <?php
+                                            $timeInfo = date('g:i A', strtotime($template['entry_time'])) . ' - ' . date('g:i A', strtotime($template['exit_time']));
+                                            ?>
+                                            <option value="<?= $template['id'] ?>"
+                                                data-name="<?= htmlspecialchars($template['name'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-entry="<?= htmlspecialchars($template['entry_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-exit="<?= htmlspecialchars($template['exit_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-lunch="<?= htmlspecialchars($template['lunch_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-break="<?= htmlspecialchars($template['break_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-lunch-minutes="<?= htmlspecialchars((string) $template['lunch_minutes'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-break-minutes="<?= htmlspecialchars((string) $template['break_minutes'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-hours="<?= htmlspecialchars((string) $template['scheduled_hours'], ENT_QUOTES, 'UTF-8') ?>">
+                                                <?= htmlspecialchars($template['name']) ?> (<?= $timeInfo ?>)
+                                            </option>
                             <?php endforeach; ?>
                         </select>
                         <button type="button" onclick="openNewScheduleModalEdit()"

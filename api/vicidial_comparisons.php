@@ -15,6 +15,13 @@ $startDate = $_GET['start_date'] ?? date('Y-m-01');
 $endDate = $_GET['end_date'] ?? date('Y-m-t');
 $campaign = $_GET['campaign'] ?? '';
 
+// Daily date override
+$dailyDate = $_GET['daily_date'] ?? '';
+if ($dailyDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dailyDate)) {
+    $startDate = $dailyDate;
+    $endDate = $dailyDate;
+}
+
 try {
     // Calculate previous period dates
     $start = new DateTime($startDate);
