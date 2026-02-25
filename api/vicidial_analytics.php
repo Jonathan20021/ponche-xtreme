@@ -58,7 +58,7 @@ try {
             break;
 
         case 'available_dates':
-            echo json_encode(getAvailableDates($pdo, $rangeStartDate, $rangeEndDate));
+            echo json_encode(getAvailableDates($pdo, $rangeStartDate, $rangeEndDate, $campaign));
             break;
 
         default:
@@ -264,11 +264,21 @@ function getDispositionBreakdown($pdo, $startDate, $endDate, $campaign = '')
             SUM(sale) as SALE,
             SUM(pedido) as PEDIDO,
             SUM(orden) as ORDEN,
+            SUM(active) as ACTIVE,
             SUM(callbk) as CALLBACK,
+            SUM(cortad) as CORTADO,
+            SUM(deposi) as DEPOSITO,
+            SUM(duplic) as DUPLICADO,
             SUM(n) as NO_INTERESADO,
             SUM(nocal) as NO_CONTACTO,
+            SUM(nocon) as NO_CONTESTA,
+            SUM(notie) as NO_TIENE_DINERO,
+            SUM(numeq) as NUMERO_EQUIVOCADO,
+            SUM(promo) as PROMO,
+            SUM(pu) as PU,
             SUM(colgo) as COLGO,
-            SUM(silenc) as SILENCIO
+            SUM(silenc) as SILENCIO,
+            SUM(wasapi) as WASAPI
         FROM vicidial_login_stats
         WHERE upload_date BETWEEN :start_date AND :end_date
         $campaignFilter
@@ -456,14 +466,23 @@ function getCampaigns($pdo, $startDate, $endDate)
 /**
  * Get Available Dates (all distinct upload dates in the database)
  */
-function getAvailableDates($pdo, $startDate, $endDate)
+function getAvailableDates($pdo, $startDate, $endDate, $campaign = '')
 {
-    $stmt = $pdo->query("
+    $campaignFilter = $campaign ? "AND current_user_group = :campaign" : "";
+    $stmt = $pdo->prepare("
         SELECT DISTINCT upload_date
         FROM vicidial_login_stats
+        WHERE upload_date BETWEEN :start_date AND :end_date
+        $campaignFilter
         ORDER BY upload_date DESC
     ");
 
+    $params = ['start_date' => $startDate, 'end_date' => $endDate];
+    if ($campaign) {
+        $params['campaign'] = $campaign;
+    }
+
+    $stmt->execute($params);
     $dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
     return [

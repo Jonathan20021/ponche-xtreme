@@ -84,6 +84,7 @@ try {
         'ID',
         'CURRENT USER GROUP',
         'MOST RECENT USER GROUP',
+        'CALL DATE ',
         'CALLS',
         'TIME',
         'PAUSE',
@@ -99,27 +100,37 @@ try {
         'CUSTOMER',
         'CUSTAVG',
         'A',
+        'ACTIVE',
         'B',
         'CALLBK',
         'COLGO',
+        'CORTAD',
         'DAIR',
         'DC',
         'DEC',
+        'DEPOSI',
         'DNC',
+        'DUPLIC',
         'N',
         'NI',
         'NOCAL',
+        'NOCON',
+        'NOTIE',
         'NP',
+        'NUMEQ',
         'ORDEN',
         'OTROD',
         'PEDIDO',
         'PREGUN',
+        'PROMO',
         'PTRANS',
+        'PU',
         'QUEJAS',
         'RESERV',
         'SALE',
         'SEGUIM',
         'SILENC',
+        'WASAPI',
         'XFER'
     ];
 
@@ -151,16 +162,16 @@ try {
             user_name, user_id, current_user_group, most_recent_user_group,
             calls, time_total, pause_time, pause_avg, wait_time, wait_avg,
             talk_time, talk_avg, dispo_time, dispo_avg, dead_time, dead_avg,
-            customer_time, customer_avg, a, b, callbk, colgo, dair, dc, `dec`,
-            dnc, n, ni, nocal, np, orden, otrod, pedido, pregun, ptrans,
-            quejas, reserv, sale, seguim, silenc, xfer, upload_date, uploaded_by
+            customer_time, customer_avg, a, active, b, callbk, colgo, cortad, dair, dc, `dec`,
+            deposi, dnc, duplic, n, ni, nocal, nocon, notie, np, numeq, orden, otrod, pedido, pregun, promo, ptrans,
+            pu, quejas, reserv, sale, seguim, silenc, wasapi, xfer, upload_date, uploaded_by
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     ");
 
     $recordCount = 0;
+    $currentAgent = null;
     $pdo->beginTransaction();
 
     // Process each row
@@ -188,17 +199,52 @@ try {
             continue;
         }
 
-        // Extract and convert data
+        // Extract agent info
         $userName = trim($data['USER NAME'] ?? '');
         $userId = trim($data['ID'] ?? '');
 
-        // Skip if no user name or ID
-        if (empty($userName) || empty($userId)) {
+        // If USER NAME and ID are present, this is a summary row (start of a new agent section)
+        if (!empty($userName) && !empty($userId)) {
+            $currentAgent = [
+                'user_name' => $userName,
+                'user_id' => $userId,
+                'current_user_group' => trim($data['CURRENT USER GROUP'] ?? ''),
+                'most_recent_user_group' => trim($data['MOST RECENT USER GROUP'] ?? '')
+            ];
+
+            // If there's no CALL DATE column OR if CALL DATE is empty, 
+            // check if we should process this row directly (non-hierarchical CSV)
+            if (!isset($header_has_call_date)) {
+                $header_has_call_date = in_array('CALL DATE ', $header);
+            }
+
+            if (!$header_has_call_date) {
+                // Old format: process summary row as the data row
+                $process_row = true;
+                $rowDate = $reportDate;
+            } else {
+                // New format: wait for daily rows
+                $process_row = false;
+            }
+        } else {
+            // This might be a daily row
+            $rowDate = trim($data['CALL DATE '] ?? '');
+            if (!empty($rowDate) && $currentAgent) {
+                $process_row = true;
+            } else {
+                $process_row = false;
+            }
+        }
+
+        if (!$process_row) {
             continue;
         }
 
-        $currentUserGroup = trim($data['CURRENT USER GROUP'] ?? '');
-        $mostRecentUserGroup = trim($data['MOST RECENT USER GROUP'] ?? '');
+        // Extract and convert data
+        $userName = $currentAgent['user_name'];
+        $userId = $currentAgent['user_id'];
+        $currentUserGroup = $currentAgent['current_user_group'];
+        $mostRecentUserGroup = $currentAgent['most_recent_user_group'];
 
         // Convert time fields to seconds
         $calls = (int) ($data['CALLS'] ?? 0);
@@ -218,27 +264,37 @@ try {
 
         // Status columns
         $a = (int) ($data['A'] ?? 0);
+        $active = (int) ($data['ACTIVE'] ?? 0);
         $b = (int) ($data['B'] ?? 0);
         $callbk = (int) ($data['CALLBK'] ?? 0);
         $colgo = (int) ($data['COLGO'] ?? 0);
+        $cortad = (int) ($data['CORTAD'] ?? 0);
         $dair = (int) ($data['DAIR'] ?? 0);
         $dc = (int) ($data['DC'] ?? 0);
         $dec = (int) ($data['DEC'] ?? 0);
+        $deposi = (int) ($data['DEPOSI'] ?? 0);
         $dnc = (int) ($data['DNC'] ?? 0);
+        $duplic = (int) ($data['DUPLIC'] ?? 0);
         $n = (int) ($data['N'] ?? 0);
         $ni = (int) ($data['NI'] ?? 0);
         $nocal = (int) ($data['NOCAL'] ?? 0);
+        $nocon = (int) ($data['NOCON'] ?? 0);
+        $notie = (int) ($data['NOTIE'] ?? 0);
         $np = (int) ($data['NP'] ?? 0);
+        $numeq = (int) ($data['NUMEQ'] ?? 0);
         $orden = (int) ($data['ORDEN'] ?? 0);
         $otrod = (int) ($data['OTROD'] ?? 0);
         $pedido = (int) ($data['PEDIDO'] ?? 0);
         $pregun = (int) ($data['PREGUN'] ?? 0);
+        $promo = (int) ($data['PROMO'] ?? 0);
         $ptrans = (int) ($data['PTRANS'] ?? 0);
+        $pu = (int) ($data['PU'] ?? 0);
         $quejas = (int) ($data['QUEJAS'] ?? 0);
         $reserv = (int) ($data['RESERV'] ?? 0);
         $sale = (int) ($data['SALE'] ?? 0);
         $seguim = (int) ($data['SEGUIM'] ?? 0);
         $silenc = (int) ($data['SILENC'] ?? 0);
+        $wasapi = (int) ($data['WASAPI'] ?? 0);
         $xfer = (int) ($data['XFER'] ?? 0);
 
         // Insert record
@@ -262,29 +318,39 @@ try {
             $customerTime,
             $customerAvg,
             $a,
+            $active,
             $b,
             $callbk,
             $colgo,
+            $cortad,
             $dair,
             $dc,
             $dec,
+            $deposi,
             $dnc,
+            $duplic,
             $n,
             $ni,
             $nocal,
+            $nocon,
+            $notie,
             $np,
+            $numeq,
             $orden,
             $otrod,
             $pedido,
             $pregun,
+            $promo,
             $ptrans,
+            $pu,
             $quejas,
             $reserv,
             $sale,
             $seguim,
             $silenc,
+            $wasapi,
             $xfer,
-            $reportDate,
+            $rowDate,
             $uploadedBy
         ]);
 

@@ -35,7 +35,7 @@ $stmt = $pdo->prepare("
         SUM(sale) as sale,
         SUM(pedido) as pedido,
         SUM(orden) as orden,
-        SUM(a + b + callbk + colgo + dair + dc + `dec` + dnc + n + ni + nocal + np + pregun + ptrans + quejas + reserv + seguim + silenc + xfer) as other_dispositions
+        SUM(active + a + b + callbk + colgo + cortad + dair + dc + `dec` + deposi + dnc + duplic + n + ni + nocal + nocon + notie + np + numeq + pregun + promo + ptrans + pu + quejas + reserv + seguim + silenc + wasapi + xfer) as other_dispositions
     FROM vicidial_login_stats
     WHERE upload_date BETWEEN :start_date AND :end_date
     $campaignFilter
@@ -91,6 +91,7 @@ include 'header.php';
         <h2 class="text-xl font-semibold text-slate-100 mb-4">
             <i class="fas fa-upload text-cyan-400 mr-2"></i>
             Subir Reporte CSV
+            <span class="ml-2 text-xs font-normal text-slate-400 italic">(Soporta archivos con desglose diario)</span>
         </h2>
 
         <form @submit.prevent="uploadCSV" class="space-y-4">
@@ -605,7 +606,8 @@ include 'header.php';
                 try {
                     const params = new URLSearchParams({
                         start_date: '<?= $_GET['start_date'] ?? date('Y-m-01') ?>',
-                        end_date: '<?= $_GET['end_date'] ?? date('Y-m-t') ?>'
+                        end_date: '<?= $_GET['end_date'] ?? date('Y-m-t') ?>',
+                        campaign: this.selectedCampaign
                     });
                     const response = await fetch(`api/vicidial_analytics.php?action=available_dates&${params}`);
                     const data = await response.json();
