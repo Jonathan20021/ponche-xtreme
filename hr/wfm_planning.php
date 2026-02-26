@@ -1,4 +1,3 @@
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <?php
 session_start();
 require_once __DIR__ . '/../db.php';
@@ -115,7 +114,7 @@ include __DIR__ . '/../header.php';
             </div>
         </div>
     </div>
-    
+
     <!-- Charts Row 2 -->
     <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5 mb-8">
         <h3 class="text-lg font-semibold text-slate-200 mb-4">Tasa de Abandono y ASA</h3>
