@@ -161,7 +161,7 @@ function resolveScheduleHours(array $map, array $defaultConfig, int $userId, str
 
 $action = $_GET['action'] ?? $_POST['action'] ?? 'staffing_gap';
 
-if ($action === 'staffing_gap') {
+if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
     $defaultStart = date('Y-m-01');
     $defaultEnd = date('Y-m-t');
     $startDate = parseDate($_GET['start_date'] ?? $defaultStart, $defaultStart);
@@ -171,136 +171,145 @@ if ($action === 'staffing_gap') {
     }
     $startBound = $startDate . ' 00:00:00';
     $endBound = $endDate . ' 23:59:59';
-    $dateList = buildDateRange($startDate, $endDate);
 
-    $campaigns = $pdo->query("SELECT id, name, code FROM campaigns ORDER BY name")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $campaignsStmt = $pdo->query("SELECT id, name, code FROM campaigns ORDER BY name");
+    $campaigns = $campaignsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     $campaignMap = [];
     foreach ($campaigns as $c) {
         $campaignMap[(int) $c['id']] = $c;
     }
 
-    $forecastStmt = $pdo->prepare("
-        SELECT *
-        FROM campaign_staffing_forecast
+    $stmt = $pdo->prepare("
+        SELECT 
+            campaign_id,
+            DATE(interval_start) as date_string,
+            SUM(offered_calls) as sum_offered,
+            SUM(answered_calls) as sum_answered,
+            SUM(abandoned_calls) as sum_abandoned,
+            SUM(total_talk_sec) as sum_talk_sec,
+            SUM(total_wrap_sec) as sum_wrap_sec,
+            SUM(total_call_sec) as sum_call_sec,
+            AVG(avg_answer_speed_sec) as g_avg_answer_speed,
+            AVG(avg_abandon_time_sec) as g_avg_abandon_time
+        FROM vicidial_inbound_hourly
         WHERE interval_start BETWEEN ? AND ?
-        ORDER BY campaign_id, interval_start
+        GROUP BY campaign_id, DATE(interval_start)
+        ORDER BY campaign_id, DATE(interval_start)
     ");
-    $forecastStmt->execute([$startBound, $endBound]);
-    $forecastRows = $forecastStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-    $requiredByCampaignDate = [];
-    foreach ($forecastRows as $row) {
-        $campaignId = (int) $row['campaign_id'];
-        $dateKey = date('Y-m-d', strtotime($row['interval_start']));
-        $calc = calcStaffing($row);
-        $intervalMinutes = max(1, (int) ($row['interval_minutes'] ?? 30));
-        $staffHours = $calc['required_staff'] * ($intervalMinutes / 60);
-
-        if (!isset($requiredByCampaignDate[$campaignId])) {
-            $requiredByCampaignDate[$campaignId] = [];
-        }
-        if (!isset($requiredByCampaignDate[$campaignId][$dateKey])) {
-            $requiredByCampaignDate[$campaignId][$dateKey] = 0.0;
-        }
-        $requiredByCampaignDate[$campaignId][$dateKey] += $staffHours;
-    }
-
-    $usersStmt = $pdo->query("
-        SELECT u.id, e.campaign_id
-        FROM users u
-        LEFT JOIN employees e ON e.user_id = u.id
-        WHERE e.campaign_id IS NOT NULL
-    ");
-    $users = $usersStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-    $userIds = [];
-    $userCampaignMap = [];
-    foreach ($users as $u) {
-        $uid = (int) $u['id'];
-        $userIds[] = $uid;
-        $userCampaignMap[$uid] = (int) $u['campaign_id'];
-    }
-
-    $globalScheduleConfig = getScheduleConfig($pdo);
-    $userSchedulesMap = [];
-    if (!empty($userIds)) {
-        $placeholders = implode(',', array_fill(0, count($userIds), '?'));
-        $schedStmt = $pdo->prepare("
-            SELECT * FROM employee_schedules
-            WHERE user_id IN ($placeholders)
-            AND is_active = 1
-            ORDER BY effective_date DESC
-        ");
-        $schedStmt->execute($userIds);
-        foreach ($schedStmt->fetchAll(PDO::FETCH_ASSOC) as $sch) {
-            $uid = (int) $sch['user_id'];
-            $userSchedulesMap[$uid][] = $sch;
-        }
-    }
-
-    $scheduledByCampaignDate = [];
-    foreach ($userIds as $uid) {
-        $campaignId = $userCampaignMap[$uid] ?? 0;
-        if ($campaignId <= 0) {
-            continue;
-        }
-        foreach ($dateList as $dateStr) {
-            $hours = resolveScheduleHours($userSchedulesMap, $globalScheduleConfig, $uid, $dateStr);
-            if (!isset($scheduledByCampaignDate[$campaignId])) {
-                $scheduledByCampaignDate[$campaignId] = [];
-            }
-            if (!isset($scheduledByCampaignDate[$campaignId][$dateStr])) {
-                $scheduledByCampaignDate[$campaignId][$dateStr] = 0.0;
-            }
-            $scheduledByCampaignDate[$campaignId][$dateStr] += $hours;
-        }
-    }
+    $stmt->execute([$startBound, $endBound]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
     $dailyRows = [];
     $campaignTotals = [];
-    foreach ($campaignMap as $campaignId => $campaign) {
-        foreach ($dateList as $dateStr) {
-            $required = $requiredByCampaignDate[$campaignId][$dateStr] ?? 0.0;
-            $scheduled = $scheduledByCampaignDate[$campaignId][$dateStr] ?? 0.0;
-            if ($required == 0 && $scheduled == 0) {
-                continue;
-            }
-            $gap = $scheduled - $required;
-            $coverage = $required > 0 ? round(($scheduled / $required) * 100, 1) : 0.0;
 
-            $dailyRows[] = [
+    foreach ($rows as $row) {
+        $campaignId = (int) $row['campaign_id'];
+        $campaign = $campaignMap[$campaignId] ?? ['name' => 'Unknown', 'code' => 'N/A'];
+
+        $offered = (int) $row['sum_offered'];
+        $answered = (int) $row['sum_answered'];
+        $abandoned = (int) $row['sum_abandoned'];
+
+        $abandonPercent = $offered > 0 ? round(($abandoned / $offered) * 100, 2) : 0.0;
+        $answerPercent = $offered > 0 ? round(($answered / $offered) * 100, 2) : 0.0;
+
+        $avgTalk = $answered > 0 ? round($row['sum_talk_sec'] / $answered) : 0;
+        $avgWrap = $answered > 0 ? round($row['sum_wrap_sec'] / $answered) : 0;
+
+        $dailyRows[] = [
+            'campaign_id' => $campaignId,
+            'campaign_name' => $campaign['name'],
+            'campaign_code' => $campaign['code'],
+            'date' => $row['date_string'],
+            'offered' => $offered,
+            'answered' => $answered,
+            'abandoned' => $abandoned,
+            'abandon_percent' => $abandonPercent,
+            'answer_percent' => $answerPercent,
+            'avg_answer_speed' => round((float) $row['g_avg_answer_speed']),
+            'avg_talk_time' => $avgTalk,
+            'avg_wrap_time' => $avgWrap
+        ];
+
+        if (!isset($campaignTotals[$campaignId])) {
+            $campaignTotals[$campaignId] = [
                 'campaign_id' => $campaignId,
                 'campaign_name' => $campaign['name'],
                 'campaign_code' => $campaign['code'],
-                'date' => $dateStr,
-                'required_hours' => round($required, 2),
-                'scheduled_hours' => round($scheduled, 2),
-                'gap_hours' => round($gap, 2),
-                'coverage_percent' => $coverage
+                'offered' => 0,
+                'answered' => 0,
+                'abandoned' => 0,
+                'sum_talk_sec' => 0,
+                'sum_wrap_sec' => 0,
+                'asa_sum' => 0,
+                'intervals' => 0
             ];
-
-            if (!isset($campaignTotals[$campaignId])) {
-                $campaignTotals[$campaignId] = [
-                    'campaign_id' => $campaignId,
-                    'campaign_name' => $campaign['name'],
-                    'campaign_code' => $campaign['code'],
-                    'required_hours' => 0.0,
-                    'scheduled_hours' => 0.0
-                ];
-            }
-            $campaignTotals[$campaignId]['required_hours'] += $required;
-            $campaignTotals[$campaignId]['scheduled_hours'] += $scheduled;
         }
+        $campaignTotals[$campaignId]['offered'] += $offered;
+        $campaignTotals[$campaignId]['answered'] += $answered;
+        $campaignTotals[$campaignId]['abandoned'] += $abandoned;
+        $campaignTotals[$campaignId]['sum_talk_sec'] += (int) $row['sum_talk_sec'];
+        $campaignTotals[$campaignId]['sum_wrap_sec'] += (int) $row['sum_wrap_sec'];
+        $campaignTotals[$campaignId]['asa_sum'] += (float) $row['g_avg_answer_speed'];
+        $campaignTotals[$campaignId]['intervals']++;
     }
 
-    $totals = array_values(array_map(function ($row) {
-        $gap = $row['scheduled_hours'] - $row['required_hours'];
-        $coverage = $row['required_hours'] > 0 ? round(($row['scheduled_hours'] / $row['required_hours']) * 100, 1) : 0.0;
-        $row['required_hours'] = round($row['required_hours'], 2);
-        $row['scheduled_hours'] = round($row['scheduled_hours'], 2);
-        $row['gap_hours'] = round($gap, 2);
-        $row['coverage_percent'] = $coverage;
-        return $row;
-    }, $campaignTotals));
+    $totals = [];
+    foreach ($campaignTotals as $ct) {
+        $offered = $ct['offered'];
+        $answered = $ct['answered'];
+        $abandoned = $ct['abandoned'];
+        $abandonPercent = $offered > 0 ? round(($abandoned / $offered) * 100, 2) : 0.0;
+        $answerPercent = $offered > 0 ? round(($answered / $offered) * 100, 2) : 0.0;
+        $avgTalk = $answered > 0 ? round($ct['sum_talk_sec'] / $answered) : 0;
+        $avgWrap = $answered > 0 ? round($ct['sum_wrap_sec'] / $answered) : 0;
+        $avgAsa = $ct['intervals'] > 0 ? round($ct['asa_sum'] / $ct['intervals']) : 0;
+
+        $totals[] = [
+            'campaign_id' => $ct['campaign_id'],
+            'campaign_name' => $ct['campaign_name'],
+            'campaign_code' => $ct['campaign_code'],
+            'offered' => $offered,
+            'answered' => $answered,
+            'abandoned' => $abandoned,
+            'abandon_percent' => $abandonPercent,
+            'answer_percent' => $answerPercent,
+            'avg_answer_speed' => $avgAsa,
+            'avg_talk_time' => $avgTalk,
+            'avg_wrap_time' => $avgWrap
+        ];
+    }
+
+    $intradayStmt = $pdo->prepare("
+        SELECT 
+            campaign_id,
+            HOUR(interval_start) as hour_of_day,
+            AVG(offered_calls) as avg_offered,
+            AVG(answered_calls) as avg_answered,
+            AVG(abandoned_calls) as avg_abandoned,
+            AVG(avg_answer_speed_sec) as avg_asa
+        FROM vicidial_inbound_hourly
+        WHERE interval_start BETWEEN ? AND ?
+        GROUP BY campaign_id, HOUR(interval_start)
+        ORDER BY campaign_id, HOUR(interval_start)
+    ");
+    $intradayStmt->execute([$startBound, $endBound]);
+    $intradayRows = $intradayStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $intraday = [];
+    foreach ($intradayRows as $iRow) {
+        $cId = (int) $iRow['campaign_id'];
+        if (!isset($intraday[$cId])) {
+            $intraday[$cId] = [];
+        }
+        $intraday[$cId][] = [
+            'hour' => (int) $iRow['hour_of_day'],
+            'avg_offered' => round((float) $iRow['avg_offered'], 1),
+            'avg_answered' => round((float) $iRow['avg_answered'], 1),
+            'avg_abandoned' => round((float) $iRow['avg_abandoned'], 1),
+            'avg_asa' => round((float) $iRow['avg_asa'], 1)
+        ];
+    }
 
     jsonResponse([
         'success' => true,
@@ -309,7 +318,8 @@ if ($action === 'staffing_gap') {
             'end_date' => $endDate
         ],
         'totals' => $totals,
-        'daily' => $dailyRows
+        'daily' => $dailyRows,
+        'intraday' => $intraday
     ]);
 }
 
@@ -448,6 +458,32 @@ if ($action === 'alerts') {
     ");
     $stmt->execute([$startDate, $endDate]);
     jsonResponse(['success' => true, 'alerts' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []]);
+}
+
+if ($action === 'delete_inbound' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!userHasPermission('manage_campaigns')) {
+        jsonResponse(['success' => false, 'error' => 'No tiene permisos para eliminar datos']);
+    }
+
+    $campaignId = isset($_POST['campaign_id']) ? (int) $_POST['campaign_id'] : 0;
+    $startDate = parseDate($_POST['start_date'] ?? '', '');
+    $endDate = parseDate($_POST['end_date'] ?? '', '');
+
+    if ($campaignId <= 0 || !$startDate || !$endDate) {
+        jsonResponse(['success' => false, 'error' => 'Debe seleccionar campaña y rango de fechas']);
+    }
+    if ($endDate < $startDate) {
+        jsonResponse(['success' => false, 'error' => 'La fecha de fin no puede ser menor a la inicial']);
+    }
+
+    $startBound = $startDate . ' 00:00:00';
+    $endBound = $endDate . ' 23:59:59';
+
+    $stmt = $pdo->prepare("DELETE FROM vicidial_inbound_hourly WHERE campaign_id = ? AND interval_start BETWEEN ? AND ?");
+    $stmt->execute([$campaignId, $startBound, $endBound]);
+    $deleted = $stmt->rowCount();
+
+    jsonResponse(['success' => true, 'deleted' => $deleted, 'message' => "Se eliminaron $deleted registros exitosamente."]);
 }
 
 jsonResponse(['success' => false, 'error' => 'Accion invalida'], 400);
