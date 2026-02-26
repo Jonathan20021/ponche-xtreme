@@ -14,6 +14,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 ?>
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -34,7 +35,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             position: relative;
             overflow: hidden;
         }
-        
+
         .campaign-card::before {
             content: '';
             position: absolute;
@@ -45,23 +46,23 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             background: var(--campaign-color);
             transition: all 0.3s ease;
         }
-        
+
         .campaign-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
         }
-        
+
         .campaign-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
             gap: 1.5rem;
             margin-top: 1.5rem;
         }
-        
+
         .campaign-inactive {
             opacity: 0.6;
         }
-        
+
         .supervisor-tag {
             display: inline-flex;
             align-items: center;
@@ -75,7 +76,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
         }
-        
+
         .modal-overlay {
             display: none;
             position: fixed;
@@ -85,11 +86,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             align-items: center;
             justify-content: center;
         }
-        
+
         .modal-overlay.active {
             display: flex;
         }
-        
+
         .modal-content {
             background: var(--card-bg);
             border-radius: 16px;
@@ -101,9 +102,10 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         }
     </style>
 </head>
+
 <body class="<?= htmlspecialchars($bodyClass) ?>">
     <?php include '../header.php'; ?>
-    
+
     <div class="container mx-auto px-4 py-8">
         <div class="max-w-7xl mx-auto">
             <div class="flex justify-between items-center mb-8">
@@ -125,7 +127,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     </a>
                 </div>
             </div>
-            
+
             <div class="glass-card mb-6">
                 <div class="p-4">
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -166,12 +168,40 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                                 Carga de Reporte de Ventas (Campaign Ops)
                             </h2>
                             <p class="text-sm text-slate-400">Sube el CSV con ventas/ingresos/volumen por campaña.</p>
+                            <span
+                                onclick="document.getElementById('salesInfo').classList.toggle('hidden')"
+                                class="text-xs text-blue-400 mt-2 hover:underline cursor-pointer inline-block"><i class="fas fa-info-circle"></i>
+                                Ver información de columnas y análisis</span>
                         </div>
                         <a href="../assets/templates/campaign_sales_report_template.csv" download class="btn-secondary">
                             <i class="fas fa-download mr-2"></i>
                             Descargar Plantilla
                         </a>
                     </div>
+
+                    <div id="salesInfo"
+                        class="hidden bg-slate-800/50 rounded-lg p-4 text-sm text-slate-300 border border-slate-700 mb-6">
+                        <strong class="text-white block mb-2"><i class="fas fa-list-alt text-emerald-400 mr-1"></i>
+                            Formato de las Columnas:</strong>
+                        <ul class="list-disc pl-5 mb-3 space-y-1 text-xs text-slate-400">
+                            <li><span class="text-emerald-300">report_date</span>: Fecha del reporte (formato
+                                YYYY-MM-DD).</li>
+                            <li><span class="text-emerald-300">ventas</span>: Cantidad total de ventas o conversiones
+                                logradas.</li>
+                            <li><span class="text-emerald-300">ingresos</span>: Dinero o facturación generada (usando
+                                formato numérico estándar, ej. 1200.50).</li>
+                            <li><span class="text-emerald-300">volumen</span>: Cantidad de llamadas/interacciones
+                                procesadas ese día.</li>
+                            <li><span class="text-emerald-300">currency</span>: Moneda de los ingresos (ej. USD, DOP,
+                                EUR).</li>
+                        </ul>
+                        <strong class="text-white block mb-2"><i class="fas fa-chart-line text-blue-400 mr-1"></i>
+                            Análisis en la Web:</strong>
+                        <p class="text-xs text-slate-400">Estos datos se utilizan en la vista de control operativo para
+                            evaluar el rendimiento general comparando el volumen de atención versus las ventas y para
+                            analizar los ingresos financieros de la campaña de manera diaria.</p>
+                    </div>
+
                     <form id="salesReportForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div>
                             <label class="text-sm text-slate-400 mb-2 block">Campaña</label>
@@ -182,7 +212,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <div class="md:col-span-2">
                             <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
                             <input type="file" id="salesReportFile" name="report_file" accept=".csv" class="w-full">
-                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por <strong>;</strong>) para ver columnas en Excel.</p>
+                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por
+                                <strong>;</strong>) para ver columnas en Excel.</p>
                         </div>
                         <div>
                             <button type="submit" class="btn-primary w-full">
@@ -203,12 +234,49 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                                 <i class="fas fa-users-cog text-cyan-400 mr-2"></i>
                                 Carga de Staffing (Erlang C)
                             </h2>
-                            <p class="text-sm text-slate-400">Pronóstico por intervalo para calcular capacidad y dotación.</p>
+                            <p class="text-sm text-slate-400">Pronóstico por intervalo para calcular capacidad y
+                                dotación.</p>
+                            <span
+                                onclick="document.getElementById('staffingInfo').classList.toggle('hidden')"
+                                class="text-xs text-blue-400 mt-2 hover:underline cursor-pointer inline-block"><i class="fas fa-info-circle"></i>
+                                Ver información de columnas y análisis</span>
                         </div>
                         <a href="../assets/templates/campaign_staffing_template.csv" download class="btn-secondary">
                             <i class="fas fa-download mr-2"></i>
                             Descargar Plantilla
                         </a>
+                    </div>
+
+                    <div id="staffingInfo"
+                        class="hidden bg-slate-800/50 rounded-lg p-4 text-sm text-slate-300 border border-slate-700 mb-6">
+                        <strong class="text-white block mb-2"><i class="fas fa-list-alt text-cyan-400 mr-1"></i> Formato
+                            de las Columnas:</strong>
+                        <ul class="list-disc pl-5 mb-3 space-y-1 text-xs text-slate-400">
+                            <li><span class="text-cyan-300">interval_start</span>: Fecha y hora de inicio del intervalo
+                                (formato YYYY-MM-DD HH:MM:SS).</li>
+                            <li><span class="text-cyan-300">interval_minutes</span>: Tamaño del intervalo en minutos
+                                (ej. 15, 30, 60).</li>
+                            <li><span class="text-cyan-300">offered_volume</span>: Volumen esperado de
+                                llamadas/interacciones recibidas en el intervalo.</li>
+                            <li><span class="text-cyan-300">aht_seconds</span>: Tiempo Medio de Operación esperado (AHT
+                                - Average Handle Time) en segundos.</li>
+                            <li><span class="text-cyan-300">target_sl</span>: Nivel de servicio a cumplir como valor
+                                decimal (ej. 0.80 representa el 80%).</li>
+                            <li><span class="text-cyan-300">target_answer_seconds</span>: Tiempo objetivo de respuesta
+                                (SLA - ej. 20 segundos).</li>
+                            <li><span class="text-cyan-300">occupancy_target</span>: Ocupación máxima de agentes deseada
+                                (ej. 0.85 representa 85%).</li>
+                            <li><span class="text-cyan-300">shrinkage</span>: Factor de merma/ausentismo (ej. 0.30
+                                representa 30% adicional para cubrimiento).</li>
+                            <li><span class="text-cyan-300">channel</span>: Canal de atención al cliente (Voice, Chat,
+                                Email).</li>
+                        </ul>
+                        <strong class="text-white block mb-2"><i class="fas fa-chart-line text-blue-400 mr-1"></i>
+                            Análisis en la Web:</strong>
+                        <p class="text-xs text-slate-400">Estos datos alimentan la calculadora en el módulo <strong>WFM
+                                > Planning</strong>. Usando la fórmula Erlang C, el sistema permite visualizar y
+                            calcular automáticamente la dotación exacta de personal requerido por cada bloque horario
+                            para lograr las metas del cliente y optimizar las coberturas ("Schedules").</p>
                     </div>
                     <form id="staffingForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div>
@@ -220,7 +288,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <div class="md:col-span-2">
                             <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
                             <input type="file" id="staffingFile" name="report_file" accept=".csv" class="w-full">
-                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por <strong>;</strong>) para ver columnas en Excel.</p>
+                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por
+                                <strong>;</strong>) para ver columnas en Excel.</p>
                         </div>
                         <div>
                             <button type="submit" class="btn-primary w-full">
@@ -232,7 +301,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     <div id="staffingMessage" class="mt-3 hidden"></div>
                 </div>
             </div>
-            
+
             <div class="campaign-grid" id="campaignGrid">
                 <div class="text-center py-8 text-slate-400">
                     <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
@@ -241,7 +310,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             </div>
         </div>
     </div>
-    
+
     <!-- Modal de Crear/Editar Campaña -->
     <div class="modal-overlay" id="campaignModal" onclick="closeModalOnOverlay(event)">
         <div class="modal-content">
@@ -254,26 +323,28 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-            
+
             <div id="campaignFormContainer">
                 <input type="hidden" id="campaignId">
-                
+
                 <div class="form-group mb-4">
                     <label for="campaignName">Nombre de la Campaña *</label>
                     <input type="text" id="campaignName" required placeholder="Ej: Soporte Técnico" class="w-full">
                 </div>
-                
+
                 <div class="form-group mb-4">
                     <label for="campaignCode">Código *</label>
-                    <input type="text" id="campaignCode" required placeholder="Ej: TECH-SUPPORT" maxlength="50" style="text-transform: uppercase;" class="w-full">
+                    <input type="text" id="campaignCode" required placeholder="Ej: TECH-SUPPORT" maxlength="50"
+                        style="text-transform: uppercase;" class="w-full">
                     <p class="text-xs text-slate-400 mt-1">Código único sin espacios</p>
                 </div>
-                
+
                 <div class="form-group mb-4">
                     <label for="campaignDescription">Descripción</label>
-                    <textarea id="campaignDescription" rows="3" placeholder="Descripción opcional" class="w-full"></textarea>
+                    <textarea id="campaignDescription" rows="3" placeholder="Descripción opcional"
+                        class="w-full"></textarea>
                 </div>
-                
+
                 <div class="form-group mb-4">
                     <label for="campaignColor">Color de Identificación</label>
                     <div class="flex gap-3 items-center">
@@ -281,16 +352,16 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <span class="text-sm text-slate-400">Selecciona un color para identificar la campaña</span>
                     </div>
                 </div>
-                
+
                 <div class="form-group mb-4">
                     <label class="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" id="campaignActive" checked class="form-checkbox">
                         <span class="text-sm text-slate-300">Campaña activa</span>
                     </label>
                 </div>
-                
+
                 <div id="formMessage" class="mb-4 hidden"></div>
-                
+
                 <div class="flex gap-3">
                     <button type="button" onclick="saveCampaign(event)" class="btn-primary flex-1">
                         <i class="fas fa-save"></i>
@@ -304,7 +375,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             </div>
         </div>
     </div>
-    
+
     <!-- Modal de Supervisores -->
     <div class="modal-overlay" id="supervisorsModal" onclick="closeModalOnOverlay(event)">
         <div class="modal-content">
@@ -317,7 +388,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-            
+
             <div class="mb-4">
                 <label class="text-sm text-slate-400 mb-2 block">Supervisores Disponibles</label>
                 <select id="supervisorSelect" class="w-full mb-2">
@@ -328,7 +399,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     Asignar Supervisor
                 </button>
             </div>
-            
+
             <div class="mb-4">
                 <label class="text-sm text-slate-400 mb-2 block">Supervisores Asignados</label>
                 <div id="assignedSupervisors" class="space-y-2">
@@ -337,15 +408,15 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     </div>
                 </div>
             </div>
-            
+
             <div id="supervisorsMessage" class="mb-4 hidden"></div>
-            
+
             <button onclick="closeSupervisorsModal()" class="btn-secondary w-full">
                 Cerrar
             </button>
         </div>
     </div>
-    
+
     <!-- Employee Assignment Modal -->
     <div class="modal-overlay" id="employeeAssignmentModal" onclick="closeModalOnOverlay(event)">
         <div class="modal-content" style="max-width: 700px;">
@@ -358,14 +429,15 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-            
+
             <div class="mb-4 bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
                 <p class="text-sm text-slate-300">
                     <i class="fas fa-info-circle text-blue-400 mr-2"></i>
-                    Para asignar empleados a esta campaña, usa el botón <strong>"Asignar"</strong> (<i class="fas fa-user-tag"></i>) en la lista de empleados.
+                    Para asignar empleados a esta campaña, usa el botón <strong>"Asignar"</strong> (<i
+                        class="fas fa-user-tag"></i>) en la lista de empleados.
                 </p>
             </div>
-            
+
             <div class="mb-4">
                 <label class="text-sm text-slate-400 mb-2 block">Empleados Asignados</label>
                 <div id="employeeList" class="space-y-2 max-h-96 overflow-y-auto">
@@ -374,9 +446,9 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     </div>
                 </div>
             </div>
-            
+
             <div id="employeeMessage" class="mb-4 hidden"></div>
-            
+
             <div class="flex gap-3">
                 <a href="employees.php" class="btn-primary flex-1 text-center">
                     <i class="fas fa-user-plus mr-2"></i>
@@ -388,16 +460,16 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             </div>
         </div>
     </div>
-    
+
     <?php include '../footer.php'; ?>
-    
+
     <script>
         let campaigns = [];
         let allSupervisors = [];
         let currentCampaignId = null;
-        
+
         // Cargar datos al iniciar
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             loadCampaigns();
             loadSupervisors();
             const salesForm = document.getElementById('salesReportForm');
@@ -409,12 +481,12 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 staffingForm.addEventListener('submit', handleStaffingUpload);
             }
         });
-        
+
         async function loadCampaigns() {
             try {
                 const response = await fetch('../api/campaigns.php?action=list');
                 const data = await response.json();
-                
+
                 if (data.success) {
                     campaigns = data.campaigns;
                     renderCampaigns();
@@ -428,12 +500,12 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 showError('Error al cargar campañas: ' + error.message);
             }
         }
-        
+
         async function loadSupervisors() {
             try {
                 const response = await fetch('../api/campaigns.php?action=supervisors');
                 const data = await response.json();
-                
+
                 if (data.success) {
                     allSupervisors = data.supervisors;
                 }
@@ -441,10 +513,10 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 console.error('Error al cargar supervisores:', error);
             }
         }
-        
+
         function renderCampaigns() {
             const grid = document.getElementById('campaignGrid');
-            
+
             if (campaigns.length === 0) {
                 grid.innerHTML = `
                     <div class="col-span-full text-center py-12 text-slate-400">
@@ -455,7 +527,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 `;
                 return;
             }
-            
+
             grid.innerHTML = campaigns.map(campaign => `
                 <div class="campaign-card ${campaign.is_active == 0 ? 'campaign-inactive' : ''}" 
                      style="--campaign-color: ${campaign.color};">
@@ -503,12 +575,12 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 </div>
             `).join('');
         }
-        
+
         function updateStats() {
             const active = campaigns.filter(c => c.is_active == 1).length;
             const totalSupervisors = campaigns.reduce((sum, c) => sum + parseInt(c.supervisor_count), 0);
             const totalAgents = campaigns.reduce((sum, c) => sum + parseInt(c.agent_count), 0);
-            
+
             document.getElementById('totalCampaigns').textContent = campaigns.length;
             document.getElementById('activeCampaigns').textContent = active;
             document.getElementById('totalSupervisors').textContent = totalSupervisors;
@@ -648,7 +720,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 }, 5000);
             }
         }
-        
+
         function openCreateModal() {
             document.getElementById('modalTitle').innerHTML = '<i class="fas fa-bullhorn text-blue-400 mr-2"></i>Nueva Campaña';
             document.getElementById('campaignId').value = '';
@@ -660,12 +732,12 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             document.getElementById('formMessage').classList.add('hidden');
             document.getElementById('campaignModal').classList.add('active');
         }
-        
+
         async function editCampaign(id) {
             try {
                 const response = await fetch(`../api/campaigns.php?action=get&id=${id}`);
                 const data = await response.json();
-                
+
                 if (data.success) {
                     const campaign = data.campaign;
                     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit text-blue-400 mr-2"></i>Editar Campaña';
@@ -684,17 +756,17 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 showError('Error al cargar campaña: ' + error.message);
             }
         }
-        
+
         async function saveCampaign(event) {
             if (event) {
                 event.preventDefault();
                 event.stopPropagation();
             }
-            
+
             // Validación básica
             const name = document.getElementById('campaignName').value.trim();
             const code = document.getElementById('campaignCode').value.trim().toUpperCase();
-            
+
             if (!name || !code) {
                 const messageDiv = document.getElementById('formMessage');
                 messageDiv.className = 'status-banner error mb-4';
@@ -702,7 +774,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 messageDiv.classList.remove('hidden');
                 return false;
             }
-            
+
             const id = document.getElementById('campaignId').value;
             const formData = {
                 name: name,
@@ -711,45 +783,45 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 color: document.getElementById('campaignColor').value,
                 is_active: document.getElementById('campaignActive').checked ? 1 : 0
             };
-            
+
             if (id) {
                 formData.id = parseInt(id);
             }
-            
+
             const messageDiv = document.getElementById('formMessage');
             messageDiv.className = 'status-banner mb-4';
             messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando...';
             messageDiv.classList.remove('hidden');
-            
+
             try {
                 const url = '../api/campaigns.php';
                 const method = 'POST';
-                
+
                 if (id) {
                     formData.action = 'update';
                 } else {
                     formData.action = 'create';
                 }
-                
+
                 console.log('Saving campaign:', { url, method, formData });
-                
+
                 const response = await fetch(url, {
                     method: method,
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     body: JSON.stringify(formData)
                 });
-                
+
                 console.log('Response status:', response.status);
                 const data = await response.json();
                 console.log('Response data:', data);
-                
+
                 if (data.success) {
                     messageDiv.className = 'status-banner success mb-4';
                     messageDiv.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + data.message;
-                    
+
                     setTimeout(() => {
                         closeModal();
                         loadCampaigns();
@@ -762,25 +834,25 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 messageDiv.className = 'status-banner error mb-4';
                 messageDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error: ' + error.message;
             }
-            
+
             return false; // Prevenir submit del form
         }
-        
+
         async function confirmDelete(id) {
             const campaign = campaigns.find(c => c.id == id);
             if (!campaign) return;
-            
+
             if (!confirm(`¿Estás seguro de que deseas eliminar la campaña "${campaign.name}"?\n\nEsta acción no se puede deshacer.`)) {
                 return;
             }
-            
+
             try {
                 const response = await fetch(`../api/campaigns.php?id=${id}`, {
                     method: 'DELETE'
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showSuccess(data.message);
                     loadCampaigns();
@@ -791,37 +863,37 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 showError('Error al eliminar: ' + error.message);
             }
         }
-        
+
         async function manageSupervisors(campaignId) {
             currentCampaignId = campaignId;
             const campaign = campaigns.find(c => c.id == campaignId);
-            
+
             if (campaign) {
-                document.getElementById('supervisorsModalTitle').innerHTML = 
+                document.getElementById('supervisorsModalTitle').innerHTML =
                     `<i class="fas fa-users-cog text-blue-400 mr-2"></i>Supervisores - ${escapeHtml(campaign.name)}`;
             }
-            
+
             // Cargar supervisores asignados
             await loadAssignedSupervisors(campaignId);
-            
+
             // Poblar select de supervisores disponibles
             const select = document.getElementById('supervisorSelect');
             select.innerHTML = '<option value="">Seleccionar supervisor...</option>' +
                 allSupervisors.map(s => `<option value="${s.id}">${escapeHtml(s.full_name)} (${escapeHtml(s.role)})</option>`).join('');
-            
+
             document.getElementById('supervisorsMessage').classList.add('hidden');
             document.getElementById('supervisorsModal').classList.add('active');
         }
-        
+
         async function loadAssignedSupervisors(campaignId) {
             try {
                 const response = await fetch(`../api/campaigns.php?action=get&id=${campaignId}`);
                 const data = await response.json();
-                
+
                 if (data.success) {
                     const container = document.getElementById('assignedSupervisors');
                     const supervisors = data.campaign.supervisors || [];
-                    
+
                     if (supervisors.length === 0) {
                         container.innerHTML = `
                             <div class="text-center text-slate-500 py-4">
@@ -848,14 +920,14 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 console.error('Error al cargar supervisores asignados:', error);
             }
         }
-        
+
         async function assignSupervisor() {
             const supervisorId = document.getElementById('supervisorSelect').value;
             if (!supervisorId) {
                 showSupervisorsMessage('Selecciona un supervisor', 'error');
                 return;
             }
-            
+
             try {
                 const response = await fetch('../api/campaigns.php?action=assign_supervisor', {
                     method: 'POST',
@@ -865,9 +937,9 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         campaign_id: currentCampaignId
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showSupervisorsMessage(data.message, 'success');
                     loadAssignedSupervisors(currentCampaignId);
@@ -880,12 +952,12 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 showSupervisorsMessage('Error: ' + error.message, 'error');
             }
         }
-        
+
         async function unassignSupervisor(supervisorId) {
             if (!confirm('¿Desasignar este supervisor de la campaña?')) {
                 return;
             }
-            
+
             try {
                 const response = await fetch('../api/campaigns.php?action=unassign_supervisor', {
                     method: 'POST',
@@ -895,9 +967,9 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         campaign_id: currentCampaignId
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showSupervisorsMessage(data.message, 'success');
                     loadAssignedSupervisors(currentCampaignId);
@@ -909,45 +981,45 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 showSupervisorsMessage('Error: ' + error.message, 'error');
             }
         }
-        
+
         function closeModal() {
             document.getElementById('campaignModal').classList.remove('active');
         }
-        
+
         function closeSupervisorsModal() {
             document.getElementById('supervisorsModal').classList.remove('active');
             currentCampaignId = null;
         }
-        
+
         function closeModalOnOverlay(event) {
             if (event.target.classList.contains('modal-overlay')) {
                 event.target.classList.remove('active');
             }
         }
-        
+
         function showSupervisorsMessage(message, type) {
             const div = document.getElementById('supervisorsMessage');
             div.className = `status-banner ${type} mb-4`;
             div.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} mr-2"></i>${message}`;
             div.classList.remove('hidden');
-            
+
             setTimeout(() => {
                 div.classList.add('hidden');
             }, 3000);
         }
-        
+
         // Employee Assignment Functions
         function openEmployeeAssignment(campaignId) {
             currentCampaignId = campaignId;
             loadCampaignEmployees(campaignId);
             document.getElementById('employeeAssignmentModal').classList.add('active');
         }
-        
+
         async function loadCampaignEmployees(campaignId) {
             try {
                 const response = await fetch(`../api/campaigns.php?action=get_employees&campaign_id=${campaignId}`);
                 const data = await response.json();
-                
+
                 if (data.success) {
                     renderEmployeeList(data.employees, data.campaign);
                 } else {
@@ -957,14 +1029,14 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 showEmployeeMessage('Error al cargar empleados', 'error');
             }
         }
-        
+
         function renderEmployeeList(employees, campaign) {
             const container = document.getElementById('employeeList');
             const campaignName = document.getElementById('assignmentCampaignName');
-            
+
             campaignName.textContent = campaign.name;
             campaignName.style.color = campaign.color;
-            
+
             if (employees.length === 0) {
                 container.innerHTML = `
                     <div class="text-center py-8 text-slate-400">
@@ -974,7 +1046,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 `;
                 return;
             }
-            
+
             container.innerHTML = employees.map(emp => `
                 <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition">
                     <div class="flex items-center gap-3">
@@ -994,22 +1066,22 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 </div>
             `).join('');
         }
-        
+
         async function unassignEmployee(employeeId) {
             if (!confirm('¿Desasignar este empleado de la campaña?')) return;
-            
+
             try {
                 const formData = new FormData();
                 formData.append('employee_id', employeeId);
                 formData.append('campaign_id', '');
-                
+
                 const response = await fetch('../api/employees.php?action=quick_assign', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     showEmployeeMessage('Empleado desasignado correctamente', 'success');
                     loadCampaignEmployees(currentCampaignId);
@@ -1021,31 +1093,31 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 showEmployeeMessage('Error al desasignar empleado', 'error');
             }
         }
-        
+
         function showEmployeeMessage(message, type) {
             const div = document.getElementById('employeeMessage');
             div.className = `status-banner ${type} mb-4`;
             div.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} mr-2"></i>${message}`;
             div.classList.remove('hidden');
-            
+
             setTimeout(() => {
                 div.classList.add('hidden');
             }, 3000);
         }
-        
+
         function closeEmployeeModal() {
             document.getElementById('employeeAssignmentModal').classList.remove('active');
             currentCampaignId = null;
         }
-        
+
         function showError(message) {
             alert('Error: ' + message);
         }
-        
+
         function showSuccess(message) {
             alert(message);
         }
-        
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -1053,6 +1125,5 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         }
     </script>
 </body>
+
 </html>
-
-
