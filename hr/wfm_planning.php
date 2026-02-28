@@ -569,7 +569,10 @@ include __DIR__ . '/../header.php';
 
             if (payload.success) {
                 status.className = 'mt-3 text-sm text-emerald-400';
-                status.textContent = `Cargado. Insertados: ${payload.inserted}, Actualizados: ${payload.updated}, Omitidos: ${payload.skipped}`;
+                const forecastInfo = (typeof payload.forecast_inserted !== 'undefined' || typeof payload.forecast_updated !== 'undefined')
+                    ? ` | Staffing WFM: Insertados ${payload.forecast_inserted ?? 0}, Actualizados ${payload.forecast_updated ?? 0}`
+                    : '';
+                status.textContent = `Cargado. Inbound: Insertados ${payload.inserted}, Actualizados ${payload.updated}, Omitidos ${payload.skipped}${forecastInfo}`;
                 refreshGap();
             } else {
                 status.className = 'mt-3 text-sm text-rose-400';

@@ -232,16 +232,16 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <div>
                             <h2 class="text-lg font-semibold text-white">
                                 <i class="fas fa-users-cog text-cyan-400 mr-2"></i>
-                                Carga de Staffing (Erlang C)
+                                Carga de Staffing (AST Erlang)
                             </h2>
-                            <p class="text-sm text-slate-400">Pronóstico por intervalo para calcular capacidad y
-                                dotación.</p>
+                            <p class="text-sm text-slate-400">Sube el reporte AST Erlang por hora para calcular
+                                analíticas por campaña en WFM.</p>
                             <span
                                 onclick="document.getElementById('staffingInfo').classList.toggle('hidden')"
                                 class="text-xs text-blue-400 mt-2 hover:underline cursor-pointer inline-block"><i class="fas fa-info-circle"></i>
-                                Ver información de columnas y análisis</span>
+                                Ver columnas del reporte AST</span>
                         </div>
-                        <a href="../assets/templates/campaign_staffing_template.csv" download class="btn-secondary">
+                        <a href="../assets/templates/campaign_staffing_ast_template.csv" download class="btn-secondary">
                             <i class="fas fa-download mr-2"></i>
                             Descargar Plantilla
                         </a>
@@ -249,47 +249,35 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
 
                     <div id="staffingInfo"
                         class="hidden bg-slate-800/50 rounded-lg p-4 text-sm text-slate-300 border border-slate-700 mb-6">
-                        <strong class="text-white block mb-2"><i class="fas fa-list-alt text-cyan-400 mr-1"></i> Formato
-                            de las Columnas:</strong>
+                        <strong class="text-white block mb-2"><i class="fas fa-list-alt text-cyan-400 mr-1"></i> Columnas
+                            esperadas del AST Erlang:</strong>
                         <ul class="list-disc pl-5 mb-3 space-y-1 text-xs text-slate-400">
-                            <li><span class="text-cyan-300">interval_start</span>: Fecha y hora de inicio del intervalo
-                                (formato YYYY-MM-DD HH:MM:SS).</li>
-                            <li><span class="text-cyan-300">interval_minutes</span>: Tamaño del intervalo en minutos
-                                (ej. 15, 30, 60).</li>
-                            <li><span class="text-cyan-300">offered_volume</span>: Volumen esperado de
-                                llamadas/interacciones recibidas en el intervalo.</li>
-                            <li><span class="text-cyan-300">aht_seconds</span>: Tiempo Medio de Operación esperado (AHT
-                                - Average Handle Time) en segundos.</li>
-                            <li><span class="text-cyan-300">target_sl</span>: Nivel de servicio a cumplir como valor
-                                decimal (ej. 0.80 representa el 80%).</li>
-                            <li><span class="text-cyan-300">target_answer_seconds</span>: Tiempo objetivo de respuesta
-                                (SLA - ej. 20 segundos).</li>
-                            <li><span class="text-cyan-300">occupancy_target</span>: Ocupación máxima de agentes deseada
-                                (ej. 0.85 representa 85%).</li>
-                            <li><span class="text-cyan-300">shrinkage</span>: Factor de merma/ausentismo (ej. 0.30
-                                representa 30% adicional para cubrimiento).</li>
-                            <li><span class="text-cyan-300">channel</span>: Canal de atención al cliente (Voice, Chat,
-                                Email).</li>
+                            <li><span class="text-cyan-300">CALLING HOUR</span>: Hora del bloque (ej.
+                                <code>2026-02-01 09am</code>).</li>
+                            <li><span class="text-cyan-300">CALLS</span>: Volumen de llamadas del bloque horario.</li>
+                            <li><span class="text-cyan-300">TOTAL TIME</span>: Tiempo total de conversación del bloque.</li>
+                            <li><span class="text-cyan-300">AVG TIME</span>: Tiempo promedio por llamada.</li>
+                            <li><span class="text-cyan-300">DROPPED HRS</span>: Tiempo acumulado de llamadas perdidas.</li>
+                            <li><span class="text-cyan-300">BLOCKING</span>: Tasa de bloqueo/drop para calcular abandono.</li>
+                            <li><span class="text-cyan-300">REC AGENTS / EST AGENTS</span>: Referencia de capacidad por hora.</li>
                         </ul>
                         <strong class="text-white block mb-2"><i class="fas fa-chart-line text-blue-400 mr-1"></i>
-                            Análisis en la Web:</strong>
-                        <p class="text-xs text-slate-400">Estos datos alimentan la calculadora en el módulo <strong>WFM
-                                > Planning</strong>. Usando la fórmula Erlang C, el sistema permite visualizar y
-                            calcular automáticamente la dotación exacta de personal requerido por cada bloque horario
-                            para lograr las metas del cliente y optimizar las coberturas ("Schedules").</p>
+                            Analíticas en WFM:</strong>
+                        <p class="text-xs text-slate-400">El reporte se guarda por campaña y alimenta los tableros WFM
+                            para ver ofrecidas, atendidas estimadas, abandonadas estimadas, AHT y tasas por periodo.</p>
                     </div>
                     <form id="staffingForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div>
                             <label class="text-sm text-slate-400 mb-2 block">Campaña</label>
-                            <select id="staffingCampaignSelect" name="campaign_id" class="w-full">
+                            <select id="staffingCampaignSelect" name="campaign_id" class="w-full" required>
                                 <option value="">Selecciona una campaña...</option>
                             </select>
                         </div>
                         <div class="md:col-span-2">
                             <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
                             <input type="file" id="staffingFile" name="report_file" accept=".csv" class="w-full">
-                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por
-                                <strong>;</strong>) para ver columnas en Excel.</p>
+                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla o sube el CSV AST original
+                                (separado por <strong>,</strong>).</p>
                         </div>
                         <div>
                             <button type="submit" class="btn-primary w-full">
@@ -676,8 +664,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 const data = await response.json();
 
                 if (data.success) {
+                    const forecastInfo = (typeof data.forecast_inserted !== 'undefined' || typeof data.forecast_updated !== 'undefined')
+                        ? ` | Staffing WFM: Insertados ${data.forecast_inserted ?? 0}, Actualizados ${data.forecast_updated ?? 0}`
+                        : '';
                     showStaffingMessage(
-                        `Carga completada. Insertados: ${data.inserted}, Actualizados: ${data.updated}, Omitidos: ${data.skipped}`,
+                        `Carga completada. Inbound: Insertados ${data.inserted}, Actualizados ${data.updated}, Omitidos ${data.skipped}${forecastInfo}`,
                         'success'
                     );
                     fileInput.value = '';

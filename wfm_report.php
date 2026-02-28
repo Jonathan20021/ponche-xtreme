@@ -144,6 +144,12 @@ $defaultEnd = date('Y-m-t');
 $startDate = $_GET['start_date'] ?? $defaultStart;
 $endDate = $_GET['end_date'] ?? $defaultEnd;
 $employeeFilter = $_GET['employee'] ?? 'all';
+$requestedTab = $_GET['tab'] ?? 'scheduler';
+
+$allowedTabs = ['scheduler', 'punch', 'payroll', 'campaign_hours', 'campaign_ops', 'staffing'];
+if (!in_array($requestedTab, $allowedTabs, true)) {
+    $requestedTab = 'scheduler';
+}
 
 // Validate Dates
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) {
@@ -598,10 +604,32 @@ try {
     ];
 }
 
+// Staffing pagination
+$staffingPerPage = 25;
+$staffingTotalRows = count($staffingRows);
+$staffingTotalPages = max(1, (int)ceil($staffingTotalRows / $staffingPerPage));
+$staffingPage = isset($_GET['staffing_page']) ? (int)$_GET['staffing_page'] : 1;
+if ($staffingPage < 1) {
+    $staffingPage = 1;
+}
+if ($staffingPage > $staffingTotalPages) {
+    $staffingPage = $staffingTotalPages;
+}
+$staffingOffset = ($staffingPage - 1) * $staffingPerPage;
+$staffingRowsPage = array_slice($staffingRows, $staffingOffset, $staffingPerPage);
+
+function buildStaffingPageUrl(int $page): string
+{
+    $params = $_GET;
+    $params['staffing_page'] = $page;
+    $params['tab'] = 'staffing';
+    return '?' . http_build_query($params);
+}
+
 include 'header.php';
 ?>
 
-<div class="container mx-auto px-4 py-8" x-data="{ activeTab: 'scheduler' }">
+<div class="container mx-auto px-4 py-8" x-data="{ activeTab: '<?= htmlspecialchars($requestedTab, ENT_QUOTES, 'UTF-8') ?>' }">
     
     <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div>
@@ -1106,10 +1134,10 @@ include 'header.php';
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-700">
-                        <?php if (empty($staffingRows)): ?>
+                        <?php if (empty($staffingRowsPage)): ?>
                             <tr><td colspan="11" class="p-8 text-center text-slate-500">No se encontraron intervalos de staffing.</td></tr>
                         <?php else: ?>
-                            <?php foreach ($staffingRows as $row): ?>
+                            <?php foreach ($staffingRowsPage as $row): ?>
                                 <?php
                                     $slTargetPct = $row['target_sl'] > 1 ? $row['target_sl'] : ($row['target_sl'] * 100);
                                     $slEstPct = $row['service_level'] * 100;
@@ -1140,6 +1168,41 @@ include 'header.php';
                     </tbody>
                 </table>
             </div>
+            <?php if ($staffingTotalRows > 0): ?>
+                <div class="p-4 border-t border-slate-700 bg-slate-800/40 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div class="text-sm text-slate-400">
+                        Mostrando <?= number_format($staffingOffset + 1) ?> - <?= number_format($staffingOffset + count($staffingRowsPage)) ?>
+                        de <?= number_format($staffingTotalRows) ?> intervalos
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <?php if ($staffingPage > 1): ?>
+                            <a href="<?= htmlspecialchars(buildStaffingPageUrl($staffingPage - 1)) ?>"
+                               class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors">
+                                <i class="fas fa-chevron-left mr-1"></i> Anterior
+                            </a>
+                        <?php else: ?>
+                            <span class="px-3 py-1.5 rounded bg-slate-800 text-slate-500 text-sm cursor-not-allowed">
+                                <i class="fas fa-chevron-left mr-1"></i> Anterior
+                            </span>
+                        <?php endif; ?>
+
+                        <span class="px-3 py-1.5 rounded bg-slate-900 text-slate-300 text-sm">
+                            Pagina <?= number_format($staffingPage) ?> / <?= number_format($staffingTotalPages) ?>
+                        </span>
+
+                        <?php if ($staffingPage < $staffingTotalPages): ?>
+                            <a href="<?= htmlspecialchars(buildStaffingPageUrl($staffingPage + 1)) ?>"
+                               class="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors">
+                                Siguiente <i class="fas fa-chevron-right ml-1"></i>
+                            </a>
+                        <?php else: ?>
+                            <span class="px-3 py-1.5 rounded bg-slate-800 text-slate-500 text-sm cursor-not-allowed">
+                                Siguiente <i class="fas fa-chevron-right ml-1"></i>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
 
     </div>
