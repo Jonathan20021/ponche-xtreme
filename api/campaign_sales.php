@@ -18,9 +18,51 @@ if (!userHasPermission('manage_campaigns')) {
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && $_SERVER['REQUEST_METHOD'] !== 'DELETE') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Método no permitido']);
+    exit;
+}
+
+// Handle DELETE requests
+if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+    $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    $campaignId = isset($input['campaign_id']) ? (int) $input['campaign_id'] : 0;
+    $reportDate = $input['report_date'] ?? '';
+
+    if ($campaignId <= 0) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'campaign_id requerido']);
+        exit;
+    }
+
+    try {
+        $deleted = 0;
+        if ($reportDate !== '') {
+            // Delete specific date
+            $stmt = $pdo->prepare("DELETE FROM campaign_ast_performance WHERE campaign_id = ? AND report_date = ?");
+            $stmt->execute([$campaignId, $reportDate]);
+            $deleted += $stmt->rowCount();
+
+            $stmt2 = $pdo->prepare("DELETE FROM campaign_sales_reports WHERE campaign_id = ? AND report_date = ?");
+            $stmt2->execute([$campaignId, $reportDate]);
+            $deleted += $stmt2->rowCount();
+        } else {
+            // Delete all data for this campaign
+            $stmt = $pdo->prepare("DELETE FROM campaign_ast_performance WHERE campaign_id = ?");
+            $stmt->execute([$campaignId]);
+            $deleted += $stmt->rowCount();
+
+            $stmt2 = $pdo->prepare("DELETE FROM campaign_sales_reports WHERE campaign_id = ?");
+            $stmt2->execute([$campaignId]);
+            $deleted += $stmt2->rowCount();
+        }
+
+        echo json_encode(['success' => true, 'deleted' => $deleted]);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Error al eliminar: ' . $e->getMessage()]);
+    }
     exit;
 }
 

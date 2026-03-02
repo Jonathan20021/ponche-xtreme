@@ -716,6 +716,23 @@ try {
     $astAgentRows = [];
 }
 
+
+// AST delete options: get distinct campaign + date pairs
+$astDeleteOptions = [];
+try {
+    $astDeleteStmt = $pdo->prepare("
+        SELECT DISTINCT a.campaign_id, c.name AS campaign_name, a.report_date
+        FROM campaign_ast_performance a
+        JOIN campaigns c ON c.id = a.campaign_id
+        WHERE a.report_date BETWEEN ? AND ?
+        ORDER BY c.name, a.report_date DESC
+    ");
+    $astDeleteStmt->execute([$startDate, $endDate]);
+    $astDeleteOptions = $astDeleteStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Exception $e) {
+    $astDeleteOptions = [];
+}
+
 // Staffing pagination
 $staffingPerPage = 25;
 $staffingTotalRows = count($staffingRows);
@@ -1133,12 +1150,37 @@ include 'header.php';
         <!-- TAB: CAMPAIGN OPS (AST Team Performance) -->
         <div x-show="activeTab === 'campaign_ops'" style="display: none;" class="p-0">
             <div class="p-6 border-b border-slate-700 bg-slate-800/50">
-                <h3 class="text-xl font-bold text-amber-400">
-                    <i class="fas fa-chart-line mr-2"></i> AST Team Performance
-                </h3>
-                <?php if ($astSummary['report_dates']): ?>
-                    <p class="text-xs text-slate-500 mt-1">Reportes: <?= htmlspecialchars($astSummary['report_dates']) ?></p>
-                <?php endif; ?>
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-amber-400">
+                            <i class="fas fa-chart-line mr-2"></i> AST Team Performance
+                        </h3>
+                        <?php if ($astSummary['report_dates']): ?>
+                            <p class="text-xs text-slate-500 mt-1">Reportes: <?= htmlspecialchars($astSummary['report_dates']) ?></p>
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!empty($astDeleteOptions)): ?>
+                    <div class="flex items-center gap-3" id="astDeleteControls">
+                        <select id="astDeleteSelect" class="bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none">
+                            <?php
+                                $grouped = [];
+                                foreach ($astDeleteOptions as $opt) {
+                                    $key = $opt['campaign_id'] . '|' . $opt['report_date'];
+                                    $grouped[$key] = $opt;
+                                }
+                                foreach ($grouped as $key => $opt):
+                            ?>
+                                <option value="<?= htmlspecialchars($key) ?>">
+                                    <?= htmlspecialchars($opt['campaign_name']) ?> - <?= htmlspecialchars($opt['report_date']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button onclick="deleteAstData()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+                            <i class="fas fa-trash-alt"></i> Eliminar Data
+                        </button>
+                    </div>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <!-- KPI Cards -->
@@ -1404,5 +1446,40 @@ include 'header.php';
 <script>
     // Simple Alpine init if needed, but x-data handles it.
 </script>
+
+    <script>
+    async function deleteAstData() {
+        const select = document.getElementById('astDeleteSelect');
+        if (!select) return;
+        const val = select.value;
+        const parts = val.split('|');
+        if (parts.length !== 2) return;
+
+        const campaignId = parseInt(parts[0]);
+        const reportDate = parts[1];
+        const label = select.options[select.selectedIndex].text;
+
+        if (!confirm('¿Eliminar todos los datos AST de "' + label + '"? Esta acción no se puede deshacer.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('api/campaign_sales.php', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ campaign_id: campaignId, report_date: reportDate })
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('Datos eliminados exitosamente (' + data.deleted + ' registros)');
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo eliminar'));
+            }
+        } catch (err) {
+            alert('Error de conexión: ' + err.message);
+        }
+    }
+    </script>
 </body>
 </html>
