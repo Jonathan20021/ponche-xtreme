@@ -604,6 +604,118 @@ try {
     ];
 }
 
+
+// AST Team Performance data
+$astTeamRows = [];
+$astAgentRows = [];
+$astSummary = [
+    'total_calls' => 0,
+    'total_leads' => 0,
+    'total_contacts' => 0,
+    'total_sales' => 0,
+    'total_callbacks' => 0,
+    'total_talk_time_sec' => 0,
+    'total_system_time_sec' => 0,
+    'avg_contact_ratio' => 0,
+    'avg_sales_per_hour' => 0,
+    'avg_fcr' => 0,
+    'report_dates' => []
+];
+
+try {
+    // Team-level totals
+    $astTeamStmt = $pdo->prepare("
+        SELECT team_name, team_id,
+               SUM(calls) AS calls, SUM(leads) AS leads, SUM(contacts) AS contacts,
+               AVG(contact_ratio) AS contact_ratio,
+               SUM(nonpause_time_sec) AS nonpause_time_sec,
+               SUM(system_time_sec) AS system_time_sec,
+               SUM(talk_time_sec) AS talk_time_sec,
+               SUM(sales) AS sales,
+               AVG(sales_per_working_hour) AS sales_per_working_hour,
+               AVG(sales_to_leads_ratio) AS sales_to_leads_ratio,
+               AVG(sales_to_contacts_ratio) AS sales_to_contacts_ratio,
+               AVG(sales_per_hour) AS sales_per_hour,
+               SUM(incomplete_sales) AS incomplete_sales,
+               SUM(cancelled_sales) AS cancelled_sales,
+               SUM(callbacks) AS callbacks,
+               AVG(first_call_resolution) AS first_call_resolution,
+               AVG(avg_sale_time_sec) AS avg_sale_time_sec,
+               AVG(avg_contact_time_sec) AS avg_contact_time_sec
+        FROM campaign_ast_performance
+        WHERE report_date BETWEEN ? AND ?
+          AND is_team_totals = 1
+          AND team_name != 'CALL CENTER TOTAL'
+        GROUP BY team_name, team_id
+        ORDER BY SUM(sales) DESC
+    ");
+    $astTeamStmt->execute([$startDate, $endDate]);
+    $astTeamRows = $astTeamStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    // Agent-level rows (top 20 by sales)
+    $astAgentStmt = $pdo->prepare("
+        SELECT agent_name, agent_id, team_name,
+               SUM(calls) AS calls, SUM(leads) AS leads, SUM(contacts) AS contacts,
+               AVG(contact_ratio) AS contact_ratio,
+               SUM(talk_time_sec) AS talk_time_sec,
+               SUM(sales) AS sales,
+               AVG(sales_per_working_hour) AS sales_per_working_hour,
+               AVG(sales_per_hour) AS sales_per_hour,
+               SUM(callbacks) AS callbacks,
+               AVG(first_call_resolution) AS first_call_resolution
+        FROM campaign_ast_performance
+        WHERE report_date BETWEEN ? AND ?
+          AND is_team_totals = 0
+          AND team_name != 'CALL CENTER TOTAL'
+          AND calls > 0
+        GROUP BY agent_name, agent_id, team_name
+        ORDER BY SUM(sales) DESC
+        LIMIT 20
+    ");
+    $astAgentStmt->execute([$startDate, $endDate]);
+    $astAgentRows = $astAgentStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    // Summary totals
+    $astSummaryStmt = $pdo->prepare("
+        SELECT
+            SUM(calls) AS total_calls,
+            SUM(leads) AS total_leads,
+            SUM(contacts) AS total_contacts,
+            SUM(sales) AS total_sales,
+            SUM(callbacks) AS total_callbacks,
+            SUM(talk_time_sec) AS total_talk_time_sec,
+            SUM(system_time_sec) AS total_system_time_sec,
+            AVG(contact_ratio) AS avg_contact_ratio,
+            AVG(sales_per_hour) AS avg_sales_per_hour,
+            AVG(first_call_resolution) AS avg_fcr,
+            GROUP_CONCAT(DISTINCT report_date ORDER BY report_date SEPARATOR ', ') AS report_dates
+        FROM campaign_ast_performance
+        WHERE report_date BETWEEN ? AND ?
+          AND is_team_totals = 1
+          AND team_name = 'CALL CENTER TOTAL'
+    ");
+    $astSummaryStmt->execute([$startDate, $endDate]);
+    $astSummaryRow = $astSummaryStmt->fetch(PDO::FETCH_ASSOC);
+    if ($astSummaryRow && $astSummaryRow['total_calls'] !== null) {
+        $astSummary = [
+            'total_calls' => (int)$astSummaryRow['total_calls'],
+            'total_leads' => (int)$astSummaryRow['total_leads'],
+            'total_contacts' => (int)$astSummaryRow['total_contacts'],
+            'total_sales' => (int)$astSummaryRow['total_sales'],
+            'total_callbacks' => (int)$astSummaryRow['total_callbacks'],
+            'total_talk_time_sec' => (int)$astSummaryRow['total_talk_time_sec'],
+            'total_system_time_sec' => (int)$astSummaryRow['total_system_time_sec'],
+            'avg_contact_ratio' => round((float)$astSummaryRow['avg_contact_ratio'], 2),
+            'avg_sales_per_hour' => round((float)$astSummaryRow['avg_sales_per_hour'], 2),
+            'avg_fcr' => round((float)$astSummaryRow['avg_fcr'], 2),
+            'report_dates' => $astSummaryRow['report_dates'] ?? ''
+        ];
+    }
+} catch (Exception $e) {
+    $astTeamRows = [];
+    $astAgentRows = [];
+}
+
 // Staffing pagination
 $staffingPerPage = 25;
 $staffingTotalRows = count($staffingRows);
@@ -1018,75 +1130,152 @@ include 'header.php';
             </div>
         </div>
 
-        <!-- TAB: CAMPAIGN OPS -->
+        <!-- TAB: CAMPAIGN OPS (AST Team Performance) -->
         <div x-show="activeTab === 'campaign_ops'" style="display: none;" class="p-0">
             <div class="p-6 border-b border-slate-700 bg-slate-800/50">
                 <h3 class="text-xl font-bold text-amber-400">
-                    <i class="fas fa-chart-line mr-2"></i> Campaign Ops (Ventas / Ingresos / Volumen)
+                    <i class="fas fa-chart-line mr-2"></i> AST Team Performance
                 </h3>
+                <?php if ($astSummary['report_dates']): ?>
+                    <p class="text-xs text-slate-500 mt-1">Reportes: <?= htmlspecialchars($astSummary['report_dates']) ?></p>
+                <?php endif; ?>
             </div>
-            <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 border-b border-slate-700 bg-slate-800/30">
-                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
-                    <div class="text-sm text-slate-400 mb-1">Ventas Totales</div>
-                    <div class="text-xl font-bold text-white">
-                        <?= htmlspecialchars(formatCurrencyTotals($campaignSalesTotals['sales'])) ?>
-                    </div>
+
+            <!-- KPI Cards -->
+            <div class="p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 border-b border-slate-700 bg-slate-800/30">
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fas fa-phone text-blue-400 mr-1"></i>Llamadas</div>
+                    <div class="text-xl font-bold text-white"><?= number_format($astSummary['total_calls']) ?></div>
                 </div>
-                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
-                    <div class="text-sm text-slate-400 mb-1">Ingresos Totales</div>
-                    <div class="text-xl font-bold text-white">
-                        <?= htmlspecialchars(formatCurrencyTotals($campaignSalesTotals['revenue'])) ?>
-                    </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fas fa-users text-cyan-400 mr-1"></i>Leads</div>
+                    <div class="text-xl font-bold text-white"><?= number_format($astSummary['total_leads']) ?></div>
                 </div>
-                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
-                    <div class="text-sm text-slate-400 mb-1">Volumen Total</div>
-                    <div class="text-2xl font-bold text-white">
-                        <?= number_format($campaignSalesTotals['volume']) ?>
-                    </div>
-                    <div class="text-xs text-slate-500 mt-1">Registros: <?= number_format($campaignSalesTotals['records']) ?></div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fas fa-handshake text-green-400 mr-1"></i>Contactos</div>
+                    <div class="text-xl font-bold text-white"><?= number_format($astSummary['total_contacts']) ?></div>
+                    <div class="text-xs text-slate-500 mt-1">Ratio: <?= $astSummary['avg_contact_ratio'] ?>%</div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fas fa-trophy text-amber-400 mr-1"></i>Ventas</div>
+                    <div class="text-xl font-bold text-amber-400"><?= number_format($astSummary['total_sales']) ?></div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fas fa-clock text-purple-400 mr-1"></i>Talk Time</div>
+                    <div class="text-xl font-bold text-white"><?= formatDuration($astSummary['total_talk_time_sec']) ?></div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fas fa-headset text-pink-400 mr-1"></i>FCR Prom.</div>
+                    <div class="text-xl font-bold text-white"><?= $astSummary['avg_fcr'] ?></div>
                 </div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead class="bg-slate-900/50 text-slate-400 uppercase text-xs font-semibold">
-                        <tr>
-                            <th class="p-4">CampaÃ±a</th>
-                            <th class="p-4">CÃ³digo</th>
-                            <th class="p-4">Moneda</th>
-                            <th class="p-4">Ventas</th>
-                            <th class="p-4">Ingresos</th>
-                            <th class="p-4">Volumen</th>
-                            <th class="p-4">Registros</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-700">
-                        <?php if (empty($campaignSalesRows)): ?>
-                            <tr><td colspan="7" class="p-8 text-center text-slate-500">No se encontraron registros de Campaign Ops.</td></tr>
-                        <?php else: ?>
-                            <?php foreach ($campaignSalesRows as $row): ?>
-                            <tr class="hover:bg-slate-700/30 transition-colors">
-                                <td class="p-4">
-                                    <div class="font-medium text-white"><?= htmlspecialchars($row['name']) ?></div>
-                                </td>
-                                <td class="p-4 text-slate-400"><?= htmlspecialchars($row['code']) ?></td>
-                                <td class="p-4 text-slate-400"><?= htmlspecialchars($row['currency']) ?></td>
-                                <td class="p-4 text-slate-300 font-mono">
-                                    <?= formatCurrencyAmount($row['sales_amount'], $row['currency']) ?>
-                                </td>
-                                <td class="p-4 text-slate-300 font-mono">
-                                    <?= formatCurrencyAmount($row['revenue_amount'], $row['currency']) ?>
-                                </td>
-                                <td class="p-4 text-slate-300 font-mono">
-                                    <?= number_format($row['volume']) ?>
-                                </td>
-                                <td class="p-4 text-slate-500 font-mono">
-                                    <?= number_format($row['records']) ?>
-                                </td>
+
+            <!-- Team Breakdown Table -->
+            <div class="p-6 border-b border-slate-700">
+                <h4 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-sitemap text-cyan-400 mr-2"></i>Desglose por Equipo
+                </h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead class="bg-slate-900/50 text-slate-400 uppercase text-xs font-semibold">
+                            <tr>
+                                <th class="p-3">Equipo</th>
+                                <th class="p-3 text-right">Calls</th>
+                                <th class="p-3 text-right">Leads</th>
+                                <th class="p-3 text-right">Contacts</th>
+                                <th class="p-3 text-right">Contact %</th>
+                                <th class="p-3 text-right">Talk Time</th>
+                                <th class="p-3 text-right">Sales</th>
+                                <th class="p-3 text-right">Sales/Hr</th>
+                                <th class="p-3 text-right">Callbacks</th>
+                                <th class="p-3 text-right">FCR</th>
                             </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700">
+                            <?php if (empty($astTeamRows)): ?>
+                                <tr><td colspan="10" class="p-8 text-center text-slate-500">No hay datos AST cargados en este periodo.</td></tr>
+                            <?php else: ?>
+                                <?php foreach ($astTeamRows as $tr): ?>
+                                <tr class="hover:bg-slate-700/30 transition-colors">
+                                    <td class="p-3">
+                                        <div class="font-medium text-white"><?= htmlspecialchars($tr['team_name']) ?></div>
+                                        <div class="text-xs text-slate-500"><?= htmlspecialchars($tr['team_id']) ?></div>
+                                    </td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format((int)$tr['calls']) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format((int)$tr['leads']) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format((int)$tr['contacts']) ?></td>
+                                    <td class="p-3 text-right font-mono">
+                                        <?php $cr = round((float)$tr['contact_ratio'], 1); ?>
+                                        <span class="<?= $cr >= 50 ? 'text-green-400' : ($cr >= 20 ? 'text-amber-400' : 'text-slate-400') ?>"><?= $cr ?>%</span>
+                                    </td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= formatDuration((int)$tr['talk_time_sec']) ?></td>
+                                    <td class="p-3 text-right font-mono font-bold text-amber-400"><?= number_format((int)$tr['sales']) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format(round((float)$tr['sales_per_hour'], 2), 2) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format((int)$tr['callbacks']) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format(round((float)$tr['first_call_resolution'], 2), 2) ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Top Agents Table -->
+            <div class="p-6">
+                <h4 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-medal text-amber-400 mr-2"></i>Top 20 Agentes por Ventas
+                </h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead class="bg-slate-900/50 text-slate-400 uppercase text-xs font-semibold">
+                            <tr>
+                                <th class="p-3">#</th>
+                                <th class="p-3">Agente</th>
+                                <th class="p-3">Equipo</th>
+                                <th class="p-3 text-right">Calls</th>
+                                <th class="p-3 text-right">Contacts</th>
+                                <th class="p-3 text-right">Contact %</th>
+                                <th class="p-3 text-right">Talk Time</th>
+                                <th class="p-3 text-right">Sales</th>
+                                <th class="p-3 text-right">Sales/Hr</th>
+                                <th class="p-3 text-right">FCR</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700">
+                            <?php if (empty($astAgentRows)): ?>
+                                <tr><td colspan="10" class="p-8 text-center text-slate-500">No hay datos de agentes.</td></tr>
+                            <?php else: ?>
+                                <?php $rank = 0; foreach ($astAgentRows as $ar): $rank++; ?>
+                                <tr class="hover:bg-slate-700/30 transition-colors">
+                                    <td class="p-3">
+                                        <?php if ($rank <= 3): ?>
+                                            <span class="text-amber-400 font-bold"><?= $rank ?></span>
+                                        <?php else: ?>
+                                            <span class="text-slate-500"><?= $rank ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="font-medium text-white"><?= htmlspecialchars($ar['agent_name']) ?></div>
+                                        <div class="text-xs text-slate-500"><?= htmlspecialchars($ar['agent_id']) ?></div>
+                                    </td>
+                                    <td class="p-3 text-slate-400 text-xs"><?= htmlspecialchars($ar['team_name']) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format((int)$ar['calls']) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format((int)$ar['contacts']) ?></td>
+                                    <td class="p-3 text-right font-mono">
+                                        <?php $acr = round((float)$ar['contact_ratio'], 1); ?>
+                                        <span class="<?= $acr >= 50 ? 'text-green-400' : ($acr >= 20 ? 'text-amber-400' : 'text-slate-400') ?>"><?= $acr ?>%</span>
+                                    </td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= formatDuration((int)$ar['talk_time_sec']) ?></td>
+                                    <td class="p-3 text-right font-mono font-bold text-amber-400"><?= number_format((int)$ar['sales']) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format(round((float)$ar['sales_per_hour'], 2), 2) ?></td>
+                                    <td class="p-3 text-right text-slate-300 font-mono"><?= number_format(round((float)$ar['first_call_resolution'], 2), 2) ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 

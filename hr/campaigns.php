@@ -165,35 +165,25 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <div>
                             <h2 class="text-lg font-semibold text-white">
                                 <i class="fas fa-file-import text-emerald-400 mr-2"></i>
-                                Carga de Reporte de Ventas (Campaign Ops)
+                                Carga de Reporte de Ventas (AST Team Performance)
                             </h2>
-                            <p class="text-sm text-slate-400">Sube el CSV con ventas/ingresos/volumen por campaña.</p>
+                            <p class="text-sm text-slate-400">Sube el CSV AST_team_performance_detail para ventas y llamadas.</p>
                             <span
                                 onclick="document.getElementById('salesInfo').classList.toggle('hidden')"
                                 class="text-xs text-blue-400 mt-2 hover:underline cursor-pointer inline-block"><i class="fas fa-info-circle"></i>
                                 Ver información de columnas y análisis</span>
                         </div>
-                        <a href="../assets/templates/campaign_sales_report_template.csv" download class="btn-secondary">
-                            <i class="fas fa-download mr-2"></i>
-                            Descargar Plantilla
-                        </a>
+                        
                     </div>
 
                     <div id="salesInfo"
                         class="hidden bg-slate-800/50 rounded-lg p-4 text-sm text-slate-300 border border-slate-700 mb-6">
                         <strong class="text-white block mb-2"><i class="fas fa-list-alt text-emerald-400 mr-1"></i>
-                            Formato de las Columnas:</strong>
+                            Formato Esperado:</strong>
                         <ul class="list-disc pl-5 mb-3 space-y-1 text-xs text-slate-400">
-                            <li><span class="text-emerald-300">report_date</span>: Fecha del reporte (formato
-                                YYYY-MM-DD).</li>
-                            <li><span class="text-emerald-300">ventas</span>: Cantidad total de ventas o conversiones
-                                logradas.</li>
-                            <li><span class="text-emerald-300">ingresos</span>: Dinero o facturación generada (usando
-                                formato numérico estándar, ej. 1200.50).</li>
-                            <li><span class="text-emerald-300">volumen</span>: Cantidad de llamadas/interacciones
-                                procesadas ese día.</li>
-                            <li><span class="text-emerald-300">currency</span>: Moneda de los ingresos (ej. USD, DOP,
-                                EUR).</li>
+                            <li>El sistema leerá el archivo generado por Vicidial <span class="text-emerald-300">AST_team_performance_detail</span>.</li>
+                            <li>La <span class="text-emerald-300">fecha del reporte</span> se extraerá automáticamente del nombre del archivo.</li>
+                            <li>Se usarán las métricas de <span class="text-emerald-300">Llamadas (Calls)</span> y <span class="text-emerald-300">Ventas (Sales)</span> de la fila TOTALS del <strong>CALL CENTER TOTAL</strong>.</li>
                         </ul>
                         <strong class="text-white block mb-2"><i class="fas fa-chart-line text-blue-400 mr-1"></i>
                             Análisis en la Web:</strong>
@@ -212,8 +202,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <div class="md:col-span-2">
                             <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
                             <input type="file" id="salesReportFile" name="report_file" accept=".csv" class="w-full">
-                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla (CSV separado por
-                                <strong>;</strong>) para ver columnas en Excel.</p>
+                            <p class="text-xs text-slate-500 mt-1">Sube directamente el reporte de Vicidial
+                                <strong>AST_team_performance_detail</strong> sin modificar.</p>
                         </div>
                         <div>
                             <button type="submit" class="btn-primary w-full">
