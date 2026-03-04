@@ -165,6 +165,10 @@ try {
     $historyStmt->execute(['login_stats', $filename, $reportDate, $uploadedBy]);
     $uploadId = (int) $pdo->lastInsertId();
 
+    // Track date range of actual call data in the CSV
+    $minCallDate = null;
+    $maxCallDate = null;
+
     // Prepare insert statement
     $insertStmt = $pdo->prepare("
         INSERT INTO vicidial_login_stats (
@@ -194,9 +198,11 @@ try {
             return trim($val, '"');
         }, $row);
 
-        // Skip if this row has wrong number of columns
-        if (count($row) !== count($header)) {
-            continue;
+        // Fix for Vicidial CSVs having extra trailing columns or not enough columns in data rows
+        if (count($row) > count($header)) {
+            $row = array_slice($row, 0, count($header));
+        } elseif (count($row) < count($header)) {
+            $row = array_pad($row, count($header), '');
         }
 
         // Map row to associative array
@@ -364,20 +370,39 @@ try {
         ]);
 
         $recordCount++;
+
+        // Track min/max call dates
+        if (!empty($rowDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $rowDate)) {
+            if ($minCallDate === null || $rowDate < $minCallDate) {
+                $minCallDate = $rowDate;
+            }
+            if ($maxCallDate === null || $rowDate > $maxCallDate) {
+                $maxCallDate = $rowDate;
+            }
+        }
     }
 
     fclose($file);
 
-    // Update upload history record with final record count
-    $updateCountStmt = $pdo->prepare("UPDATE vicidial_uploads SET record_count = ? WHERE id = ?");
-    $updateCountStmt->execute([$recordCount, $uploadId]);
+    // Update upload history record with final record count and date range
+    // Try to add min_date/max_date columns if they don't exist yet (safe migration)
+    try {
+        $pdo->exec("ALTER TABLE vicidial_uploads ADD COLUMN IF NOT EXISTS min_date DATE NULL, ADD COLUMN IF NOT EXISTS max_date DATE NULL");
+    } catch (Exception $alterEx) {
+        // columns might already exist, ignore
+    }
+
+    $updateCountStmt = $pdo->prepare("UPDATE vicidial_uploads SET record_count = ?, min_date = ?, max_date = ? WHERE id = ?");
+    $updateCountStmt->execute([$recordCount, $minCallDate, $maxCallDate, $uploadId]);
 
     $pdo->commit();
 
     echo json_encode([
         'success' => true,
         'message' => 'Reporte subido exitosamente',
-        'record_count' => $recordCount
+        'record_count' => $recordCount,
+        'min_date' => $minCallDate,
+        'max_date' => $maxCallDate
     ]);
 
 } catch (Exception $e) {

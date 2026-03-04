@@ -5,9 +5,15 @@ require_once 'lib/authorization_functions.php';
 
 ensurePermission('vicidial_reports');
 
+// Default date bounds querying if no dates are explicitly provided in GET
+$defaultDatesQuery = $pdo->query("SELECT MIN(min_date) as min_dt, MAX(max_date) as max_dt FROM vicidial_uploads");
+$defaultDatesRow = $defaultDatesQuery->fetch(PDO::FETCH_ASSOC);
+$overallMinDate = $defaultDatesRow['min_dt'] ?? date('Y-m-01');
+$overallMaxDate = $defaultDatesRow['max_dt'] ?? date('Y-m-t');
+
 // Get filter parameters
-$startDate = $_GET['start_date'] ?? date('Y-m-01');
-$endDate = $_GET['end_date'] ?? date('Y-m-t');
+$startDate = $_GET['start_date'] ?? $overallMinDate;
+$endDate = $_GET['end_date'] ?? $overallMaxDate;
 $campaign = $_GET['campaign'] ?? '';
 $dailyDate = $_GET['daily_date'] ?? '';
 
@@ -388,7 +394,7 @@ include 'header.php';
                     <thead>
                         <tr class="border-b border-slate-700">
                             <th class="text-left py-3 px-4 text-slate-300 font-semibold">Archivo</th>
-                            <th class="text-left py-3 px-4 text-slate-300 font-semibold">Fecha Reporte</th>
+                            <th class="text-left py-3 px-4 text-slate-300 font-semibold">Fechas de Datos</th>
                             <th class="text-right py-3 px-4 text-slate-300 font-semibold">Registros</th>
                             <th class="text-left py-3 px-4 text-slate-300 font-semibold">Subido Por</th>
                             <th class="text-left py-3 px-4 text-slate-300 font-semibold">Fecha Subida</th>
@@ -399,7 +405,14 @@ include 'header.php';
                         <?php foreach ($uploadHistory as $upload): ?>
                             <tr class="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                                 <td class="py-3 px-4 text-slate-200"><?= htmlspecialchars($upload['filename']) ?></td>
-                                <td class="py-3 px-4 text-slate-300"><?= htmlspecialchars($upload['upload_date']) ?></td>
+                                <td class="py-3 px-4 text-slate-300">
+                                    <?php if (!empty($upload['min_date']) && !empty($upload['max_date'])): ?>
+                                        <?= htmlspecialchars($upload['min_date']) ?> a
+                                        <?= htmlspecialchars($upload['max_date']) ?>
+                                    <?php else: ?>
+                                        <?= htmlspecialchars($upload['upload_date']) ?>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="py-3 px-4 text-right text-slate-300">
                                     <?= number_format($upload['record_count']) ?>
                                 </td>
@@ -746,7 +759,13 @@ include 'header.php';
                     this.uploadMessage = data.message + (data.record_count ? ` (${data.record_count} registros)` : '');
 
                     if (data.success) {
-                        setTimeout(() => window.location.reload(), 2000);
+                        setTimeout(() => {
+                            if (data.min_date && data.max_date) {
+                                window.location.href = `?start_date=${data.min_date}&end_date=${data.max_date}`;
+                            } else {
+                                window.location.reload();
+                            }
+                        }, 2000);
                     }
                 } catch (error) {
                     this.uploadSuccess = false;
