@@ -22,9 +22,9 @@ $uploadId = (int) $_POST['upload_id'];
 try {
     $pdo->beginTransaction();
 
-    // Get upload information
+    // Get upload information (verify it exists)
     $uploadStmt = $pdo->prepare("
-        SELECT upload_date, uploaded_by 
+        SELECT id, upload_date, uploaded_by 
         FROM vicidial_uploads 
         WHERE id = ?
     ");
@@ -35,13 +35,23 @@ try {
         throw new Exception('Registro de subida no encontrado');
     }
 
-    // Delete associated login stats records
-    $deleteStatsStmt = $pdo->prepare("
+    // Delete new records linked by upload_id
+    $deleteNewStmt = $pdo->prepare("
         DELETE FROM vicidial_login_stats 
-        WHERE upload_date = ? AND uploaded_by = ?
+        WHERE upload_id = ?
     ");
-    $deleteStatsStmt->execute([$upload['upload_date'], $upload['uploaded_by']]);
-    $deletedRecords = $deleteStatsStmt->rowCount();
+    $deleteNewStmt->execute([$uploadId]);
+    $deletedRecords = $deleteNewStmt->rowCount();
+
+    // Delete legacy records (upload_id IS NULL) matched by upload_date + uploaded_by
+    $deleteLegacyStmt = $pdo->prepare("
+        DELETE FROM vicidial_login_stats 
+        WHERE upload_id IS NULL 
+          AND upload_date = ? 
+          AND uploaded_by = ?
+    ");
+    $deleteLegacyStmt->execute([$upload['upload_date'], $upload['uploaded_by']]);
+    $deletedRecords += $deleteLegacyStmt->rowCount();
 
     // Delete upload record
     $deleteUploadStmt = $pdo->prepare("

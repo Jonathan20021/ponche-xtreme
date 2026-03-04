@@ -156,6 +156,15 @@ try {
         return 0;
     }
 
+    // Create upload history record FIRST so we can link stats rows to it
+    $pdo->beginTransaction();
+    $historyStmt = $pdo->prepare("
+        INSERT INTO vicidial_uploads (report_type, filename, upload_date, uploaded_by, record_count)
+        VALUES (?, ?, ?, ?, 0)
+    ");
+    $historyStmt->execute(['login_stats', $filename, $reportDate, $uploadedBy]);
+    $uploadId = (int) $pdo->lastInsertId();
+
     // Prepare insert statement
     $insertStmt = $pdo->prepare("
         INSERT INTO vicidial_login_stats (
@@ -164,15 +173,14 @@ try {
             talk_time, talk_avg, dispo_time, dispo_avg, dead_time, dead_avg,
             customer_time, customer_avg, a, active, b, callbk, colgo, cortad, dair, dc, `dec`,
             deposi, dnc, duplic, n, ni, nocal, nocon, notie, np, numeq, orden, otrod, pedido, pregun, promo, ptrans,
-            pu, quejas, reserv, sale, seguim, silenc, wasapi, xfer, upload_date, uploaded_by
+            pu, quejas, reserv, sale, seguim, silenc, wasapi, xfer, upload_date, uploaded_by, upload_id
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     ");
 
     $recordCount = 0;
     $currentAgent = null;
-    $pdo->beginTransaction();
 
     // Process each row
     while (($row = fgetcsv($file, 0, ",")) !== false) {
@@ -351,7 +359,8 @@ try {
             $wasapi,
             $xfer,
             $rowDate,
-            $uploadedBy
+            $uploadedBy,
+            $uploadId
         ]);
 
         $recordCount++;
@@ -359,12 +368,9 @@ try {
 
     fclose($file);
 
-    // Create upload history record
-    $historyStmt = $pdo->prepare("
-        INSERT INTO vicidial_uploads (report_type, filename, upload_date, uploaded_by, record_count)
-        VALUES (?, ?, ?, ?, ?)
-    ");
-    $historyStmt->execute(['login_stats', $filename, $reportDate, $uploadedBy, $recordCount]);
+    // Update upload history record with final record count
+    $updateCountStmt = $pdo->prepare("UPDATE vicidial_uploads SET record_count = ? WHERE id = ?");
+    $updateCountStmt->execute([$recordCount, $uploadId]);
 
     $pdo->commit();
 
