@@ -222,39 +222,217 @@ try {
             break;
             
         case 'agent_load':
-            // Carga por agente desde Wasapi
-            $data = wasapiRequest('dashboard/metrics/agent-conversations');
+            // Carga por agente desde Wasapi - usamos múltiples endpoints para mejor data
+            $multiHandle = curl_multi_init();
+            $handles = [];
             
-            $agents = [];
-            $agentData = $data['agents'] ?? $data['data'] ?? $data;
+            // Endpoint 1: agent-conversations con fechas
+            $ch1 = curl_init();
+            curl_setopt($ch1, CURLOPT_URL, WASAPI_BASE_URL . 'dashboard/metrics/agent-conversations?' . $datesParam);
+            curl_setopt($ch1, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch1, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch1, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . WASAPI_TOKEN,
+                'Accept: application/json'
+            ]);
+            curl_setopt($ch1, CURLOPT_SSL_VERIFYPEER, false);
+            curl_multi_add_handle($multiHandle, $ch1);
+            $handles['agent_conversations'] = $ch1;
             
-            if (is_array($agentData)) {
-                foreach ($agentData as $agent) {
-                    $activeConv = $agent['active'] ?? $agent['active_conversations'] ?? $agent['conversations'] ?? 0;
-                    $maxChats = 5;
-                    $loadPercent = round(($activeConv / $maxChats) * 100, 1);
-                    
-                    $agents[] = [
-                        'id' => $agent['agent_id'] ?? $agent['id'] ?? $agent['user_id'] ?? 0,
-                        'name' => $agent['agent_name'] ?? $agent['name'] ?? 'Agente',
-                        'active_conversations' => $activeConv,
-                        'max_capacity' => $maxChats,
-                        'load_percent' => min($loadPercent, 100),
-                        'status' => $loadPercent >= 100 ? 'full' : ($loadPercent >= 80 ? 'busy' : 'available'),
-                        'resolved_today' => $agent['resolved'] ?? $agent['resolved_today'] ?? 0
-                    ];
+            // Endpoint 2: online-agents para estado actual
+            $ch2 = curl_init();
+            curl_setopt($ch2, CURLOPT_URL, WASAPI_BASE_URL . 'dashboard/metrics/online-agents');
+            curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch2, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch2, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . WASAPI_TOKEN,
+                'Accept: application/json'
+            ]);
+            curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+            curl_multi_add_handle($multiHandle, $ch2);
+            $handles['online_agents'] = $ch2;
+            
+            // Endpoint 3: performance por agente
+            $ch3 = curl_init();
+            curl_setopt($ch3, CURLOPT_URL, WASAPI_BASE_URL . 'reports/performance-by-agent?start_date=' . $startDate . '&end_date=' . $endDate);
+            curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch3, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch3, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . WASAPI_TOKEN,
+                'Accept: application/json'
+            ]);
+            curl_setopt($ch3, CURLOPT_SSL_VERIFYPEER, false);
+            curl_multi_add_handle($multiHandle, $ch3);
+            $handles['performance'] = $ch3;
+            
+            $running = null;
+            do {
+                curl_multi_exec($multiHandle, $running);
+                curl_multi_select($multiHandle);
+            } while ($running > 0);
+            
+            $loadResults = [];
+            foreach ($handles as $key => $ch) {
+                $response = curl_multi_getcontent($ch);
+                $loadResults[$key] = json_decode($response, true) ?? [];
+                curl_multi_remove_handle($multiHandle, $ch);
+                curl_close($ch);
+            }
+            curl_multi_close($multiHandle);
+            
+            // Procesar datos de agentes
+            $agentStats = [];
+            $agentNames = []; // Mapa de ID -> nombre
+            $onlineStatus = []; // Mapa de ID -> boolean
+            
+            // 1. Primero crear mapa de nombres y estado desde online-agents
+            $onlineData = $loadResults['online_agents'] ?? [];
+            $users = $onlineData['users'] ?? $onlineData['data'] ?? $onlineData;
+            
+            if (is_array($users)) {
+                foreach ($users as $user) {
+                    $userId = $user['id'] ?? $user['user_id'] ?? 0;
+                    if ($userId > 0) {
+                        $agentNames[$userId] = $user['name'] ?? $user['full_name'] ?? $user['username'] ?? 'Agente #' . $userId;
+                        
+                        $isOnline = isset($user['online']) ? ($user['online'] == 1 || $user['online'] === true) : false;
+                        if (!$isOnline && isset($user['status'])) {
+                            $isOnline = $user['status'] === 'online' || $user['status'] === 'available';
+                        }
+                        $onlineStatus[$userId] = $isOnline;
+                    }
                 }
             }
             
-            // Ordenar por carga descendente
-            usort($agents, fn($a, $b) => $b['load_percent'] <=> $a['load_percent']);
+            // 2. Agregar nombres desde performance (tienen agent.name)
+            $performanceData = $loadResults['performance']['data'] ?? $loadResults['performance'] ?? [];
+            if (is_array($performanceData)) {
+                foreach ($performanceData as $pa) {
+                    $agentId = $pa['agent_id'] ?? ($pa['agent']['id'] ?? 0);
+                    $agentName = $pa['agent']['name'] ?? $pa['agent_name'] ?? null;
+                    
+                    if ($agentId > 0 && $agentName && !isset($agentNames[$agentId])) {
+                        $agentNames[$agentId] = $agentName;
+                    }
+                }
+            }
+            
+            // 3. Procesar agent-conversations (estadísticas por estado)
+            $agentConvData = $loadResults['agent_conversations'] ?? [];
+            $agentConversations = $agentConvData['conversations'] ?? $agentConvData['data'] ?? [];
+            
+            if (is_array($agentConversations)) {
+                foreach ($agentConversations as $ac) {
+                    $agentId = $ac['agent_id'] ?? $ac['id'] ?? 0;
+                    if ($agentId > 0) {
+                        if (!isset($agentStats[$agentId])) {
+                            $agentStats[$agentId] = [
+                                'id' => $agentId,
+                                'name' => $agentNames[$agentId] ?? 'Agente #' . $agentId,
+                                'active_conversations' => 0,
+                                'pending' => 0,
+                                'resolved_today' => 0,
+                                'status' => isset($onlineStatus[$agentId]) && $onlineStatus[$agentId] ? 'online' : 'offline'
+                            ];
+                        }
+                        
+                        $status = $ac['status'] ?? '';
+                        $count = intval($ac['count'] ?? $ac['cant'] ?? 0);
+                        
+                        if ($status === 'open' || $status === 'active') {
+                            $agentStats[$agentId]['active_conversations'] += $count;
+                        } elseif ($status === 'closed' || $status === 'resolved') {
+                            $agentStats[$agentId]['resolved_today'] += $count;
+                        } elseif ($status === 'pending' || $status === 'waiting' || $status === 'hold') {
+                            $agentStats[$agentId]['pending'] += $count;
+                        }
+                    }
+                }
+            }
+            
+            // 4. Enriquecer/completar con datos de performance
+            if (is_array($performanceData)) {
+                foreach ($performanceData as $pa) {
+                    $agentId = $pa['agent_id'] ?? ($pa['agent']['id'] ?? 0);
+                    $agentName = $pa['agent']['name'] ?? $pa['agent_name'] ?? null;
+                    
+                    if ($agentId > 0) {
+                        if (!isset($agentStats[$agentId])) {
+                            $agentStats[$agentId] = [
+                                'id' => $agentId,
+                                'name' => $agentName ?? $agentNames[$agentId] ?? 'Agente #' . $agentId,
+                                'active_conversations' => 0,
+                                'pending' => 0,
+                                'resolved_today' => 0,
+                                'status' => isset($onlineStatus[$agentId]) && $onlineStatus[$agentId] ? 'online' : 'offline'
+                            ];
+                        }
+                        
+                        // Actualizar nombre si no teníamos uno bueno
+                        if ($agentName && strpos($agentStats[$agentId]['name'], 'Agente #') === 0) {
+                            $agentStats[$agentId]['name'] = $agentName;
+                        }
+                        
+                        // Usar datos de performance para conversaciones si no hay de agent-conversations
+                        $totalOpen = intval($pa['total_open_conversations'] ?? 0);
+                        $totalClosed = intval($pa['total_close_conversations'] ?? 0);
+                        
+                        // Si no tenemos resolved, usar total_close_conversations
+                        if ($agentStats[$agentId]['resolved_today'] == 0 && $totalClosed > 0) {
+                            $agentStats[$agentId]['resolved_today'] = $totalClosed;
+                        }
+                        
+                        // Si no tenemos activos, calcular desde open - closed
+                        if ($agentStats[$agentId]['active_conversations'] == 0 && $totalOpen > $totalClosed) {
+                            $agentStats[$agentId]['active_conversations'] = $totalOpen - $totalClosed;
+                        }
+                    }
+                }
+            }
+            
+            // Convertir a array y calcular métricas
+            $agents = [];
+            $maxChats = 5;
+            
+            foreach ($agentStats as $agent) {
+                $activeConv = $agent['active_conversations'];
+                $loadPercent = round(($activeConv / $maxChats) * 100, 1);
+                
+                $agents[] = [
+                    'id' => $agent['id'],
+                    'name' => $agent['name'],
+                    'active_conversations' => $activeConv,
+                    'pending' => $agent['pending'],
+                    'max_capacity' => $maxChats,
+                    'load_percent' => min($loadPercent, 100),
+                    'status' => $agent['status'] === 'online' 
+                        ? ($loadPercent >= 100 ? 'at_capacity' : ($loadPercent >= 80 ? 'busy' : 'available'))
+                        : 'offline',
+                    'resolved_today' => $agent['resolved_today']
+                ];
+            }
+            
+            // Ordenar: primero online, luego por carga descendente
+            usort($agents, function($a, $b) {
+                // Online primero
+                if ($a['status'] !== 'offline' && $b['status'] === 'offline') return -1;
+                if ($a['status'] === 'offline' && $b['status'] !== 'offline') return 1;
+                // Luego por carga
+                return $b['load_percent'] <=> $a['load_percent'];
+            });
             
             echo json_encode([
                 'success' => true,
                 'agents' => $agents,
                 'total_agents' => count($agents),
+                'online_agents' => count(array_filter($agents, fn($a) => $a['status'] !== 'offline')),
                 'timestamp' => date('Y-m-d H:i:s'),
-                'source' => 'wasapi_api'
+                'source' => 'wasapi_api',
+                'debug' => [
+                    'online_raw' => $onlineData,
+                    'conversations_raw' => $agentConvData,
+                    'performance_raw' => $performanceData
+                ]
             ]);
             break;
             

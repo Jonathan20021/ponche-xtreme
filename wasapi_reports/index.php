@@ -49,6 +49,10 @@ if (!isset($_SESSION['user_id'])) {
                 class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
                 <i class="fas fa-sync-alt" :class="{'animate-spin': isLoading}"></i> Actualizar
             </button>
+            <a href="reports_dashboard.php"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-chart-line"></i> Análisis Avanzado
+            </a>
             <button @click="showAIPanel = true"
                 class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
                 <i class="fas fa-robot"></i> IA Gemini
