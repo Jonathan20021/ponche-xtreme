@@ -115,7 +115,7 @@ function parseCallingHourToDateTime($value)
     return sprintf('%s %02d:00:00', $datePart, $hour24);
 }
 
-function parseInboundDailyRow(array $row)
+function parseInboundDailyRow(array $row, array $columnMap)
 {
     $rangeStr = trim((string) ($row[0] ?? ''));
     $parts = explode(' - ', $rangeStr);
@@ -128,18 +128,19 @@ function parseInboundDailyRow(array $row)
         return null;
     }
 
-    $offered = (int) round(parseNumber($row[1] ?? 0));
-    $answered = (int) round(parseNumber($row[2] ?? 0));
-    $agentsAnswered = (int) round(parseNumber($row[3] ?? 0));
-    $abandoned = (int) round(parseNumber($row[4] ?? 0));
-    $abandonPercent = parseNumber($row[5] ?? '0');
+    // Get values from column map, using default index if column not found
+    $offered = (int) round(parseNumber($row[$columnMap['offered'] ?? 1] ?? 0));
+    $answered = (int) round(parseNumber($row[$columnMap['answered'] ?? 2] ?? 0));
+    $agentsAnswered = (int) round(parseNumber($row[$columnMap['agents_answered'] ?? 3] ?? 0));
+    $abandoned = (int) round(parseNumber($row[$columnMap['abandoned'] ?? 4] ?? 0));
+    $abandonPercent = parseNumber($row[$columnMap['abandon_percent'] ?? 5] ?? '0');
 
-    $avgAbandon = timeStrToSeconds($row[6] ?? '00:00');
-    $avgAnswer = timeStrToSeconds($row[7] ?? '00:00');
-    $avgTalk = timeStrToSeconds($row[8] ?? '00:00');
-    $totalTalk = timeStrToSeconds($row[9] ?? '0:00:00');
-    $totalWrap = timeStrToSeconds($row[10] ?? '0:00:00');
-    $totalCall = timeStrToSeconds($row[11] ?? '0:00:00');
+    $avgAbandon = isset($columnMap['avg_abandon_time']) ? timeStrToSeconds($row[$columnMap['avg_abandon_time']] ?? '00:00') : 0;
+    $avgAnswer = isset($columnMap['avg_answer_speed']) ? timeStrToSeconds($row[$columnMap['avg_answer_speed']] ?? '00:00') : 0;
+    $avgTalk = isset($columnMap['avg_talk_time']) ? timeStrToSeconds($row[$columnMap['avg_talk_time']] ?? '00:00') : 0;
+    $totalTalk = isset($columnMap['total_talk_time']) ? timeStrToSeconds($row[$columnMap['total_talk_time']] ?? '0:00:00') : 0;
+    $totalWrap = isset($columnMap['total_wrap_time']) ? timeStrToSeconds($row[$columnMap['total_wrap_time']] ?? '0:00:00') : 0;
+    $totalCall = isset($columnMap['total_call_time']) ? timeStrToSeconds($row[$columnMap['total_call_time']] ?? '0:00:00') : 0;
 
     return [
         'interval_start' => $intervalStart,
@@ -237,11 +238,6 @@ function buildForecastRow(array $parsedRow, string $format): array
     ];
 }
 
-$campaignId = isset($_POST['campaign_id']) ? (int) $_POST['campaign_id'] : 0;
-if ($campaignId <= 0) {
-    jsonError('Campana invalida');
-}
-
 if (!isset($_FILES['report_file']) || $_FILES['report_file']['error'] !== UPLOAD_ERR_OK) {
     jsonError('Archivo no valido');
 }
@@ -309,17 +305,100 @@ $forecastUpdated = 0;
 
 $format = null;
 $inDataSection = false;
+$campaignId = null;
+$campaignName = null;
+$columnMap = [];
+$missingColumns = [];
+$headerRow = null;
+$lineNumber = 0;
+$headerLine1 = null;
+$headerLine2 = null;
+$headerLine3 = null;
 
 while (($row = fgetcsv($handle, 0, ',')) !== false) {
+    $lineNumber++;
     $firstCell = trim((string) ($row[0] ?? ''));
     $firstNorm = normalizeHeader($firstCell);
 
+    // Extract campaign from line 2 (Selected in-groups)
+    if ($lineNumber === 2 && stripos($firstCell, 'Selected in-groups') !== false) {
+        // Extract campaign name from: "Selected in-groups: BBQ_Servicio - Serivico Cliente BBQ Express"
+        // Remove the "Selected in-groups:" prefix
+        $campaignStr = trim(str_replace(['Selected in-groups:', 'Selected in-groups'], '', $firstCell));
+        if (!empty($campaignStr)) {
+            // Get first part before " - "
+            $parts = explode(' - ', $campaignStr);
+            $campaignName = trim($parts[0]);
+        }
+    }
+
     if ($format === null) {
-        if ($firstNorm === 'shift_datetime_range') {
+        // Detect header rows for Inbound Daily Report (lines 5, 6, 7)
+        if ($firstCell === '' && count($row) >= 10 && !$headerLine1) {
+            // This might be line 5 (TOTAL, TOTAL, AVG, etc.)
+            $headerLine1 = $row;
+            continue;
+        }
+        
+        if ($firstCell === '' && count($row) >= 10 && $headerLine1 && !$headerLine2) {
+            // This is line 6 (CALLS, CALLS, AGENTS, etc.)
+            $headerLine2 = $row;
+            continue;
+        }
+        
+        if (($firstNorm === 'shift_date_time_range' || $firstNorm === 'shift_datetime_range') && $headerLine1 && $headerLine2) {
+            // This is line 7 (OFFERED, ANSWERED, etc.)
             $format = 'inbound_daily_report';
+            $headerLine3 = $row;
+            
+            // Build column map by combining all three header lines
+            $expectedColumns = [
+                'offered' => ['total_calls_offered', 'calls_offered', 'offered'],
+                'answered' => ['total_calls_answered', 'calls_answered'],
+                'agents_answered' => ['total_agents_answered', 'agents_answered'],
+                'abandoned' => ['total_calls_abandoned', 'calls_abandoned', 'abandoned'],
+                'abandon_percent' => ['total_abandon_percent', 'abandon_percent'],
+                'avg_abandon_time' => ['avg_abandon_time', 'abandon_time'],
+                'avg_answer_speed' => ['avg_answer_speed', 'answer_speed'],
+                'avg_talk_time' => ['avg_talk_time'],
+                'total_talk_time' => ['total_talk_time'],
+                'total_wrap_time' => ['total_wrap_time'],
+                'total_call_time' => ['total_call_time']
+            ];
+            
+            // Combine the three header rows to create full column names
+            for ($idx = 0; $idx < count($headerLine3); $idx++) {
+                $h1 = normalizeHeader($headerLine1[$idx] ?? '');
+                $h2 = normalizeHeader($headerLine2[$idx] ?? '');
+                $h3 = normalizeHeader($headerLine3[$idx] ?? '');
+                
+                // Combine non-empty parts
+                $parts = array_filter([$h1, $h2, $h3], function($p) { return $p !== ''; });
+                $combinedHeader = implode('_', $parts);
+                
+                // Match against expected columns
+                foreach ($expectedColumns as $key => $patterns) {
+                    foreach ($patterns as $pattern) {
+                        if (stripos($combinedHeader, $pattern) !== false) {
+                            $columnMap[$key] = $idx;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            
+            // Check for missing columns
+            $criticalColumns = ['offered', 'answered', 'abandoned'];
+            foreach ($criticalColumns as $col) {
+                if (!isset($columnMap[$col])) {
+                    $missingColumns[] = $col;
+                }
+            }
+            
             $inDataSection = true;
             continue;
         }
+        
         if ($firstNorm === 'calling_hour') {
             $format = 'ast_erlang';
             $inDataSection = true;
@@ -353,12 +432,37 @@ while (($row = fgetcsv($handle, 0, ',')) !== false) {
     if ($format === 'ast_erlang') {
         $parsedRow = parseAstErlangRow($row);
     } elseif ($format === 'inbound_daily_report') {
-        $parsedRow = parseInboundDailyRow($row);
+        $parsedRow = parseInboundDailyRow($row, $columnMap);
     }
 
     if ($parsedRow === null) {
         $skipped++;
         continue;
+    }
+
+    // Resolve campaign ID
+    if ($campaignId === null) {
+        if (!empty($campaignName)) {
+            // Find or create campaign
+            $stmt2 = $pdo->prepare("SELECT id FROM campaigns WHERE name = ? OR code = ?");
+            $stmt2->execute([$campaignName, $campaignName]);
+            $campaign = $stmt2->fetch(PDO::FETCH_ASSOC);
+            
+            if ($campaign) {
+                $campaignId = (int) $campaign['id'];
+            } else {
+                // Create new campaign
+                $stmt2 = $pdo->prepare("INSERT INTO campaigns (name, code, description) VALUES (?, ?, ?)");
+                $stmt2->execute([$campaignName, $campaignName, 'Auto-created from Inbound Daily Report']);
+                $campaignId = (int) $pdo->lastInsertId();
+            }
+        } else {
+            // Use manually selected campaign if provided
+            $campaignId = isset($_POST['campaign_id']) ? (int) $_POST['campaign_id'] : 0;
+            if ($campaignId <= 0) {
+                jsonError('No se pudo determinar la campana. El archivo no contiene informacion de campaña.');
+            }
+        }
     }
 
     $stmt->execute([
@@ -422,10 +526,14 @@ if ($format === null || $parsed === 0) {
 echo json_encode([
     'success' => true,
     'format' => $format,
+    'campaign_name' => $campaignName,
+    'campaign_id' => $campaignId,
     'inserted' => $inserted,
     'updated' => $updated,
     'skipped' => $skipped,
     'parsed' => $parsed,
     'forecast_inserted' => $forecastInserted,
-    'forecast_updated' => $forecastUpdated
+    'forecast_updated' => $forecastUpdated,
+    'missing_columns' => $missingColumns,
+    'columns_found' => array_keys($columnMap)
 ]);

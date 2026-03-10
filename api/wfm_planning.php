@@ -465,12 +465,12 @@ if ($action === 'delete_inbound' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(['success' => false, 'error' => 'No tiene permisos para eliminar datos']);
     }
 
-    $campaignId = isset($_POST['campaign_id']) ? (int) $_POST['campaign_id'] : 0;
+    $campaignId = isset($_POST['campaign_id']) && $_POST['campaign_id'] !== '' ? (int) $_POST['campaign_id'] : null;
     $startDate = parseDate($_POST['start_date'] ?? '', '');
     $endDate = parseDate($_POST['end_date'] ?? '', '');
 
-    if ($campaignId <= 0 || !$startDate || !$endDate) {
-        jsonResponse(['success' => false, 'error' => 'Debe seleccionar campaña y rango de fechas']);
+    if (!$startDate || !$endDate) {
+        jsonResponse(['success' => false, 'error' => 'Debe seleccionar rango de fechas']);
     }
     if ($endDate < $startDate) {
         jsonResponse(['success' => false, 'error' => 'La fecha de fin no puede ser menor a la inicial']);
@@ -479,11 +479,27 @@ if ($action === 'delete_inbound' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $startBound = $startDate . ' 00:00:00';
     $endBound = $endDate . ' 23:59:59';
 
-    $stmt = $pdo->prepare("DELETE FROM vicidial_inbound_hourly WHERE campaign_id = ? AND interval_start BETWEEN ? AND ?");
-    $stmt->execute([$campaignId, $startBound, $endBound]);
-    $deleted = $stmt->rowCount();
-
-    jsonResponse(['success' => true, 'deleted' => $deleted, 'message' => "Se eliminaron $deleted registros exitosamente."]);
+    if ($campaignId !== null) {
+        // Delete specific campaign
+        $stmt = $pdo->prepare("DELETE FROM vicidial_inbound_hourly WHERE campaign_id = ? AND interval_start BETWEEN ? AND ?");
+        $stmt->execute([$campaignId, $startBound, $endBound]);
+        $deleted = $stmt->rowCount();
+        
+        // Get campaign name
+        $campStmt = $pdo->prepare("SELECT name FROM campaigns WHERE id = ?");
+        $campStmt->execute([$campaignId]);
+        $camp = $campStmt->fetch(PDO::FETCH_ASSOC);
+        $campName = $camp ? $camp['name'] : "ID $campaignId";
+        
+        jsonResponse(['success' => true, 'deleted' => $deleted, 'message' => "Se eliminaron $deleted registros de la campaña $campName."]);
+    } else {
+        // Delete all campaigns
+        $stmt = $pdo->prepare("DELETE FROM vicidial_inbound_hourly WHERE interval_start BETWEEN ? AND ?");
+        $stmt->execute([$startBound, $endBound]);
+        $deleted = $stmt->rowCount();
+        
+        jsonResponse(['success' => true, 'deleted' => $deleted, 'message' => "Se eliminaron $deleted registros de todas las campañas."]);
+    }
 }
 
 jsonResponse(['success' => false, 'error' => 'Accion invalida'], 400);

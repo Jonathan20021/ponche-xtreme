@@ -310,6 +310,44 @@ if (!isset($_SESSION['user_id'])) {
             </div>
         </div>
         
+        <!-- Weekly Volume Chart (Por Día de Semana - Para Staffing) -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    <i class="fas fa-calendar-week text-orange-500"></i>
+                    Histórico por Día de Semana
+                    <span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full ml-2">Para Staffing</span>
+                </h3>
+                <div class="text-sm text-gray-500">
+                    <i class="fas fa-info-circle"></i> Promedio histórico del período seleccionado
+                </div>
+            </div>
+            <div class="h-64">
+                <canvas id="weeklyVolumeChart"></canvas>
+            </div>
+            <!-- Resumen rápido de staffing -->
+            <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3" x-show="realtimeMetrics.weekly_volume && realtimeMetrics.weekly_volume.length > 0">
+                <template x-for="(day, idx) in realtimeMetrics.weekly_volume" :key="idx">
+                    <div class="p-3 rounded-lg text-center" 
+                        :class="day.avg_total === Math.max(...realtimeMetrics.weekly_volume.map(d => d.avg_total)) ? 'bg-red-50 border-2 border-red-200' : 
+                               (day.avg_total === Math.min(...realtimeMetrics.weekly_volume.map(d => d.avg_total)) ? 'bg-green-50 border-2 border-green-200' : 'bg-gray-50')">
+                        <p class="font-bold text-sm" x-text="day.day_short"></p>
+                        <p class="text-lg font-bold" 
+                            :class="day.avg_total === Math.max(...realtimeMetrics.weekly_volume.map(d => d.avg_total)) ? 'text-red-600' : 
+                                   (day.avg_total === Math.min(...realtimeMetrics.weekly_volume.map(d => d.avg_total)) ? 'text-green-600' : 'text-gray-700')"
+                            x-text="Math.round(day.avg_total)"></p>
+                        <p class="text-xs text-gray-500">conv. prom</p>
+                        <p class="text-xs mt-1" x-show="day.avg_total === Math.max(...realtimeMetrics.weekly_volume.map(d => d.avg_total))" class="text-red-500">
+                            <i class="fas fa-fire"></i> Más ocupado
+                        </p>
+                        <p class="text-xs mt-1" x-show="day.avg_total === Math.min(...realtimeMetrics.weekly_volume.map(d => d.avg_total))" class="text-green-500">
+                            <i class="fas fa-leaf"></i> Menos ocupado
+                        </p>
+                    </div>
+                </template>
+            </div>
+        </div>
+        
         <!-- Agent Performance Table -->
         <div class="bg-white rounded-xl shadow-lg p-6">
             <h3 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -928,6 +966,7 @@ document.addEventListener('alpine:init', () => {
     let chatDistChart = null;
     let campaignChart = null;
     let hourlyVolumeChart = null;
+    let weeklyVolumeChart = null;
     
     // Helper function to get local date in YYYY-MM-DD format
     const getLocalDate = () => {
@@ -963,6 +1002,7 @@ document.addEventListener('alpine:init', () => {
             avg_chats_per_hour: 0,
             total_resolved_today: 0,
             hourly_volume: [],
+            weekly_volume: [],
             agent_performance: []
         },
         
@@ -1053,6 +1093,7 @@ document.addEventListener('alpine:init', () => {
                 this.setupChatDistChart();
                 this.setupCampaignChart();
                 this.setupHourlyVolumeChart();
+                this.setupWeeklyVolumeChart();
             });
         },
         
@@ -1165,6 +1206,52 @@ document.addEventListener('alpine:init', () => {
             });
         },
         
+        setupWeeklyVolumeChart() {
+            const ctx = document.getElementById('weeklyVolumeChart');
+            if (!ctx) return;
+            
+            if (weeklyVolumeChart) weeklyVolumeChart.destroy();
+            weeklyVolumeChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+                    datasets: [
+                        {
+                            label: 'Abiertos (Promedio)',
+                            data: [],
+                            backgroundColor: 'rgba(249, 115, 22, 0.7)',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Cerrados (Promedio)',
+                            data: [],
+                            backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { position: 'top' },
+                        title: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                afterBody: function(context) {
+                                    return 'Útil para planificar staffing';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'Promedio de Conversaciones' } },
+                        x: { title: { display: true, text: 'Día de la Semana' } }
+                    }
+                }
+            });
+        },
+        
         async loadAllData() {
             this.isLoading = true;
             this.error = null;
@@ -1208,6 +1295,15 @@ document.addEventListener('alpine:init', () => {
                         hourlyVolumeChart.data.datasets[0].data = hourlyData.map(h => h.open);
                         hourlyVolumeChart.data.datasets[1].data = hourlyData.map(h => h.closed);
                         hourlyVolumeChart.update();
+                    }
+                    
+                    // Update weekly volume chart (por día de semana para staffing)
+                    if (weeklyVolumeChart && this.realtimeMetrics.weekly_volume && this.realtimeMetrics.weekly_volume.length > 0) {
+                        const weeklyData = this.realtimeMetrics.weekly_volume;
+                        weeklyVolumeChart.data.labels = weeklyData.map(d => d.day_short);
+                        weeklyVolumeChart.data.datasets[0].data = weeklyData.map(d => d.avg_open || 0);
+                        weeklyVolumeChart.data.datasets[1].data = weeklyData.map(d => d.avg_closed || 0);
+                        weeklyVolumeChart.update();
                     }
                 }
                 

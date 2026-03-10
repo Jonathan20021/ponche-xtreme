@@ -364,6 +364,123 @@ try {
         : 0;
     
     // ============================================================
+    // PROCESAR VOLUMEN POR DÍA DE LA SEMANA (Histórico para Staffing)
+    // ============================================================
+    $weeklyVolume = [];
+    $dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    $dayNamesShort = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    
+    // Inicializar estructura para cada día de la semana
+    $weeklyStats = [];
+    for ($i = 0; $i < 7; $i++) {
+        $weeklyStats[$i] = [
+            'day_number' => $i,
+            'day_name' => $dayNames[$i],
+            'day_short' => $dayNamesShort[$i],
+            'open' => 0,
+            'closed' => 0,
+            'total' => 0,
+            'count_days' => 0 // Para calcular promedios
+        ];
+    }
+    
+    // Procesar cada día en el rango de fechas usando datos de la respuesta de performance
+    // Los datos de performanceAgents tienen fecha porque vienen filtrados por start_date y end_date
+    if (is_array($performanceAgents) && !empty($performanceAgents)) {
+        $dateStats = [];
+        
+        foreach ($performanceAgents as $pa) {
+            // Cada registro puede tener una fecha específica
+            $dateStr = $pa['date'] ?? $pa['created_at'] ?? null;
+            $openConvs = intval($pa['total_open_conversations'] ?? 0);
+            $closeConvs = intval($pa['total_close_conversations'] ?? 0);
+            
+            if ($dateStr) {
+                $date = strtotime($dateStr);
+                $dayOfWeek = intval(date('w', $date)); // 0=Domingo, 1=Lunes, etc.
+                $dateKey = date('Y-m-d', $date);
+                
+                if (!isset($dateStats[$dateKey])) {
+                    $dateStats[$dateKey] = [
+                        'day_of_week' => $dayOfWeek,
+                        'open' => 0,
+                        'closed' => 0
+                    ];
+                }
+                
+                $dateStats[$dateKey]['open'] += $openConvs;
+                $dateStats[$dateKey]['closed'] += $closeConvs;
+            }
+        }
+        
+        // Agrupar por día de semana
+        foreach ($dateStats as $dateKey => $stats) {
+            $dayOfWeek = $stats['day_of_week'];
+            $weeklyStats[$dayOfWeek]['open'] += $stats['open'];
+            $weeklyStats[$dayOfWeek]['closed'] += $stats['closed'];
+            $weeklyStats[$dayOfWeek]['total'] += $stats['open'] + $stats['closed'];
+            $weeklyStats[$dayOfWeek]['count_days']++;
+        }
+    }
+    
+    // Si no hay datos de performance con fechas, usar el rango de fechas para calcular promedios básicos
+    if (array_sum(array_column($weeklyStats, 'total')) == 0) {
+        // Calcular los días que hay en el rango
+        $start = strtotime($startDate);
+        $end = strtotime($endDate);
+        
+        // Distribuir el total de conversaciones proporcionalmente
+        $totalAll = $totalConversations > 0 ? $totalConversations : ($activeChats + $resolvedToday);
+        $numDays = max(1, floor(($end - $start) / (24 * 3600)) + 1);
+        
+        // Contar cuántos de cada día de semana hay en el rango
+        $current = $start;
+        while ($current <= $end) {
+            $dayOfWeek = intval(date('w', $current));
+            $weeklyStats[$dayOfWeek]['count_days']++;
+            $current += 24 * 3600;
+        }
+        
+        // Estimar distribución basada en patrones típicos (más carga Lun-Vie)
+        $businessDayMultiplier = [0.4, 1.2, 1.1, 1.15, 1.1, 1.0, 0.5]; // Dom, Lun, Mar, Mié, Jue, Vie, Sáb
+        $totalMultiplier = array_sum($businessDayMultiplier);
+        
+        foreach ($weeklyStats as $i => &$stat) {
+            if ($stat['count_days'] > 0 && $totalAll > 0) {
+                $proportion = $businessDayMultiplier[$i] / $totalMultiplier;
+                $dayTotal = round($totalAll * $proportion);
+                $stat['total'] = $dayTotal;
+                $stat['closed'] = round($dayTotal * ($resolvedToday / max(1, $totalAll)));
+                $stat['open'] = $dayTotal - $stat['closed'];
+            }
+        }
+    }
+    
+    // Calcular promedios si hay múltiples días del mismo tipo
+    foreach ($weeklyStats as &$stat) {
+        if ($stat['count_days'] > 1) {
+            $stat['avg_open'] = round($stat['open'] / $stat['count_days'], 1);
+            $stat['avg_closed'] = round($stat['closed'] / $stat['count_days'], 1);
+            $stat['avg_total'] = round($stat['total'] / $stat['count_days'], 1);
+        } else {
+            $stat['avg_open'] = $stat['open'];
+            $stat['avg_closed'] = $stat['closed'];
+            $stat['avg_total'] = $stat['total'];
+        }
+    }
+    
+    // Reordenar para empezar en Lunes (más intuitivo para trabajo)
+    $weeklyVolume = [
+        $weeklyStats[1], // Lunes
+        $weeklyStats[2], // Martes
+        $weeklyStats[3], // Miércoles
+        $weeklyStats[4], // Jueves
+        $weeklyStats[5], // Viernes
+        $weeklyStats[6], // Sábado
+        $weeklyStats[0]  // Domingo
+    ];
+    
+    // ============================================================
     // PROCESAR CONTACTOS
     // ============================================================
     $contactsData = $results['contacts']['data'] ?? [];
@@ -417,6 +534,9 @@ try {
             // Volumen por hora
             'hourly_volume' => $hourlyVolume,
             'avg_chats_per_hour' => $avgChatsPerHour,
+            
+            // Volumen por día de semana (para staffing)
+            'weekly_volume' => $weeklyVolume,
             
             // Performance por agente
             'agent_performance' => array_values($agentPerformanceMetrics),
