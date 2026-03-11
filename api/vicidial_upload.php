@@ -134,12 +134,47 @@ try {
         'XFER'
     ];
 
-    // Validate header
-    $missingColumns = array_diff($expectedColumns, $header);
-    if (!empty($missingColumns)) {
+    // Separate critical vs optional columns
+    $criticalColumns = [
+        'USER NAME',
+        'ID',
+        'CURRENT USER GROUP',
+        'MOST RECENT USER GROUP',
+        'CALLS',
+        'TIME',
+        'PAUSE',
+        'PAUSAVG',
+        'WAIT',
+        'WAITAVG',
+        'TALK',
+        'TALKAVG',
+        'DISPO',
+        'DISPAVG',
+        'DEAD',
+        'DEADAVG',
+        'CUSTOMER',
+        'CUSTAVG'
+    ];
+
+    // Optional disposition columns - may vary between Vicidial configurations
+    $optionalColumns = [
+        'A', 'ACTIVE', 'B', 'CALLBK', 'COLGO', 'CORTAD', 'DAIR', 'DC', 'DEC',
+        'DEPOSI', 'DNC', 'DUPLIC', 'N', 'NI', 'NOCAL', 'NOCON', 'NOTIE', 'NP',
+        'NUMEQ', 'ORDEN', 'OTROD', 'PEDIDO', 'PREGUN', 'PROMO', 'PTRANS', 'PU',
+        'QUEJAS', 'RESERV', 'SALE', 'SEGUIM', 'SILENC', 'WASAPI', 'XFER'
+    ];
+
+    // Validate critical columns only
+    $missingCritical = array_diff($criticalColumns, $header);
+    if (!empty($missingCritical)) {
         fclose($file);
-        throw new Exception('Faltan columnas en el CSV: ' . implode(', ', $missingColumns));
+        throw new Exception('Faltan columnas críticas en el CSV: ' . implode(', ', $missingCritical));
     }
+
+    // Track missing optional columns for warning
+    $missingOptional = array_diff($optionalColumns, $header);
+    $foundColumns = array_intersect($header, $expectedColumns);
+    $hasWarning = !empty($missingOptional);
 
     // Helper function to convert HH:MM:SS to seconds
     function timeToSeconds($timeStr)
@@ -397,13 +432,23 @@ try {
 
     $pdo->commit();
 
-    echo json_encode([
+    $responseData = [
         'success' => true,
         'message' => 'Reporte subido exitosamente',
         'record_count' => $recordCount,
         'min_date' => $minCallDate,
-        'max_date' => $maxCallDate
-    ]);
+        'max_date' => $maxCallDate,
+        'columns_found' => count($foundColumns),
+        'columns_total' => count($expectedColumns)
+    ];
+
+    // Add warning if optional columns are missing
+    if ($hasWarning && !empty($missingOptional)) {
+        $responseData['warning'] = 'Algunas columnas de disposición no estaban en el archivo. Se usaron valores por defecto (0).';
+        $responseData['missing_optional_columns'] = array_values($missingOptional);
+    }
+
+    echo json_encode($responseData);
 
 } catch (Exception $e) {
     if ($pdo->inTransaction()) {
