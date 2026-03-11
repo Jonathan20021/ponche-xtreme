@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Campaigns Load</title>
+</head>
+<body>
+    <h1>Testing Campaigns Page</h1>
+    <div id="result"></div>
+    <script>
+        async function testCampaignsLoad() {
+            try {
+                console.log('Loading campaigns...');
+                const response = await fetch('../api/campaigns.php?action=list');
+                console.log('Response received:', response.status);
+                
+                const data = await response.json();
+                console.log('Data:', data);
+                
+                if (data.success) {
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: green;">✅ Campaigns loaded successfully!</p>
+                         <p>Total campaigns: ${data.campaigns.length}</p>
+                         <pre>${JSON.stringify(data.campaigns, null, 2)}</pre>`;
+                } else {
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: red;">❌ Error: ${data.error}</p>`;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = 
+                    `<p style="color: red;">❌ Exception: ${error.message}</p>`;
+            }
+        }
+        
+        testCampaignsLoad();
+    </script>
+</body>
+</html>

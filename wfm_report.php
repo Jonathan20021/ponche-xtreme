@@ -717,15 +717,18 @@ try {
 }
 
 
-// AST delete options: get distinct campaign + date pairs
+// AST delete options: get distinct report dates
 $astDeleteOptions = [];
 try {
     $astDeleteStmt = $pdo->prepare("
-        SELECT DISTINCT a.campaign_id, c.name AS campaign_name, a.report_date
-        FROM campaign_ast_performance a
-        JOIN campaigns c ON c.id = a.campaign_id
-        WHERE a.report_date BETWEEN ? AND ?
-        ORDER BY c.name, a.report_date DESC
+        SELECT DISTINCT report_date,
+               GROUP_CONCAT(DISTINCT team_name ORDER BY team_name SEPARATOR ', ') AS teams_summary,
+               COUNT(DISTINCT team_id) AS team_count
+        FROM campaign_ast_performance
+        WHERE report_date BETWEEN ? AND ?
+          AND is_team_totals = 1
+        GROUP BY report_date
+        ORDER BY report_date DESC
     ");
     $astDeleteStmt->execute([$startDate, $endDate]);
     $astDeleteOptions = $astDeleteStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -1162,16 +1165,10 @@ include 'header.php';
                     <?php if (!empty($astDeleteOptions)): ?>
                     <div class="flex items-center gap-3" id="astDeleteControls">
                         <select id="astDeleteSelect" class="bg-slate-900 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-rose-500 outline-none">
-                            <?php
-                                $grouped = [];
-                                foreach ($astDeleteOptions as $opt) {
-                                    $key = $opt['campaign_id'] . '|' . $opt['report_date'];
-                                    $grouped[$key] = $opt;
-                                }
-                                foreach ($grouped as $key => $opt):
-                            ?>
-                                <option value="<?= htmlspecialchars($key) ?>">
-                                    <?= htmlspecialchars($opt['campaign_name']) ?> - <?= htmlspecialchars($opt['report_date']) ?>
+                            <?php foreach ($astDeleteOptions as $opt): ?>
+                                <option value="<?= htmlspecialchars($opt['report_date']) ?>">
+                                    <?= htmlspecialchars($opt['report_date']) ?> 
+                                    (<?= htmlspecialchars($opt['team_count']) ?> equipos: <?= htmlspecialchars($opt['teams_summary']) ?>)
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -1451,12 +1448,9 @@ include 'header.php';
     async function deleteAstData() {
         const select = document.getElementById('astDeleteSelect');
         if (!select) return;
-        const val = select.value;
-        const parts = val.split('|');
-        if (parts.length !== 2) return;
+        const reportDate = select.value;
+        if (!reportDate) return;
 
-        const campaignId = parseInt(parts[0]);
-        const reportDate = parts[1];
         const label = select.options[select.selectedIndex].text;
 
         if (!confirm('¿Eliminar todos los datos AST de "' + label + '"? Esta acción no se puede deshacer.')) {
@@ -1467,7 +1461,7 @@ include 'header.php';
             const response = await fetch('api/campaign_sales.php', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ campaign_id: campaignId, report_date: reportDate })
+                body: JSON.stringify({ report_date: reportDate })
             });
             const data = await response.json();
             if (data.success) {

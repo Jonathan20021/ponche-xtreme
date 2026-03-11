@@ -110,10 +110,8 @@ function timeToSeconds($value)
 }
 
 // --- Validation ---
-$campaignId = isset($_POST['campaign_id']) ? (int) $_POST['campaign_id'] : 0;
-if ($campaignId <= 0) {
-    jsonError('Campaña inválida');
-}
+// No campaign_id needed - teams come directly from the file
+// The file itself contains all campaign/team information
 
 if (!isset($_FILES['report_file']) || $_FILES['report_file']['error'] !== UPLOAD_ERR_OK) {
     jsonError('Archivo no válido');
@@ -207,12 +205,23 @@ $stmtAst = $pdo->prepare("
         uploaded_by = VALUES(uploaded_by)
 ");
 
-// Delete existing data for this campaign + date to avoid stale data
-$pdo->prepare("DELETE FROM campaign_ast_performance WHERE campaign_id = ? AND report_date = ?")
-    ->execute([$campaignId, $reportDate]);
+// Delete existing data for this report_date to avoid duplicates
+// We delete by report_date only since teams come from the file itself
+$pdo->prepare("DELETE FROM campaign_ast_performance WHERE report_date = ?")
+    ->execute([$reportDate]);
 
 $lineNum = 0;
 $inCallCenterTotal = false;
+$expectedColumns = [
+    'Agent Name', 'Agent ID', 'Calls', 'Leads', 'Contacts', 'Contact Ratio',
+    'Nonpause Time', 'System Time', 'Talk Time', 'Sales', 'Sales per Working Hour',
+    'Sales to Leads Ratio', 'Sales to Contacts Ratio', 'Sales Per Hour',
+    'Incomplete Sales', 'Cancelled Sales', 'Callbacks', 'First Call Resolution',
+    'Average Sale Time', 'Average Contact Time'
+];
+$foundColumns = [];
+$missingColumns = [];
+$teamsProcessed = []; // Track teams found in the file
 
 while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
     $lineNum++;
@@ -224,6 +233,7 @@ while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
     if (isset($row[1]) && preg_match('/^TEAM:\s*(\S+)\s*-\s*(.+)$/i', trim($row[1]), $teamMatch)) {
         $currentTeamId = trim($teamMatch[1]);
         $currentTeamName = trim($teamMatch[2]);
+        $teamsProcessed[$currentTeamId] = $currentTeamName;
         $inHeader = true; // Next non-empty row will be the column headers
         $headerIndexes = null;
         continue;
@@ -234,6 +244,7 @@ while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
         $inCallCenterTotal = true;
         $currentTeamName = 'CALL CENTER TOTAL';
         $currentTeamId = 'TOTAL';
+        $teamsProcessed[$currentTeamId] = $currentTeamName;
         $inHeader = true;
         $headerIndexes = null;
         continue;
@@ -251,7 +262,17 @@ while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
         // This is the agent-level header row
         $headerIndexes = [];
         foreach ($row as $idx => $colName) {
-            $headerIndexes[trim($colName)] = $idx;
+            $colName = trim($colName);
+            if ($colName !== '') {
+                $headerIndexes[$colName] = $idx;
+                $foundColumns[] = $colName;
+            }
+        }
+        // Check for missing columns
+        foreach ($expectedColumns as $expected) {
+            if (!isset($headerIndexes[$expected])) {
+                $missingColumns[] = $expected;
+            }
         }
         $inHeader = false;
         continue;
@@ -261,7 +282,20 @@ while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
     if ($inHeader && isset($row[1]) && trim($row[1]) === 'Team Name') {
         $headerIndexes = [];
         foreach ($row as $idx => $colName) {
-            $headerIndexes[trim($colName)] = $idx;
+            $colName = trim($colName);
+            if ($colName !== '') {
+                $headerIndexes[$colName] = $idx;
+                if (!in_array($colName, $foundColumns)) {
+                    $foundColumns[] = $colName;
+                }
+            }
+        }
+        // Check for missing columns (update list)
+        $missingColumns = [];
+        foreach ($expectedColumns as $expected) {
+            if (!isset($headerIndexes[$expected]) && $expected !== 'Agent Name' && $expected !== 'Agent ID') {
+                $missingColumns[] = $expected;
+            }
         }
         $inHeader = false;
         continue;
@@ -341,7 +375,7 @@ while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
 
     try {
         $stmtAst->execute([
-            $campaignId,
+            null, // campaign_id is NULL - we use team_id instead
             $reportDate,
             $currentTeamName,
             $currentTeamId,
@@ -385,29 +419,6 @@ while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
 
 fclose($handle);
 
-// Also update campaign_sales_reports for backward compatibility
-$stmtSales = $pdo->prepare("
-    INSERT INTO campaign_sales_reports
-        (campaign_id, report_date, sales_amount, revenue_amount, volume, currency, source_filename, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE
-        sales_amount = VALUES(sales_amount),
-        revenue_amount = VALUES(revenue_amount),
-        volume = VALUES(volume),
-        source_filename = VALUES(source_filename),
-        uploaded_by = VALUES(uploaded_by)
-");
-$stmtSales->execute([
-    $campaignId,
-    $reportDate,
-    $grandSales,
-    0,
-    $grandCalls,
-    'USD',
-    $originalName,
-    $_SESSION['user_id'] ?? null
-]);
-
 echo json_encode([
     'success' => true,
     'inserted' => $inserted,
@@ -415,5 +426,10 @@ echo json_encode([
     'skipped' => $skipped,
     'report_date' => $reportDate,
     'grand_calls' => $grandCalls,
-    'grand_sales' => $grandSales
+    'grand_sales' => $grandSales,
+    'teams_found' => $teamsProcessed,
+    'teams_count' => count($teamsProcessed),
+    'columns_found' => array_unique($foundColumns),
+    'columns_missing' => array_unique($missingColumns),
+    'warning' => !empty($missingColumns) ? 'Algunas columnas no se encontraron en el archivo. Se usaron valores por defecto.' : null
 ]);

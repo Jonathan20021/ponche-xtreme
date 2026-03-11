@@ -155,6 +155,8 @@ function parseInboundDailyRow(array $row, array $columnMap)
         'total_talk_sec' => max(0, $totalTalk),
         'total_wrap_sec' => max(0, $totalWrap),
         'total_call_sec' => max(0, $totalCall),
+        '_format' => 'inbound_daily_report',
+        '_columns_used' => array_keys($columnMap)
     ];
 }
 
@@ -165,11 +167,12 @@ function parseAstErlangRow(array $row)
         return null;
     }
 
+    // Columnas flexibles para AST Erlang
     $calls = (int) round(parseNumber($row[1] ?? 0));
-    $totalTimeSec = timeStrToSeconds($row[3] ?? '0:00:00');
-    $avgTimeSec = timeStrToSeconds($row[4] ?? '00:00');
-    $droppedTimeSec = timeStrToSeconds($row[5] ?? '00:00');
-    $blocking = parseNumber($row[6] ?? 0);
+    $totalTimeSec = isset($row[3]) ? timeStrToSeconds($row[3]) : 0;
+    $avgTimeSec = isset($row[4]) ? timeStrToSeconds($row[4]) : 0;
+    $droppedTimeSec = isset($row[5]) ? timeStrToSeconds($row[5]) : 0;
+    $blocking = isset($row[6]) ? parseNumber($row[6]) : 0;
 
     if ($blocking > 1) {
         $blocking = $blocking / 100;
@@ -180,12 +183,17 @@ function parseAstErlangRow(array $row)
 
     $abandoned = (int) round($calls * $blocking);
     $answered = max(0, $calls - $abandoned);
-    $agentsAnswered = (int) round(parseNumber($row[9] ?? 0));
-    if ($agentsAnswered <= 0) {
-        $agentsAnswered = (int) round(parseNumber($row[8] ?? 0));
+    
+    // EST AGENTS (columna 9) o REC AGENTS (columna 8) - ambas son opcionales
+    $agentsAnswered = 0;
+    if (isset($row[9])) {
+        $agentsAnswered = (int) round(parseNumber($row[9]));
+    }
+    if ($agentsAnswered <= 0 && isset($row[8])) {
+        $agentsAnswered = (int) round(parseNumber($row[8]));
     }
 
-    $avgAbandonSec = $abandoned > 0 ? (int) round($droppedTimeSec / $abandoned) : 0;
+    $avgAbandonSec = $abandoned > 0 && $droppedTimeSec > 0 ? (int) round($droppedTimeSec / $abandoned) : 0;
 
     return [
         'interval_start' => $intervalStart,
@@ -200,6 +208,9 @@ function parseAstErlangRow(array $row)
         'total_talk_sec' => max(0, $totalTimeSec),
         'total_wrap_sec' => 0,
         'total_call_sec' => max(0, $totalTimeSec),
+        '_format' => 'ast_erlang',
+        '_columns_used' => ['CALLING HOUR', 'CALLS', 'TOTAL TIME', 'AVG TIME', 'DROPPED HRS', 'BLOCKING', 'REC/EST AGENTS'],
+        '_columns_optional' => ['SALES', 'TOTAL TIME', 'AVG TIME', 'DROPPED HRS', 'BLOCKING', 'REC AGENTS', 'EST AGENTS']
     ];
 }
 
@@ -256,12 +267,13 @@ if (!$handle) {
 
 $stmt = $pdo->prepare("
     INSERT INTO vicidial_inbound_hourly
-        (campaign_id, interval_start, offered_calls, answered_calls, agents_answered,
+        (campaign_id, campaign_name, interval_start, offered_calls, answered_calls, agents_answered,
          abandoned_calls, abandon_percent, avg_abandon_time_sec, avg_answer_speed_sec,
          avg_talk_time_sec, total_talk_sec, total_wrap_sec, total_call_sec,
          source_filename, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
+        campaign_id = VALUES(campaign_id),
         offered_calls = VALUES(offered_calls),
         answered_calls = VALUES(answered_calls),
         agents_answered = VALUES(agents_answered),
@@ -279,11 +291,12 @@ $stmt = $pdo->prepare("
 
 $forecastStmt = $pdo->prepare("
     INSERT INTO campaign_staffing_forecast
-        (campaign_id, interval_start, interval_minutes, offered_volume, aht_seconds,
+        (campaign_id, campaign_name, interval_start, interval_minutes, offered_volume, aht_seconds,
          target_sl, target_answer_seconds, occupancy_target, shrinkage, channel,
          source_filename, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
+        campaign_id = VALUES(campaign_id),
         interval_minutes = VALUES(interval_minutes),
         offered_volume = VALUES(offered_volume),
         aht_seconds = VALUES(aht_seconds),
@@ -389,9 +402,18 @@ while (($row = fgetcsv($handle, 0, ',')) !== false) {
             
             // Check for missing columns
             $criticalColumns = ['offered', 'answered', 'abandoned'];
+            $optionalColumns = ['agents_answered', 'abandon_percent', 'avg_abandon_time', 'avg_answer_speed', 'avg_talk_time', 'total_talk_time', 'total_wrap_time', 'total_call_time'];
             foreach ($criticalColumns as $col) {
                 if (!isset($columnMap[$col])) {
                     $missingColumns[] = $col;
+                }
+            }
+            
+            // Track which optional columns are missing (for info only, not critical)
+            $missingOptional = [];
+            foreach ($optionalColumns as $col) {
+                if (!isset($columnMap[$col])) {
+                    $missingOptional[] = $col;
                 }
             }
             
@@ -440,33 +462,27 @@ while (($row = fgetcsv($handle, 0, ',')) !== false) {
         continue;
     }
 
-    // Resolve campaign ID
-    if ($campaignId === null) {
-        if (!empty($campaignName)) {
-            // Find or create campaign
-            $stmt2 = $pdo->prepare("SELECT id FROM campaigns WHERE name = ? OR code = ?");
-            $stmt2->execute([$campaignName, $campaignName]);
-            $campaign = $stmt2->fetch(PDO::FETCH_ASSOC);
-            
-            if ($campaign) {
-                $campaignId = (int) $campaign['id'];
-            } else {
-                // Create new campaign
-                $stmt2 = $pdo->prepare("INSERT INTO campaigns (name, code, description) VALUES (?, ?, ?)");
-                $stmt2->execute([$campaignName, $campaignName, 'Auto-created from Inbound Daily Report']);
-                $campaignId = (int) $pdo->lastInsertId();
-            }
-        } else {
-            // Use manually selected campaign if provided
-            $campaignId = isset($_POST['campaign_id']) ? (int) $_POST['campaign_id'] : 0;
-            if ($campaignId <= 0) {
-                jsonError('No se pudo determinar la campana. El archivo no contiene informacion de campaña.');
-            }
+    // Resolve campaign - NO crear campañas automáticamente
+    if ($campaignId === null && !empty($campaignName)) {
+        // Buscar campaña existente
+        $stmt2 = $pdo->prepare("SELECT id FROM campaigns WHERE name = ? OR code = ?");
+        $stmt2->execute([$campaignName, $campaignName]);
+        $campaign = $stmt2->fetch(PDO::FETCH_ASSOC);
+        
+        if ($campaign) {
+            $campaignId = (int) $campaign['id'];
         }
+        // Si no existe, dejar campaign_id en NULL y usar campaign_name del archivo
+    }
+    
+    // Si no se detectó campaña del archivo, requerirla
+    if (empty($campaignName)) {
+        jsonError('El archivo no contiene información de campaña. Verifica la línea 2 del CSV.');
     }
 
     $stmt->execute([
         $campaignId,
+        $campaignName,
         $parsedRow['interval_start'],
         $parsedRow['offered_calls'],
         $parsedRow['answered_calls'],
@@ -486,6 +502,7 @@ while (($row = fgetcsv($handle, 0, ',')) !== false) {
     $forecastRow = buildForecastRow($parsedRow, (string) $format);
     $forecastStmt->execute([
         $campaignId,
+        $campaignName,
         $forecastRow['interval_start'],
         $forecastRow['interval_minutes'],
         $forecastRow['offered_volume'],
@@ -523,6 +540,21 @@ if ($format === null || $parsed === 0) {
     jsonError('Formato CSV no reconocido o sin filas validas. Usa AST Erlang (CALLING HOUR) o Inbound Daily Report.');
 }
 
+// Prepare detailed column information
+$columnInfo = [
+    'format' => $format,
+    'columns_found' => array_keys($columnMap),
+    'missing_columns' => $missingColumns,
+    'missing_optional' => isset($missingOptional) ? $missingOptional : [],
+];
+
+$warning = null;
+if (!empty($missingColumns)) {
+    $warning = 'Columnas criticas faltantes: ' . implode(', ', $missingColumns) . '. Se usaron valores por defecto.';
+} elseif (!empty($columnInfo['missing_optional'])) {
+    $warning = 'Algunas columnas opcionales no se encontraron. Se usaron valores por defecto.';
+}
+
 echo json_encode([
     'success' => true,
     'format' => $format,
@@ -534,6 +566,6 @@ echo json_encode([
     'parsed' => $parsed,
     'forecast_inserted' => $forecastInserted,
     'forecast_updated' => $forecastUpdated,
-    'missing_columns' => $missingColumns,
-    'columns_found' => array_keys($columnMap)
+    'column_info' => $columnInfo,
+    'warning' => $warning
 ]);

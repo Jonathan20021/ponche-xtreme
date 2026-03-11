@@ -167,7 +167,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                                 <i class="fas fa-file-import text-emerald-400 mr-2"></i>
                                 Carga de Reporte de Ventas (AST Team Performance)
                             </h2>
-                            <p class="text-sm text-slate-400">Sube el CSV AST_team_performance_detail para ventas y llamadas.</p>
+                            <p class="text-sm text-slate-400">Sube el CSV AST_team_performance_detail para análisis en WFM Report.</p>
+                            <p class="text-xs text-cyan-400 mt-1">
+                                <i class="fas fa-magic mr-1"></i>
+                                El archivo contiene todos los equipos. No necesitas seleccionar campaña.
+                            </p>
                             <span
                                 onclick="document.getElementById('salesInfo').classList.toggle('hidden')"
                                 class="text-xs text-blue-400 mt-2 hover:underline cursor-pointer inline-block"><i class="fas fa-info-circle"></i>
@@ -192,18 +196,14 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             analizar los ingresos financieros de la campaña de manera diaria.</p>
                     </div>
 
-                    <form id="salesReportForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div>
-                            <label class="text-sm text-slate-400 mb-2 block">Campaña</label>
-                            <select id="salesCampaignSelect" name="campaign_id" class="w-full">
-                                <option value="">Selecciona una campaña...</option>
-                            </select>
-                        </div>
+                    <form id="salesReportForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                         <div class="md:col-span-2">
                             <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
-                            <input type="file" id="salesReportFile" name="report_file" accept=".csv" class="w-full">
-                            <p class="text-xs text-slate-500 mt-1">Sube directamente el reporte de Vicidial
-                                <strong>AST_team_performance_detail</strong> sin modificar.</p>
+                            <input type="file" id="salesReportFile" name="report_file" accept=".csv" class="w-full" required>
+                            <p class="text-xs text-slate-500 mt-1">
+                                <i class="fas fa-file-csv text-emerald-400 mr-1"></i>
+                                Sube directamente el reporte de Vicidial <strong>AST_team_performance_detail</strong> sin modificar.
+                            </p>
                         </div>
                         <div>
                             <button type="submit" class="btn-primary w-full">
@@ -222,52 +222,51 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <div>
                             <h2 class="text-lg font-semibold text-white">
                                 <i class="fas fa-users-cog text-cyan-400 mr-2"></i>
-                                Carga de Staffing (AST Erlang)
+                                Carga de Staffing (AST Erlang / Inbound Daily)
                             </h2>
-                            <p class="text-sm text-slate-400">Sube el reporte AST Erlang por hora para calcular
-                                analíticas por campaña en WFM.</p>
+                            <p class="text-sm text-slate-400">Sube el reporte AST Erlang o Inbound Daily para análisis en WFM.</p>
+                            <p class="text-xs text-cyan-400 mt-1">
+                                <i class="fas fa-magic mr-1"></i>
+                                El archivo contiene la campaña en línea 2. No necesitas seleccionar.
+                            </p>
                             <span
                                 onclick="document.getElementById('staffingInfo').classList.toggle('hidden')"
                                 class="text-xs text-blue-400 mt-2 hover:underline cursor-pointer inline-block"><i class="fas fa-info-circle"></i>
-                                Ver columnas del reporte AST</span>
+                                Ver información del formato</span>
                         </div>
-                        <a href="../assets/templates/campaign_staffing_ast_template.csv" download class="btn-secondary">
-                            <i class="fas fa-download mr-2"></i>
-                            Descargar Plantilla
-                        </a>
                     </div>
 
                     <div id="staffingInfo"
                         class="hidden bg-slate-800/50 rounded-lg p-4 text-sm text-slate-300 border border-slate-700 mb-6">
-                        <strong class="text-white block mb-2"><i class="fas fa-list-alt text-cyan-400 mr-1"></i> Columnas
-                            esperadas del AST Erlang:</strong>
-                        <ul class="list-disc pl-5 mb-3 space-y-1 text-xs text-slate-400">
-                            <li><span class="text-cyan-300">CALLING HOUR</span>: Hora del bloque (ej.
-                                <code>2026-02-01 09am</code>).</li>
-                            <li><span class="text-cyan-300">CALLS</span>: Volumen de llamadas del bloque horario.</li>
-                            <li><span class="text-cyan-300">TOTAL TIME</span>: Tiempo total de conversación del bloque.</li>
-                            <li><span class="text-cyan-300">AVG TIME</span>: Tiempo promedio por llamada.</li>
-                            <li><span class="text-cyan-300">DROPPED HRS</span>: Tiempo acumulado de llamadas perdidas.</li>
-                            <li><span class="text-cyan-300">BLOCKING</span>: Tasa de bloqueo/drop para calcular abandono.</li>
-                            <li><span class="text-cyan-300">REC AGENTS / EST AGENTS</span>: Referencia de capacidad por hora.</li>
-                        </ul>
-                        <strong class="text-white block mb-2"><i class="fas fa-chart-line text-blue-400 mr-1"></i>
-                            Analíticas en WFM:</strong>
-                        <p class="text-xs text-slate-400">El reporte se guarda por campaña y alimenta los tableros WFM
-                            para ver ofrecidas, atendidas estimadas, abandonadas estimadas, AHT y tasas por periodo.</p>
-                    </div>
-                    <form id="staffingForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div>
-                            <label class="text-sm text-slate-400 mb-2 block">Campaña</label>
-                            <select id="staffingCampaignSelect" name="campaign_id" class="w-full" required>
-                                <option value="">Selecciona una campaña...</option>
-                            </select>
+                        <strong class="text-white block mb-2"><i class="fas fa-file-csv text-cyan-400 mr-1"></i> Formatos soportados:</strong>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                            <div>
+                                <p class="text-cyan-300 font-semibold text-xs mb-1">AST Erlang Report:</p>
+                                <ul class="list-disc pl-5 space-y-1 text-xs text-slate-400">
+                                    <li>CALLING HOUR (ej. 2026-02-01 09am)</li>
+                                    <li>CALLS, TOTAL TIME, AVG TIME</li>
+                                    <li>DROPPED HRS, BLOCKING, REC AGENTS</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <p class="text-cyan-300 font-semibold text-xs mb-1">Inbound Daily Report:</p>
+                                <ul class="list-disc pl-5 space-y-1 text-xs text-slate-400">
+                                    <li>Shift Date-Time Range (intervalos)</li>
+                                    <li>Offered, Answered, Abandoned</li>
+                                    <li>Avg Talk Time, Answer Speed</li>
+                                </ul>
+                            </div>
                         </div>
+                        <p class="text-xs text-slate-500"><i class="fas fa-info-circle text-blue-400 mr-1"></i> Si faltan columnas opcionales, se usan valores por defecto.</p>
+                    </div>
+                    <form id="staffingForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                         <div class="md:col-span-2">
                             <label class="text-sm text-slate-400 mb-2 block">Archivo CSV</label>
-                            <input type="file" id="staffingFile" name="report_file" accept=".csv" class="w-full">
-                            <p class="text-xs text-slate-500 mt-1">Usa la plantilla o sube el CSV AST original
-                                (separado por <strong>,</strong>).</p>
+                            <input type="file" id="staffingFile" name="report_file" accept=".csv" class="w-full" required>
+                            <p class="text-xs text-slate-500 mt-1">
+                                <i class="fas fa-file-csv text-cyan-400 mr-1"></i>
+                                Sube el reporte <strong>AST Erlang</strong> o <strong>Inbound Daily Report</strong> de Vicidial.
+                            </p>
                         </div>
                         <div>
                             <button type="submit" class="btn-primary w-full">
@@ -470,7 +469,6 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     renderCampaigns();
                     updateStats();
                     populateSalesCampaigns();
-                    populateStaffingCampaigns();
                 } else {
                     showError('Error al cargar campañas: ' + data.error);
                 }
@@ -572,32 +570,19 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 campaigns.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.code)})</option>`).join('');
         }
 
-        function populateStaffingCampaigns() {
-            const select = document.getElementById('staffingCampaignSelect');
-            if (!select) return;
-            select.innerHTML = '<option value="">Selecciona una campaña...</option>' +
-                campaigns.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.code)})</option>`).join('');
-        }
-
         async function handleSalesReportUpload(event) {
             event.preventDefault();
             event.stopPropagation();
 
-            const campaignId = document.getElementById('salesCampaignSelect').value;
             const fileInput = document.getElementById('salesReportFile');
             const file = fileInput.files[0];
 
-            if (!campaignId) {
-                showSalesReportMessage('Selecciona una campaña.', 'error');
-                return;
-            }
             if (!file) {
                 showSalesReportMessage('Selecciona un archivo CSV.', 'error');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('campaign_id', campaignId);
             formData.append('report_file', file);
 
             showSalesReportMessage('Subiendo reporte...', 'info');
@@ -610,10 +595,25 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 const data = await response.json();
 
                 if (data.success) {
-                    showSalesReportMessage(
-                        `Carga completada. Insertados: ${data.inserted}, Actualizados: ${data.updated}, Omitidos: ${data.skipped}`,
-                        'success'
-                    );
+                    let message = `✅ Carga completada. Insertados: ${data.inserted}, Actualizados: ${data.updated}, Omitidos: ${data.skipped}`;
+                    
+                    // Show teams found in the file
+                    if (data.teams_found && data.teams_count > 0) {
+                        message += `\n\n📊 Equipos/Campañas procesados (${data.teams_count}):`;
+                        for (const [teamId, teamName] of Object.entries(data.teams_found)) {
+                            message += `\n  • ${teamId}: ${teamName}`;
+                        }
+                    }
+                    
+                    // Add column information if available
+                    if (data.columns_found && data.columns_found.length > 0) {
+                        message += `\n\n📋 Columnas procesadas: ${data.columns_found.length} de ${data.columns_found.length + (data.columns_missing ? data.columns_missing.length : 0)}`;
+                    }
+                    if (data.columns_missing && data.columns_missing.length > 0) {
+                        message += `\n⚠️ Columnas faltantes (valores por defecto): ${data.columns_missing.join(', ')}`;
+                    }
+                    
+                    showSalesReportMessage(message, data.warning ? 'warning' : 'success');
                     fileInput.value = '';
                 } else {
                     showSalesReportMessage(data.error || 'Error al procesar el archivo.', 'error');
@@ -627,24 +627,18 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             event.preventDefault();
             event.stopPropagation();
 
-            const campaignId = document.getElementById('staffingCampaignSelect').value;
             const fileInput = document.getElementById('staffingFile');
             const file = fileInput.files[0];
 
-            if (!campaignId) {
-                showStaffingMessage('Selecciona una campaña.', 'error');
-                return;
-            }
             if (!file) {
                 showStaffingMessage('Selecciona un archivo CSV.', 'error');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('campaign_id', campaignId);
             formData.append('report_file', file);
 
-            showStaffingMessage('Subiendo pronóstico...', 'info');
+            showStaffingMessage('Subiendo reporte...', 'info');
 
             try {
                 const response = await fetch('../api/campaign_staffing.php', {
@@ -654,13 +648,28 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 const data = await response.json();
 
                 if (data.success) {
+                    let message = `✅ Carga completada: ${data.format}${data.campaign_name ? ' - ' + data.campaign_name : ''}`;
+                    message += `\n\nInbound: Insertados ${data.inserted}, Actualizados ${data.updated}, Omitidos ${data.skipped}`;
+                    
                     const forecastInfo = (typeof data.forecast_inserted !== 'undefined' || typeof data.forecast_updated !== 'undefined')
                         ? ` | Staffing WFM: Insertados ${data.forecast_inserted ?? 0}, Actualizados ${data.forecast_updated ?? 0}`
                         : '';
-                    showStaffingMessage(
-                        `Carga completada. Inbound: Insertados ${data.inserted}, Actualizados ${data.updated}, Omitidos ${data.skipped}${forecastInfo}`,
-                        'success'
-                    );
+                    message += forecastInfo;
+                    
+                    // Add column information if available
+                    if (data.column_info) {
+                        if (data.column_info.columns_found && data.column_info.columns_found.length > 0) {
+                            message += `\n\n📋 Columnas procesadas: ${data.column_info.columns_found.length}`;
+                        }
+                        if (data.column_info.missing_columns && data.column_info.missing_columns.length > 0) {
+                            message += `\n⚠️ Columnas críticas faltantes (valores por defecto): ${data.column_info.missing_columns.join(', ')}`;
+                        }
+                        if (data.column_info.missing_optional && data.column_info.missing_optional.length > 0) {
+                            message += `\n📄 Columnas opcionales faltantes: ${data.column_info.missing_optional.join(', ')}`;
+                        }
+                    }
+                    
+                    showStaffingMessage(message, data.warning ? 'warning' : 'success');
                     fileInput.value = '';
                 } else {
                     showStaffingMessage(data.error || 'Error al procesar el archivo.', 'error');
@@ -673,32 +682,42 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
         function showStaffingMessage(message, type) {
             const div = document.getElementById('staffingMessage');
             if (!div) return;
-            const icon = type === 'success' ? 'check-circle' : (type === 'info' ? 'spinner fa-spin' : 'exclamation-circle');
+            
+            let icon = 'exclamation-circle';
+            if (type === 'success') icon = 'check-circle';
+            else if (type === 'info') icon = 'spinner fa-spin';
+            else if (type === 'warning') icon = 'exclamation-triangle';
+            
             const bannerType = type === 'info' ? '' : type;
             div.className = `status-banner ${bannerType} mt-3`;
-            div.innerHTML = `<i class="fas fa-${icon} mr-2"></i>${message}`;
+            div.innerHTML = `<i class="fas fa-${icon} mr-2"></i><span style="white-space: pre-line;">${message}</span>`;
             div.classList.remove('hidden');
 
             if (type !== 'info') {
                 setTimeout(() => {
                     div.classList.add('hidden');
-                }, 5000);
+                }, type === 'warning' ? 8000 : 5000);
             }
         }
 
         function showSalesReportMessage(message, type) {
             const div = document.getElementById('salesReportMessage');
             if (!div) return;
-            const icon = type === 'success' ? 'check-circle' : (type === 'info' ? 'spinner fa-spin' : 'exclamation-circle');
+            
+            let icon = 'exclamation-circle';
+            if (type === 'success') icon = 'check-circle';
+            else if (type === 'info') icon = 'spinner fa-spin';
+            else if (type === 'warning') icon = 'exclamation-triangle';
+            
             const bannerType = type === 'info' ? '' : type;
             div.className = `status-banner ${bannerType} mt-3`;
-            div.innerHTML = `<i class="fas fa-${icon} mr-2"></i>${message}`;
+            div.innerHTML = `<i class="fas fa-${icon} mr-2"></i><span style="white-space: pre-line;">${message}</span>`;
             div.classList.remove('hidden');
 
             if (type !== 'info') {
                 setTimeout(() => {
                     div.classList.add('hidden');
-                }, 5000);
+                }, type === 'warning' ? 8000 : 5000);
             }
         }
 
