@@ -58,6 +58,12 @@ $navItems = [
                 'icon' => 'fa-calendar-check',
             ],
             [
+                'section' => 'wfm_planning',
+                'label' => 'Calculadora SL',
+                'href' => $baseHref . 'hr/service_level_calculator.php',
+                'icon' => 'fa-calculator',
+            ],
+            [
                 'section' => 'hr_trial_period',
                 'label' => 'Período de Prueba',
                 'href' => $baseHref . 'hr/trial_period.php',
