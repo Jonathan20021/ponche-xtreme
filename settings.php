@@ -46,6 +46,7 @@ $sections = [
     'hr_employee_documents' => ['label' => 'Documentos de Empleados', 'category' => 'Recursos Humanos', 'icon' => 'fa-folder-open', 'description' => 'Gestión y almacenamiento de documentos de empleados'],
     'hr_calendar' => ['label' => 'Calendario HR', 'category' => 'Recursos Humanos', 'icon' => 'fa-calendar-alt', 'description' => 'Calendario integrado de eventos'],
     'hr_recruitment' => ['label' => 'Reclutamiento', 'category' => 'Recursos Humanos', 'icon' => 'fa-user-plus', 'description' => 'Gestión de vacantes y solicitudes de empleo'],
+    'hr_recruitment_ai' => ['label' => 'Análisis de Reclutamiento IA', 'category' => 'Recursos Humanos', 'icon' => 'fa-brain', 'description' => 'Análisis inteligente de datos de reclutamiento con filtros personalizados y consultas en lenguaje natural'],
     'hr_job_postings' => ['label' => 'Gestión de Vacantes', 'category' => 'Recursos Humanos', 'icon' => 'fa-briefcase', 'description' => 'Crear y administrar vacantes de empleo'],
     'manage_campaigns' => ['label' => 'Gestión de Campañas', 'category' => 'Recursos Humanos', 'icon' => 'fa-bullhorn', 'description' => 'Crear, editar y gestionar campañas de agentes y supervisores'],
     'productivity_dashboard' => ['label' => 'Productividad', 'category' => 'Recursos Humanos', 'icon' => 'fa-bullseye', 'description' => 'KPIs por campaña/equipo, metas, coaching y gamificacion'],

@@ -544,6 +544,16 @@ $recentVacations = $pdo->query("
                 <p class="text-slate-400 text-sm">Crear y administrar ofertas de empleo</p>
             </div>
 
+            <div class="module-card" onclick="window.location.href='recruitment_ai_analysis.php'">
+                <div class="flex items-center mb-3">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <i class="fas fa-brain text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white">Análisis IA</h3>
+                </div>
+                <p class="text-slate-400 text-sm">Análisis inteligente de datos de reclutamiento</p>
+            </div>
+
             <div class="module-card" onclick="window.location.href='wfm_planning.php'">
                 <div class="flex items-center mb-3">
                     <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); width: 40px; height: 40px; font-size: 1.2rem;">

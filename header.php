@@ -118,6 +118,12 @@ $navItems = [
                 'icon' => 'fa-file-contract',
             ],
             [
+                'section' => 'hr_recruitment_ai',
+                'label' => 'Análisis Reclutamiento IA',
+                'href' => $baseHref . 'hr/recruitment_ai_analysis.php',
+                'icon' => 'fa-brain',
+            ],
+            [
                 'section' => 'hr_dashboard',
                 'label' => 'Asistente Virtual',
                 'href' => $baseHref . 'hr/hr_assistant.php',
