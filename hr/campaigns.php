@@ -229,6 +229,10 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                                 <i class="fas fa-magic mr-1"></i>
                                 El archivo contiene la campaña en línea 2. No necesitas seleccionar.
                             </p>
+                            <p class="text-xs text-amber-400 mt-1">
+                                <i class="fas fa-layer-group mr-1"></i>
+                                Los AST Erlang agregados sin Selected in-groups tambien se aceptan y se guardan como ALL CAMPAIGNS.
+                            </p>
                             <span
                                 onclick="document.getElementById('staffingInfo').classList.toggle('hidden')"
                                 class="text-xs text-blue-400 mt-2 hover:underline cursor-pointer inline-block"><i class="fas fa-info-circle"></i>
@@ -258,6 +262,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             </div>
                         </div>
                         <p class="text-xs text-slate-500"><i class="fas fa-info-circle text-blue-400 mr-1"></i> Si faltan columnas opcionales, se usan valores por defecto.</p>
+                        <p class="text-xs text-slate-500 mt-2"><i class="fas fa-layer-group text-cyan-400 mr-1"></i> Si el reporte AST Erlang no trae campana en linea 2 ni Selected in-groups, se importa como <strong>ALL CAMPAIGNS</strong>.</p>
                     </div>
                     <form id="staffingForm" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                         <div class="md:col-span-2">

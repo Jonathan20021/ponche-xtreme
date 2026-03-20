@@ -545,12 +545,12 @@ try {
     $staffingStmt = $pdo->prepare("
         SELECT 
             f.*,
-            c.name AS campaign_name,
+            COALESCE(c.name, f.campaign_name) AS campaign_name,
             c.code AS campaign_code
         FROM campaign_staffing_forecast f
-        INNER JOIN campaigns c ON c.id = f.campaign_id
+        LEFT JOIN campaigns c ON c.id = f.campaign_id
         WHERE f.interval_start BETWEEN ? AND ?
-        ORDER BY c.name ASC, f.interval_start ASC
+        ORDER BY COALESCE(c.name, f.campaign_name) ASC, f.interval_start ASC
     ");
     $staffingStmt->execute([$startBound, $endBound]);
     $staffingRowsRaw = $staffingStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];

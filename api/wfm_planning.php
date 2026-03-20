@@ -181,7 +181,12 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
 
     $stmt = $pdo->prepare("
         SELECT 
+            CASE
+                WHEN campaign_id IS NOT NULL THEN CONCAT('id:', campaign_id)
+                ELSE CONCAT('name:', COALESCE(NULLIF(TRIM(campaign_name), ''), 'ALL CAMPAIGNS'))
+            END AS campaign_group,
             campaign_id,
+            MAX(campaign_name) as stored_campaign_name,
             DATE(interval_start) as date_string,
             SUM(offered_calls) as sum_offered,
             SUM(answered_calls) as sum_answered,
@@ -193,8 +198,8 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
             AVG(avg_abandon_time_sec) as g_avg_abandon_time
         FROM vicidial_inbound_hourly
         WHERE interval_start BETWEEN ? AND ?
-        GROUP BY campaign_id, DATE(interval_start)
-        ORDER BY campaign_id, DATE(interval_start)
+        GROUP BY campaign_group, DATE(interval_start)
+        ORDER BY stored_campaign_name, DATE(interval_start)
     ");
     $stmt->execute([$startBound, $endBound]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -203,8 +208,12 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
     $campaignTotals = [];
 
     foreach ($rows as $row) {
-        $campaignId = (int) $row['campaign_id'];
-        $campaign = $campaignMap[$campaignId] ?? ['name' => 'Unknown', 'code' => 'N/A'];
+        $campaignId = $row['campaign_id'] !== null ? (int) $row['campaign_id'] : null;
+        $storedCampaignName = trim((string) ($row['stored_campaign_name'] ?? ''));
+        $campaign = $campaignId !== null
+            ? ($campaignMap[$campaignId] ?? ['name' => $storedCampaignName !== '' ? $storedCampaignName : 'ALL CAMPAIGNS', 'code' => null])
+            : ['name' => $storedCampaignName !== '' ? $storedCampaignName : 'ALL CAMPAIGNS', 'code' => null];
+        $campaignGroup = (string) $row['campaign_group'];
 
         $offered = (int) $row['sum_offered'];
         $answered = (int) $row['sum_answered'];
@@ -219,7 +228,7 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
         $dailyRows[] = [
             'campaign_id' => $campaignId,
             'campaign_name' => $campaign['name'],
-            'campaign_code' => $campaign['code'],
+            'campaign_code' => $campaign['code'] ?? null,
             'date' => $row['date_string'],
             'offered' => $offered,
             'answered' => $answered,
@@ -231,11 +240,11 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
             'avg_wrap_time' => $avgWrap
         ];
 
-        if (!isset($campaignTotals[$campaignId])) {
-            $campaignTotals[$campaignId] = [
+        if (!isset($campaignTotals[$campaignGroup])) {
+            $campaignTotals[$campaignGroup] = [
                 'campaign_id' => $campaignId,
                 'campaign_name' => $campaign['name'],
-                'campaign_code' => $campaign['code'],
+                'campaign_code' => $campaign['code'] ?? null,
                 'offered' => 0,
                 'answered' => 0,
                 'abandoned' => 0,
@@ -245,13 +254,13 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
                 'intervals' => 0
             ];
         }
-        $campaignTotals[$campaignId]['offered'] += $offered;
-        $campaignTotals[$campaignId]['answered'] += $answered;
-        $campaignTotals[$campaignId]['abandoned'] += $abandoned;
-        $campaignTotals[$campaignId]['sum_talk_sec'] += (int) $row['sum_talk_sec'];
-        $campaignTotals[$campaignId]['sum_wrap_sec'] += (int) $row['sum_wrap_sec'];
-        $campaignTotals[$campaignId]['asa_sum'] += (float) $row['g_avg_answer_speed'];
-        $campaignTotals[$campaignId]['intervals']++;
+        $campaignTotals[$campaignGroup]['offered'] += $offered;
+        $campaignTotals[$campaignGroup]['answered'] += $answered;
+        $campaignTotals[$campaignGroup]['abandoned'] += $abandoned;
+        $campaignTotals[$campaignGroup]['sum_talk_sec'] += (int) $row['sum_talk_sec'];
+        $campaignTotals[$campaignGroup]['sum_wrap_sec'] += (int) $row['sum_wrap_sec'];
+        $campaignTotals[$campaignGroup]['asa_sum'] += (float) $row['g_avg_answer_speed'];
+        $campaignTotals[$campaignGroup]['intervals']++;
     }
 
     $totals = [];
@@ -282,7 +291,12 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
 
     $intradayStmt = $pdo->prepare("
         SELECT 
+            CASE
+                WHEN campaign_id IS NOT NULL THEN CONCAT('id:', campaign_id)
+                ELSE CONCAT('name:', COALESCE(NULLIF(TRIM(campaign_name), ''), 'ALL CAMPAIGNS'))
+            END AS campaign_group,
             campaign_id,
+            MAX(campaign_name) as stored_campaign_name,
             HOUR(interval_start) as hour_of_day,
             AVG(offered_calls) as avg_offered,
             AVG(answered_calls) as avg_answered,
@@ -290,19 +304,25 @@ if ($action === 'staffing_gap' || $action === 'inbound_metrics') {
             AVG(avg_answer_speed_sec) as avg_asa
         FROM vicidial_inbound_hourly
         WHERE interval_start BETWEEN ? AND ?
-        GROUP BY campaign_id, HOUR(interval_start)
-        ORDER BY campaign_id, HOUR(interval_start)
+        GROUP BY campaign_group, HOUR(interval_start)
+        ORDER BY stored_campaign_name, HOUR(interval_start)
     ");
     $intradayStmt->execute([$startBound, $endBound]);
     $intradayRows = $intradayStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
     $intraday = [];
     foreach ($intradayRows as $iRow) {
-        $cId = (int) $iRow['campaign_id'];
-        if (!isset($intraday[$cId])) {
-            $intraday[$cId] = [];
+        $campaignId = $iRow['campaign_id'] !== null ? (int) $iRow['campaign_id'] : null;
+        $storedCampaignName = trim((string) ($iRow['stored_campaign_name'] ?? ''));
+        $campaignGroup = (string) $iRow['campaign_group'];
+        if (!isset($intraday[$campaignGroup])) {
+            $intraday[$campaignGroup] = [];
         }
-        $intraday[$cId][] = [
+        $intraday[$campaignGroup][] = [
+            'campaign_id' => $campaignId,
+            'campaign_name' => $campaignId !== null
+                ? ($campaignMap[$campaignId]['name'] ?? ($storedCampaignName !== '' ? $storedCampaignName : 'ALL CAMPAIGNS'))
+                : ($storedCampaignName !== '' ? $storedCampaignName : 'ALL CAMPAIGNS'),
             'hour' => (int) $iRow['hour_of_day'],
             'avg_offered' => round((float) $iRow['avg_offered'], 1),
             'avg_answered' => round((float) $iRow['avg_answered'], 1),

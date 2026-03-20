@@ -39,6 +39,54 @@ function normalizeHeader($header)
     return $header;
 }
 
+function normalizeCampaignLabel($value)
+{
+    $value = trim((string) $value);
+    $value = trim($value, "\"' ");
+    $value = preg_replace('/\s+/', ' ', $value);
+    return trim((string) $value);
+}
+
+function extractCampaignNameFromRow(array $row)
+{
+    foreach ($row as $cell) {
+        $cell = normalizeCampaignLabel($cell);
+        if ($cell === '' || stripos($cell, 'Selected in-groups') === false) {
+            continue;
+        }
+
+        $campaignStr = preg_replace('/^selected in-groups\s*:?\s*/i', '', $cell);
+        $campaignStr = normalizeCampaignLabel($campaignStr);
+        if ($campaignStr === '') {
+            return null;
+        }
+
+        $parts = preg_split('/\s+-\s+/', $campaignStr, 2);
+        if (!empty($parts[0])) {
+            return normalizeCampaignLabel($parts[0]);
+        }
+
+        return $campaignStr;
+    }
+
+    return null;
+}
+
+function buildAggregateCampaignName($format, $originalName)
+{
+    $format = (string) $format;
+    if ($format === 'ast_erlang' || $format === 'inbound_daily_report') {
+        return 'ALL CAMPAIGNS';
+    }
+
+    $baseName = pathinfo((string) $originalName, PATHINFO_FILENAME);
+    $baseName = preg_replace('/[_-]+\d{8}.*$/', '', (string) $baseName);
+    $baseName = str_replace(['_', '-'], ' ', (string) $baseName);
+    $baseName = strtoupper(trim((string) $baseName));
+
+    return $baseName !== '' ? $baseName : 'ALL CAMPAIGNS';
+}
+
 function parseNumber($value)
 {
     if ($value === null) {
@@ -320,6 +368,8 @@ $format = null;
 $inDataSection = false;
 $campaignId = null;
 $campaignName = null;
+$campaignResolved = false;
+$isAggregateCampaign = false;
 $columnMap = [];
 $missingColumns = [];
 $headerRow = null;
@@ -333,15 +383,10 @@ while (($row = fgetcsv($handle, 0, ',')) !== false) {
     $firstCell = trim((string) ($row[0] ?? ''));
     $firstNorm = normalizeHeader($firstCell);
 
-    // Extract campaign from line 2 (Selected in-groups)
-    if ($lineNumber === 2 && stripos($firstCell, 'Selected in-groups') !== false) {
-        // Extract campaign name from: "Selected in-groups: BBQ_Servicio - Serivico Cliente BBQ Express"
-        // Remove the "Selected in-groups:" prefix
-        $campaignStr = trim(str_replace(['Selected in-groups:', 'Selected in-groups'], '', $firstCell));
-        if (!empty($campaignStr)) {
-            // Get first part before " - "
-            $parts = explode(' - ', $campaignStr);
-            $campaignName = trim($parts[0]);
+    if ($campaignName === null) {
+        $detectedCampaign = extractCampaignNameFromRow($row);
+        if ($detectedCampaign !== null) {
+            $campaignName = $detectedCampaign;
         }
     }
 
@@ -463,20 +508,28 @@ while (($row = fgetcsv($handle, 0, ',')) !== false) {
     }
 
     // Resolve campaign - NO crear campañas automáticamente
-    if ($campaignId === null && !empty($campaignName)) {
+    if (!$campaignResolved) {
         // Buscar campaña existente
-        $stmt2 = $pdo->prepare("SELECT id FROM campaigns WHERE name = ? OR code = ?");
+        if (empty($campaignName)) {
+            $campaignName = buildAggregateCampaignName($format, $originalName);
+            $isAggregateCampaign = true;
+        }
+
+        $campaignName = normalizeCampaignLabel($campaignName);
+
+        $stmt2 = $pdo->prepare("SELECT id, name FROM campaigns WHERE name = ? OR code = ? LIMIT 1");
         $stmt2->execute([$campaignName, $campaignName]);
         $campaign = $stmt2->fetch(PDO::FETCH_ASSOC);
         
         if ($campaign) {
             $campaignId = (int) $campaign['id'];
+            $campaignName = (string) $campaign['name'];
         }
-        // Si no existe, dejar campaign_id en NULL y usar campaign_name del archivo
+        $campaignResolved = true;
     }
     
     // Si no se detectó campaña del archivo, requerirla
-    if (empty($campaignName)) {
+    if (false) {
         jsonError('El archivo no contiene información de campaña. Verifica la línea 2 del CSV.');
     }
 
@@ -554,12 +607,17 @@ if (!empty($missingColumns)) {
 } elseif (!empty($columnInfo['missing_optional'])) {
     $warning = 'Algunas columnas opcionales no se encontraron. Se usaron valores por defecto.';
 }
+if ($isAggregateCampaign) {
+    $aggregateWarning = 'El archivo no trae una campana unica. Se guardo como ALL CAMPAIGNS para analisis agregado.';
+    $warning = $warning ? ($warning . ' ' . $aggregateWarning) : $aggregateWarning;
+}
 
 echo json_encode([
     'success' => true,
     'format' => $format,
     'campaign_name' => $campaignName,
     'campaign_id' => $campaignId,
+    'is_aggregate' => $isAggregateCampaign,
     'inserted' => $inserted,
     'updated' => $updated,
     'skipped' => $skipped,
