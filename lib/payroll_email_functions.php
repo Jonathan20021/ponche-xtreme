@@ -181,18 +181,26 @@ function sendIndividualPayrollSlip(PDO $pdo, int $periodId, int $employeeId): ar
  * @return array|null Payroll data or null if not found
  */
 function getEmployeePayrollData(PDO $pdo, int $periodId, int $employeeId): ?array {
+    ensurePayrollManualIncentivesTable($pdo);
+
     $stmt = $pdo->prepare("
         SELECT pr.*, 
                pp.name as period_name, pp.start_date, pp.end_date, pp.payment_date,
                e.first_name, e.last_name, e.employee_code, e.identification_number, 
                e.position, e.email, e.employment_status, e.hire_date,
                d.name as department_name,
-               u.hourly_rate, u.monthly_salary, u.overtime_multiplier
+               u.hourly_rate, u.monthly_salary, u.overtime_multiplier,
+               COALESCE(pmi.sales_incentive, 0) as sales_incentive,
+               COALESCE(pmi.night_incentive, 0) as night_incentive,
+               pmi.notes as incentive_notes
         FROM payroll_records pr
         JOIN payroll_periods pp ON pp.id = pr.payroll_period_id
         JOIN employees e ON e.id = pr.employee_id
         JOIN users u ON u.id = e.user_id
         LEFT JOIN departments d ON d.id = e.department_id
+        LEFT JOIN payroll_manual_incentives pmi
+            ON pmi.payroll_period_id = pr.payroll_period_id
+           AND pmi.employee_id = pr.employee_id
         WHERE pr.payroll_period_id = ? AND pr.employee_id = ?
     ");
     
@@ -425,8 +433,14 @@ function generatePayrollSlipHTML(array $data): string {
                     <?php endif; ?>
                     <?php if ($data['commissions'] > 0): ?>
                     <tr>
-                        <td>Comisiones</td>
+                        <td>Incentivo por Ventas</td>
                         <td class="amount positive"><?= formatDOP($data['commissions']) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php if (($data['night_incentive'] ?? 0) > 0): ?>
+                    <tr>
+                        <td>Incentivo Nocturno</td>
+                        <td class="amount positive"><?= formatDOP($data['night_incentive']) ?></td>
                     </tr>
                     <?php endif; ?>
                     <?php if ($data['other_income'] > 0): ?>
@@ -549,7 +563,10 @@ function generatePayrollSlipPlainText(array $data): string {
         $text .= "Bonificaciones: " . formatDOP($data['bonuses']) . "\n";
     }
     if ($data['commissions'] > 0) {
-        $text .= "Comisiones: " . formatDOP($data['commissions']) . "\n";
+        $text .= "Incentivo por Ventas: " . formatDOP($data['commissions']) . "\n";
+    }
+    if (($data['night_incentive'] ?? 0) > 0) {
+        $text .= "Incentivo Nocturno: " . formatDOP($data['night_incentive']) . "\n";
     }
     if ($data['other_income'] > 0) {
         $text .= "Otros Ingresos: " . formatDOP($data['other_income']) . "\n";

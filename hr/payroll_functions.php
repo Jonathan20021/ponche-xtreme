@@ -182,6 +182,61 @@ function getEmployeeCustomDeductions($pdo, $employeeId)
 }
 
 /**
+ * Garantiza la tabla de incentivos manuales por periodo.
+ */
+function ensurePayrollManualIncentivesTable(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS payroll_manual_incentives (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            payroll_period_id INT NOT NULL,
+            employee_id INT NOT NULL,
+            sales_incentive DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            night_incentive DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            notes VARCHAR(255) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_period_employee (payroll_period_id, employee_id),
+            INDEX idx_payroll_period_id (payroll_period_id),
+            INDEX idx_employee_id (employee_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    $ensured = true;
+}
+
+/**
+ * Obtiene incentivos manuales por empleado dentro de un periodo.
+ */
+function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
+{
+    ensurePayrollManualIncentivesTable($pdo);
+
+    $stmt = $pdo->prepare("
+        SELECT employee_id, sales_incentive, night_incentive, notes
+        FROM payroll_manual_incentives
+        WHERE payroll_period_id = ?
+    ");
+    $stmt->execute([$periodId]);
+
+    $incentives = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $incentives[(int) $row['employee_id']] = [
+            'sales_incentive' => (float) $row['sales_incentive'],
+            'night_incentive' => (float) $row['night_incentive'],
+            'notes' => $row['notes'] ?? null,
+        ];
+    }
+
+    return $incentives;
+}
+
+/**
  * Calcula nómina completa para un empleado
  */
 function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
@@ -311,6 +366,8 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     $bonuses = $hoursData['bonuses'] ?? 0;
     $commissions = $hoursData['commissions'] ?? 0;
     $otherIncome = $hoursData['other_income'] ?? 0;
+    $nightIncentive = (float) ($hoursData['night_incentive'] ?? 0);
+    $salesIncentive = (float) ($hoursData['sales_incentive'] ?? 0);
 
     $grossSalary = $regularPay + $overtimePay + $bonuses + $commissions + $otherIncome;
 
@@ -340,6 +397,8 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
         'bonuses' => $bonuses,
         'commissions' => $commissions,
         'other_income' => $otherIncome,
+        'night_incentive' => $nightIncentive,
+        'sales_incentive' => $salesIncentive,
         'gross_salary' => $grossSalary,
         'afp_employee' => $deductions['afp_employee'],
         'sfs_employee' => $deductions['sfs_employee'],

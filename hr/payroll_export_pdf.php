@@ -9,6 +9,7 @@ use Dompdf\Options;
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
+ensurePayrollManualIncentivesTable($pdo);
 
 $periodId = isset($_GET['period_id']) ? (int)$_GET['period_id'] : 0;
 
@@ -36,10 +37,15 @@ while ($row = $ratesStmt->fetch(PDO::FETCH_ASSOC)) {
 $recordsStmt = $pdo->prepare("
     SELECT pr.*, 
            e.first_name, e.last_name, e.employee_code, e.identification_number, e.position,
-           d.name as department_name
+           d.name as department_name,
+           COALESCE(pmi.sales_incentive, 0) as sales_incentive,
+           COALESCE(pmi.night_incentive, 0) as night_incentive
     FROM payroll_records pr
     JOIN employees e ON e.id = pr.employee_id
     LEFT JOIN departments d ON d.id = e.department_id
+    LEFT JOIN payroll_manual_incentives pmi
+        ON pmi.payroll_period_id = pr.payroll_period_id
+       AND pmi.employee_id = pr.employee_id
     WHERE pr.payroll_period_id = ?
     ORDER BY e.last_name, e.first_name
 ");
@@ -49,6 +55,8 @@ $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
 // Calculate totals
 $totals = [
     'gross' => 0,
+    'sales_incentive' => 0,
+    'night_incentive' => 0,
     'afp_employee' => 0,
     'sfs_employee' => 0,
     'isr' => 0,
@@ -63,6 +71,8 @@ $totals = [
 ];
 
 foreach ($records as $record) {
+    $totals['sales_incentive'] += $record['sales_incentive'];
+    $totals['night_incentive'] += $record['night_incentive'];
     $totals['gross'] += $record['gross_salary'];
     $totals['afp_employee'] += $record['afp_employee'];
     $totals['sfs_employee'] += $record['sfs_employee'];
@@ -208,6 +218,8 @@ ob_start();
                 <th>Código</th>
                 <th>Empleado</th>
                 <th>Cédula</th>
+                <th class="text-right">Inc. Ventas</th>
+                <th class="text-right">Inc. Nocturno</th>
                 <th class="text-right">Salario Bruto</th>
                 <th class="text-right">AFP (<?= number_format($deductionRates['AFP']['employee_percentage'], 2) ?>%)</th>
                 <th class="text-right">SFS (<?= number_format($deductionRates['SFS']['employee_percentage'], 2) ?>%)</th>
@@ -223,6 +235,8 @@ ob_start();
                 <td><?= htmlspecialchars($record['employee_code']) ?></td>
                 <td><?= htmlspecialchars($record['first_name'] . ' ' . $record['last_name']) ?></td>
                 <td><?= htmlspecialchars($record['identification_number'] ?: 'N/A') ?></td>
+                <td class="text-right"><?= formatDOP($record['sales_incentive']) ?></td>
+                <td class="text-right"><?= formatDOP($record['night_incentive']) ?></td>
                 <td class="text-right"><?= formatDOP($record['gross_salary']) ?></td>
                 <td class="text-right"><?= formatDOP($record['afp_employee']) ?></td>
                 <td class="text-right"><?= formatDOP($record['sfs_employee']) ?></td>
@@ -234,6 +248,8 @@ ob_start();
             <?php endforeach; ?>
             <tr class="totals-row">
                 <td colspan="3"><strong>TOTALES</strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['sales_incentive']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['night_incentive']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['gross']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['afp_employee']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['sfs_employee']) ?></strong></td>

@@ -13,6 +13,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
+ensurePayrollManualIncentivesTable($pdo);
 
 $periodId = isset($_GET['period_id']) ? (int)$_GET['period_id'] : 0;
 
@@ -40,10 +41,15 @@ while ($row = $ratesStmt->fetch(PDO::FETCH_ASSOC)) {
 $recordsStmt = $pdo->prepare("
     SELECT pr.*, 
            e.first_name, e.last_name, e.employee_code, e.identification_number, e.position,
-           d.name as department_name
+           d.name as department_name,
+           COALESCE(pmi.sales_incentive, 0) as sales_incentive,
+           COALESCE(pmi.night_incentive, 0) as night_incentive
     FROM payroll_records pr
     JOIN employees e ON e.id = pr.employee_id
     LEFT JOIN departments d ON d.id = e.department_id
+    LEFT JOIN payroll_manual_incentives pmi
+        ON pmi.payroll_period_id = pr.payroll_period_id
+       AND pmi.employee_id = pr.employee_id
     WHERE pr.payroll_period_id = ?
     ORDER BY e.last_name, e.first_name
 ");
@@ -72,11 +78,11 @@ if (file_exists($logoPath)) {
 
 // Header
 $sheet->setCellValue('B1', 'REPORTE DE NÓMINA - REPÚBLICA DOMINICANA');
-$sheet->mergeCells('B1:N1');
-$sheet->getStyle('B1:N1')->getFont()->setBold(true)->setSize(16);
-$sheet->getStyle('B1:N1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle('A1:N1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
-$sheet->getStyle('B1:N1')->getFont()->getColor()->setRGB('FFFFFF');
+$sheet->mergeCells('B1:P1');
+$sheet->getStyle('B1:P1')->getFont()->setBold(true)->setSize(16);
+$sheet->getStyle('B1:P1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$sheet->getStyle('A1:P1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
+$sheet->getStyle('B1:P1')->getFont()->getColor()->setRGB('FFFFFF');
 
 // Period info
 $sheet->setCellValue('A2', 'Período: ' . $period['name']);
@@ -94,15 +100,17 @@ $headers = [
     'C' => 'Cédula',
     'D' => 'Departamento',
     'E' => 'Horas',
-    'F' => 'Salario Bruto',
-    'G' => 'AFP (' . number_format($deductionRates['AFP']['employee_percentage'], 2) . '%)',
-    'H' => 'SFS (' . number_format($deductionRates['SFS']['employee_percentage'], 2) . '%)',
-    'I' => 'ISR',
-    'J' => 'Otros Desc.',
-    'K' => 'Total Desc.',
-    'L' => 'Salario Neto',
-    'M' => 'AFP Patronal (' . number_format($deductionRates['AFP']['employer_percentage'], 2) . '%)',
-    'N' => 'SFS Patronal (' . number_format($deductionRates['SFS']['employer_percentage'], 2) . '%)'
+    'F' => 'Inc. Ventas',
+    'G' => 'Inc. Nocturno',
+    'H' => 'Salario Bruto',
+    'I' => 'AFP (' . number_format($deductionRates['AFP']['employee_percentage'], 2) . '%)',
+    'J' => 'SFS (' . number_format($deductionRates['SFS']['employee_percentage'], 2) . '%)',
+    'K' => 'ISR',
+    'L' => 'Otros Desc.',
+    'M' => 'Total Desc.',
+    'N' => 'Salario Neto',
+    'O' => 'AFP Patronal (' . number_format($deductionRates['AFP']['employer_percentage'], 2) . '%)',
+    'P' => 'SFS Patronal (' . number_format($deductionRates['SFS']['employer_percentage'], 2) . '%)'
 ];
 
 foreach ($headers as $col => $header) {
@@ -115,11 +123,11 @@ $headerStyle = [
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
 ];
-$sheet->getStyle('A' . $row . ':N' . $row)->applyFromArray($headerStyle);
+$sheet->getStyle('A' . $row . ':P' . $row)->applyFromArray($headerStyle);
 
 // Data rows
 $row++;
-$totals = ['gross' => 0, 'afp_emp' => 0, 'sfs_emp' => 0, 'isr' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0, 'afp_pat' => 0, 'sfs_pat' => 0];
+$totals = ['sales' => 0, 'night' => 0, 'gross' => 0, 'afp_emp' => 0, 'sfs_emp' => 0, 'isr' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0, 'afp_pat' => 0, 'sfs_pat' => 0];
 
 foreach ($records as $record) {
     $sheet->setCellValue('A' . $row, $record['employee_code']);
@@ -127,21 +135,25 @@ foreach ($records as $record) {
     $sheet->setCellValue('C' . $row, $record['identification_number'] ?: 'N/A');
     $sheet->setCellValue('D' . $row, $record['department_name'] ?: 'N/A');
     $sheet->setCellValue('E' . $row, number_format($record['total_hours'], 2));
-    $sheet->setCellValue('F' . $row, $record['gross_salary']);
-    $sheet->setCellValue('G' . $row, $record['afp_employee']);
-    $sheet->setCellValue('H' . $row, $record['sfs_employee']);
-    $sheet->setCellValue('I' . $row, $record['isr']);
-    $sheet->setCellValue('J' . $row, $record['other_deductions']);
-    $sheet->setCellValue('K' . $row, $record['total_deductions']);
-    $sheet->setCellValue('L' . $row, $record['net_salary']);
-    $sheet->setCellValue('M' . $row, $record['afp_employer']);
-    $sheet->setCellValue('N' . $row, $record['sfs_employer']);
+    $sheet->setCellValue('F' . $row, $record['sales_incentive']);
+    $sheet->setCellValue('G' . $row, $record['night_incentive']);
+    $sheet->setCellValue('H' . $row, $record['gross_salary']);
+    $sheet->setCellValue('I' . $row, $record['afp_employee']);
+    $sheet->setCellValue('J' . $row, $record['sfs_employee']);
+    $sheet->setCellValue('K' . $row, $record['isr']);
+    $sheet->setCellValue('L' . $row, $record['other_deductions']);
+    $sheet->setCellValue('M' . $row, $record['total_deductions']);
+    $sheet->setCellValue('N' . $row, $record['net_salary']);
+    $sheet->setCellValue('O' . $row, $record['afp_employer']);
+    $sheet->setCellValue('P' . $row, $record['sfs_employer']);
     
     // Format currency
-    foreach (['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'] as $col) {
+    foreach (['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'] as $col) {
         $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
     }
     
+    $totals['sales'] += $record['sales_incentive'];
+    $totals['night'] += $record['night_incentive'];
     $totals['gross'] += $record['gross_salary'];
     $totals['afp_emp'] += $record['afp_employee'];
     $totals['sfs_emp'] += $record['sfs_employee'];
@@ -158,17 +170,19 @@ foreach ($records as $record) {
 // Totals row
 $sheet->setCellValue('A' . $row, 'TOTALES');
 $sheet->mergeCells('A' . $row . ':E' . $row);
-$sheet->setCellValue('F' . $row, $totals['gross']);
-$sheet->setCellValue('G' . $row, $totals['afp_emp']);
-$sheet->setCellValue('H' . $row, $totals['sfs_emp']);
-$sheet->setCellValue('I' . $row, $totals['isr']);
-$sheet->setCellValue('J' . $row, $totals['other']);
-$sheet->setCellValue('K' . $row, $totals['deductions']);
-$sheet->setCellValue('L' . $row, $totals['net']);
-$sheet->setCellValue('M' . $row, $totals['afp_pat']);
-$sheet->setCellValue('N' . $row, $totals['sfs_pat']);
+$sheet->setCellValue('F' . $row, $totals['sales']);
+$sheet->setCellValue('G' . $row, $totals['night']);
+$sheet->setCellValue('H' . $row, $totals['gross']);
+$sheet->setCellValue('I' . $row, $totals['afp_emp']);
+$sheet->setCellValue('J' . $row, $totals['sfs_emp']);
+$sheet->setCellValue('K' . $row, $totals['isr']);
+$sheet->setCellValue('L' . $row, $totals['other']);
+$sheet->setCellValue('M' . $row, $totals['deductions']);
+$sheet->setCellValue('N' . $row, $totals['net']);
+$sheet->setCellValue('O' . $row, $totals['afp_pat']);
+$sheet->setCellValue('P' . $row, $totals['sfs_pat']);
 
-foreach (['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'] as $col) {
+foreach (['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'] as $col) {
     $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
 }
 
@@ -177,10 +191,10 @@ $totalsStyle = [
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
 ];
-$sheet->getStyle('A' . $row . ':N' . $row)->applyFromArray($totalsStyle);
+$sheet->getStyle('A' . $row . ':P' . $row)->applyFromArray($totalsStyle);
 
 // Auto-size columns
-foreach (range('A', 'N') as $col) {
+foreach (range('A', 'P') as $col) {
     $sheet->getColumnDimension($col)->setAutoSize(true);
 }
 
