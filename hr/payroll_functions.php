@@ -198,6 +198,9 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
             employee_id INT NOT NULL,
             sales_incentive DECIMAL(10,2) NOT NULL DEFAULT 0.00,
             night_incentive DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            use_manual_hours TINYINT(1) NOT NULL DEFAULT 0,
+            manual_regular_hours DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+            manual_overtime_hours DECIMAL(6,2) NOT NULL DEFAULT 0.00,
             notes VARCHAR(255) NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
@@ -206,6 +209,17 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
             INDEX idx_employee_id (employee_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    $columns = $pdo->query("SHOW COLUMNS FROM payroll_manual_incentives")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('use_manual_hours', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN use_manual_hours TINYINT(1) NOT NULL DEFAULT 0 AFTER night_incentive");
+    }
+    if (!in_array('manual_regular_hours', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN manual_regular_hours DECIMAL(6,2) NOT NULL DEFAULT 0.00 AFTER use_manual_hours");
+    }
+    if (!in_array('manual_overtime_hours', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN manual_overtime_hours DECIMAL(6,2) NOT NULL DEFAULT 0.00 AFTER manual_regular_hours");
+    }
 
     $ensured = true;
 }
@@ -218,7 +232,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
     ensurePayrollManualIncentivesTable($pdo);
 
     $stmt = $pdo->prepare("
-        SELECT employee_id, sales_incentive, night_incentive, notes
+        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes
         FROM payroll_manual_incentives
         WHERE payroll_period_id = ?
     ");
@@ -229,6 +243,9 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
         $incentives[(int) $row['employee_id']] = [
             'sales_incentive' => (float) $row['sales_incentive'],
             'night_incentive' => (float) $row['night_incentive'],
+            'use_manual_hours' => (int) ($row['use_manual_hours'] ?? 0),
+            'manual_regular_hours' => (float) ($row['manual_regular_hours'] ?? 0),
+            'manual_overtime_hours' => (float) ($row['manual_overtime_hours'] ?? 0),
             'notes' => $row['notes'] ?? null,
         ];
     }

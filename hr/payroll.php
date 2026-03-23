@@ -101,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         foreach ($employees as $emp) {
             $userId = $emp['user_id'];
             $employeeId = $emp['id'];
+            $manualInput = $manualIncentivesMap[$employeeId] ?? null;
             
             // Calculate hours from attendance.
             // NOTE: For precision consistency with /records and the Daily Attendance Report,
@@ -158,6 +159,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                     }
                 }
             }
+
+            $manualRegularHours = max(0, round((float) ($manualInput['manual_regular_hours'] ?? 0), 2));
+            $manualOvertimeHours = max(0, round((float) ($manualInput['manual_overtime_hours'] ?? 0), 2));
+
+            if (!empty($manualInput['use_manual_hours'])) {
+                $totalRegularHours = $manualRegularHours;
+                $totalOvertimeHours = $manualOvertimeHours;
+            } else {
+                $totalRegularHours += $manualRegularHours;
+                $totalOvertimeHours += $manualOvertimeHours;
+            }
+
+            $daysWorked = (int) ceil(max($totalRegularHours + $totalOvertimeHours, 0) / max($scheduledHours, 0.01));
             
             // Calculate payroll
             $hoursData = [
@@ -249,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
     }
 }
 
-// Handle manual incentives save
+// Handle manual payroll inputs save
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentives'])) {
     $periodId = (int)($_POST['period_id'] ?? 0);
 
@@ -260,7 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
     if (!$period) {
         $errorMsg = "PerÃ­odo no encontrado.";
     } elseif (!in_array($period['status'], ['DRAFT', 'CALCULATED'], true)) {
-        $errorMsg = "Solo puedes editar incentivos en perÃ­odos DRAFT o CALCULATED.";
+        $errorMsg = "Solo puedes editar ajustes manuales en perÃ­odos DRAFT o CALCULATED.";
     } else {
         $rows = $_POST['manual_incentives'] ?? [];
 
@@ -268,11 +282,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
         try {
             $deleteStmt = $pdo->prepare("DELETE FROM payroll_manual_incentives WHERE payroll_period_id = ? AND employee_id = ?");
             $upsertStmt = $pdo->prepare("
-                INSERT INTO payroll_manual_incentives (payroll_period_id, employee_id, sales_incentive, night_incentive, notes)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO payroll_manual_incentives (
+                    payroll_period_id, employee_id, sales_incentive, night_incentive,
+                    use_manual_hours, manual_regular_hours, manual_overtime_hours, notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     sales_incentive = VALUES(sales_incentive),
                     night_incentive = VALUES(night_incentive),
+                    use_manual_hours = VALUES(use_manual_hours),
+                    manual_regular_hours = VALUES(manual_regular_hours),
+                    manual_overtime_hours = VALUES(manual_overtime_hours),
                     notes = VALUES(notes)
             ");
 
@@ -284,22 +304,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
 
                 $sales = isset($values['sales']) ? round((float)$values['sales'], 2) : 0.00;
                 $night = isset($values['night']) ? round((float)$values['night'], 2) : 0.00;
+                $useManualHours = !empty($values['use_manual_hours']) ? 1 : 0;
+                $manualRegularHours = isset($values['manual_regular_hours']) ? round(max((float)$values['manual_regular_hours'], 0), 2) : 0.00;
+                $manualOvertimeHours = isset($values['manual_overtime_hours']) ? round(max((float)$values['manual_overtime_hours'], 0), 2) : 0.00;
                 $notes = trim((string)($values['notes'] ?? ''));
                 $notes = $notes !== '' ? mb_substr($notes, 0, 255) : null;
 
-                if ($sales == 0.0 && $night == 0.0 && $notes === null) {
+                if ($sales == 0.0 && $night == 0.0 && $useManualHours === 0 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0 && $notes === null) {
                     $deleteStmt->execute([$periodId, $employeeId]);
                     continue;
                 }
 
-                $upsertStmt->execute([$periodId, $employeeId, $sales, $night, $notes]);
+                $upsertStmt->execute([
+                    $periodId,
+                    $employeeId,
+                    $sales,
+                    $night,
+                    $useManualHours,
+                    $manualRegularHours,
+                    $manualOvertimeHours,
+                    $notes
+                ]);
             }
 
             $pdo->commit();
-            $successMsg = "Incentivos manuales guardados. Recalcula la nÃ³mina para reflejar los montos.";
+            $successMsg = "Ajustes manuales guardados. Recalcula la nÃ³mina para reflejar horas e incentivos.";
         } catch (Exception $e) {
             $pdo->rollBack();
-            $errorMsg = "Error al guardar incentivos: " . $e->getMessage();
+            $errorMsg = "Error al guardar ajustes manuales: " . $e->getMessage();
         }
     }
 }
@@ -323,7 +355,7 @@ $selectedPeriodId = isset($_GET['period_id']) ? (int)$_GET['period_id'] : null;
 $selectedPeriod = null;
 $payrollRecords = [];
 $manualIncentives = [];
-$agentEmployees = [];
+$editableEmployees = [];
 
 if ($selectedPeriodId) {
     $stmt = $pdo->prepare("SELECT * FROM payroll_periods WHERE id = ?");
@@ -338,16 +370,18 @@ if ($selectedPeriodId) {
             FROM employees e
             JOIN users u ON u.id = e.user_id
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
-              AND UPPER(COALESCE(u.role, '')) = 'AGENT'
-            ORDER BY e.first_name, e.last_name
+            ORDER BY e.last_name, e.first_name
         ");
         $agentsStmt->execute();
-        $agentEmployees = $agentsStmt->fetchAll(PDO::FETCH_ASSOC);
+        $editableEmployees = $agentsStmt->fetchAll(PDO::FETCH_ASSOC);
 
         $recordsStmt = $pdo->prepare("
             SELECT pr.*, e.first_name, e.last_name, e.employee_code, e.identification_number, d.name as department_name,
                    COALESCE(pmi.sales_incentive, 0) as sales_incentive,
-                   COALESCE(pmi.night_incentive, 0) as night_incentive
+                   COALESCE(pmi.night_incentive, 0) as night_incentive,
+                   COALESCE(pmi.use_manual_hours, 0) as use_manual_hours,
+                   COALESCE(pmi.manual_regular_hours, 0) as manual_regular_hours,
+                   COALESCE(pmi.manual_overtime_hours, 0) as manual_overtime_hours
             FROM payroll_records pr
             JOIN employees e ON e.id = pr.employee_id
             LEFT JOIN departments d ON d.id = e.department_id
@@ -525,17 +559,17 @@ if ($selectedPeriodId) {
                     <div>
                         <h2 class="text-xl font-semibold">
                             <i class="fas fa-moon text-amber-400 mr-2"></i>
-                            Incentivos Manuales por Agente
+                            Ajustes Manuales por Empleado
                         </h2>
-                        <p class="text-sm text-slate-400">Ingresa incentivos de ventas y nocturnos. Luego recalcula la nomina del periodo.</p>
+                        <p class="text-sm text-slate-400">Las horas de ponche siguen siendo la base. Las horas manuales se suman por defecto; si marcas la casilla, corrigen el total calculado para ese empleado.</p>
                     </div>
                     <div class="text-sm text-slate-400">
                         Estado del periodo: <span class="font-semibold text-slate-200"><?= htmlspecialchars($selectedPeriod['status']) ?></span>
                     </div>
                 </div>
 
-                <?php if (empty($agentEmployees)): ?>
-                    <p class="text-slate-400">No hay agentes activos disponibles para capturar incentivos.</p>
+                <?php if (empty($editableEmployees)): ?>
+                    <p class="text-slate-400">No hay empleados activos disponibles para capturar ajustes.</p>
                 <?php else: ?>
                     <form method="POST">
                         <input type="hidden" name="save_manual_incentives" value="1">
@@ -545,23 +579,62 @@ if ($selectedPeriodId) {
                             <table class="w-full text-sm">
                                 <thead>
                                     <tr class="border-b border-slate-700">
-                                        <th class="text-left py-2 px-2">Agente</th>
+                                        <th class="text-left py-2 px-2">Empleado</th>
                                         <th class="text-left py-2 px-2">Codigo</th>
+                                        <th class="text-center py-2 px-2">Corregir Base</th>
+                                        <th class="text-right py-2 px-2">Horas Regulares</th>
+                                        <th class="text-right py-2 px-2">Horas Extra</th>
                                         <th class="text-right py-2 px-2">Incentivo Ventas</th>
                                         <th class="text-right py-2 px-2">Incentivo Nocturno</th>
                                         <th class="text-left py-2 px-2">Nota</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($agentEmployees as $agent): 
-                                        $agentIncentive = $manualIncentives[(int)$agent['id']] ?? ['sales_incentive' => 0, 'night_incentive' => 0, 'notes' => ''];
+                                    <?php foreach ($editableEmployees as $agent): 
+                                        $agentIncentive = $manualIncentives[(int)$agent['id']] ?? [
+                                            'sales_incentive' => 0,
+                                            'night_incentive' => 0,
+                                            'use_manual_hours' => 0,
+                                            'manual_regular_hours' => 0,
+                                            'manual_overtime_hours' => 0,
+                                            'notes' => ''
+                                        ];
                                     ?>
                                         <tr class="border-b border-slate-800 hover:bg-slate-800/40">
                                             <td class="py-2 px-2">
                                                 <div class="font-medium"><?= htmlspecialchars($agent['first_name'] . ' ' . $agent['last_name']) ?></div>
-                                                <div class="text-xs text-slate-400"><?= htmlspecialchars($agent['position'] ?: 'Agente') ?></div>
+                                                <div class="text-xs text-slate-400"><?= htmlspecialchars($agent['position'] ?: ($agent['role'] ?: 'Empleado')) ?></div>
                                             </td>
                                             <td class="py-2 px-2 text-slate-300"><?= htmlspecialchars($agent['employee_code']) ?></td>
+                                            <td class="py-2 px-2 text-center">
+                                                <input
+                                                    type="checkbox"
+                                                    name="manual_incentives[<?= (int)$agent['id'] ?>][use_manual_hours]"
+                                                    value="1"
+                                                    <?= !empty($agentIncentive['use_manual_hours']) ? 'checked' : '' ?>
+                                                    class="h-4 w-4 rounded border-slate-600 bg-slate-900"
+                                                >
+                                            </td>
+                                            <td class="py-2 px-2">
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    name="manual_incentives[<?= (int)$agent['id'] ?>][manual_regular_hours]"
+                                                    value="<?= htmlspecialchars(number_format((float)$agentIncentive['manual_regular_hours'], 2, '.', '')) ?>"
+                                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                                >
+                                            </td>
+                                            <td class="py-2 px-2">
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    name="manual_incentives[<?= (int)$agent['id'] ?>][manual_overtime_hours]"
+                                                    value="<?= htmlspecialchars(number_format((float)$agentIncentive['manual_overtime_hours'], 2, '.', '')) ?>"
+                                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                                >
+                                            </td>
                                             <td class="py-2 px-2">
                                                 <input
                                                     type="number"
@@ -601,9 +674,9 @@ if ($selectedPeriodId) {
                         <div class="mt-4 flex flex-wrap gap-3">
                             <button type="submit" class="btn-primary">
                                 <i class="fas fa-save"></i>
-                                Guardar Incentivos
+                                Guardar Ajustes
                             </button>
-                            <span class="text-sm text-slate-400 self-center">Los montos guardados se suman al salario bruto cuando recalculas la nomina.</span>
+                            <span class="text-sm text-slate-400 self-center">Sin marcar la casilla, las horas ingresadas se agregan al ponche. Marcada, reemplazan las horas calculadas para corregir el total.</span>
                         </div>
                     </form>
                 <?php endif; ?>
@@ -647,6 +720,8 @@ if ($selectedPeriodId) {
                             <tr class="border-b border-slate-700">
                                 <th class="text-left py-2 px-2">Empleado</th>
                                 <th class="text-center py-2 px-2">Horas</th>
+                                <th class="text-center py-2 px-2">Horas Extra</th>
+                                <th class="text-center py-2 px-2">Origen</th>
                                 <th class="text-right py-2 px-2">Inc. Ventas</th>
                                 <th class="text-right py-2 px-2">Inc. Nocturno</th>
                                 <th class="text-right py-2 px-2">Salario Bruto</th>
@@ -660,8 +735,10 @@ if ($selectedPeriodId) {
                         </thead>
                         <tbody>
                             <?php 
-                            $totals = ['sales' => 0, 'night' => 0, 'gross' => 0, 'afp' => 0, 'sfs' => 0, 'isr' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0];
+                            $totals = ['hours' => 0, 'overtime_hours' => 0, 'sales' => 0, 'night' => 0, 'gross' => 0, 'afp' => 0, 'sfs' => 0, 'isr' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0];
                             foreach ($payrollRecords as $record): 
+                                $totals['hours'] += $record['total_hours'];
+                                $totals['overtime_hours'] += $record['overtime_hours'];
                                 $totals['sales'] += $record['sales_incentive'];
                                 $totals['night'] += $record['night_incentive'];
                                 $totals['gross'] += $record['gross_salary'];
@@ -678,6 +755,24 @@ if ($selectedPeriodId) {
                                         <div class="text-xs text-slate-400"><?= htmlspecialchars($record['employee_code']) ?></div>
                                     </td>
                                     <td class="py-2 px-2 text-center"><?= number_format($record['total_hours'], 1) ?></td>
+                                    <td class="py-2 px-2 text-center"><?= number_format($record['overtime_hours'], 1) ?></td>
+                                    <td class="py-2 px-2 text-center">
+                                        <?php
+                                        $hasManualExtra = ((float) $record['manual_regular_hours'] > 0 || (float) $record['manual_overtime_hours'] > 0);
+                                        $originLabel = 'Asistencia';
+                                        $originClass = 'bg-slate-700 text-slate-200';
+                                        if (!empty($record['use_manual_hours'])) {
+                                            $originLabel = 'Corregida';
+                                            $originClass = 'bg-amber-500 text-slate-900';
+                                        } elseif ($hasManualExtra) {
+                                            $originLabel = 'Asistencia + Manual';
+                                            $originClass = 'bg-blue-600 text-white';
+                                        }
+                                        ?>
+                                        <span class="px-2 py-1 rounded-full text-xs font-semibold <?= $originClass ?>">
+                                            <?= $originLabel ?>
+                                        </span>
+                                    </td>
                                     <td class="py-2 px-2 text-right text-emerald-300"><?= formatDOP($record['sales_incentive']) ?></td>
                                     <td class="py-2 px-2 text-right text-amber-300"><?= formatDOP($record['night_incentive']) ?></td>
                                     <td class="py-2 px-2 text-right font-semibold"><?= formatDOP($record['gross_salary']) ?></td>
@@ -690,7 +785,10 @@ if ($selectedPeriodId) {
                                 </tr>
                             <?php endforeach; ?>
                             <tr class="bg-slate-800/70 font-bold">
-                                <td colspan="2" class="py-3 px-2">TOTALES</td>
+                                <td class="py-3 px-2">TOTALES</td>
+                                <td class="py-3 px-2 text-center"><?= number_format($totals['hours'], 1) ?></td>
+                                <td class="py-3 px-2 text-center"><?= number_format($totals['overtime_hours'], 1) ?></td>
+                                <td class="py-3 px-2 text-center text-slate-400">-</td>
                                 <td class="py-3 px-2 text-right text-emerald-300"><?= formatDOP($totals['sales']) ?></td>
                                 <td class="py-3 px-2 text-right text-amber-300"><?= formatDOP($totals['night']) ?></td>
                                 <td class="py-3 px-2 text-right"><?= formatDOP($totals['gross']) ?></td>
