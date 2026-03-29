@@ -31,6 +31,8 @@ $sections = [
     'wfm_planning' => ['label' => 'Planificacion WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-calendar-check', 'description' => 'Pronostico, dimensionamiento y alertas intradia'],
     'vicidial_reports' => ['label' => 'Reportes Vicidial', 'category' => 'Registros y Reportes', 'icon' => 'fa-phone-volume', 'description' => 'Estadísticas de Login y Actividad de Agentes Vicidial'],
 
+    'voice_ai_reports' => ['label' => 'Comms GHL Reports', 'category' => 'Registros y Reportes', 'icon' => 'fa-robot', 'description' => 'Dashboard integral de llamadas, mensajes, usuarios y Voice AI en GoHighLevel'],
+
     // Attendance
     'register_attendance' => ['label' => 'Registrar Horas', 'category' => 'Asistencia', 'icon' => 'fa-calendar-plus', 'description' => 'Registro de horas administrativas'],
 

@@ -21,6 +21,7 @@ $navItems = [
     'adherence_report' => ['label' => 'Adherencia', 'href' => $baseHref . 'adherencia_report_hr.php', 'icon' => 'fa-chart-line'],
     'wfm_report' => ['label' => 'Reporte WFM', 'href' => $baseHref . 'wfm_report.php', 'icon' => 'fa-chart-area'],
     'vicidial_reports' => ['label' => 'Reportes Vicidial', 'href' => $baseHref . 'vicidial_reports.php', 'icon' => 'fa-phone-volume'],
+    'voice_ai_reports' => ['label' => 'Comms GHL', 'href' => $baseHref . 'voice_ai_reports.php', 'icon' => 'fa-robot'],
     'wasapi_reports' => ['label' => 'Centro Wasapi', 'href' => $baseHref . 'wasapi_reports/', 'icon' => 'fa-whatsapp'],
     'operations_dashboard' => ['label' => 'Operaciones', 'href' => $baseHref . 'operations_dashboard.php', 'icon' => 'fa-sitemap'],
     'hr_module' => [
