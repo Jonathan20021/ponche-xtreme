@@ -201,6 +201,15 @@ require_once __DIR__ . '/header.php';
                 </select>
             </div>
             <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Disposicion</label>
+                <select x-model="filters.disposition" class="w-full rounded-xl bg-slate-950 border border-slate-700 text-slate-100 px-4 py-3">
+                    <option value="">Todas</option>
+                    <template x-for="disposition in availableFilters.interaction_dispositions" :key="disposition">
+                        <option :value="disposition" x-text="disposition"></option>
+                    </template>
+                </select>
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-slate-300 mb-2">Usuario</label>
                 <select x-model="filters.user_id" class="w-full rounded-xl bg-slate-950 border border-slate-700 text-slate-100 px-4 py-3">
                     <option value="">Todos</option>
@@ -319,6 +328,76 @@ require_once __DIR__ . '/header.php';
     </div>
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-700/70">
+                <h2 class="text-lg font-semibold text-white">Disposiciones de llamadas</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-950/60 text-slate-400">
+                        <tr>
+                            <th class="px-6 py-4 text-left">Disposicion</th>
+                            <th class="px-6 py-4 text-right">Total</th>
+                            <th class="px-6 py-4 text-right">Inbound</th>
+                            <th class="px-6 py-4 text-right">Outbound</th>
+                            <th class="px-6 py-4 text-right">Duracion promedio</th>
+                            <th class="px-6 py-4 text-right">Grabadas</th>
+                            <th class="px-6 py-4 text-right">Usuarios</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 text-slate-200">
+                        <template x-for="row in dashboard.call_dispositions" :key="row.disposition">
+                            <tr class="hover:bg-slate-800/50">
+                                <td class="px-6 py-4 font-medium text-white" x-text="row.disposition"></td>
+                                <td class="px-6 py-4 text-right" x-text="row.total"></td>
+                                <td class="px-6 py-4 text-right" x-text="row.inbound"></td>
+                                <td class="px-6 py-4 text-right" x-text="row.outbound"></td>
+                                <td class="px-6 py-4 text-right" x-text="formatDuration(row.avg_duration_seconds)"></td>
+                                <td class="px-6 py-4 text-right" x-text="row.recorded_calls"></td>
+                                <td class="px-6 py-4 text-right" x-text="row.users"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="dashboard.call_dispositions.length === 0 && !isLoading" style="display:none;">
+                            <td colspan="7" class="px-6 py-8 text-center text-slate-500">No hay disposiciones disponibles para este rango.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-700/70">
+                <h2 class="text-lg font-semibold text-white">Disposicion principal por usuario</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-950/60 text-slate-400">
+                        <tr>
+                            <th class="px-6 py-4 text-left">Usuario</th>
+                            <th class="px-6 py-4 text-right">Llamadas</th>
+                            <th class="px-6 py-4 text-left">Disposicion top</th>
+                            <th class="px-6 py-4 text-right">Total top</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 text-slate-200">
+                        <template x-for="row in dashboard.disposition_by_user" :key="row.user_id || row.user_name">
+                            <tr class="hover:bg-slate-800/50">
+                                <td class="px-6 py-4 font-medium text-white" x-text="row.user_name"></td>
+                                <td class="px-6 py-4 text-right" x-text="row.total_calls"></td>
+                                <td class="px-6 py-4" x-text="row.top_disposition"></td>
+                                <td class="px-6 py-4 text-right" x-text="row.top_disposition_calls"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="dashboard.disposition_by_user.length === 0 && !isLoading" style="display:none;">
+                            <td colspan="4" class="px-6 py-8 text-center text-slate-500">Sin datos de disposicion por usuario en este rango.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
         <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 backdrop-blur-sm">
             <h2 class="text-lg font-semibold text-white mb-4">Llamadas inbound vs outbound</h2>
             <div class="relative h-72">
@@ -362,6 +441,15 @@ require_once __DIR__ . '/header.php';
                     <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
                 </div>
                 <canvas id="voiceAiChannelDirectionChart"></canvas>
+            </div>
+        </section>
+        <section class="xl:col-span-2 rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 backdrop-blur-sm">
+            <h2 class="text-lg font-semibold text-white mb-4">Resultados por disposicion</h2>
+            <div class="relative h-80">
+                <div x-show="isLoading" style="display:none;" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/50 rounded-xl">
+                    <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                </div>
+                <canvas id="voiceAiDispositionChart"></canvas>
             </div>
         </section>
     </div>
@@ -1045,6 +1133,10 @@ require_once __DIR__ . '/header.php';
                                         <dd class="text-slate-200" x-text="activeCall.status || 'Unknown'"></dd>
                                     </div>
                                     <div class="flex justify-between gap-4">
+                                        <dt class="text-slate-500">Disposicion</dt>
+                                        <dd class="text-slate-200" x-text="activeCall.disposition || '--'"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
                                         <dt class="text-slate-500">Sentiment</dt>
                                         <dd class="text-slate-200" x-text="activeCall.sentiment || '--'"></dd>
                                     </div>
@@ -1113,6 +1205,7 @@ require_once __DIR__ . '/header.php';
                 interaction_channels: [],
                 interaction_directions: [],
                 interaction_statuses: [],
+                interaction_dispositions: [],
                 interaction_sources: [],
                 interaction_users: []
             },
@@ -1122,7 +1215,8 @@ require_once __DIR__ . '/header.php';
                     channels: {},
                     directions: {},
                     statuses: {},
-                    sources: {}
+                    sources: {},
+                    call_dispositions: {}
                 },
                 timeline: {
                     by_day: {},
@@ -1140,6 +1234,8 @@ require_once __DIR__ . '/header.php';
                 numbers: [],
                 numbers_usage: [],
                 message_breakdown: [],
+                call_dispositions: [],
+                disposition_by_user: [],
                 users_catalog: [],
                 numbers_catalog: [],
                 recent_interactions: [],
@@ -1157,6 +1253,7 @@ require_once __DIR__ . '/header.php';
                 interaction_channel: '',
                 direction: '',
                 status: '',
+                disposition: '',
                 source: '',
                 user_id: '',
                 search: '',
@@ -1187,6 +1284,8 @@ require_once __DIR__ . '/header.php';
                 agents: 8,
                 contacts: 8,
                 message_breakdown: 8,
+                call_dispositions: 8,
+                disposition_by_user: 8,
                 recent_inbound_calls: 8,
                 recent_outbound_calls: 8,
                 recent_interactions: 15
@@ -1337,6 +1436,7 @@ require_once __DIR__ . '/header.php';
                     interaction_channel: '',
                     direction: '',
                     status: '',
+                    disposition: '',
                     source: '',
                     user_id: '',
                     search: '',
@@ -1397,6 +1497,7 @@ require_once __DIR__ . '/header.php';
                     interaction_channel: this.filters.interaction_channel || '',
                     direction: this.filters.direction || '',
                     status: this.filters.status || '',
+                    disposition: this.filters.disposition || '',
                     source: this.filters.source || '',
                     user_id: this.filters.user_id || '',
                     search: this.filters.search || '',
@@ -1619,6 +1720,7 @@ require_once __DIR__ . '/header.php';
                     .filter(([key]) => ['inbound', 'outbound'].includes(key));
                 const messageDirectionEntries = Object.entries(this.dashboard.distributions.message_directions || {})
                     .filter(([key]) => ['inbound', 'outbound'].includes(key));
+                const dispositionEntries = Object.entries(this.dashboard.distributions.call_dispositions || {}).slice(0, 15);
                 const weekdayEntries = Object.entries(this.dashboard.timeline.by_weekday || {});
                 const hourLabels = Object.keys((this.dashboard.timeline.by_hour_direction || {}).inbound || {});
                 const hourInboundValues = Object.values((this.dashboard.timeline.by_hour_direction || {}).inbound || {});
@@ -1865,6 +1967,32 @@ require_once __DIR__ . '/header.php';
                             },
                             y: {
                                 stacked: true,
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                upsertChart('voiceAiDispositionChart', {
+                    type: 'bar',
+                    data: {
+                        labels: dispositionEntries.map(([label]) => label),
+                        datasets: [{
+                            label: 'Llamadas',
+                            data: dispositionEntries.map(([, value]) => value),
+                            backgroundColor: this.chartPalette(dispositionEntries.length)
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
                                 beginAtZero: true
                             }
                         }

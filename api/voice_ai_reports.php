@@ -84,6 +84,7 @@ function voiceAiBuildFiltersFromRequest(): array
         'interaction_channel' => trim((string) ($_GET['interaction_channel'] ?? '')),
         'direction' => trim((string) ($_GET['direction'] ?? '')),
         'status' => trim((string) ($_GET['status'] ?? '')),
+        'disposition' => trim((string) ($_GET['disposition'] ?? '')),
         'source' => trim((string) ($_GET['source'] ?? '')),
         'user_id' => trim((string) ($_GET['user_id'] ?? '')),
         'call_type' => trim((string) ($_GET['call_type'] ?? '')),
@@ -94,6 +95,45 @@ function voiceAiBuildFiltersFromRequest(): array
         'with_comparison' => ($_GET['with_comparison'] ?? '0') === '1',
         'sort_order' => strtolower((string) ($_GET['sort_order'] ?? 'desc')) === 'asc' ? 'asc' : 'desc',
     ];
+}
+
+function voiceAiIsTransientDbError(Throwable $e): bool
+{
+    $message = strtolower($e->getMessage());
+    if (strpos($message, 'server has gone away') !== false) {
+        return true;
+    }
+    if (strpos($message, 'lost connection') !== false) {
+        return true;
+    }
+
+    if ($e instanceof PDOException) {
+        $code = (string) $e->getCode();
+        if ($code === '2006' || $code === '2013') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function voiceAiReconnectPdo(): ?PDO
+{
+    global $host, $dbname, $username, $password, $pdo;
+
+    try {
+        $pdo = new PDO("mysql:host={$host};dbname={$dbname};charset=utf8mb4", $username, $password, [
+            PDO::ATTR_PERSISTENT => true,
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+        $pdo->exec("SET NAMES utf8mb4");
+        $pdo->exec("SET time_zone = '-04:00'");
+        return $pdo;
+    } catch (Throwable $e) {
+        return null;
+    }
 }
 
 if (!isset($_SESSION['user_id']) || !userHasPermission('voice_ai_reports')) {
@@ -146,7 +186,21 @@ try {
         case 'dashboard':
         default:
             $filters = voiceAiBuildFiltersFromRequest();
-            $result = voiceAiBuildReportPayload($pdo, $filters, !empty($filters['with_comparison']));
+            try {
+                $result = voiceAiBuildReportPayload($pdo, $filters, !empty($filters['with_comparison']));
+            } catch (Throwable $retryableError) {
+                if (!voiceAiIsTransientDbError($retryableError)) {
+                    throw $retryableError;
+                }
+
+                $reconnected = voiceAiReconnectPdo();
+                if (!$reconnected) {
+                    throw $retryableError;
+                }
+
+                voiceAiSetContextIntegrationId($filters['integration_id'] ?? null);
+                $result = voiceAiBuildReportPayload($reconnected, $filters, !empty($filters['with_comparison']));
+            }
             voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
             break;
     }

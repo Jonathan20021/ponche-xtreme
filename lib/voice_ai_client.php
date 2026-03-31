@@ -860,6 +860,25 @@ if (!function_exists('voiceAiNormalizeCall')) {
             'type',
         ], 'Unknown'));
 
+        $disposition = trim((string) voiceAiPickValue($raw, [
+            'dispositionName',
+            'disposition',
+            'callDisposition',
+            'callResult',
+            'analysis.disposition',
+            'outcome',
+            'result',
+        ], ''));
+        $dispositionId = trim((string) voiceAiPickValue($raw, [
+            'dispositionId',
+            'callDispositionId',
+            'analysis.dispositionId',
+        ], ''));
+
+        if ($disposition === '' && $status !== '' && strcasecmp($status, 'Unknown') !== 0) {
+            $disposition = $status;
+        }
+
         return [
             'call_id' => (string) voiceAiPickValue($raw, ['callId', 'call_id', 'id'], ''),
             'started_at' => voiceAiNormalizeDate($startedAtValue),
@@ -868,6 +887,8 @@ if (!function_exists('voiceAiNormalizeCall')) {
             'ended_at_ts' => voiceAiToTimestamp($endedAtValue),
             'call_type' => $callType !== '' ? $callType : 'Unknown',
             'status' => $status !== '' ? $status : 'Unknown',
+            'disposition' => $disposition,
+            'disposition_id' => $dispositionId,
             'duration_seconds' => voiceAiNormalizeDuration(voiceAiPickValue($raw, [
                 'durationSeconds',
                 'duration',
@@ -1323,6 +1344,7 @@ if (!function_exists('voiceAiBuildDashboard')) {
         $uniqueContacts = [];
         $callTypes = [];
         $statuses = [];
+        $dispositions = [];
         $actions = [];
         $sentiments = [];
         $timelineDays = [];
@@ -1349,11 +1371,15 @@ if (!function_exists('voiceAiBuildDashboard')) {
 
             $type = $call['call_type'] ?: 'Unknown';
             $status = $call['status'] ?: 'Unknown';
+            $disposition = trim((string) ($call['disposition'] ?? ''));
             $sentiment = $call['sentiment'] ?: 'Unknown';
             $duration = (int) ($call['duration_seconds'] ?? 0);
 
             $callTypes[$type] = ($callTypes[$type] ?? 0) + 1;
             $statuses[$status] = ($statuses[$status] ?? 0) + 1;
+            if ($disposition !== '') {
+                $dispositions[$disposition] = ($dispositions[$disposition] ?? 0) + 1;
+            }
             if ($call['sentiment'] !== '') {
                 $sentiments[$sentiment] = ($sentiments[$sentiment] ?? 0) + 1;
             }
@@ -1426,6 +1452,7 @@ if (!function_exists('voiceAiBuildDashboard')) {
         ksort($timelineDays);
         arsort($callTypes);
         arsort($statuses);
+        arsort($dispositions);
         arsort($actions);
         arsort($sentiments);
 
@@ -1521,6 +1548,7 @@ if (!function_exists('voiceAiBuildDashboard')) {
             'distributions' => [
                 'call_types' => $callTypes,
                 'statuses' => $statuses,
+                'dispositions' => $dispositions,
                 'actions' => $actions,
                 'sentiments' => $sentiments,
             ],
@@ -1578,6 +1606,13 @@ if (!function_exists('voiceAiBuildReportPayload')) {
         $filters = voiceAiNormalizeReportFilters($filters);
         $withComparison = $withComparison && !empty($filters['with_comparison']);
         $fastMode = !array_key_exists('fast_mode', $filters) || !empty($filters['fast_mode']);
+        $runtimeFilters = $filters;
+        if ($fastMode) {
+            $runtimeFilters['interaction_max_pages'] = min((int) ($runtimeFilters['interaction_max_pages'] ?? 12), 12);
+            $runtimeFilters['interaction_page_size'] = min((int) ($runtimeFilters['interaction_page_size'] ?? 50), 50);
+            $runtimeFilters['max_pages'] = min((int) ($runtimeFilters['max_pages'] ?? 3), 3);
+            $runtimeFilters['page_size'] = min((int) ($runtimeFilters['page_size'] ?? 25), 25);
+        }
         voiceAiSetContextIntegrationId($filters['integration_id'] ?? null);
         $config = voiceAiGetConfig($pdo, $filters['integration_id'] ?? null);
         $cacheKey = voiceAiBuildReportsCacheKey($config, $filters, $withComparison);
@@ -1589,14 +1624,14 @@ if (!function_exists('voiceAiBuildReportPayload')) {
         $timings = [];
 
         $stageStart = microtime(true);
-        $interactions = voiceAiFetchInteractions($pdo, $filters);
+        $interactions = voiceAiFetchInteractions($pdo, $runtimeFilters);
         $timings['interactions_fetch_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
         if (!$interactions['success']) {
             return $interactions;
         }
 
         $stageStart = microtime(true);
-        $interactionTotalsResult = voiceAiFetchInteractionTotals($pdo, $filters, $interactions['items'] ?? [], $interactions['meta'] ?? []);
+        $interactionTotalsResult = voiceAiFetchInteractionTotals($pdo, $runtimeFilters, $interactions['items'] ?? [], $interactions['meta'] ?? []);
         $interactionTotals = $interactionTotalsResult['success'] ? ($interactionTotalsResult['totals'] ?? []) : [];
         $timings['interaction_totals_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
 
@@ -1644,14 +1679,14 @@ if (!function_exists('voiceAiBuildReportPayload')) {
         $conversationsTotal = $conversationsResult['success'] ? (int) ($conversationsResult['total'] ?? count($conversationsSnapshot)) : 0;
 
         $stageStart = microtime(true);
-        $current = voiceAiFetchCalls($pdo, $filters);
+        $current = voiceAiFetchCalls($pdo, $runtimeFilters);
         $timings['voice_ai_calls_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
         $previousCalls = [];
         $previousRange = null;
         $voiceAiWarnings = [];
 
         if ($current['success'] && $withComparison) {
-            $previousFilters = voiceAiShiftDateWindow($filters);
+            $previousFilters = voiceAiShiftDateWindow($runtimeFilters);
             if ($previousFilters !== null) {
                 $previousRange = [
                     'start_date' => $previousFilters['start_date'],
@@ -2043,6 +2078,11 @@ if (!function_exists('voiceAiNormalizeReportFilters')) {
             if ($value !== '') {
                 $normalized[$key] = $value;
             }
+        }
+
+        $disposition = trim((string) ($filters['disposition'] ?? ''));
+        if ($disposition !== '') {
+            $normalized['disposition'] = $disposition;
         }
 
         $search = trim((string) ($filters['search'] ?? ''));
@@ -2549,9 +2589,27 @@ if (!function_exists('voiceAiNormalizeInteractionMessage')) {
         $user = $userMap[$userId] ?? null;
         $direction = strtolower(trim((string) ($raw['direction'] ?? '')));
         $status = trim((string) ($raw['status'] ?? ($raw['meta']['call']['status'] ?? '')));
+        $callDisposition = trim((string) voiceAiPickValue($raw, [
+            'dispositionName',
+            'disposition',
+            'callDisposition',
+            'meta.call.dispositionName',
+            'meta.call.disposition',
+            'meta.call.outcome',
+            'meta.call.result',
+        ], ''));
+        $callDispositionId = trim((string) voiceAiPickValue($raw, [
+            'dispositionId',
+            'callDispositionId',
+            'meta.call.dispositionId',
+        ], ''));
         $duration = 0;
         if (isset($raw['meta']['call']['duration']) && $raw['meta']['call']['duration'] !== null) {
             $duration = (int) $raw['meta']['call']['duration'];
+        }
+
+        if ($callDisposition === '' && $channel === 'Call' && $status !== '' && strcasecmp($status, 'unknown') !== 0) {
+            $callDisposition = $status;
         }
 
         $fromValue = voiceAiNormalizeRecipientValue($raw['from'] ?? '');
@@ -2583,6 +2641,8 @@ if (!function_exists('voiceAiNormalizeInteractionMessage')) {
             'channel' => $channel,
             'direction' => $direction !== '' ? $direction : 'unknown',
             'status' => $status !== '' ? $status : 'unknown',
+            'call_disposition' => $callDisposition,
+            'call_disposition_id' => $callDispositionId,
             'source' => trim((string) ($raw['source'] ?? '')),
             'message_type' => trim((string) ($raw['messageType'] ?? '')),
             'type' => (int) ($raw['type'] ?? 0),
@@ -2610,6 +2670,7 @@ if (!function_exists('voiceAiApplyInteractionFilters')) {
         $search = voiceAiLower(trim((string) ($filters['search'] ?? '')));
         $direction = strtolower(trim((string) ($filters['direction'] ?? '')));
         $status = strtolower(trim((string) ($filters['status'] ?? '')));
+        $disposition = voiceAiLower(trim((string) ($filters['disposition'] ?? '')));
         $source = strtolower(trim((string) ($filters['source'] ?? '')));
         $userId = trim((string) ($filters['user_id'] ?? ''));
         $channel = voiceAiNormalizeInteractionChannel((string) ($filters['interaction_channel'] ?? ''));
@@ -2623,7 +2684,7 @@ if (!function_exists('voiceAiApplyInteractionFilters')) {
             $endTs = strtotime((string) $filters['end_date'] . ' 23:59:59');
         }
 
-        return array_values(array_filter($items, static function (array $item) use ($search, $direction, $status, $source, $userId, $channel, $startTs, $endTs): bool {
+        return array_values(array_filter($items, static function (array $item) use ($search, $direction, $status, $disposition, $source, $userId, $channel, $startTs, $endTs): bool {
             $timestamp = (int) ($item['timestamp'] ?? 0);
 
             if ($startTs !== null && $timestamp > 0 && $timestamp < $startTs) {
@@ -2637,6 +2698,15 @@ if (!function_exists('voiceAiApplyInteractionFilters')) {
             }
             if ($status !== '' && strtolower((string) ($item['status'] ?? '')) !== $status) {
                 return false;
+            }
+            if ($disposition !== '') {
+                $itemDisposition = voiceAiLower(trim((string) ($item['call_disposition'] ?? '')));
+                if ($itemDisposition === '' && !empty($item['is_call'])) {
+                    $itemDisposition = voiceAiLower(trim((string) ($item['status'] ?? '')));
+                }
+                if ($itemDisposition !== $disposition) {
+                    return false;
+                }
             }
             if ($source !== '' && strtolower((string) ($item['source'] ?? '')) !== $source) {
                 return false;
@@ -2656,6 +2726,7 @@ if (!function_exists('voiceAiApplyInteractionFilters')) {
                     (string) ($item['user_name'] ?? ''),
                     (string) ($item['body'] ?? ''),
                     (string) ($item['status'] ?? ''),
+                    (string) ($item['call_disposition'] ?? ''),
                     (string) ($item['source'] ?? ''),
                     (string) ($item['channel'] ?? ''),
                 ]));
@@ -2698,6 +2769,7 @@ if (!function_exists('voiceAiBuildInteractionAvailableFilters')) {
         $channels = [];
         $directions = [];
         $statuses = [];
+        $dispositions = [];
         $sources = [];
         $users = [];
 
@@ -2705,6 +2777,7 @@ if (!function_exists('voiceAiBuildInteractionAvailableFilters')) {
             $channel = (string) ($item['channel'] ?? '');
             $direction = (string) ($item['direction'] ?? '');
             $status = (string) ($item['status'] ?? '');
+            $disposition = (string) ($item['call_disposition'] ?? '');
             $source = (string) ($item['source'] ?? '');
             $userId = (string) ($item['user_id'] ?? '');
 
@@ -2716,6 +2789,9 @@ if (!function_exists('voiceAiBuildInteractionAvailableFilters')) {
             }
             if ($status !== '') {
                 $statuses[$status] = true;
+            }
+            if (!empty($item['is_call']) && $disposition !== '') {
+                $dispositions[$disposition] = true;
             }
             if ($source !== '') {
                 $sources[$source] = true;
@@ -2731,6 +2807,7 @@ if (!function_exists('voiceAiBuildInteractionAvailableFilters')) {
         ksort($channels);
         ksort($directions);
         ksort($statuses);
+        ksort($dispositions);
         ksort($sources);
         uasort($users, static function (array $left, array $right): int {
             return strcasecmp($left['name'], $right['name']);
@@ -2740,6 +2817,7 @@ if (!function_exists('voiceAiBuildInteractionAvailableFilters')) {
             'interaction_channels' => array_keys($channels),
             'interaction_directions' => array_keys($directions),
             'interaction_statuses' => array_keys($statuses),
+            'interaction_dispositions' => array_keys($dispositions),
             'interaction_sources' => array_keys($sources),
             'interaction_users' => array_values($users),
         ];
@@ -2899,6 +2977,7 @@ if (!function_exists('voiceAiFetchInteractionTotals')) {
         }
 
         $config = voiceAiGetConfig($pdo);
+        $fastMode = !array_key_exists('fast_mode', $filters) || !empty($filters['fast_mode']);
         $selectedChannel = voiceAiNormalizeInteractionChannel((string) ($filters['interaction_channel'] ?? ''));
         $warnings = [];
         $totals = [
@@ -2935,20 +3014,22 @@ if (!function_exists('voiceAiFetchInteractionTotals')) {
         }
 
         $channelsToQuery = [];
-        if ($selectedChannel === '') {
-            if (!$isComplete) {
+        if (!$fastMode) {
+            if ($selectedChannel === '') {
+                if (!$isComplete) {
+                    $channelsToQuery = [
+                        'non_email' => '',
+                        'call' => 'Call',
+                        'sms' => 'SMS',
+                        'whatsapp' => 'WhatsApp',
+                    ];
+                }
+                $channelsToQuery['email'] = 'Email';
+            } elseif (!$isComplete) {
                 $channelsToQuery = [
-                    'non_email' => '',
-                    'call' => 'Call',
-                    'sms' => 'SMS',
-                    'whatsapp' => 'WhatsApp',
+                    strtolower($selectedChannel) => $selectedChannel,
                 ];
             }
-            $channelsToQuery['email'] = 'Email';
-        } elseif (!$isComplete) {
-            $channelsToQuery = [
-                strtolower($selectedChannel) => $selectedChannel,
-            ];
         }
 
         foreach ($channelsToQuery as $key => $channel) {
@@ -3012,6 +3093,9 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
         $contactRows = [];
         $numberUsage = [];
         $messageBreakdown = [];
+        $callDispositions = [];
+        $callDispositionRows = [];
+        $callDispositionsByUser = [];
 
         $callDirections = [
             'inbound' => 0,
@@ -3101,6 +3185,48 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
                 } else {
                     $callDirections['unknown']++;
                 }
+
+                $dispositionLabel = trim((string) ($item['call_disposition'] ?? ''));
+                if ($dispositionLabel === '') {
+                    $dispositionLabel = 'Sin disposicion';
+                }
+                $callDispositions[$dispositionLabel] = ($callDispositions[$dispositionLabel] ?? 0) + 1;
+
+                if (!isset($callDispositionRows[$dispositionLabel])) {
+                    $callDispositionRows[$dispositionLabel] = [
+                        'disposition' => $dispositionLabel,
+                        'total' => 0,
+                        'inbound' => 0,
+                        'outbound' => 0,
+                        'total_duration_seconds' => 0,
+                        'avg_duration_seconds' => 0,
+                        'recorded_calls' => 0,
+                        'users' => [],
+                    ];
+                }
+                $callDispositionRows[$dispositionLabel]['total']++;
+                $callDispositionRows[$dispositionLabel]['total_duration_seconds'] += $duration;
+                $callDispositionRows[$dispositionLabel]['recorded_calls'] += !empty($item['has_recording']) ? 1 : 0;
+                if ($userId !== '') {
+                    $callDispositionRows[$dispositionLabel]['users'][$userId] = true;
+                }
+                if ($direction === 'inbound') {
+                    $callDispositionRows[$dispositionLabel]['inbound']++;
+                } elseif ($direction === 'outbound') {
+                    $callDispositionRows[$dispositionLabel]['outbound']++;
+                }
+
+                $userDispositionKey = $userId !== '' ? $userId : ((string) ($item['user_name'] ?? '') !== '' ? (string) $item['user_name'] : 'Sin usuario');
+                if (!isset($callDispositionsByUser[$userDispositionKey])) {
+                    $callDispositionsByUser[$userDispositionKey] = [
+                        'user_id' => $userId,
+                        'user_name' => (string) ($item['user_name'] ?? ($userId !== '' ? $userId : 'Sin usuario')),
+                        'total_calls' => 0,
+                        'dispositions' => [],
+                    ];
+                }
+                $callDispositionsByUser[$userDispositionKey]['total_calls']++;
+                $callDispositionsByUser[$userDispositionKey]['dispositions'][$dispositionLabel] = ($callDispositionsByUser[$userDispositionKey]['dispositions'][$dispositionLabel] ?? 0) + 1;
 
                 $callStatuses[$status] = ($callStatuses[$status] ?? 0) + 1;
 
@@ -3364,6 +3490,35 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
             return $right['total'] <=> $left['total'];
         });
 
+        $callDispositionRows = array_values($callDispositionRows);
+        foreach ($callDispositionRows as &$dispositionRow) {
+            $dispositionRow['avg_duration_seconds'] = $dispositionRow['total'] > 0
+                ? (int) round($dispositionRow['total_duration_seconds'] / $dispositionRow['total'])
+                : 0;
+            $dispositionRow['users'] = count($dispositionRow['users']);
+        }
+        unset($dispositionRow);
+        usort($callDispositionRows, static function (array $left, array $right): int {
+            return $right['total'] <=> $left['total'];
+        });
+
+        $callDispositionsByUserRows = [];
+        foreach ($callDispositionsByUser as $userDispositionRow) {
+            arsort($userDispositionRow['dispositions']);
+            $topDisposition = array_key_first($userDispositionRow['dispositions'] ?? []);
+            $callDispositionsByUserRows[] = [
+                'user_id' => $userDispositionRow['user_id'],
+                'user_name' => $userDispositionRow['user_name'],
+                'total_calls' => $userDispositionRow['total_calls'],
+                'top_disposition' => $topDisposition !== null ? $topDisposition : 'Sin disposicion',
+                'top_disposition_calls' => $topDisposition !== null ? (int) ($userDispositionRow['dispositions'][$topDisposition] ?? 0) : 0,
+                'dispositions' => $userDispositionRow['dispositions'],
+            ];
+        }
+        usort($callDispositionsByUserRows, static function (array $left, array $right): int {
+            return $right['total_calls'] <=> $left['total_calls'];
+        });
+
         $queueByUser = [];
         foreach ($assignmentTotals as $userId => $total) {
             $queueByUser[] = [
@@ -3384,6 +3539,7 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
         arsort($directions);
         arsort($statuses);
         arsort($sources);
+        arsort($callDispositions);
         arsort($callStatuses);
 
         $exactCallTotal = (int) ($interactionTotals['call'] ?? $callsFetched);
@@ -3496,6 +3652,7 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
                 'sources' => $sources,
                 'call_directions' => $callDirections,
                 'message_directions' => $messageDirections,
+                'call_dispositions' => $callDispositions,
                 'call_statuses' => $callStatuses,
                 'channel_directions' => $channelDirections,
             ],
@@ -3541,6 +3698,7 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
                 'message_inbound_total' => (int) ($messageDirections['inbound'] ?? 0),
                 'message_outbound_total' => (int) ($messageDirections['outbound'] ?? 0),
                 'missed_calls_total' => $missedCallTotal,
+                'dispositions_total' => count($callDispositions),
             ],
             'users' => array_slice($userRows, 0, 20),
             'contacts' => array_slice($contactRows, 0, 20),
@@ -3548,6 +3706,8 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
             'numbers' => array_slice($numbers, 0, 20),
             'numbers_usage' => array_slice($numberUsage, 0, 50),
             'message_breakdown' => $messageBreakdown,
+            'call_dispositions' => $callDispositionRows,
+            'disposition_by_user' => array_slice($callDispositionsByUserRows, 0, 50),
             'recent_interactions' => array_slice($items, 0, 100),
             'recent_calls' => array_slice(array_values(array_filter($items, static function (array $item): bool {
                 return !empty($item['is_call']);
