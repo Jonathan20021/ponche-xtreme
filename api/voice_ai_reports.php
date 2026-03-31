@@ -90,6 +90,8 @@ function voiceAiBuildFiltersFromRequest(): array
         'action_type' => trim((string) ($_GET['action_type'] ?? '')),
         'search' => trim((string) ($_GET['search'] ?? '')),
         'transcript_only' => ($_GET['transcript_only'] ?? '0') === '1',
+        'fast_mode' => ($_GET['fast_mode'] ?? '1') !== '0',
+        'with_comparison' => ($_GET['with_comparison'] ?? '0') === '1',
         'sort_order' => strtolower((string) ($_GET['sort_order'] ?? 'desc')) === 'asc' ? 'asc' : 'desc',
     ];
 }
@@ -144,7 +146,7 @@ try {
         case 'dashboard':
         default:
             $filters = voiceAiBuildFiltersFromRequest();
-            $result = voiceAiBuildReportPayload($pdo, $filters, true);
+            $result = voiceAiBuildReportPayload($pdo, $filters, !empty($filters['with_comparison']));
             voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
             break;
     }

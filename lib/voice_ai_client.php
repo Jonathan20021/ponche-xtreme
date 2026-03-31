@@ -1574,7 +1574,10 @@ if (!function_exists('voiceAiShiftDateWindow')) {
 if (!function_exists('voiceAiBuildReportPayload')) {
     function voiceAiBuildReportPayload(PDO $pdo, array $filters = [], bool $withComparison = true): array
     {
+        $startedAt = microtime(true);
         $filters = voiceAiNormalizeReportFilters($filters);
+        $withComparison = $withComparison && !empty($filters['with_comparison']);
+        $fastMode = !array_key_exists('fast_mode', $filters) || !empty($filters['fast_mode']);
         voiceAiSetContextIntegrationId($filters['integration_id'] ?? null);
         $config = voiceAiGetConfig($pdo, $filters['integration_id'] ?? null);
         $cacheKey = voiceAiBuildReportsCacheKey($config, $filters, $withComparison);
@@ -1583,13 +1586,19 @@ if (!function_exists('voiceAiBuildReportPayload')) {
             return $cached;
         }
 
+        $timings = [];
+
+        $stageStart = microtime(true);
         $interactions = voiceAiFetchInteractions($pdo, $filters);
+        $timings['interactions_fetch_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
         if (!$interactions['success']) {
             return $interactions;
         }
 
+        $stageStart = microtime(true);
         $interactionTotalsResult = voiceAiFetchInteractionTotals($pdo, $filters, $interactions['items'] ?? [], $interactions['meta'] ?? []);
         $interactionTotals = $interactionTotalsResult['success'] ? ($interactionTotalsResult['totals'] ?? []) : [];
+        $timings['interaction_totals_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
 
         $activeUsers = array_values(array_filter($interactions['users'] ?? [], static function (array $user) use ($interactions): bool {
             $userId = (string) ($user['id'] ?? '');
@@ -1606,16 +1615,37 @@ if (!function_exists('voiceAiBuildReportPayload')) {
             return false;
         }));
 
-        $assignmentTotalsResult = voiceAiFetchAssignedConversationTotals($pdo, $activeUsers);
+        $assignmentTotalsResult = [
+            'success' => true,
+            'totals' => [],
+        ];
+        if (!$fastMode && count($activeUsers) > 0 && count($activeUsers) <= 6) {
+            $stageStart = microtime(true);
+            $assignmentTotalsResult = voiceAiFetchAssignedConversationTotals($pdo, $activeUsers);
+            $timings['assignment_totals_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
+        }
         $assignmentTotals = $assignmentTotalsResult['success'] ? ($assignmentTotalsResult['totals'] ?? []) : [];
 
-        $agentsCatalogResult = voiceAiFetchAgents($pdo, $filters);
+        $agentsCatalogResult = ['success' => true, 'agents' => []];
+        $conversationsResult = ['success' => true, 'conversations' => [], 'total' => 0];
+
+        if (!$fastMode) {
+            $stageStart = microtime(true);
+            $agentsCatalogResult = voiceAiFetchAgents($pdo, $filters);
+            $timings['agents_catalog_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
+
+            $stageStart = microtime(true);
+            $conversationsResult = voiceAiFetchConversationsSnapshot($pdo, 25);
+            $timings['conversations_snapshot_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
+        }
+
         $agentsCatalog = $agentsCatalogResult['success'] ? ($agentsCatalogResult['agents'] ?? []) : [];
-        $conversationsResult = voiceAiFetchConversationsSnapshot($pdo, 25);
         $conversationsSnapshot = $conversationsResult['success'] ? ($conversationsResult['conversations'] ?? []) : [];
         $conversationsTotal = $conversationsResult['success'] ? (int) ($conversationsResult['total'] ?? count($conversationsSnapshot)) : 0;
 
+        $stageStart = microtime(true);
         $current = voiceAiFetchCalls($pdo, $filters);
+        $timings['voice_ai_calls_ms'] = (int) round((microtime(true) - $stageStart) * 1000);
         $previousCalls = [];
         $previousRange = null;
         $voiceAiWarnings = [];
@@ -1734,6 +1764,11 @@ if (!function_exists('voiceAiBuildReportPayload')) {
                 'voice_ai_total' => $current['success'] ? (int) (($current['meta']['api_total'] ?? count($current['calls']))) : 0,
                 'voice_ai_warnings' => $voiceAiWarnings,
                 'warnings' => array_merge($interactions['meta']['warnings'] ?? [], $voiceAiWarnings, $interactionTotalsResult['warnings'] ?? []),
+                'fast_mode' => $fastMode,
+                'with_comparison' => $withComparison,
+                'performance_ms' => array_merge($timings, [
+                    'total_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                ]),
                 'generated_at' => date('c'),
             ]),
             'available_filters' => array_merge(
@@ -2018,6 +2053,9 @@ if (!function_exists('voiceAiNormalizeReportFilters')) {
         if (!empty($filters['transcript_only'])) {
             $normalized['transcript_only'] = true;
         }
+
+        $normalized['fast_mode'] = !array_key_exists('fast_mode', $filters) || !empty($filters['fast_mode']);
+        $normalized['with_comparison'] = !empty($filters['with_comparison']);
 
         $normalized['sort_order'] = strtolower((string) ($filters['sort_order'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
 
@@ -2808,9 +2846,14 @@ if (!function_exists('voiceAiFetchInteractions')) {
         }
 
         arsort($contactFrequency);
-        $priorityContacts = array_slice(array_keys($contactFrequency), 0, 12);
-        $contactsResult = voiceAiFetchContactsByIds($pdo, $priorityContacts);
-        $contactMap = $contactsResult['success'] ? ($contactsResult['contact_map'] ?? []) : [];
+        $fastMode = !array_key_exists('fast_mode', $filters) || !empty($filters['fast_mode']);
+        $priorityLimit = $fastMode ? 4 : 12;
+        $priorityContacts = array_slice(array_keys($contactFrequency), 0, $priorityLimit);
+        $contactMap = [];
+        if (!empty($priorityContacts)) {
+            $contactsResult = voiceAiFetchContactsByIds($pdo, $priorityContacts);
+            $contactMap = $contactsResult['success'] ? ($contactsResult['contact_map'] ?? []) : [];
+        }
 
         $normalized = array_map(static function (array $raw) use ($userMap, $contactMap, $numberMap): array {
             return voiceAiNormalizeInteractionMessage($raw, $userMap, $contactMap, $numberMap);
@@ -2951,8 +2994,39 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
         $sources = [];
         $timelineDays = [];
         $timelineHours = array_fill(0, 24, 0);
+        $timelineWeekdays = [
+            'Mon' => 0,
+            'Tue' => 0,
+            'Wed' => 0,
+            'Thu' => 0,
+            'Fri' => 0,
+            'Sat' => 0,
+            'Sun' => 0,
+        ];
+        $timelineByDayChannels = [];
+        $timelineByHourDirection = [
+            'inbound' => array_fill(0, 24, 0),
+            'outbound' => array_fill(0, 24, 0),
+        ];
         $userRows = [];
         $contactRows = [];
+        $numberUsage = [];
+        $messageBreakdown = [];
+
+        $callDirections = [
+            'inbound' => 0,
+            'outbound' => 0,
+            'unknown' => 0,
+        ];
+        $messageDirections = [
+            'inbound' => 0,
+            'outbound' => 0,
+            'unknown' => 0,
+        ];
+        $callStatuses = [];
+        $channelDirections = [];
+        $recentInboundCalls = [];
+        $recentOutboundCalls = [];
 
         $callDurationTotal = 0;
         $recordedCallCount = 0;
@@ -2968,6 +3042,15 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
                 continue;
             }
             $usersById[$userId] = $user;
+        }
+
+        $numbersByPhone = [];
+        foreach ($numbers as $number) {
+            $phone = trim((string) ($number['phone_number'] ?? ''));
+            if ($phone === '') {
+                continue;
+            }
+            $numbersByPhone[$phone] = $number;
         }
 
         foreach ($items as $item) {
@@ -2990,17 +3073,124 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
             if ($timestamp > 0) {
                 $dayKey = date('Y-m-d', $timestamp);
                 $timelineDays[$dayKey] = ($timelineDays[$dayKey] ?? 0) + 1;
-                $timelineHours[(int) date('G', $timestamp)]++;
+                $hourOfDay = (int) date('G', $timestamp);
+                $timelineHours[$hourOfDay]++;
+
+                $weekdayKey = date('D', $timestamp);
+                if (isset($timelineWeekdays[$weekdayKey])) {
+                    $timelineWeekdays[$weekdayKey]++;
+                }
+
+                if (!isset($timelineByDayChannels[$dayKey])) {
+                    $timelineByDayChannels[$dayKey] = [];
+                }
+                $timelineByDayChannels[$dayKey][$channel] = ($timelineByDayChannels[$dayKey][$channel] ?? 0) + 1;
+
+                if ($direction === 'inbound' || $direction === 'outbound') {
+                    $timelineByHourDirection[$direction][$hourOfDay]++;
+                }
             }
 
             if (!empty($item['is_call'])) {
                 $callsFetched++;
                 $callDurationTotal += $duration;
                 $recordedCallCount += !empty($item['has_recording']) ? 1 : 0;
+
+                if (isset($callDirections[$direction])) {
+                    $callDirections[$direction]++;
+                } else {
+                    $callDirections['unknown']++;
+                }
+
+                $callStatuses[$status] = ($callStatuses[$status] ?? 0) + 1;
+
+                if ($direction === 'inbound') {
+                    $recentInboundCalls[] = $item;
+                } elseif ($direction === 'outbound') {
+                    $recentOutboundCalls[] = $item;
+                }
             } else {
                 $messagesFetched++;
                 if (!empty($item['is_email'])) {
                     $emailsFetched++;
+                }
+
+                if (isset($messageDirections[$direction])) {
+                    $messageDirections[$direction]++;
+                } else {
+                    $messageDirections['unknown']++;
+                }
+
+                $messageChannel = $channel !== '' ? $channel : 'Unknown';
+                if (!isset($messageBreakdown[$messageChannel])) {
+                    $messageBreakdown[$messageChannel] = [
+                        'channel' => $messageChannel,
+                        'total' => 0,
+                        'inbound' => 0,
+                        'outbound' => 0,
+                    ];
+                }
+                $messageBreakdown[$messageChannel]['total']++;
+                if ($direction === 'inbound') {
+                    $messageBreakdown[$messageChannel]['inbound']++;
+                } elseif ($direction === 'outbound') {
+                    $messageBreakdown[$messageChannel]['outbound']++;
+                }
+            }
+
+            if (!isset($channelDirections[$channel])) {
+                $channelDirections[$channel] = [
+                    'inbound' => 0,
+                    'outbound' => 0,
+                    'unknown' => 0,
+                ];
+            }
+            if ($direction === 'inbound' || $direction === 'outbound') {
+                $channelDirections[$channel][$direction]++;
+            } else {
+                $channelDirections[$channel]['unknown']++;
+            }
+
+            $businessNumber = trim((string) ($item['business_number'] ?? ''));
+            if ($businessNumber !== '') {
+                if (!isset($numberUsage[$businessNumber])) {
+                    $numberCatalog = $numbersByPhone[$businessNumber] ?? null;
+                    $numberUsage[$businessNumber] = [
+                        'business_number' => $businessNumber,
+                        'friendly_name' => is_array($numberCatalog) ? (string) ($numberCatalog['friendly_name'] ?? '') : '',
+                        'interactions' => 0,
+                        'calls' => 0,
+                        'messages' => 0,
+                        'inbound' => 0,
+                        'outbound' => 0,
+                        'unique_contacts' => [],
+                        'last_activity_at' => '',
+                    ];
+                }
+
+                $numberUsage[$businessNumber]['interactions']++;
+                if (!empty($item['is_call'])) {
+                    $numberUsage[$businessNumber]['calls']++;
+                } else {
+                    $numberUsage[$businessNumber]['messages']++;
+                }
+
+                if ($direction === 'inbound') {
+                    $numberUsage[$businessNumber]['inbound']++;
+                } elseif ($direction === 'outbound') {
+                    $numberUsage[$businessNumber]['outbound']++;
+                }
+
+                $contactIdentity = trim((string) ($item['contact_id'] ?? ''));
+                if ($contactIdentity === '') {
+                    $contactIdentity = trim((string) ($item['counterparty_phone'] ?? ''));
+                }
+                if ($contactIdentity !== '') {
+                    $numberUsage[$businessNumber]['unique_contacts'][$contactIdentity] = true;
+                }
+
+                if ($numberUsage[$businessNumber]['last_activity_at'] === '' || $timestamp > voiceAiToTimestamp($numberUsage[$businessNumber]['last_activity_at'])) {
+                    $numberUsage[$businessNumber]['last_activity_at'] = (string) ($item['date_added'] ?? '');
                 }
             }
 
@@ -3156,6 +3346,24 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
             return $right['interactions'] <=> $left['interactions'];
         });
 
+        foreach ($numberUsage as &$numberRow) {
+            $numberRow['unique_contacts'] = count($numberRow['unique_contacts']);
+        }
+        unset($numberRow);
+
+        $numberUsage = array_values($numberUsage);
+        usort($numberUsage, static function (array $left, array $right): int {
+            if ($left['interactions'] === $right['interactions']) {
+                return $right['calls'] <=> $left['calls'];
+            }
+            return $right['interactions'] <=> $left['interactions'];
+        });
+
+        $messageBreakdown = array_values($messageBreakdown);
+        usort($messageBreakdown, static function (array $left, array $right): int {
+            return $right['total'] <=> $left['total'];
+        });
+
         $queueByUser = [];
         foreach ($assignmentTotals as $userId => $total) {
             $queueByUser[] = [
@@ -3171,16 +3379,24 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
         });
 
         ksort($timelineDays);
+        ksort($timelineByDayChannels);
         arsort($channels);
         arsort($directions);
         arsort($statuses);
         arsort($sources);
+        arsort($callStatuses);
 
         $exactCallTotal = (int) ($interactionTotals['call'] ?? $callsFetched);
         $exactSmsTotal = (int) ($interactionTotals['sms'] ?? 0);
         $exactWhatsappTotal = (int) ($interactionTotals['whatsapp'] ?? 0);
         $exactEmailTotal = (int) ($interactionTotals['email'] ?? $emailsFetched);
         $trackedTotal = (int) ($interactionTotals['tracked_total'] ?? count($items));
+        $missedCallTotal = 0;
+        foreach ($callStatuses as $statusLabel => $statusTotal) {
+            if (strpos(voiceAiLower((string) $statusLabel), 'miss') !== false || strpos(voiceAiLower((string) $statusLabel), 'no-answer') !== false) {
+                $missedCallTotal += (int) $statusTotal;
+            }
+        }
 
         return [
             'kpis' => [
@@ -3248,21 +3464,65 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
                     'color' => 'blue',
                     'comparison' => voiceAiBuildStaticComparison($callsFetched > 0 ? (int) round($callDurationTotal / $callsFetched) : 0),
                 ],
+                'inbound_calls' => [
+                    'value' => (int) ($callDirections['inbound'] ?? 0),
+                    'formatted' => number_format((int) ($callDirections['inbound'] ?? 0)),
+                    'label' => 'Llamadas inbound',
+                    'icon' => 'fa-phone-volume',
+                    'color' => 'cyan',
+                    'comparison' => voiceAiBuildStaticComparison((int) ($callDirections['inbound'] ?? 0)),
+                ],
+                'outbound_calls' => [
+                    'value' => (int) ($callDirections['outbound'] ?? 0),
+                    'formatted' => number_format((int) ($callDirections['outbound'] ?? 0)),
+                    'label' => 'Llamadas outbound',
+                    'icon' => 'fa-phone-slash',
+                    'color' => 'orange',
+                    'comparison' => voiceAiBuildStaticComparison((int) ($callDirections['outbound'] ?? 0)),
+                ],
+                'missed_calls' => [
+                    'value' => $missedCallTotal,
+                    'formatted' => number_format($missedCallTotal),
+                    'label' => 'Llamadas perdidas',
+                    'icon' => 'fa-phone-xmark',
+                    'color' => 'amber',
+                    'comparison' => voiceAiBuildStaticComparison($missedCallTotal),
+                ],
             ],
             'distributions' => [
                 'channels' => $channels,
                 'directions' => $directions,
                 'statuses' => $statuses,
                 'sources' => $sources,
+                'call_directions' => $callDirections,
+                'message_directions' => $messageDirections,
+                'call_statuses' => $callStatuses,
+                'channel_directions' => $channelDirections,
             ],
             'timeline' => [
                 'by_day' => $timelineDays,
+                'by_weekday' => $timelineWeekdays,
+                'by_day_channels' => $timelineByDayChannels,
                 'by_hour' => array_combine(
                     array_map(static function (int $hour): string {
                         return sprintf('%02d:00', $hour);
                     }, range(0, 23)),
                     $timelineHours
                 ),
+                'by_hour_direction' => [
+                    'inbound' => array_combine(
+                        array_map(static function (int $hour): string {
+                            return sprintf('%02d:00', $hour);
+                        }, range(0, 23)),
+                        $timelineByHourDirection['inbound']
+                    ),
+                    'outbound' => array_combine(
+                        array_map(static function (int $hour): string {
+                            return sprintf('%02d:00', $hour);
+                        }, range(0, 23)),
+                        $timelineByHourDirection['outbound']
+                    ),
+                ],
             ],
             'summary' => [
                 'tracked_total' => $trackedTotal,
@@ -3276,15 +3536,24 @@ if (!function_exists('voiceAiBuildInteractionsDashboard')) {
                 'emails_fetched' => $emailsFetched,
                 'recorded_call_count' => $recordedCallCount,
                 'assigned_conversations_total' => array_sum($assignmentTotals),
+                'call_inbound_total' => (int) ($callDirections['inbound'] ?? 0),
+                'call_outbound_total' => (int) ($callDirections['outbound'] ?? 0),
+                'message_inbound_total' => (int) ($messageDirections['inbound'] ?? 0),
+                'message_outbound_total' => (int) ($messageDirections['outbound'] ?? 0),
+                'missed_calls_total' => $missedCallTotal,
             ],
             'users' => array_slice($userRows, 0, 20),
             'contacts' => array_slice($contactRows, 0, 20),
             'queue_by_user' => array_slice($queueByUser, 0, 20),
             'numbers' => array_slice($numbers, 0, 20),
+            'numbers_usage' => array_slice($numberUsage, 0, 50),
+            'message_breakdown' => $messageBreakdown,
             'recent_interactions' => array_slice($items, 0, 100),
             'recent_calls' => array_slice(array_values(array_filter($items, static function (array $item): bool {
                 return !empty($item['is_call']);
             })), 0, 100),
+            'recent_inbound_calls' => array_slice($recentInboundCalls, 0, 100),
+            'recent_outbound_calls' => array_slice($recentOutboundCalls, 0, 100),
             'recent_messages' => array_slice(array_values(array_filter($items, static function (array $item): bool {
                 return empty($item['is_call']);
             })), 0, 100),

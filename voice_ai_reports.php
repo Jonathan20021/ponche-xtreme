@@ -223,6 +223,19 @@ require_once __DIR__ . '/header.php';
                 <input x-model="filters.search" type="text" class="w-full rounded-xl bg-slate-950 border border-slate-700 text-slate-100 px-4 py-3"
                     placeholder="contacto, telefono, usuario, cuerpo, estado, canal">
             </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Modo de carga</label>
+                <select x-model="filters.fast_mode" class="w-full rounded-xl bg-slate-950 border border-slate-700 text-slate-100 px-4 py-3">
+                    <option value="1">Rapido</option>
+                    <option value="0">Completo</option>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <label class="inline-flex items-center gap-2 text-sm text-slate-300 pb-2">
+                    <input x-model="filters.with_comparison" type="checkbox" :disabled="filters.fast_mode === '1'" class="rounded border-slate-700 bg-slate-950 text-cyan-400 disabled:opacity-50">
+                    Comparar periodo anterior
+                </label>
+            </div>
         </div>
 
         <div class="mt-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -301,6 +314,54 @@ require_once __DIR__ . '/header.php';
                     <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
                 </div>
                 <canvas id="voiceAiActionChart"></canvas>
+            </div>
+        </section>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 backdrop-blur-sm">
+            <h2 class="text-lg font-semibold text-white mb-4">Llamadas inbound vs outbound</h2>
+            <div class="relative h-72">
+                <div x-show="isLoading" style="display:none;" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/50 rounded-xl">
+                    <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                </div>
+                <canvas id="voiceAiCallDirectionChart"></canvas>
+            </div>
+        </section>
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 backdrop-blur-sm">
+            <h2 class="text-lg font-semibold text-white mb-4">Mensajes inbound vs outbound</h2>
+            <div class="relative h-72">
+                <div x-show="isLoading" style="display:none;" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/50 rounded-xl">
+                    <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                </div>
+                <canvas id="voiceAiMessageDirectionChart"></canvas>
+            </div>
+        </section>
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 backdrop-blur-sm">
+            <h2 class="text-lg font-semibold text-white mb-4">Volumen por dia de semana</h2>
+            <div class="relative h-72">
+                <div x-show="isLoading" style="display:none;" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/50 rounded-xl">
+                    <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                </div>
+                <canvas id="voiceAiWeekdayChart"></canvas>
+            </div>
+        </section>
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 backdrop-blur-sm">
+            <h2 class="text-lg font-semibold text-white mb-4">Picos horarios de llamadas</h2>
+            <div class="relative h-72">
+                <div x-show="isLoading" style="display:none;" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/50 rounded-xl">
+                    <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                </div>
+                <canvas id="voiceAiHourDirectionChart"></canvas>
+            </div>
+        </section>
+        <section class="xl:col-span-2 rounded-2xl border border-slate-700/70 bg-slate-900/70 p-6 backdrop-blur-sm">
+            <h2 class="text-lg font-semibold text-white mb-4">Direccion por canal</h2>
+            <div class="relative h-80">
+                <div x-show="isLoading" style="display:none;" class="absolute inset-0 z-10 flex items-center justify-center bg-slate-950/50 rounded-xl">
+                    <div class="h-9 w-9 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                </div>
+                <canvas id="voiceAiChannelDirectionChart"></canvas>
             </div>
         </section>
     </div>
@@ -658,6 +719,189 @@ require_once __DIR__ . '/header.php';
                 </div>
             </div>
         </section>
+
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-700/70">
+                <h2 class="text-lg font-semibold text-white">Numeros con mayor actividad</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-950/60 text-slate-400">
+                        <tr>
+                            <th class="px-6 py-4 text-left">Numero</th>
+                            <th class="px-6 py-4 text-right">Interacciones</th>
+                            <th class="px-6 py-4 text-right">Calls</th>
+                            <th class="px-6 py-4 text-right">Mensajes</th>
+                            <th class="px-6 py-4 text-right">Inbound</th>
+                            <th class="px-6 py-4 text-right">Outbound</th>
+                            <th class="px-6 py-4 text-right">Contactos unicos</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 text-slate-200">
+                        <template x-for="number in paginatedItems('numbers_usage', dashboard.numbers_usage)" :key="number.business_number">
+                            <tr class="hover:bg-slate-800/50">
+                                <td class="px-6 py-4">
+                                    <div class="font-medium text-white" x-text="number.business_number"></div>
+                                    <div class="text-xs text-slate-400" x-text="number.friendly_name || '--'"></div>
+                                </td>
+                                <td class="px-6 py-4 text-right" x-text="number.interactions"></td>
+                                <td class="px-6 py-4 text-right" x-text="number.calls"></td>
+                                <td class="px-6 py-4 text-right" x-text="number.messages"></td>
+                                <td class="px-6 py-4 text-right" x-text="number.inbound"></td>
+                                <td class="px-6 py-4 text-right" x-text="number.outbound"></td>
+                                <td class="px-6 py-4 text-right" x-text="number.unique_contacts"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="dashboard.numbers_usage.length === 0 && !isLoading" style="display:none;">
+                            <td colspan="7" class="px-6 py-8 text-center text-slate-500">No hay actividad por numero en el rango seleccionado.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-800 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div class="text-xs text-slate-400">
+                    Mostrando <span x-text="tableRangeStart('numbers_usage', dashboard.numbers_usage)"></span>-<span x-text="tableRangeEnd('numbers_usage', dashboard.numbers_usage)"></span>
+                    de <span x-text="dashboard.numbers_usage.length"></span>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <label class="text-xs text-slate-400">
+                        Filas
+                        <select @change="setTablePageSize('numbers_usage', $event.target.value)" :value="ensureTablePagination('numbers_usage').size" class="ml-2 rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-slate-200">
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="25">25</option>
+                        </select>
+                    </label>
+                    <div class="text-xs text-slate-400">
+                        Pagina <span x-text="ensureTablePagination('numbers_usage').page"></span> de <span x-text="tableTotalPages('numbers_usage', dashboard.numbers_usage)"></span>
+                    </div>
+                    <button @click="prevTablePage('numbers_usage', dashboard.numbers_usage)" :disabled="ensureTablePagination('numbers_usage').page <= 1" class="px-3 py-2 rounded-lg border border-slate-700 text-slate-200 disabled:opacity-40">Anterior</button>
+                    <button @click="nextTablePage('numbers_usage', dashboard.numbers_usage)" :disabled="ensureTablePagination('numbers_usage').page >= tableTotalPages('numbers_usage', dashboard.numbers_usage)" class="px-3 py-2 rounded-lg border border-slate-700 text-slate-200 disabled:opacity-40">Siguiente</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-700/70">
+                <h2 class="text-lg font-semibold text-white">Breakdown de mensajeria</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-950/60 text-slate-400">
+                        <tr>
+                            <th class="px-6 py-4 text-left">Canal</th>
+                            <th class="px-6 py-4 text-right">Total</th>
+                            <th class="px-6 py-4 text-right">Inbound</th>
+                            <th class="px-6 py-4 text-right">Outbound</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 text-slate-200">
+                        <template x-for="channel in paginatedItems('message_breakdown', dashboard.message_breakdown)" :key="channel.channel">
+                            <tr class="hover:bg-slate-800/50">
+                                <td class="px-6 py-4 font-medium text-white" x-text="channel.channel"></td>
+                                <td class="px-6 py-4 text-right" x-text="channel.total"></td>
+                                <td class="px-6 py-4 text-right" x-text="channel.inbound"></td>
+                                <td class="px-6 py-4 text-right" x-text="channel.outbound"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="dashboard.message_breakdown.length === 0 && !isLoading" style="display:none;">
+                            <td colspan="4" class="px-6 py-8 text-center text-slate-500">No hay mensajes disponibles para este rango.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-800 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div class="text-xs text-slate-400">
+                    Mostrando <span x-text="tableRangeStart('message_breakdown', dashboard.message_breakdown)"></span>-<span x-text="tableRangeEnd('message_breakdown', dashboard.message_breakdown)"></span>
+                    de <span x-text="dashboard.message_breakdown.length"></span>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <label class="text-xs text-slate-400">
+                        Filas
+                        <select @change="setTablePageSize('message_breakdown', $event.target.value)" :value="ensureTablePagination('message_breakdown').size" class="ml-2 rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-slate-200">
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="25">25</option>
+                        </select>
+                    </label>
+                    <div class="text-xs text-slate-400">
+                        Pagina <span x-text="ensureTablePagination('message_breakdown').page"></span> de <span x-text="tableTotalPages('message_breakdown', dashboard.message_breakdown)"></span>
+                    </div>
+                    <button @click="prevTablePage('message_breakdown', dashboard.message_breakdown)" :disabled="ensureTablePagination('message_breakdown').page <= 1" class="px-3 py-2 rounded-lg border border-slate-700 text-slate-200 disabled:opacity-40">Anterior</button>
+                    <button @click="nextTablePage('message_breakdown', dashboard.message_breakdown)" :disabled="ensureTablePagination('message_breakdown').page >= tableTotalPages('message_breakdown', dashboard.message_breakdown)" class="px-3 py-2 rounded-lg border border-slate-700 text-slate-200 disabled:opacity-40">Siguiente</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-700/70">
+                <h2 class="text-lg font-semibold text-white">Ultimas llamadas inbound</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-950/60 text-slate-400">
+                        <tr>
+                            <th class="px-6 py-4 text-left">Fecha</th>
+                            <th class="px-6 py-4 text-left">Contacto</th>
+                            <th class="px-6 py-4 text-left">Usuario</th>
+                            <th class="px-6 py-4 text-left">Estado</th>
+                            <th class="px-6 py-4 text-right">Duracion</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 text-slate-200">
+                        <template x-for="call in paginatedItems('recent_inbound_calls', dashboard.recent_inbound_calls)" :key="call.id || call.date_added">
+                            <tr class="hover:bg-slate-800/50">
+                                <td class="px-6 py-4" x-text="formatDate(call.date_added)"></td>
+                                <td class="px-6 py-4" x-text="call.contact_name || call.contact_phone || '--'"></td>
+                                <td class="px-6 py-4" x-text="call.user_name || '--'"></td>
+                                <td class="px-6 py-4" x-text="call.status || '--'"></td>
+                                <td class="px-6 py-4 text-right" x-text="formatDuration(call.duration_seconds)"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="dashboard.recent_inbound_calls.length === 0 && !isLoading" style="display:none;">
+                            <td colspan="5" class="px-6 py-8 text-center text-slate-500">Sin llamadas inbound en este rango.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-700/70">
+                <h2 class="text-lg font-semibold text-white">Ultimas llamadas outbound</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-950/60 text-slate-400">
+                        <tr>
+                            <th class="px-6 py-4 text-left">Fecha</th>
+                            <th class="px-6 py-4 text-left">Contacto</th>
+                            <th class="px-6 py-4 text-left">Usuario</th>
+                            <th class="px-6 py-4 text-left">Estado</th>
+                            <th class="px-6 py-4 text-right">Duracion</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800 text-slate-200">
+                        <template x-for="call in paginatedItems('recent_outbound_calls', dashboard.recent_outbound_calls)" :key="call.id || call.date_added">
+                            <tr class="hover:bg-slate-800/50">
+                                <td class="px-6 py-4" x-text="formatDate(call.date_added)"></td>
+                                <td class="px-6 py-4" x-text="call.contact_name || call.contact_phone || '--'"></td>
+                                <td class="px-6 py-4" x-text="call.user_name || '--'"></td>
+                                <td class="px-6 py-4" x-text="call.status || '--'"></td>
+                                <td class="px-6 py-4 text-right" x-text="formatDuration(call.duration_seconds)"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="dashboard.recent_outbound_calls.length === 0 && !isLoading" style="display:none;">
+                            <td colspan="5" class="px-6 py-8 text-center text-slate-500">Sin llamadas outbound en este rango.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </div>
 
     <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
@@ -882,16 +1126,26 @@ require_once __DIR__ . '/header.php';
                 },
                 timeline: {
                     by_day: {},
-                    by_hour: {}
+                    by_weekday: {},
+                    by_day_channels: {},
+                    by_hour: {},
+                    by_hour_direction: {
+                        inbound: {},
+                        outbound: {}
+                    }
                 },
                 agents: [],
                 contacts: [],
                 queue_by_user: [],
                 numbers: [],
+                numbers_usage: [],
+                message_breakdown: [],
                 users_catalog: [],
                 numbers_catalog: [],
                 recent_interactions: [],
                 recent_calls: [],
+                recent_inbound_calls: [],
+                recent_outbound_calls: [],
                 recent_messages: [],
                 summary: {}
             },
@@ -906,6 +1160,8 @@ require_once __DIR__ . '/header.php';
                 source: '',
                 user_id: '',
                 search: '',
+                fast_mode: '1',
+                with_comparison: false,
                 sort_order: 'desc'
             },
             configForm: {
@@ -927,8 +1183,12 @@ require_once __DIR__ . '/header.php';
                 conversations_snapshot: 8,
                 queue_by_user: 8,
                 numbers: 8,
+                numbers_usage: 8,
                 agents: 8,
                 contacts: 8,
+                message_breakdown: 8,
+                recent_inbound_calls: 8,
+                recent_outbound_calls: 8,
                 recent_interactions: 15
             },
             tablePagination: {},
@@ -1080,6 +1340,8 @@ require_once __DIR__ . '/header.php';
                     source: '',
                     user_id: '',
                     search: '',
+                    fast_mode: '1',
+                    with_comparison: false,
                     sort_order: 'desc'
                 };
             },
@@ -1125,6 +1387,9 @@ require_once __DIR__ . '/header.php';
             },
 
             buildQueryParams() {
+                const fastMode = this.filters.fast_mode === '0' ? '0' : '1';
+                const withComparison = fastMode === '1' ? '0' : (this.filters.with_comparison ? '1' : '0');
+
                 return new URLSearchParams({
                     integration_id: this.filters.integration_id || '',
                     start_date: this.filters.start_date || '',
@@ -1135,6 +1400,8 @@ require_once __DIR__ . '/header.php';
                     source: this.filters.source || '',
                     user_id: this.filters.user_id || '',
                     search: this.filters.search || '',
+                    fast_mode: fastMode,
+                    with_comparison: withComparison,
                     sort_order: this.filters.sort_order || 'desc'
                 });
             },
@@ -1189,12 +1456,16 @@ require_once __DIR__ . '/header.php';
                     }
                     this.resetTablePages();
                     const interactionTotals = this.meta.interaction_totals || {};
+                    const totalMs = Number((this.meta.performance_ms || {}).total_ms || 0);
+                    const loadSpeed = totalMs > 0 ? `Carga API: ${totalMs} ms.` : '';
                     if ((this.meta.voice_ai_total || 0) === 0 && (interactionTotals.call || 0) > 0) {
-                        this.notice = `Voice AI no devolvio call logs, pero Conversations API si devolvio ${interactionTotals.call} llamadas y ${interactionTotals.sms || 0} SMS para este rango.`;
+                        this.notice = `Voice AI no devolvio call logs, pero Conversations API si devolvio ${interactionTotals.call} llamadas y ${interactionTotals.sms || 0} SMS para este rango. ${loadSpeed}`.trim();
                     } else if ((interactionTotals.tracked_total || 0) > 0) {
-                        this.notice = `Se cargaron ${interactionTotals.tracked_total} interacciones rastreadas para el rango consultado.`;
+                        this.notice = `Se cargaron ${interactionTotals.tracked_total} interacciones rastreadas para el rango consultado. ${loadSpeed}`.trim();
                     } else if ((this.meta.conversations_total || 0) > 0) {
-                        this.notice = `Hay ${this.meta.conversations_total} conversaciones en el location, aunque el rango actual no devolvio interacciones.`;
+                        this.notice = `Hay ${this.meta.conversations_total} conversaciones en el location, aunque el rango actual no devolvio interacciones. ${loadSpeed}`.trim();
+                    } else if (loadSpeed) {
+                        this.notice = loadSpeed;
                     }
                     this.renderCharts();
                 } catch (error) {
@@ -1344,6 +1615,15 @@ require_once __DIR__ . '/header.php';
                 const statusLabels = Object.keys(this.dashboard.distributions.statuses || {});
                 const statusValues = Object.values(this.dashboard.distributions.statuses || {});
                 const actionEntries = Object.entries(this.dashboard.distributions.sources || {}).slice(0, 10);
+                const callDirectionEntries = Object.entries(this.dashboard.distributions.call_directions || {})
+                    .filter(([key]) => ['inbound', 'outbound'].includes(key));
+                const messageDirectionEntries = Object.entries(this.dashboard.distributions.message_directions || {})
+                    .filter(([key]) => ['inbound', 'outbound'].includes(key));
+                const weekdayEntries = Object.entries(this.dashboard.timeline.by_weekday || {});
+                const hourLabels = Object.keys((this.dashboard.timeline.by_hour_direction || {}).inbound || {});
+                const hourInboundValues = Object.values((this.dashboard.timeline.by_hour_direction || {}).inbound || {});
+                const hourOutboundValues = Object.values((this.dashboard.timeline.by_hour_direction || {}).outbound || {});
+                const channelDirectionEntries = Object.entries(this.dashboard.distributions.channel_directions || {});
 
                 upsertChart('voiceAiTimelineChart', {
                     type: 'line',
@@ -1437,6 +1717,154 @@ require_once __DIR__ . '/header.php';
                         },
                         scales: {
                             x: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                upsertChart('voiceAiCallDirectionChart', {
+                    type: 'bar',
+                    data: {
+                        labels: callDirectionEntries.map(([label]) => label.toUpperCase()),
+                        datasets: [{
+                            label: 'Llamadas',
+                            data: callDirectionEntries.map(([, value]) => value),
+                            backgroundColor: ['#22d3ee', '#f97316']
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                upsertChart('voiceAiMessageDirectionChart', {
+                    type: 'bar',
+                    data: {
+                        labels: messageDirectionEntries.map(([label]) => label.toUpperCase()),
+                        datasets: [{
+                            label: 'Mensajes',
+                            data: messageDirectionEntries.map(([, value]) => value),
+                            backgroundColor: ['#10b981', '#f59e0b']
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                upsertChart('voiceAiWeekdayChart', {
+                    type: 'bar',
+                    data: {
+                        labels: weekdayEntries.map(([label]) => label),
+                        datasets: [{
+                            label: 'Interacciones',
+                            data: weekdayEntries.map(([, value]) => value),
+                            backgroundColor: '#818cf8'
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                upsertChart('voiceAiHourDirectionChart', {
+                    type: 'line',
+                    data: {
+                        labels: hourLabels,
+                        datasets: [{
+                                label: 'Inbound',
+                                data: hourInboundValues,
+                                borderColor: '#22d3ee',
+                                backgroundColor: 'rgba(34, 211, 238, 0.14)',
+                                fill: true,
+                                tension: 0.3
+                            },
+                            {
+                                label: 'Outbound',
+                                data: hourOutboundValues,
+                                borderColor: '#f97316',
+                                backgroundColor: 'rgba(249, 115, 22, 0.12)',
+                                fill: true,
+                                tension: 0.3
+                            }
+                        ]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                upsertChart('voiceAiChannelDirectionChart', {
+                    type: 'bar',
+                    data: {
+                        labels: channelDirectionEntries.map(([channel]) => channel),
+                        datasets: [{
+                                label: 'Inbound',
+                                data: channelDirectionEntries.map(([, values]) => values.inbound || 0),
+                                backgroundColor: '#22d3ee'
+                            },
+                            {
+                                label: 'Outbound',
+                                data: channelDirectionEntries.map(([, values]) => values.outbound || 0),
+                                backgroundColor: '#f97316'
+                            }
+                        ]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        },
+                        responsive: true,
+                        scales: {
+                            x: {
+                                stacked: true
+                            },
+                            y: {
+                                stacked: true,
                                 beginAtZero: true
                             }
                         }
