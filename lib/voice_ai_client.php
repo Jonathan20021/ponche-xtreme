@@ -1731,7 +1731,8 @@ if (!function_exists('voiceAiBuildReportPayload')) {
             $interactions['users'] ?? [],
             $assignmentTotals,
             $interactions['numbers'] ?? [],
-            $interactionTotals
+            $interactionTotals,
+            $current['success'] ? ($current['calls'] ?? []) : []
         );
 
         $dashboard = [
@@ -1741,6 +1742,8 @@ if (!function_exists('voiceAiBuildReportPayload')) {
             'agents' => $interactionDashboard['users'],
             'contacts' => $interactionDashboard['contacts'],
             'recent_calls' => $interactionDashboard['recent_calls'],
+            'voice_ai_recent_calls' => $voiceAiDashboard['recent_calls'],
+            'voice_ai_coverage' => $voiceAiDashboard['coverage'],
             'recent_messages' => $interactionDashboard['recent_messages'],
             'recent_interactions' => $interactionDashboard['recent_interactions'],
             'queue_by_user' => $interactionDashboard['queue_by_user'],
@@ -3073,8 +3076,90 @@ if (!function_exists('voiceAiFetchInteractionTotals')) {
 }
 
 if (!function_exists('voiceAiBuildInteractionsDashboard')) {
-    function voiceAiBuildInteractionsDashboard(array $items, array $users, array $assignmentTotals, array $numbers, array $interactionTotals): array
+    function voiceAiAttachVoiceAiCallDetails(array $items, array $voiceAiCalls): array
     {
+        if (empty($items) || empty($voiceAiCalls)) {
+            return $items;
+        }
+
+        $callsByContactId = [];
+        foreach ($voiceAiCalls as $index => $call) {
+            $contactId = trim((string) ($call['contact_id'] ?? ''));
+            if ($contactId === '') {
+                continue;
+            }
+
+            $callsByContactId[$contactId][] = [
+                'index' => $index,
+                'call' => $call,
+            ];
+        }
+
+        $usedCallIndexes = [];
+
+        foreach ($items as &$item) {
+            $item['voice_ai_call_id'] = '';
+            $item['voice_ai_detail_available'] = false;
+
+            if (empty($item['is_call'])) {
+                continue;
+            }
+
+            $contactId = trim((string) ($item['contact_id'] ?? ''));
+            if ($contactId === '' || empty($callsByContactId[$contactId])) {
+                continue;
+            }
+
+            $interactionTs = (int) ($item['timestamp'] ?? 0);
+            $interactionDuration = (int) ($item['duration_seconds'] ?? 0);
+            $bestMatch = null;
+
+            foreach ($callsByContactId[$contactId] as $candidate) {
+                $candidateIndex = (int) $candidate['index'];
+                if (isset($usedCallIndexes[$candidateIndex])) {
+                    continue;
+                }
+
+                $call = $candidate['call'];
+                $callTs = (int) ($call['started_at_ts'] ?? 0);
+                if ($interactionTs > 0 && $callTs > 0) {
+                    $timeDiff = abs($interactionTs - $callTs);
+                    if ($timeDiff > 1800) {
+                        continue;
+                    }
+                } else {
+                    $timeDiff = PHP_INT_MAX;
+                }
+
+                $durationDiff = abs($interactionDuration - (int) ($call['duration_seconds'] ?? 0));
+                $score = ($timeDiff === PHP_INT_MAX ? 999999 : $timeDiff) + ($durationDiff * 2);
+
+                if ($bestMatch === null || $score < $bestMatch['score']) {
+                    $bestMatch = [
+                        'index' => $candidateIndex,
+                        'call_id' => (string) ($call['call_id'] ?? ''),
+                        'score' => $score,
+                    ];
+                }
+            }
+
+            if ($bestMatch !== null && $bestMatch['call_id'] !== '') {
+                $item['voice_ai_call_id'] = $bestMatch['call_id'];
+                $item['voice_ai_detail_available'] = true;
+                $usedCallIndexes[$bestMatch['index']] = true;
+            }
+        }
+        unset($item);
+
+        return $items;
+    }
+}
+
+if (!function_exists('voiceAiBuildInteractionsDashboard')) {
+    function voiceAiBuildInteractionsDashboard(array $items, array $users, array $assignmentTotals, array $numbers, array $interactionTotals, array $voiceAiCalls = []): array
+    {
+        $items = voiceAiAttachVoiceAiCallDetails($items, $voiceAiCalls);
+
         $channels = [];
         $directions = [];
         $statuses = [];

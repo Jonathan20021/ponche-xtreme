@@ -274,12 +274,29 @@ require_once __DIR__ . '/header.php';
         <div class="mt-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <p class="text-sm text-slate-400">Las horas de uso por usuario se calculan como actividad operacional estimada desde eventos reales de la API, no como login del navegador.</p>
             <div class="flex flex-wrap gap-3">
+                <button @click="openApiHealthModal" type="button" class="px-4 py-3 rounded-xl border border-cyan-500/50 text-cyan-200 hover:bg-cyan-500/10 transition-colors">
+                    <i class="fas fa-heart-pulse mr-2"></i>Estado API
+                </button>
                 <button @click="resetFilters" type="button" class="px-4 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors">Resetear</button>
                 <button @click="fetchDashboard" type="button" :disabled="isLoading || !configStatus.is_ready"
                     class="px-5 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold transition-colors">
                     <i class="fas mr-2" :class="isLoading ? 'fa-spinner fa-spin' : 'fa-rotate-right'"></i>
                     Actualizar dashboard
                 </button>
+            </div>
+        </div>
+
+        <div x-show="isLoading" class="mt-4 rounded-2xl border border-cyan-500/20 bg-slate-950/60 px-4 py-4" style="display:none;">
+            <div class="flex items-center justify-between gap-4 text-sm">
+                <div class="flex items-center gap-3 text-cyan-200">
+                    <div class="h-5 w-5 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                    <span x-text="loadingStage || 'Consultando API...'">Consultando API...</span>
+                </div>
+                <div class="text-slate-400">Modo: <span class="text-slate-200" x-text="filters.fast_mode === '1' ? 'Rapido' : 'Completo'"></span></div>
+            </div>
+            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400 transition-all duration-500"
+                    :style="`width: ${loadingStageProgress}%`"></div>
             </div>
         </div>
     </section>
@@ -290,6 +307,14 @@ require_once __DIR__ . '/header.php';
 
     <div x-show="notice" class="mb-8 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 px-5 py-4 text-cyan-100" style="display:none;">
         <i class="fas fa-circle-info mr-2"></i><span x-text="notice"></span>
+    </div>
+
+    <div x-show="lastLoadedAt" class="mb-8 text-xs text-slate-400 flex items-center justify-end gap-2" style="display:none;">
+        <i class="fas fa-clock"></i>
+        <span>Ultima carga:</span>
+        <span x-text="formatDate(lastLoadedAt)"></span>
+        <span class="text-slate-500">|</span>
+        <span x-text="cacheHit ? 'resultado desde cache' : 'resultado en vivo API'"></span>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
@@ -1016,6 +1041,85 @@ require_once __DIR__ . '/header.php';
         </section>
     </div>
 
+    <section class="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-900/90 to-slate-950/90 overflow-hidden mb-8">
+        <div class="px-6 py-5 border-b border-slate-700/70 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-semibold text-white">Voice AI Call Logs</h2>
+                <p class="text-sm text-slate-400 mt-1">Llamadas nativas del endpoint de Voice AI con detalle remoto completo.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                <span>Transcripts: <span class="text-slate-100" x-text="dashboard.voice_ai_coverage.transcripts || 0"></span></span>
+                <span>|</span>
+                <span>Summaries: <span class="text-slate-100" x-text="dashboard.voice_ai_coverage.summaries || 0"></span></span>
+                <span>|</span>
+                <span>Recordings: <span class="text-slate-100" x-text="dashboard.voice_ai_coverage.recordings || 0"></span></span>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-slate-950/60 text-slate-400">
+                    <tr>
+                        <th class="px-6 py-4 text-left">Fecha</th>
+                        <th class="px-6 py-4 text-left">Contacto</th>
+                        <th class="px-6 py-4 text-left">Agente</th>
+                        <th class="px-6 py-4 text-left">Estado</th>
+                        <th class="px-6 py-4 text-left">Resumen</th>
+                        <th class="px-6 py-4 text-right">Duracion</th>
+                        <th class="px-6 py-4 text-right">Accion</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800 text-slate-200">
+                    <template x-for="call in paginatedItems('voice_ai_recent_calls', dashboard.voice_ai_recent_calls)" :key="call.call_id || call.started_at">
+                        <tr class="hover:bg-slate-800/40">
+                            <td class="px-6 py-4" x-text="formatDate(call.started_at)"></td>
+                            <td class="px-6 py-4">
+                                <div x-text="call.contact_name || 'Sin contacto'"></div>
+                                <div class="text-xs text-slate-400" x-text="call.contact_phone || call.contact_id || ''"></div>
+                            </td>
+                            <td class="px-6 py-4" x-text="call.agent_name || 'Sin agente'"></td>
+                            <td class="px-6 py-4" x-text="call.status || 'Unknown'"></td>
+                            <td class="px-6 py-4 max-w-[420px]">
+                                <div class="truncate" x-text="call.summary || 'Sin summary disponible'"></div>
+                                <div class="text-xs text-slate-400" x-text="call.call_id || ''"></div>
+                            </td>
+                            <td class="px-6 py-4 text-right" x-text="formatDuration(call.duration_seconds)"></td>
+                            <td class="px-6 py-4 text-right">
+                                <button @click="openCallDetail(call)" type="button" class="px-3 py-2 rounded-lg border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/10 transition-colors inline-flex items-center">
+                                    Ver detalle API
+                                </button>
+                            </td>
+                        </tr>
+                    </template>
+                    <tr x-show="dashboard.voice_ai_recent_calls.length === 0 && !isLoading" style="display:none;">
+                        <td colspan="7" class="px-6 py-8 text-center text-slate-500">No hay call logs de Voice AI en el rango seleccionado.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-6 py-4 border-t border-slate-800 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div class="text-xs text-slate-400">
+                Mostrando <span x-text="tableRangeStart('voice_ai_recent_calls', dashboard.voice_ai_recent_calls)"></span>-<span x-text="tableRangeEnd('voice_ai_recent_calls', dashboard.voice_ai_recent_calls)"></span>
+                de <span x-text="dashboard.voice_ai_recent_calls.length"></span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <label class="text-xs text-slate-400">
+                    Filas
+                    <select @change="setTablePageSize('voice_ai_recent_calls', $event.target.value)" :value="ensureTablePagination('voice_ai_recent_calls').size" class="ml-2 rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-slate-200">
+                        <option value="5">5</option>
+                        <option value="8">8</option>
+                        <option value="15">15</option>
+                        <option value="25">25</option>
+                    </select>
+                </label>
+                <div class="text-xs text-slate-400">
+                    Pagina <span x-text="ensureTablePagination('voice_ai_recent_calls').page"></span> de <span x-text="tableTotalPages('voice_ai_recent_calls', dashboard.voice_ai_recent_calls)"></span>
+                </div>
+                <button @click="prevTablePage('voice_ai_recent_calls', dashboard.voice_ai_recent_calls)" :disabled="ensureTablePagination('voice_ai_recent_calls').page <= 1" class="px-3 py-2 rounded-lg border border-slate-700 text-slate-200 disabled:opacity-40">Anterior</button>
+                <button @click="nextTablePage('voice_ai_recent_calls', dashboard.voice_ai_recent_calls)" :disabled="ensureTablePagination('voice_ai_recent_calls').page >= tableTotalPages('voice_ai_recent_calls', dashboard.voice_ai_recent_calls)" class="px-3 py-2 rounded-lg border border-slate-700 text-slate-200 disabled:opacity-40">Siguiente</button>
+            </div>
+        </div>
+    </section>
+
     <section class="rounded-2xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
         <div class="px-6 py-5 border-b border-slate-700/70 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -1042,7 +1146,7 @@ require_once __DIR__ . '/header.php';
                         <th class="px-6 py-4 text-left">Estado</th>
                         <th class="px-6 py-4 text-right">Duracion</th>
                         <th class="px-6 py-4 text-left">Detalle</th>
-                        <th class="px-6 py-4 text-right">Recording</th>
+                            <th class="px-6 py-4 text-right">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800 text-slate-200">
@@ -1065,11 +1169,17 @@ require_once __DIR__ . '/header.php';
                                 <div class="text-xs text-slate-400" x-text="interaction.source || '--'"></div>
                             </td>
                             <td class="px-6 py-4 text-right">
-                                <a x-show="interaction.has_recording" :href="(interaction.recording_urls || [])[0]" target="_blank"
-                                    class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 hover:bg-slate-700 transition-colors inline-flex items-center">
-                                    Abrir
-                                </a>
-                                <span x-show="!interaction.has_recording" class="text-slate-500">--</span>
+                                <div class="flex items-center justify-end gap-2">
+                                    <button @click="openCallDetail(interaction)" type="button"
+                                        class="px-3 py-2 rounded-lg border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/10 transition-colors inline-flex items-center">
+                                        Ver
+                                    </button>
+                                    <a x-show="interaction.has_recording" :href="(interaction.recording_urls || [])[0]" target="_blank"
+                                        class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 hover:bg-slate-700 transition-colors inline-flex items-center">
+                                        Abrir
+                                    </a>
+                                    <span x-show="!interaction.has_recording" class="text-slate-500">--</span>
+                                </div>
                             </td>
                         </tr>
                     </template>
@@ -1107,8 +1217,8 @@ require_once __DIR__ . '/header.php';
         <div class="w-full max-w-4xl rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
             <div class="px-6 py-5 border-b border-slate-700 flex items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-xl font-semibold text-white">Detalle de llamada</h2>
-                    <p class="text-sm text-slate-400" x-text="activeCall ? (activeCall.call_id || 'Sin ID') : ''"></p>
+                    <h2 class="text-xl font-semibold text-white">Detalle de interaccion</h2>
+                    <p class="text-sm text-slate-400" x-text="activeCall ? (activeCall.call_id || activeCall.channel || 'Sin ID') : ''"></p>
                 </div>
                 <button @click="detailModal = false" type="button" class="h-10 w-10 rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700">
                     <i class="fas fa-xmark"></i>
@@ -1149,7 +1259,7 @@ require_once __DIR__ . '/header.php';
                                 <h3 class="text-white font-semibold mb-3">Metadatos</h3>
                                 <dl class="space-y-3 text-sm">
                                     <div class="flex justify-between gap-4">
-                                        <dt class="text-slate-500">Tipo</dt>
+                                        <dt class="text-slate-500">Canal / tipo</dt>
                                         <dd class="text-slate-200" x-text="activeCall.call_type || 'Unknown'"></dd>
                                     </div>
                                     <div class="flex justify-between gap-4">
@@ -1163,6 +1273,14 @@ require_once __DIR__ . '/header.php';
                                     <div class="flex justify-between gap-4">
                                         <dt class="text-slate-500">Sentiment</dt>
                                         <dd class="text-slate-200" x-text="activeCall.sentiment || '--'"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                        <dt class="text-slate-500">Origen</dt>
+                                        <dd class="text-slate-200" x-text="activeCall.source || '--'"></dd>
+                                    </div>
+                                    <div class="flex justify-between gap-4">
+                                        <dt class="text-slate-500">Business number</dt>
+                                        <dd class="text-slate-200 text-right" x-text="activeCall.business_number || '--'"></dd>
                                     </div>
                                     <div class="flex justify-between gap-4">
                                         <dt class="text-slate-500">Acciones</dt>
@@ -1185,6 +1303,114 @@ require_once __DIR__ . '/header.php';
                         </div>
                     </div>
                 </template>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="apiHealthModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" style="display:none;">
+        <div class="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
+                <div>
+                    <h2 class="text-xl font-semibold text-white">Estado de API y Cobertura UI</h2>
+                    <p class="text-sm text-slate-400 mt-1">Validacion en vivo de endpoints y que se esta renderizando en el dashboard.</p>
+                </div>
+                <button @click="apiHealthModal = false" type="button" class="h-10 w-10 rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <section class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Integracion</p>
+                        <p class="text-sm text-slate-200 mt-2" x-text="apiHealth.context.integration_name || '--'"></p>
+                    </div>
+                    <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Location ID</p>
+                        <p class="text-sm text-cyan-200 mt-2 break-all" x-text="apiHealth.context.location_id || '--'"></p>
+                    </div>
+                    <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Rango</p>
+                        <p class="text-sm text-slate-200 mt-2" x-text="`${filters.start_date || '--'} → ${filters.end_date || '--'}`"></p>
+                    </div>
+                    <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Modo</p>
+                        <p class="text-sm text-slate-200 mt-2" x-text="filters.fast_mode === '1' ? 'Rapido' : 'Completo'"></p>
+                    </div>
+                </section>
+
+                <section class="rounded-2xl border border-slate-700 bg-slate-950/40 p-5">
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                        <h3 class="text-base font-semibold text-white">Validacion de endpoints</h3>
+                        <button @click="validateApiEndpoints" :disabled="apiHealthLoading"
+                            class="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 text-sm font-semibold">
+                            <i class="fas mr-2" :class="apiHealthLoading ? 'fa-spinner fa-spin' : 'fa-vial-circle-check'"></i>
+                            Revalidar API
+                        </button>
+                    </div>
+
+                    <div x-show="apiHealthLoading" class="flex items-center gap-3 text-cyan-200 text-sm" style="display:none;">
+                        <div class="h-5 w-5 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin"></div>
+                        <span>Probando endpoints contra API...</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3" x-show="!apiHealthLoading" style="display:none;">
+                        <template x-for="endpoint in apiHealth.endpoints" :key="endpoint.name">
+                            <article class="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <h4 class="text-sm font-semibold text-slate-100" x-text="endpoint.label"></h4>
+                                    <span class="px-2 py-1 rounded-full text-xs font-semibold"
+                                        :class="endpoint.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'"
+                                        x-text="endpoint.success ? 'OK' : 'Error'"></span>
+                                </div>
+                                <div class="mt-3 text-xs text-slate-400 space-y-1">
+                                    <p>HTTP: <span class="text-slate-200" x-text="endpoint.status"></span></p>
+                                    <p>Tiempo: <span class="text-slate-200" x-text="`${endpoint.elapsed_ms} ms`"></span></p>
+                                    <p x-show="endpoint.summary" style="display:none;" x-text="endpoint.summary"></p>
+                                    <p x-show="endpoint.message" style="display:none;" class="text-rose-300" x-text="endpoint.message"></p>
+                                </div>
+                            </article>
+                        </template>
+                    </div>
+                </section>
+
+                <section class="rounded-2xl border border-slate-700 bg-slate-950/40 p-5">
+                    <h3 class="text-base font-semibold text-white mb-4">Cobertura de reportes en UI</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <template x-for="item in uiCoverageChecks()" :key="item.key">
+                            <div class="rounded-xl border p-3"
+                                :class="item.ok ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-amber-500/40 bg-amber-500/10'">
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-sm font-medium" :class="item.ok ? 'text-emerald-200' : 'text-amber-200'" x-text="item.label"></p>
+                                    <i class="fas" :class="item.ok ? 'fa-circle-check text-emerald-300' : 'fa-circle-minus text-amber-300'"></i>
+                                </div>
+                                <p class="text-xs mt-2 text-slate-300" x-text="item.detail"></p>
+                            </div>
+                        </template>
+                    </div>
+                </section>
+
+                <section class="rounded-2xl border border-slate-700 bg-slate-950/40 p-5" x-show="meta.performance_ms" style="display:none;">
+                    <h3 class="text-base font-semibold text-white mb-4">Desglose de rendimiento (ultima carga)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                        <div class="rounded-lg border border-slate-700 p-3">
+                            <p class="text-slate-400">Interacciones API</p>
+                            <p class="text-cyan-200 mt-1" x-text="`${(meta.performance_ms || {}).interactions_fetch_ms || 0} ms`"></p>
+                        </div>
+                        <div class="rounded-lg border border-slate-700 p-3">
+                            <p class="text-slate-400">Totales interacción</p>
+                            <p class="text-cyan-200 mt-1" x-text="`${(meta.performance_ms || {}).interaction_totals_ms || 0} ms`"></p>
+                        </div>
+                        <div class="rounded-lg border border-slate-700 p-3">
+                            <p class="text-slate-400">Voice AI calls</p>
+                            <p class="text-cyan-200 mt-1" x-text="`${(meta.performance_ms || {}).voice_ai_calls_ms || 0} ms`"></p>
+                        </div>
+                        <div class="rounded-lg border border-slate-700 p-3">
+                            <p class="text-slate-400">Tiempo total</p>
+                            <p class="text-emerald-200 mt-1" x-text="`${(meta.performance_ms || {}).total_ms || 0} ms`"></p>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </div>
@@ -1233,10 +1459,12 @@ require_once __DIR__ . '/header.php';
             numbers_catalog: [],
             recent_interactions: [],
             recent_calls: [],
+            voice_ai_recent_calls: [],
             recent_inbound_calls: [],
             recent_outbound_calls: [],
             recent_messages: [],
             summary: {},
+            voice_ai_coverage: {},
             agents_catalog: [],
             conversations_snapshot: []
         });
@@ -1316,9 +1544,26 @@ require_once __DIR__ . '/header.php';
                 disposition_by_user: 8,
                 recent_inbound_calls: 8,
                 recent_outbound_calls: 8,
+                voice_ai_recent_calls: 8,
                 recent_interactions: 15
             },
             tablePagination: {},
+            apiHealthModal: false,
+            apiHealthLoading: false,
+            apiHealth: {
+                context: {
+                    integration_name: '',
+                    location_id: ''
+                },
+                endpoints: []
+            },
+            dashboardCache: {},
+            cacheTtlMs: 90000,
+            cacheHit: false,
+            lastLoadedAt: null,
+            activeDashboardRequest: null,
+            loadingStage: '',
+            loadingStageProgress: 0,
 
             init() {
                 Chart.defaults.color = '#94a3b8';
@@ -1391,10 +1636,12 @@ require_once __DIR__ . '/header.php';
                     numbers_catalog: Array.isArray(incoming.numbers_catalog) ? incoming.numbers_catalog : base.numbers_catalog,
                     recent_interactions: Array.isArray(incoming.recent_interactions) ? incoming.recent_interactions : base.recent_interactions,
                     recent_calls: Array.isArray(incoming.recent_calls) ? incoming.recent_calls : base.recent_calls,
+                    voice_ai_recent_calls: Array.isArray(incoming.voice_ai_recent_calls) ? incoming.voice_ai_recent_calls : base.voice_ai_recent_calls,
                     recent_inbound_calls: Array.isArray(incoming.recent_inbound_calls) ? incoming.recent_inbound_calls : base.recent_inbound_calls,
                     recent_outbound_calls: Array.isArray(incoming.recent_outbound_calls) ? incoming.recent_outbound_calls : base.recent_outbound_calls,
                     recent_messages: Array.isArray(incoming.recent_messages) ? incoming.recent_messages : base.recent_messages,
                     summary: (incoming.summary && typeof incoming.summary === 'object') ? incoming.summary : base.summary,
+                    voice_ai_coverage: (incoming.voice_ai_coverage && typeof incoming.voice_ai_coverage === 'object') ? incoming.voice_ai_coverage : base.voice_ai_coverage,
                     agents_catalog: Array.isArray(incoming.agents_catalog) ? incoming.agents_catalog : base.agents_catalog,
                     conversations_snapshot: Array.isArray(incoming.conversations_snapshot) ? incoming.conversations_snapshot : base.conversations_snapshot
                 };
@@ -1599,6 +1846,21 @@ require_once __DIR__ . '/header.php';
             buildQueryParams() {
                 const fastMode = this.filters.fast_mode === '0' ? '0' : '1';
                 const withComparison = fastMode === '1' ? '0' : (this.filters.with_comparison ? '1' : '0');
+                const selectedIntegration = (this.configStatus.integrations || []).find(
+                    (item) => String(item.integration_id) === String(this.filters.integration_id || '')
+                );
+                const callPageSize = fastMode === '1'
+                    ? 25
+                    : Number(selectedIntegration?.page_size || this.configStatus.page_size || 50);
+                const callMaxPages = fastMode === '1'
+                    ? 3
+                    : Number(selectedIntegration?.max_pages || this.configStatus.max_pages || 10);
+                const interactionPageSize = fastMode === '1'
+                    ? 50
+                    : Number(selectedIntegration?.interaction_page_size || this.configStatus.interaction_page_size || 100);
+                const interactionMaxPages = fastMode === '1'
+                    ? 12
+                    : Number(selectedIntegration?.interaction_max_pages || this.configStatus.interaction_max_pages || 50);
 
                 return new URLSearchParams({
                     integration_id: this.filters.integration_id || '',
@@ -1613,7 +1875,11 @@ require_once __DIR__ . '/header.php';
                     search: this.filters.search || '',
                     fast_mode: fastMode,
                     with_comparison: withComparison,
-                    sort_order: this.filters.sort_order || 'desc'
+                    sort_order: this.filters.sort_order || 'desc',
+                    page_size: String(callPageSize),
+                    max_pages: String(callMaxPages),
+                    interaction_page_size: String(interactionPageSize),
+                    interaction_max_pages: String(interactionMaxPages)
                 });
             },
 
@@ -1637,65 +1903,310 @@ require_once __DIR__ . '/header.php';
                 }
             },
 
+            buildNotice(meta) {
+                const interactionTotals = meta.interaction_totals || {};
+                const totalMs = Number((meta.performance_ms || {}).total_ms || 0);
+                const loadSpeed = totalMs > 0 ? `Carga API: ${totalMs} ms.` : '';
+                const selectedIntegration = (this.configStatus.integrations || []).find(
+                    (item) => String(item.integration_id) === String(this.filters.integration_id || '')
+                );
+                const selectedLabel = selectedIntegration
+                    ? `${selectedIntegration.integration_name} (${selectedIntegration.location_id})`
+                    : 'la ubicacion seleccionada';
+                const totalInteractions = (interactionTotals.call || 0) + (interactionTotals.sms || 0) + (interactionTotals.whatsapp || 0) + (interactionTotals.email || 0);
+
+                if ((meta.voice_ai_total || 0) === 0 && totalInteractions === 0) {
+                    return `No se encontraron interacciones para ${selectedLabel} entre ${this.filters.start_date || 'la fecha inicial'} y ${this.filters.end_date || 'la fecha final'}. Prueba ampliar el rango o cambiar de ubicacion. ${loadSpeed}`.trim();
+                }
+                if ((meta.voice_ai_total || 0) === 0 && (interactionTotals.call || 0) > 0) {
+                    return `Voice AI no devolvio call logs, pero Conversations API si devolvio ${interactionTotals.call} llamadas y ${interactionTotals.sms || 0} SMS para este rango. ${loadSpeed}`.trim();
+                }
+                if ((interactionTotals.tracked_total || 0) > 0) {
+                    return `Se cargaron ${interactionTotals.tracked_total} interacciones rastreadas para el rango consultado. ${loadSpeed}`.trim();
+                }
+                if ((meta.conversations_total || 0) > 0) {
+                    return `Hay ${meta.conversations_total} conversaciones en el location, aunque el rango actual no devolvio interacciones. ${loadSpeed}`.trim();
+                }
+                return loadSpeed;
+            },
+
+            buildLocalInteractionDetail(item) {
+                if (!item || typeof item !== 'object') {
+                    return null;
+                }
+
+                return {
+                    call_id: item.call_id || item.alt_id || item.id || '',
+                    started_at: item.date_added || item.date_updated || '',
+                    duration_seconds: Number(item.duration_seconds || 0),
+                    agent_name: item.user_name || 'Sin agente',
+                    contact_name: item.contact_name || '',
+                    contact_phone: item.contact_phone || item.counterparty_phone || '',
+                    status: item.status || 'Unknown',
+                    call_type: item.channel ? `${item.channel} / ${item.direction || 'unknown'}` : (item.direction || 'unknown'),
+                    disposition: item.call_disposition || '--',
+                    sentiment: item.sentiment || '--',
+                    action_types: [],
+                    recording_url: Array.isArray(item.recording_urls) && item.recording_urls.length ? item.recording_urls[0] : '',
+                    summary: item.body || item.error || 'Sin resumen disponible.',
+                    transcript: item.body || 'Sin transcript disponible.',
+                    channel: item.channel || '--',
+                    source: item.source || '--',
+                    business_number: item.business_number || '--',
+                    from: item.from || '--',
+                    to: item.to || '--'
+                };
+            },
+
+            applyDashboardPayload(payload, fromCache = false) {
+                this.meta = payload.meta || {};
+                this.availableFilters = {
+                    ...this.availableFilters,
+                    ...(payload.available_filters || {})
+                };
+                this.dashboard = this.normalizeDashboardPayload(payload.dashboard);
+                this.configStatus = payload.config_status || this.configStatus;
+                if (!this.filters.integration_id && this.configStatus.selected_integration_id) {
+                    this.filters.integration_id = String(this.configStatus.selected_integration_id);
+                }
+                this.resetTablePages();
+                this.notice = this.buildNotice(this.meta);
+                this.cacheHit = fromCache;
+                this.lastLoadedAt = new Date().toISOString();
+                this.renderCharts();
+            },
+
             async fetchDashboard() {
                 if (!this.configStatus.is_ready) {
                     return;
                 }
 
-                this.isLoading = true;
+                const query = this.buildQueryParams().toString();
+                const cacheEntry = this.dashboardCache[query];
+                const now = Date.now();
+
                 this.error = null;
                 this.notice = null;
 
+                if (cacheEntry && (now - cacheEntry.timestamp) < this.cacheTtlMs) {
+                    this.applyDashboardPayload(cacheEntry.payload, true);
+                    return;
+                }
+
+                if (this.activeDashboardRequest) {
+                    this.activeDashboardRequest.abort();
+                }
+
+                const controller = new AbortController();
+                this.activeDashboardRequest = controller;
+                this.isLoading = true;
+                this.loadingStage = 'Consultando endpoints principales...';
+                this.loadingStageProgress = 15;
+
                 try {
-                    const response = await fetch(`api/voice_ai_reports.php?action=dashboard&${this.buildQueryParams().toString()}`, {
+                    const response = await fetch(`api/voice_ai_reports.php?action=dashboard&${query}`, {
                         headers: {
                             'Accept': 'application/json'
-                        }
+                        },
+                        signal: controller.signal
                     });
+                    this.loadingStage = 'Procesando respuesta de la API...';
+                    this.loadingStageProgress = 68;
                     const payload = await this.parseJsonResponse(response, 'No se pudo cargar la reporteria de comunicaciones.');
 
                     if (!response.ok || !payload.success) {
                         throw new Error(payload.message || 'No se pudo cargar la reporteria de comunicaciones.');
                     }
 
-                    this.meta = payload.meta || {};
-                    this.availableFilters = {
-                        ...this.availableFilters,
-                        ...(payload.available_filters || {})
+                    this.dashboardCache[query] = {
+                        timestamp: now,
+                        payload
                     };
-                    this.dashboard = this.normalizeDashboardPayload(payload.dashboard);
-                    this.configStatus = payload.config_status || this.configStatus;
-                    if (!this.filters.integration_id && this.configStatus.selected_integration_id) {
-                        this.filters.integration_id = String(this.configStatus.selected_integration_id);
-                    }
-                    this.resetTablePages();
-                    const interactionTotals = this.meta.interaction_totals || {};
-                    const totalMs = Number((this.meta.performance_ms || {}).total_ms || 0);
-                    const loadSpeed = totalMs > 0 ? `Carga API: ${totalMs} ms.` : '';
-                    const selectedIntegration = (this.configStatus.integrations || []).find(
-                        (item) => String(item.integration_id) === String(this.filters.integration_id || '')
-                    );
-                    const selectedLabel = selectedIntegration
-                        ? `${selectedIntegration.integration_name} (${selectedIntegration.location_id})`
-                        : 'la ubicacion seleccionada';
-                    const totalInteractions = (interactionTotals.call || 0) + (interactionTotals.sms || 0) + (interactionTotals.whatsapp || 0) + (interactionTotals.email || 0);
-
-                    if ((this.meta.voice_ai_total || 0) === 0 && totalInteractions === 0) {
-                        this.notice = `No se encontraron interacciones para ${selectedLabel} entre ${this.filters.start_date || 'la fecha inicial'} y ${this.filters.end_date || 'la fecha final'}. Prueba ampliar el rango o cambiar de ubicacion. ${loadSpeed}`.trim();
-                    } else if ((this.meta.voice_ai_total || 0) === 0 && (interactionTotals.call || 0) > 0) {
-                        this.notice = `Voice AI no devolvio call logs, pero Conversations API si devolvio ${interactionTotals.call} llamadas y ${interactionTotals.sms || 0} SMS para este rango. ${loadSpeed}`.trim();
-                    } else if ((interactionTotals.tracked_total || 0) > 0) {
-                        this.notice = `Se cargaron ${interactionTotals.tracked_total} interacciones rastreadas para el rango consultado. ${loadSpeed}`.trim();
-                    } else if ((this.meta.conversations_total || 0) > 0) {
-                        this.notice = `Hay ${this.meta.conversations_total} conversaciones en el location, aunque el rango actual no devolvio interacciones. ${loadSpeed}`.trim();
-                    } else if (loadSpeed) {
-                        this.notice = loadSpeed;
-                    }
-                    this.renderCharts();
+                    this.loadingStage = 'Renderizando metricas y graficos...';
+                    this.loadingStageProgress = 92;
+                    this.applyDashboardPayload(payload, false);
                 } catch (error) {
+                    if (error && error.name === 'AbortError') {
+                        return;
+                    }
                     this.error = error.message || 'Ocurrio un error al cargar el dashboard.';
                 } finally {
+                    if (this.activeDashboardRequest === controller) {
+                        this.activeDashboardRequest = null;
+                    }
+                    this.loadingStage = '';
+                    this.loadingStageProgress = 0;
                     this.isLoading = false;
+                }
+            },
+
+            uiCoverageChecks() {
+                const d = this.dashboard || {};
+                return [{
+                        key: 'kpis',
+                        label: 'KPIs ejecutivos',
+                        ok: Object.keys(d.kpis || {}).length > 0,
+                        detail: `${Object.keys(d.kpis || {}).length} KPI(s) cargados`
+                    },
+                    {
+                        key: 'channels',
+                        label: 'Distribucion por canal',
+                        ok: Object.keys((d.distributions || {}).channels || {}).length > 0,
+                        detail: `${Object.keys((d.distributions || {}).channels || {}).length} canal(es)`
+                    },
+                    {
+                        key: 'statuses',
+                        label: 'Estados de interaccion',
+                        ok: Object.keys((d.distributions || {}).statuses || {}).length > 0,
+                        detail: `${Object.keys((d.distributions || {}).statuses || {}).length} estado(s)`
+                    },
+                    {
+                        key: 'timeline',
+                        label: 'Timeline interacciones',
+                        ok: Object.keys((d.timeline || {}).by_day || {}).length > 0,
+                        detail: `${Object.keys((d.timeline || {}).by_day || {}).length} punto(s) de tiempo`
+                    },
+                    {
+                        key: 'activity_by_user',
+                        label: 'Actividad por usuario',
+                        ok: Array.isArray(d.agents) && d.agents.length > 0,
+                        detail: `${(d.agents || []).length} usuario(s) en actividad`
+                    },
+                    {
+                        key: 'top_contacts',
+                        label: 'Top contactos',
+                        ok: Array.isArray(d.contacts) && d.contacts.length > 0,
+                        detail: `${(d.contacts || []).length} contacto(s)`
+                    },
+                    {
+                        key: 'recent_feed',
+                        label: 'Actividad reciente',
+                        ok: Array.isArray(d.recent_interactions) && d.recent_interactions.length > 0,
+                        detail: `${(d.recent_interactions || []).length} interaccion(es) recientes`
+                    },
+                    {
+                        key: 'message_breakdown',
+                        label: 'Breakdown de mensajeria',
+                        ok: Array.isArray(d.message_breakdown) && d.message_breakdown.length > 0,
+                        detail: `${(d.message_breakdown || []).length} fila(s)`
+                    },
+                    {
+                        key: 'dispositions_table',
+                        label: 'Tabla de disposiciones',
+                        ok: Array.isArray(d.call_dispositions) && d.call_dispositions.length > 0,
+                        detail: `${(d.call_dispositions || []).length} disposicion(es)`
+                    }
+                ];
+            },
+
+            async validateApiEndpoints() {
+                this.apiHealthLoading = true;
+
+                const buildSummary = (payload) => {
+                    const totals = payload?.meta?.interaction_totals || {};
+                    const calls = totals.call || 0;
+                    const sms = totals.sms || 0;
+                    const filtered = payload?.meta?.filtered_count || 0;
+                    return `Llamadas: ${calls}, SMS: ${sms}, Filtradas: ${filtered}`;
+                };
+
+                try {
+                    const query = this.buildQueryParams().toString();
+                    const endpoints = [{
+                            name: 'config_status',
+                            label: 'Configuracion activa',
+                            url: `api/voice_ai_reports.php?action=config_status&integration_id=${encodeURIComponent(this.filters.integration_id || '')}`
+                        },
+                        {
+                            name: 'dashboard',
+                            label: 'Dashboard principal',
+                            url: `api/voice_ai_reports.php?action=dashboard&${query}`
+                        },
+                        {
+                            name: 'disposition_analytics',
+                            label: 'Analitica de disposiciones',
+                            url: `api/voice_ai_reports.php?action=disposition_analytics&${query}`
+                        },
+                        {
+                            name: 'call_quality',
+                            label: 'Calidad de llamadas',
+                            url: `api/voice_ai_reports.php?action=call_quality&${query}`
+                        },
+                        {
+                            name: 'comprehensive_report',
+                            label: 'Reporte integral',
+                            url: `api/voice_ai_reports.php?action=comprehensive_report&${query}`
+                        }
+                    ];
+
+                    const responses = await Promise.all(endpoints.map(async (endpoint) => {
+                        const started = performance.now();
+                        let response;
+                        let payload;
+
+                        try {
+                            response = await fetch(endpoint.url, {
+                                headers: {
+                                    'Accept': 'application/json'
+                                }
+                            });
+                            payload = await this.parseJsonResponse(response, `Error consultando ${endpoint.label}.`);
+                        } catch (error) {
+                            return {
+                                name: endpoint.name,
+                                label: endpoint.label,
+                                status: 0,
+                                elapsed_ms: Math.round(performance.now() - started),
+                                success: false,
+                                message: error.message || `No se pudo consultar ${endpoint.label}.`,
+                                summary: ''
+                            };
+                        }
+
+                        const endpointSuccess = response.ok && !!payload.success;
+                        let summary = '';
+                        if (endpoint.name === 'dashboard') {
+                            summary = buildSummary(payload);
+                        } else if (endpoint.name === 'config_status') {
+                            summary = payload?.config_status?.is_ready ? 'Integracion lista' : 'Configuracion incompleta';
+                        } else if (endpoint.name === 'disposition_analytics') {
+                            summary = `Disposiciones: ${(payload?.disposition_stats || []).length}`;
+                        } else if (endpoint.name === 'call_quality') {
+                            summary = `Calls analizadas: ${payload?.quality_metrics?.total_calls || 0}`;
+                        } else if (endpoint.name === 'comprehensive_report') {
+                            summary = `Warnings: ${(payload?.warnings || []).filter(Boolean).length}`;
+                        }
+
+                        return {
+                            name: endpoint.name,
+                            label: endpoint.label,
+                            status: response.status,
+                            elapsed_ms: Math.round(performance.now() - started),
+                            success: endpointSuccess,
+                            message: endpointSuccess ? '' : (payload?.message || 'Fallo de endpoint'),
+                            summary
+                        };
+                    }));
+
+                    this.apiHealth.endpoints = responses;
+                } finally {
+                    this.apiHealthLoading = false;
+                }
+            },
+
+            async openApiHealthModal() {
+                const selectedIntegration = (this.configStatus.integrations || []).find(
+                    (item) => String(item.integration_id) === String(this.filters.integration_id || '')
+                );
+
+                this.apiHealth.context = {
+                    integration_name: selectedIntegration?.integration_name || this.configStatus.integration_name || '',
+                    location_id: selectedIntegration?.location_id || this.configStatus.location_id || ''
+                };
+                this.apiHealthModal = true;
+
+                if (!this.apiHealth.endpoints.length) {
+                    await this.validateApiEndpoints();
                 }
             },
 
@@ -1745,16 +2256,26 @@ require_once __DIR__ . '/header.php';
                 window.location.href = `api/voice_ai_export.php?${this.buildQueryParams().toString()}`;
             },
 
-            async openCallDetail(callId) {
-                if (!callId) {
+            async openCallDetail(callOrInteraction) {
+                if (!callOrInteraction) {
                     return;
                 }
 
+                const fallbackItem = typeof callOrInteraction === 'object' ? callOrInteraction : null;
+                const callId = typeof callOrInteraction === 'string'
+                    ? callOrInteraction
+                    : (callOrInteraction.voice_ai_call_id || callOrInteraction.call_id || callOrInteraction.alt_id || callOrInteraction.id || '');
+
                 this.detailModal = true;
                 this.detailLoading = true;
-                this.activeCall = null;
+                this.activeCall = fallbackItem ? this.buildLocalInteractionDetail(fallbackItem) : null;
 
                 try {
+                    if (!callId) {
+                        this.detailLoading = false;
+                        return;
+                    }
+
                     const integrationSuffix = this.filters.integration_id ? `&integration_id=${encodeURIComponent(this.filters.integration_id)}` : '';
                     const response = await fetch(`api/voice_ai_reports.php?action=call_detail&call_id=${encodeURIComponent(callId)}${integrationSuffix}`, {
                         headers: {
@@ -1769,8 +2290,13 @@ require_once __DIR__ . '/header.php';
 
                     this.activeCall = payload.call || null;
                 } catch (error) {
-                    this.error = error.message || 'No se pudo cargar el detalle.';
-                    this.detailModal = false;
+                    if (!this.activeCall && fallbackItem) {
+                        this.activeCall = this.buildLocalInteractionDetail(fallbackItem);
+                    }
+                    if (!this.activeCall) {
+                        this.error = error.message || 'No se pudo cargar el detalle.';
+                        this.detailModal = false;
+                    }
                 } finally {
                     this.detailLoading = false;
                 }
