@@ -2512,7 +2512,13 @@ if (!function_exists('voiceAiFetchAssignedConversationTotals')) {
                 continue;
             }
 
-            $totals[$userId] = (int) ($response['data']['total'] ?? 0);
+            $assigned = (int) ($response['data']['total'] ?? 0);
+            $totals[] = [
+                'user_id' => $userId,
+                'user_name' => (string) ($user['name'] ?? ''),
+                'assigned_conversations' => $assigned,
+                'queue_level' => $assigned > 20 ? 'High' : ($assigned > 10 ? 'Medium' : 'Low'),
+            ];
         }
 
         return [

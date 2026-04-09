@@ -46,6 +46,30 @@ require_once __DIR__ . '/header.php';
         </div>
     </div>
 
+    <!-- Location Selector -->
+    <div x-show="(configStatus.integrations || []).length > 1" style="display:none;" class="mb-8 rounded-2xl border border-cyan-500/20 bg-slate-950/50 p-5 backdrop-blur-sm">
+        <div class="flex items-center gap-3 mb-4">
+            <i class="fas fa-map-pin text-cyan-400"></i>
+            <h3 class="text-sm font-semibold text-slate-200">Selecciona una ubicación</h3>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <template x-for="integration in configStatus.integrations || []" :key="integration.integration_id">
+                <button
+                    @click="changeLocation(String(integration.integration_id))"
+                    :class="filters.integration_id === String(integration.integration_id) 
+                        ? 'bg-cyan-500 text-slate-950 border-cyan-400' 
+                        : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-cyan-500/50'"
+                    class="px-4 py-3 rounded-xl border transition-all text-left">
+                    <div class="font-medium text-sm" x-text="integration.integration_name"></div>
+                    <div class="text-xs opacity-75 mt-1" x-text="integration.location_id"></div>
+                    <div class="text-xs mt-1" :class="integration.is_default ? 'text-cyan-300' : 'opacity-50'" x-show="integration.is_default">
+                        <i class="fas fa-star mr-1"></i>Por defecto
+                    </div>
+                </button>
+            </template>
+        </div>
+    </div>
+
     <div x-show="!configStatus.is_ready" class="mb-8 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-5 text-amber-100" style="display:none;">
         <div class="flex items-start gap-3">
             <i class="fas fa-triangle-exclamation mt-1"></i>
@@ -1178,6 +1202,45 @@ require_once __DIR__ . '/header.php';
     document.addEventListener('alpine:init', () => {
         const charts = {};
 
+        const createEmptyDashboard = () => ({
+            kpis: {},
+            distributions: {
+                channels: {},
+                directions: {},
+                statuses: {},
+                sources: {},
+                call_dispositions: {}
+            },
+            timeline: {
+                by_day: {},
+                by_weekday: {},
+                by_day_channels: {},
+                by_hour: {},
+                by_hour_direction: {
+                    inbound: {},
+                    outbound: {}
+                }
+            },
+            agents: [],
+            contacts: [],
+            queue_by_user: [],
+            numbers: [],
+            numbers_usage: [],
+            message_breakdown: [],
+            call_dispositions: [],
+            disposition_by_user: [],
+            users_catalog: [],
+            numbers_catalog: [],
+            recent_interactions: [],
+            recent_calls: [],
+            recent_inbound_calls: [],
+            recent_outbound_calls: [],
+            recent_messages: [],
+            summary: {},
+            agents_catalog: [],
+            conversations_snapshot: []
+        });
+
         const upsertChart = (id, config) => {
             const canvas = document.getElementById(id);
             if (!canvas) return;
@@ -1209,42 +1272,7 @@ require_once __DIR__ . '/header.php';
                 interaction_sources: [],
                 interaction_users: []
             },
-            dashboard: {
-                kpis: {},
-                distributions: {
-                    channels: {},
-                    directions: {},
-                    statuses: {},
-                    sources: {},
-                    call_dispositions: {}
-                },
-                timeline: {
-                    by_day: {},
-                    by_weekday: {},
-                    by_day_channels: {},
-                    by_hour: {},
-                    by_hour_direction: {
-                        inbound: {},
-                        outbound: {}
-                    }
-                },
-                agents: [],
-                contacts: [],
-                queue_by_user: [],
-                numbers: [],
-                numbers_usage: [],
-                message_breakdown: [],
-                call_dispositions: [],
-                disposition_by_user: [],
-                users_catalog: [],
-                numbers_catalog: [],
-                recent_interactions: [],
-                recent_calls: [],
-                recent_inbound_calls: [],
-                recent_outbound_calls: [],
-                recent_messages: [],
-                summary: {}
-            },
+            dashboard: createEmptyDashboard(),
             activeCall: null,
             filters: {
                 integration_id: voiceAiInitialConfig.selected_integration_id ? String(voiceAiInitialConfig.selected_integration_id) : '',
@@ -1297,6 +1325,26 @@ require_once __DIR__ . '/header.php';
                 Chart.defaults.borderColor = 'rgba(71, 85, 105, 0.45)';
                 Chart.defaults.font.family = "'Inter', sans-serif";
                 this.resetTablePages();
+                
+                // Cargar location guardada en localStorage o usar la default
+                const savedLocation = localStorage.getItem('voiceai_selected_location');
+                const defaultLocationId = this.configStatus.default_integration_id ? String(this.configStatus.default_integration_id) : null;
+                const availableLocationIds = (this.configStatus.integrations || []).map(i => String(i.integration_id));
+                
+                let initialLocationId = null;
+                if (savedLocation && availableLocationIds.includes(savedLocation)) {
+                    initialLocationId = savedLocation;
+                } else if (defaultLocationId && availableLocationIds.includes(defaultLocationId)) {
+                    initialLocationId = defaultLocationId;
+                } else if (availableLocationIds.length > 0) {
+                    initialLocationId = availableLocationIds[0];
+                }
+
+                if (initialLocationId) {
+                    this.filters.integration_id = initialLocationId;
+                    this.configForm.integration_id = initialLocationId;
+                }
+
                 if (!this.filters.integration_id && this.configStatus.selected_integration_id) {
                     this.filters.integration_id = String(this.configStatus.selected_integration_id);
                 }
@@ -1308,6 +1356,48 @@ require_once __DIR__ . '/header.php';
                         this.fetchDashboard();
                     }
                 });
+            },
+
+            normalizeDashboardPayload(incomingDashboard) {
+                const base = createEmptyDashboard();
+                const incoming = (incomingDashboard && typeof incomingDashboard === 'object') ? incomingDashboard : {};
+                const incomingTimeline = (incoming.timeline && typeof incoming.timeline === 'object') ? incoming.timeline : {};
+
+                return {
+                    ...base,
+                    ...incoming,
+                    kpis: (incoming.kpis && typeof incoming.kpis === 'object') ? incoming.kpis : base.kpis,
+                    distributions: {
+                        ...base.distributions,
+                        ...((incoming.distributions && typeof incoming.distributions === 'object') ? incoming.distributions : {})
+                    },
+                    timeline: {
+                        ...base.timeline,
+                        ...incomingTimeline,
+                        by_hour_direction: {
+                            ...base.timeline.by_hour_direction,
+                            ...((incomingTimeline.by_hour_direction && typeof incomingTimeline.by_hour_direction === 'object') ? incomingTimeline.by_hour_direction : {})
+                        }
+                    },
+                    agents: Array.isArray(incoming.agents) ? incoming.agents : base.agents,
+                    contacts: Array.isArray(incoming.contacts) ? incoming.contacts : base.contacts,
+                    queue_by_user: Array.isArray(incoming.queue_by_user) ? incoming.queue_by_user : base.queue_by_user,
+                    numbers: Array.isArray(incoming.numbers) ? incoming.numbers : base.numbers,
+                    numbers_usage: Array.isArray(incoming.numbers_usage) ? incoming.numbers_usage : base.numbers_usage,
+                    message_breakdown: Array.isArray(incoming.message_breakdown) ? incoming.message_breakdown : base.message_breakdown,
+                    call_dispositions: Array.isArray(incoming.call_dispositions) ? incoming.call_dispositions : base.call_dispositions,
+                    disposition_by_user: Array.isArray(incoming.disposition_by_user) ? incoming.disposition_by_user : base.disposition_by_user,
+                    users_catalog: Array.isArray(incoming.users_catalog) ? incoming.users_catalog : base.users_catalog,
+                    numbers_catalog: Array.isArray(incoming.numbers_catalog) ? incoming.numbers_catalog : base.numbers_catalog,
+                    recent_interactions: Array.isArray(incoming.recent_interactions) ? incoming.recent_interactions : base.recent_interactions,
+                    recent_calls: Array.isArray(incoming.recent_calls) ? incoming.recent_calls : base.recent_calls,
+                    recent_inbound_calls: Array.isArray(incoming.recent_inbound_calls) ? incoming.recent_inbound_calls : base.recent_inbound_calls,
+                    recent_outbound_calls: Array.isArray(incoming.recent_outbound_calls) ? incoming.recent_outbound_calls : base.recent_outbound_calls,
+                    recent_messages: Array.isArray(incoming.recent_messages) ? incoming.recent_messages : base.recent_messages,
+                    summary: (incoming.summary && typeof incoming.summary === 'object') ? incoming.summary : base.summary,
+                    agents_catalog: Array.isArray(incoming.agents_catalog) ? incoming.agents_catalog : base.agents_catalog,
+                    conversations_snapshot: Array.isArray(incoming.conversations_snapshot) ? incoming.conversations_snapshot : base.conversations_snapshot
+                };
             },
 
             kpiList() {
@@ -1486,6 +1576,26 @@ require_once __DIR__ . '/header.php';
                 };
             },
 
+            changeLocation(integrationId) {
+                if (!integrationId || this.filters.integration_id === integrationId) {
+                    return;
+                }
+
+                // Cambiar la location seleccionada
+                this.filters.integration_id = integrationId;
+
+                // Guardar en localStorage para persistencia
+                localStorage.setItem('voiceai_selected_location', integrationId);
+
+                // Resetear la paginación de tablas
+                this.resetTablePages();
+
+                // Recargar el dashboard con la nueva location
+                if (this.configStatus.is_ready) {
+                    this.fetchDashboard();
+                }
+            },
+
             buildQueryParams() {
                 const fastMode = this.filters.fast_mode === '0' ? '0' : '1';
                 const withComparison = fastMode === '1' ? '0' : (this.filters.with_comparison ? '1' : '0');
@@ -1549,8 +1659,11 @@ require_once __DIR__ . '/header.php';
                     }
 
                     this.meta = payload.meta || {};
-                    this.availableFilters = payload.available_filters || this.availableFilters;
-                    this.dashboard = payload.dashboard || this.dashboard;
+                    this.availableFilters = {
+                        ...this.availableFilters,
+                        ...(payload.available_filters || {})
+                    };
+                    this.dashboard = this.normalizeDashboardPayload(payload.dashboard);
                     this.configStatus = payload.config_status || this.configStatus;
                     if (!this.filters.integration_id && this.configStatus.selected_integration_id) {
                         this.filters.integration_id = String(this.configStatus.selected_integration_id);
@@ -1559,7 +1672,17 @@ require_once __DIR__ . '/header.php';
                     const interactionTotals = this.meta.interaction_totals || {};
                     const totalMs = Number((this.meta.performance_ms || {}).total_ms || 0);
                     const loadSpeed = totalMs > 0 ? `Carga API: ${totalMs} ms.` : '';
-                    if ((this.meta.voice_ai_total || 0) === 0 && (interactionTotals.call || 0) > 0) {
+                    const selectedIntegration = (this.configStatus.integrations || []).find(
+                        (item) => String(item.integration_id) === String(this.filters.integration_id || '')
+                    );
+                    const selectedLabel = selectedIntegration
+                        ? `${selectedIntegration.integration_name} (${selectedIntegration.location_id})`
+                        : 'la ubicacion seleccionada';
+                    const totalInteractions = (interactionTotals.call || 0) + (interactionTotals.sms || 0) + (interactionTotals.whatsapp || 0) + (interactionTotals.email || 0);
+
+                    if ((this.meta.voice_ai_total || 0) === 0 && totalInteractions === 0) {
+                        this.notice = `No se encontraron interacciones para ${selectedLabel} entre ${this.filters.start_date || 'la fecha inicial'} y ${this.filters.end_date || 'la fecha final'}. Prueba ampliar el rango o cambiar de ubicacion. ${loadSpeed}`.trim();
+                    } else if ((this.meta.voice_ai_total || 0) === 0 && (interactionTotals.call || 0) > 0) {
                         this.notice = `Voice AI no devolvio call logs, pero Conversations API si devolvio ${interactionTotals.call} llamadas y ${interactionTotals.sms || 0} SMS para este rango. ${loadSpeed}`.trim();
                     } else if ((interactionTotals.tracked_total || 0) > 0) {
                         this.notice = `Se cargaron ${interactionTotals.tracked_total} interacciones rastreadas para el rango consultado. ${loadSpeed}`.trim();

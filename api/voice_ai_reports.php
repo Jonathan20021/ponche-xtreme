@@ -11,6 +11,7 @@ session_start();
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../lib/authorization_functions.php';
 require_once __DIR__ . '/../lib/voice_ai_client.php';
+require_once __DIR__ . '/../lib/voice_ai_extended_reports.php';
 
 $voiceAiJsonResponseSent = false;
 
@@ -94,6 +95,10 @@ function voiceAiBuildFiltersFromRequest(): array
         'fast_mode' => ($_GET['fast_mode'] ?? '1') !== '0',
         'with_comparison' => ($_GET['with_comparison'] ?? '0') === '1',
         'sort_order' => strtolower((string) ($_GET['sort_order'] ?? 'desc')) === 'asc' ? 'asc' : 'desc',
+        'max_pages' => (int) ($_GET['max_pages'] ?? 10),
+        'page_size' => (int) ($_GET['page_size'] ?? 50),
+        'interaction_max_pages' => (int) ($_GET['interaction_max_pages'] ?? 50),
+        'interaction_page_size' => (int) ($_GET['interaction_page_size'] ?? 100),
     ];
 }
 
@@ -183,6 +188,27 @@ try {
             voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
             break;
 
+        case 'disposition_analytics':
+            voiceAiSetContextIntegrationId($_GET['integration_id'] ?? null);
+            $filters = voiceAiBuildFiltersFromRequest();
+            $result = voiceAiFetchDispositionAnalytics($pdo, $filters);
+            voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
+            break;
+
+        case 'call_quality':
+            voiceAiSetContextIntegrationId($_GET['integration_id'] ?? null);
+            $filters = voiceAiBuildFiltersFromRequest();
+            $result = voiceAiFetchCallQualityMetrics($pdo, $filters);
+            voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
+            break;
+
+        case 'comprehensive_report':
+            voiceAiSetContextIntegrationId($_GET['integration_id'] ?? null);
+            $filters = voiceAiBuildFiltersFromRequest();
+            $result = voiceAiGenerateComprehensiveReport($pdo, $filters);
+            voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
+            break;
+
         case 'dashboard':
         default:
             $filters = voiceAiBuildFiltersFromRequest();
@@ -211,3 +237,4 @@ try {
         'message' => 'Se produjo un error interno al consultar la reporteria de comunicaciones.',
     ], 500);
 }
+
