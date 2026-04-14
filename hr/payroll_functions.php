@@ -220,6 +220,9 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
     if (!in_array('manual_overtime_hours', $columns, true)) {
         $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN manual_overtime_hours DECIMAL(6,2) NOT NULL DEFAULT 0.00 AFTER manual_regular_hours");
     }
+    if (!in_array('cooperative_deduction', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN cooperative_deduction DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER notes");
+    }
 
     $ensured = true;
 }
@@ -232,7 +235,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
     ensurePayrollManualIncentivesTable($pdo);
 
     $stmt = $pdo->prepare("
-        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes
+        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction
         FROM payroll_manual_incentives
         WHERE payroll_period_id = ?
     ");
@@ -247,6 +250,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
             'manual_regular_hours' => (float) ($row['manual_regular_hours'] ?? 0),
             'manual_overtime_hours' => (float) ($row['manual_overtime_hours'] ?? 0),
             'notes' => $row['notes'] ?? null,
+            'cooperative_deduction' => (float) ($row['cooperative_deduction'] ?? 0),
         ];
     }
 
@@ -393,6 +397,13 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
 
     // Calcular descuentos
     $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions);
+
+    // Aplicar descuento de cooperativo (monto fijo manual)
+    $cooperativeDeduction = round((float)($hoursData['cooperative_deduction'] ?? 0), 2);
+    if ($cooperativeDeduction > 0) {
+        $deductions['custom_deductions'] = round($deductions['custom_deductions'] + $cooperativeDeduction, 2);
+        $deductions['total_deductions'] = round($deductions['total_deductions'] + $cooperativeDeduction, 2);
+    }
 
     // Calcular aportes empleador
     $employerContributions = calculateEmployerContributions($pdo, $grossSalary);
