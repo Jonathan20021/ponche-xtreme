@@ -591,7 +591,7 @@ if ($selectedPeriodId) {
                                         <th class="text-right py-2 px-2">Horas Extra</th>
                                         <th class="text-right py-2 px-2">Incentivo Ventas</th>
                                         <th class="text-right py-2 px-2">Incentivo Nocturno</th>
-                                        <th class="text-right py-2 px-2">Cooperativo</th>
+                                        <th class="text-right py-2 px-2">Cooperativa</th>
                                         <th class="text-left py-2 px-2">Nota</th>
                                     </tr>
                                 </thead>
@@ -746,7 +746,7 @@ if ($selectedPeriodId) {
                                 <th class="text-right py-2 px-2">AFP (<?= number_format($deductionRates['AFP'], 2) ?>%)</th>
                                 <th class="text-right py-2 px-2">SFS (<?= number_format($deductionRates['SFS'], 2) ?>%)</th>
                                 <th class="text-right py-2 px-2">ISR</th>
-                                <th class="text-right py-2 px-2">Cooperativo</th>
+                                <th class="text-right py-2 px-2">Cooperativa</th>
                                 <th class="text-right py-2 px-2">Otros Desc.</th>
                                 <th class="text-right py-2 px-2">Total Desc.</th>
                                 <th class="text-right py-2 px-2">Salario Neto</th>

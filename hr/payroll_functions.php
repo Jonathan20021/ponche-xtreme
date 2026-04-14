@@ -398,7 +398,7 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     // Calcular descuentos
     $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions);
 
-    // Aplicar descuento de cooperativo (monto fijo manual)
+    // Aplicar descuento de cooperativa (monto fijo manual)
     $cooperativeDeduction = round((float)($hoursData['cooperative_deduction'] ?? 0), 2);
     if ($cooperativeDeduction > 0) {
         $deductions['custom_deductions'] = round($deductions['custom_deductions'] + $cooperativeDeduction, 2);

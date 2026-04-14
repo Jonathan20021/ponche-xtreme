@@ -486,7 +486,7 @@ function generatePayrollSlipHTML(array $data): string {
                     <?php endif; ?>
                     <?php if (($data['cooperative_deduction'] ?? 0) > 0): ?>
                     <tr>
-                        <td>Cooperativo</td>
+                        <td>Cooperativa</td>
                         <td class="amount negative">-<?= formatDOP($data['cooperative_deduction']) ?></td>
                     </tr>
                     <?php endif; ?>
@@ -604,7 +604,7 @@ function generatePayrollSlipPlainText(array $data): string {
         }
     }
     if (($data['cooperative_deduction'] ?? 0) > 0) {
-        $text .= "Cooperativo: -" . formatDOP($data['cooperative_deduction']) . "\n";
+        $text .= "Cooperativa: -" . formatDOP($data['cooperative_deduction']) . "\n";
     }
     if ($data['other_deductions'] > 0) {
         $text .= "Otras Deducciones: -" . formatDOP($data['other_deductions']) . "\n";
