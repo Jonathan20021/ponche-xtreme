@@ -47,6 +47,13 @@ $status_history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $hr_users = $pdo->query("SELECT id, full_name as name FROM users WHERE role IN ('Admin', 'HR') ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
 
+// Build safe back URL (only allow relative paths to recruitment.php)
+$rawReturn = $_GET['returnUrl'] ?? '';
+$backUrl = 'recruitment.php';
+if ($rawReturn && preg_match('/^recruitment\.php(\?[a-zA-Z0-9%=&_\-\.]*)?$/', $rawReturn)) {
+    $backUrl = $rawReturn;
+}
+
 // Parse JSON payload if exists
 $formPayload = null;
 if (!empty($application['cover_letter'])) {
@@ -137,7 +144,7 @@ require_once '../header.php';
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
     <div class="mb-6">
-        <a href="recruitment.php" class="btn-secondary inline-flex items-center gap-2 mb-4">
+        <a href="<?php echo htmlspecialchars($backUrl); ?>" class="btn-secondary inline-flex items-center gap-2 mb-4">
             <i class="fas fa-arrow-left"></i>
             Volver a Solicitudes
         </a>

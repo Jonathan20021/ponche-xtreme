@@ -323,9 +323,19 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
 
                                 <div class="mt-auto pt-6 border-t border-slate-100 flex gap-3">
                                     <button
-                                        onclick="openApplicationModal(<?php echo $job['id']; ?>, '<?php echo htmlspecialchars($job['title'], ENT_QUOTES); ?>')"
+                                        onclick="openJobModal(<?php echo htmlspecialchars(json_encode([
+                                            'id' => $job['id'],
+                                            'title' => $job['title'],
+                                            'department' => $job['department'] ?? '',
+                                            'location' => $job['location'] ?? '',
+                                            'employment_type' => $job['employment_type'] ?? '',
+                                            'salary_range' => $job['salary_range'] ?? '',
+                                            'description' => $job['description'] ?? '',
+                                            'requirements' => $job['requirements'] ?? '',
+                                            'responsibilities' => $job['responsibilities'] ?? '',
+                                        ]), ENT_QUOTES); ?>)"
                                         class="flex-1 py-3 px-4 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-brand-600 transition-colors shadow-lg shadow-slate-900/20 flex items-center justify-center gap-2 group/btn">
-                                        Aplicar
+                                        Ver y Aplicar
                                         <i class="fas fa-arrow-right group-hover/btn:translate-x-1 transition-transform"></i>
                                     </button>
                                 </div>
@@ -366,8 +376,47 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
                         </button>
                     </div>
 
-                    <div class="bg-slate-50 max-h-[85vh] overflow-y-auto">
-                        <form id="applicationForm" class="p-4 sm:p-8 space-y-8" enctype="multipart/form-data">
+                    <!-- Step 1: Job Info Panel -->
+                    <div id="jobInfoPanel" class="bg-slate-50 max-h-[85vh] overflow-y-auto hidden">
+                        <div class="p-4 sm:p-8 space-y-6">
+                            <div class="flex flex-wrap gap-3 text-sm" id="jobMetaBadges"></div>
+
+                            <div id="jobDescSection" class="hidden">
+                                <h4 class="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                    <i class="fas fa-align-left text-brand-500"></i> Descripción del Puesto
+                                </h4>
+                                <div id="jobDescText" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-slate-100"></div>
+                            </div>
+
+                            <div id="jobResponsibilitiesSection" class="hidden">
+                                <h4 class="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                    <i class="fas fa-tasks text-brand-500"></i> Responsabilidades
+                                </h4>
+                                <div id="jobResponsibilitiesText" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-slate-100"></div>
+                            </div>
+
+                            <div id="jobRequirementsSection" class="hidden">
+                                <h4 class="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                    <i class="fas fa-clipboard-check text-brand-500"></i> Requisitos
+                                </h4>
+                                <div id="jobRequirementsText" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-slate-100"></div>
+                            </div>
+                        </div>
+                        <div class="bg-white px-4 py-4 sm:px-8 border-t border-slate-200 flex flex-col sm:flex-row gap-3 sm:justify-between items-center sticky bottom-0">
+                            <p class="text-slate-500 text-sm text-center sm:text-left">¿Cumples con los requisitos? Completa tu solicitud a continuación.</p>
+                            <div class="flex gap-3">
+                                <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm hover:bg-slate-200 transition-colors">Cancelar</button>
+                                <button type="button" onclick="goToApplicationForm()"
+                                    class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 text-white font-bold text-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2">
+                                    <i class="fas fa-pencil-alt"></i> Completar Solicitud
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Application Form -->
+                    <div id="applicationFormPanel" class="bg-slate-50 max-h-[85vh] overflow-y-auto hidden">
+                    <form id="applicationForm" class="p-4 sm:p-8 space-y-8" enctype="multipart/form-data">
                             <input type="hidden" name="job_posting_id" id="job_posting_id">
                             <input type="hidden" name="puesto_aplicado" id="puesto_aplicado">
 
@@ -990,13 +1039,16 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
 
                         </form>
                     </div>
+                    </div><!-- end applicationFormPanel -->
 
-                    <div class="bg-slate-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-slate-200">
+                    <div id="applicationFormFooter" class="hidden bg-slate-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-slate-200">
                         <button type="button" onclick="submitApplication()"
                             class="inline-flex w-full justify-center rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 sm:ml-3 sm:w-auto"
                             id="btnSubmit">Enviar Solicitud</button>
-                        <button type="button" onclick="closeModal()"
-                            class="mt-3 inline-flex w-full justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-slate-300 hover:bg-slate-50 sm:mt-0 sm:w-auto">Cancelar</button>
+                        <button type="button" onclick="backToJobInfo()"
+                            class="mt-3 inline-flex w-full justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-slate-300 hover:bg-slate-50 sm:mt-0 sm:w-auto">
+                            <i class="fas fa-arrow-left mr-2"></i>Ver Vacante
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1009,10 +1061,46 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
         const modalPanel = document.getElementById('modalPanel');
         const form = document.getElementById('applicationForm');
 
-        function openApplicationModal(jobId, jobTitle) {
-            document.getElementById('job_posting_id').value = jobId;
-            document.getElementById('puesto_aplicado').value = jobTitle;
-            document.getElementById('modalJobTitle').textContent = jobTitle;
+        const employmentTypeLabels = {
+            'full_time': 'Tiempo Completo',
+            'part_time': 'Medio Tiempo',
+            'contract': 'Contrato',
+            'internship': 'Pasantía'
+        };
+
+        function openJobModal(job) {
+            document.getElementById('job_posting_id').value = job.id;
+            document.getElementById('puesto_aplicado').value = job.title;
+            document.getElementById('modalJobTitle').textContent = job.title;
+
+            // Populate meta badges
+            const badges = document.getElementById('jobMetaBadges');
+            badges.innerHTML = '';
+            if (job.department) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-100 font-semibold"><i class="fas fa-building mr-1"></i>${job.department}</span>`;
+            if (job.location) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200"><i class="fas fa-map-marker-alt mr-1 text-brand-500"></i>${job.location}</span>`;
+            if (job.employment_type) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">${employmentTypeLabels[job.employment_type] || job.employment_type}</span>`;
+            if (job.salary_range) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-100 font-semibold"><i class="fas fa-money-bill-wave mr-1"></i>${job.salary_range}</span>`;
+
+            // Populate sections
+            function fillSection(sectionId, textId, text) {
+                const section = document.getElementById(sectionId);
+                const el = document.getElementById(textId);
+                if (text && text.trim()) {
+                    el.textContent = text.trim();
+                    section.classList.remove('hidden');
+                } else {
+                    section.classList.add('hidden');
+                }
+            }
+            fillSection('jobDescSection', 'jobDescText', job.description);
+            fillSection('jobResponsibilitiesSection', 'jobResponsibilitiesText', job.responsibilities);
+            fillSection('jobRequirementsSection', 'jobRequirementsText', job.requirements);
+
+            // Show job info panel, hide form panel
+            document.getElementById('jobInfoPanel').classList.remove('hidden');
+            document.getElementById('applicationFormPanel').classList.add('hidden');
+            document.getElementById('applicationFormFooter').classList.add('hidden');
+
             modal.classList.remove('hidden');
             setTimeout(() => {
                 modalBackdrop.classList.remove('opacity-0');
@@ -1020,6 +1108,21 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
                 modalPanel.classList.add('opacity-100', 'translate-y-0', 'sm:scale-100');
             }, 10);
             document.body.style.overflow = 'hidden';
+        }
+
+        function goToApplicationForm() {
+            document.getElementById('jobInfoPanel').classList.add('hidden');
+            document.getElementById('applicationFormPanel').classList.remove('hidden');
+            document.getElementById('applicationFormFooter').classList.remove('hidden');
+            document.getElementById('applicationFormFooter').style.display = 'flex';
+            // Scroll form panel to top
+            document.getElementById('applicationFormPanel').scrollTop = 0;
+        }
+
+        function backToJobInfo() {
+            document.getElementById('applicationFormPanel').classList.add('hidden');
+            document.getElementById('applicationFormFooter').classList.add('hidden');
+            document.getElementById('jobInfoPanel').classList.remove('hidden');
         }
 
         function closeModal() {
@@ -1031,6 +1134,9 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
                 document.body.style.overflow = '';
                 form.reset();
                 document.getElementById('cv-preview').textContent = '';
+                document.getElementById('jobInfoPanel').classList.add('hidden');
+                document.getElementById('applicationFormPanel').classList.add('hidden');
+                document.getElementById('applicationFormFooter').classList.add('hidden');
 
                 // Hide all dynamic fields on close
                 ['inputOtroHorario', 'inputOtraModalidad', 'inputOtroTransporte', 'inputIncapacidad', 'inputConoce'].forEach(id => {

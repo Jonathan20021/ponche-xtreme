@@ -45,6 +45,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_item'])) {
     }
 }
 
+// Handle delete item
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_item'])) {
+    $inventoryId = (int) $_POST['inventory_id'];
+
+    try {
+        $metaStmt = $pdo->prepare("
+            SELECT CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+                   it.name AS item_name
+            FROM employee_inventory ei
+            JOIN employees e ON e.id = ei.employee_id
+            JOIN inventory_item_types it ON it.id = ei.item_type_id
+            WHERE ei.id = ?
+        ");
+        $metaStmt->execute([$inventoryId]);
+        $meta = $metaStmt->fetch(PDO::FETCH_ASSOC);
+
+        $pdo->prepare("DELETE FROM employee_inventory WHERE id = ?")->execute([$inventoryId]);
+        $successMsg = "Artículo eliminado correctamente.";
+
+        if ($meta && function_exists('log_custom_action')) {
+            log_custom_action(
+                $pdo,
+                $_SESSION['user_id'] ?? null,
+                $_SESSION['full_name'] ?? 'Sistema',
+                $_SESSION['role'] ?? 'system',
+                'inventory',
+                'delete',
+                "Inventario eliminado: {$meta['item_name']} de {$meta['employee_name']}",
+                'employee_inventory',
+                $inventoryId,
+                []
+            );
+        }
+    } catch (Exception $e) {
+        $errorMsg = "Error al eliminar artículo: " . $e->getMessage();
+    }
+}
+
 // Handle return item
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['return_item'])) {
     $inventoryId = (int) $_POST['inventory_id'];
@@ -421,6 +459,12 @@ $stats = [
                                                     <i class="fas fa-undo"></i>
                                                 </button>
                                             <?php endif; ?>
+                                            <button
+                                                onclick="openDeleteModal(<?= (int) $item['id'] ?>, <?= json_encode($item['item_name']) ?>, <?= json_encode($item['employee_name']) ?>)"
+                                                class="text-red-400 hover:text-red-300 transition-colors"
+                                                title="Eliminar registro">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -585,6 +629,45 @@ $stats = [
         </div>
     </div>
 
+    <!-- Delete Modal -->
+    <div id="deleteModal"
+        class="modal-backdrop hidden flex items-center justify-center"
+        style="display: none;">
+        <div class="modal-content rounded-xl p-6 w-full max-w-md relative">
+            <button onclick="closeDeleteModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+
+            <h3 class="text-xl font-bold text-white mb-4">
+                <i class="fas fa-trash text-red-400 mr-2"></i>Eliminar Registro
+            </h3>
+
+            <form method="POST">
+                <input type="hidden" name="delete_item" value="1">
+                <input type="hidden" name="inventory_id" id="delete_inventory_id">
+
+                <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4">
+                    <p class="text-slate-300 mb-1">
+                        ¿Estás seguro de que deseas <strong class="text-red-400">eliminar permanentemente</strong> el registro de:
+                    </p>
+                    <p class="text-white font-semibold mt-2">
+                        <span id="delete_item_name" class="text-cyan-300"></span>
+                        <span class="text-slate-400 text-sm"> — </span>
+                        <span id="delete_employee_name" class="text-slate-200"></span>
+                    </p>
+                    <p class="text-red-400 text-xs mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>Esta acción no se puede deshacer.</p>
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeDeleteModal()" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary" style="background-color: #dc2626;">
+                        <i class="fas fa-trash mr-2"></i>Eliminar Permanentemente
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function openEditModal(item) {
             document.getElementById('edit_inventory_id').value = item.id;
@@ -620,6 +703,22 @@ $stats = [
             modal.style.display = 'none';
         }
 
+        function openDeleteModal(id, itemName, employeeName) {
+            document.getElementById('delete_inventory_id').value = id;
+            document.getElementById('delete_item_name').textContent = itemName;
+            document.getElementById('delete_employee_name').textContent = employeeName;
+
+            const modal = document.getElementById('deleteModal');
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+        }
+
+        function closeDeleteModal() {
+            const modal = document.getElementById('deleteModal');
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+        }
+
         // Close modals when clicking outside
         document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('editModal').addEventListener('click', function(e) {
@@ -627,10 +726,16 @@ $stats = [
                     closeEditModal();
                 }
             });
-            
+
             document.getElementById('returnModal').addEventListener('click', function(e) {
                 if (e.target === this) {
                     closeReturnModal();
+                }
+            });
+
+            document.getElementById('deleteModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeDeleteModal();
                 }
             });
         });

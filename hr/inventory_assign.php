@@ -98,7 +98,7 @@ try {
         SELECT id, first_name, last_name, employee_code, 
                COALESCE(department, '') as department 
         FROM employees 
-        WHERE employment_status = 'ACTIVE' 
+        WHERE employment_status IN ('ACTIVE', 'TRIAL')
         ORDER BY first_name, last_name
     ")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -106,8 +106,8 @@ try {
     $employees = $pdo->query("
         SELECT id, first_name, last_name, employee_code,
                '' as department
-        FROM employees 
-        WHERE employment_status = 'ACTIVE' 
+        FROM employees
+        WHERE employment_status IN ('ACTIVE', 'TRIAL')
         ORDER BY first_name, last_name
     ")->fetchAll(PDO::FETCH_ASSOC);
 }

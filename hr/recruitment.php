@@ -459,7 +459,18 @@ require_once '../header.php';
                                 </td>
                                 <td class="py-4 px-4">
                                     <div class="flex gap-2">
-                                        <a href="view_application.php?id=<?php echo $app['id']; ?>" class="btn-action btn-view"
+                                        <?php
+                                        $returnParams = array_filter([
+                                            'status' => $status_filter !== 'all' ? $status_filter : null,
+                                            'job' => $job_filter !== 'all' ? $job_filter : null,
+                                            'search' => $search ?: null,
+                                            'sort' => $sort !== 'applied_date' ? $sort : null,
+                                            'order' => $order !== 'DESC' ? $order : null,
+                                            'page' => $page > 1 ? $page : null,
+                                        ]);
+                                        $returnUrl = 'recruitment.php' . ($returnParams ? '?' . http_build_query($returnParams) : '');
+                                        ?>
+                                        <a href="view_application.php?id=<?php echo $app['id']; ?>&returnUrl=<?php echo urlencode($returnUrl); ?>" class="btn-action btn-view"
                                             title="Ver Detalles">
                                             <i class="fas fa-eye"></i>
                                             <?php if ($app['comment_count'] > 0): ?>
