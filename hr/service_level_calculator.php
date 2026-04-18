@@ -502,6 +502,114 @@ include __DIR__ . '/../header.php';
             </button>
         </div>
     </div>
+
+    <!-- Bulk Interval Analysis Section -->
+    <div class="mt-6 calculator-card rounded-xl p-6">
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-4">
+            <div>
+                <h2 class="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                    <i class="fas fa-file-excel text-emerald-400"></i>
+                    Análisis por Intervalos (Plantilla Excel)
+                </h2>
+                <p class="text-sm text-slate-400">
+                    Descarga la plantilla, completa un intervalo por fila y súbela para obtener el dimensionamiento de cada intervalo de forma masiva.
+                </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="../api/service_level_template.php?action=download"
+                   class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-download"></i>
+                    Descargar plantilla
+                </a>
+                <button type="button" onclick="document.getElementById('bulkFileInput').click()"
+                    class="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors font-semibold text-sm flex items-center gap-2">
+                    <i class="fas fa-upload"></i>
+                    Subir plantilla
+                </button>
+                <input type="file" id="bulkFileInput" accept=".xlsx,.xls,.csv" class="hidden">
+            </div>
+        </div>
+
+        <!-- Instructions box -->
+        <div class="p-4 bg-slate-900/60 border border-slate-700/60 rounded-lg mb-4">
+            <h3 class="text-sm font-semibold text-cyan-300 mb-2 flex items-center gap-2">
+                <i class="fas fa-list-ol text-xs"></i>
+                Instrucciones de uso
+            </h3>
+            <ol class="text-xs text-slate-300 space-y-1 list-decimal ml-5">
+                <li>Presiona <strong class="text-emerald-300">Descargar plantilla</strong> para obtener el archivo base (<code class="text-cyan-300">plantilla_service_level_calculator.xlsx</code>).</li>
+                <li>Abre el archivo y ve a la pestaña <strong class="text-cyan-300">Intervalos</strong>. No modifiques los encabezados.</li>
+                <li>Completa una fila por intervalo con: etiqueta, llamadas, AHT (seg), duración (min), SL objetivo (%), tiempo respuesta (seg), ocupación (%) y shrinkage (%).</li>
+                <li>Guarda el archivo como <code class="text-cyan-300">.xlsx</code> o <code class="text-cyan-300">.csv</code>.</li>
+                <li>Presiona <strong class="text-cyan-300">Subir plantilla</strong> y selecciona el archivo. Los resultados se mostrarán abajo.</li>
+                <li>El análisis por intervalos es independiente del formulario superior — no sobreescribe sus valores.</li>
+            </ol>
+        </div>
+
+        <!-- File status -->
+        <div id="bulkStatus" class="hidden mb-4 p-3 rounded-lg text-sm"></div>
+
+        <!-- Bulk results -->
+        <div id="bulkResultsSection" class="hidden">
+            <!-- Summary cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
+                    <div class="text-xs text-slate-500">Intervalos procesados</div>
+                    <div class="text-2xl font-bold text-cyan-400" id="bulkProcessed">0</div>
+                </div>
+                <div class="p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
+                    <div class="text-xs text-slate-500">Total agentes (suma)</div>
+                    <div class="text-2xl font-bold text-emerald-400" id="bulkTotalAgents">0</div>
+                </div>
+                <div class="p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
+                    <div class="text-xs text-slate-500">Total staff (suma)</div>
+                    <div class="text-2xl font-bold text-blue-400" id="bulkTotalStaff">0</div>
+                </div>
+                <div class="p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
+                    <div class="text-xs text-slate-500">SL promedio</div>
+                    <div class="text-2xl font-bold text-yellow-400" id="bulkAvgSl">0%</div>
+                </div>
+            </div>
+
+            <!-- Results table -->
+            <div class="overflow-x-auto border border-slate-700/50 rounded-lg">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-slate-900/80 text-slate-300 uppercase text-xs">
+                        <tr>
+                            <th class="px-3 py-2 text-left">Intervalo</th>
+                            <th class="px-3 py-2 text-right">Llamadas</th>
+                            <th class="px-3 py-2 text-right">AHT</th>
+                            <th class="px-3 py-2 text-right">Dur.</th>
+                            <th class="px-3 py-2 text-right">Erlangs</th>
+                            <th class="px-3 py-2 text-right">Agentes</th>
+                            <th class="px-3 py-2 text-right">Staff</th>
+                            <th class="px-3 py-2 text-right">SL</th>
+                            <th class="px-3 py-2 text-right">Occ.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bulkResultsBody" class="divide-y divide-slate-800/80"></tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button type="button" onclick="exportBulkResults()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors text-sm font-semibold">
+                    <i class="fas fa-file-csv mr-2"></i>Exportar resultados CSV
+                </button>
+                <button type="button" onclick="clearBulkResults()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm font-semibold">
+                    <i class="fas fa-times mr-2"></i>Limpiar
+                </button>
+            </div>
+
+            <!-- Errors -->
+            <div id="bulkErrorsSection" class="hidden mt-4 p-3 bg-red-900/20 border border-red-700/40 rounded-lg">
+                <h4 class="text-sm font-semibold text-red-300 mb-2 flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Filas con error
+                </h4>
+                <ul id="bulkErrorsList" class="text-xs text-red-200 space-y-1 list-disc ml-5"></ul>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -745,6 +853,166 @@ function showToast(message, type = 'info') {
         toast.style.transition = 'all 0.3s ease';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
+}
+
+// ======================================================================
+// Bulk interval analysis (Excel template upload)
+// ======================================================================
+let lastBulkResults = null;
+
+document.getElementById('bulkFileInput').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const statusBox = document.getElementById('bulkStatus');
+    statusBox.className = 'mb-4 p-3 rounded-lg text-sm bg-blue-900/30 border border-blue-700/40 text-blue-200';
+    statusBox.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando "' + file.name + '"...';
+    statusBox.classList.remove('hidden');
+
+    const formData = new FormData();
+    formData.append('action', 'upload');
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('../api/service_level_template.php?action=upload', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+
+        if (!result.success) {
+            statusBox.className = 'mb-4 p-3 rounded-lg text-sm bg-red-900/30 border border-red-700/40 text-red-200';
+            statusBox.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + (result.error || 'Error procesando archivo');
+            showToast('Error: ' + (result.error || 'Error procesando archivo'), 'error');
+        } else {
+            lastBulkResults = result;
+            renderBulkResults(result);
+            const s = result.summary;
+            let msg = 'Procesados ' + s.processed + ' intervalos correctamente.';
+            if (s.errors > 0) msg += ' ' + s.errors + ' con error.';
+            statusBox.className = 'mb-4 p-3 rounded-lg text-sm bg-emerald-900/30 border border-emerald-700/40 text-emerald-200';
+            statusBox.innerHTML = '<i class="fas fa-check-circle mr-2"></i>' + msg;
+            showToast(msg, 'success');
+        }
+    } catch (err) {
+        console.error(err);
+        statusBox.className = 'mb-4 p-3 rounded-lg text-sm bg-red-900/30 border border-red-700/40 text-red-200';
+        statusBox.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Error de red al subir el archivo';
+        showToast('Error de red al subir el archivo', 'error');
+    }
+
+    // Reset input so same file can be re-uploaded
+    e.target.value = '';
+});
+
+function slBadgeClass(slPercent) {
+    if (slPercent >= 90) return 'metric-excellent';
+    if (slPercent >= 80) return 'metric-good';
+    if (slPercent >= 70) return 'metric-warning';
+    return 'metric-poor';
+}
+
+function renderBulkResults(payload) {
+    const section = document.getElementById('bulkResultsSection');
+    section.classList.remove('hidden');
+
+    const s = payload.summary;
+    document.getElementById('bulkProcessed').textContent = s.processed;
+    document.getElementById('bulkTotalAgents').textContent = s.total_agents;
+    document.getElementById('bulkTotalStaff').textContent = s.total_staff;
+    document.getElementById('bulkAvgSl').textContent = (s.avg_sl * 100).toFixed(2) + '%';
+
+    const body = document.getElementById('bulkResultsBody');
+    body.innerHTML = '';
+
+    payload.results.forEach((r, idx) => {
+        const slPct = r.service_level * 100;
+        const occPct = r.occupancy * 100;
+        const rowEl = document.createElement('tr');
+        rowEl.className = idx % 2 === 0 ? 'bg-slate-900/30' : 'bg-slate-900/10';
+        rowEl.innerHTML = `
+            <td class="px-3 py-2 text-slate-200 font-semibold">${escapeHtml(r.label)}</td>
+            <td class="px-3 py-2 text-right text-slate-300">${r.params.calls}</td>
+            <td class="px-3 py-2 text-right text-slate-300">${r.params.ahtSeconds}s</td>
+            <td class="px-3 py-2 text-right text-slate-300">${r.params.intervalMinutes}m</td>
+            <td class="px-3 py-2 text-right text-slate-300">${Number(r.workload).toFixed(2)}</td>
+            <td class="px-3 py-2 text-right text-cyan-300 font-bold">${r.required_agents}</td>
+            <td class="px-3 py-2 text-right text-blue-300 font-bold">${r.required_staff}</td>
+            <td class="px-3 py-2 text-right">
+                <span class="metric-badge ${slBadgeClass(slPct)}">${slPct.toFixed(2)}%</span>
+            </td>
+            <td class="px-3 py-2 text-right text-slate-300">${occPct.toFixed(2)}%</td>
+        `;
+        body.appendChild(rowEl);
+    });
+
+    const errorsSection = document.getElementById('bulkErrorsSection');
+    const errorsList = document.getElementById('bulkErrorsList');
+    errorsList.innerHTML = '';
+    if (payload.errors && payload.errors.length) {
+        payload.errors.forEach(err => {
+            const li = document.createElement('li');
+            li.textContent = 'Fila ' + err.line + ' (' + (err.label || 'sin etiqueta') + '): ' + err.error;
+            errorsList.appendChild(li);
+        });
+        errorsSection.classList.remove('hidden');
+    } else {
+        errorsSection.classList.add('hidden');
+    }
+}
+
+function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[m]));
+}
+
+function clearBulkResults() {
+    lastBulkResults = null;
+    document.getElementById('bulkResultsSection').classList.add('hidden');
+    document.getElementById('bulkStatus').classList.add('hidden');
+    document.getElementById('bulkResultsBody').innerHTML = '';
+    showToast('Resultados de intervalos limpiados', 'info');
+}
+
+function exportBulkResults() {
+    if (!lastBulkResults || !lastBulkResults.results.length) {
+        showToast('No hay resultados para exportar', 'warning');
+        return;
+    }
+    const rows = [
+        ['Intervalo', 'Llamadas', 'AHT (seg)', 'Duración (min)', 'SL Objetivo (%)', 'Tiempo Resp. (seg)',
+         'Ocupación Obj. (%)', 'Shrinkage (%)', 'Erlangs', 'Agentes', 'Staff', 'SL Proyectado (%)', 'Ocupación Real (%)']
+    ];
+    lastBulkResults.results.forEach(r => {
+        rows.push([
+            r.label,
+            r.params.calls,
+            r.params.ahtSeconds,
+            r.params.intervalMinutes,
+            r.params.targetSl,
+            r.params.targetAns,
+            r.params.occupancyTarget,
+            r.params.shrinkage,
+            Number(r.workload).toFixed(3),
+            r.required_agents,
+            r.required_staff,
+            (r.service_level * 100).toFixed(2),
+            (r.occupancy * 100).toFixed(2)
+        ]);
+    });
+    const csv = rows.map(r => r.map(v => {
+        const s = String(v ?? '');
+        return s.includes(',') || s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',')).join('\n');
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'analisis_intervalos_' + timestamp + '.csv';
+    link.click();
+    showToast('Resultados exportados', 'success');
 }
 
 // Initialize
