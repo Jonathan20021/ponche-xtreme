@@ -8,6 +8,7 @@ require_once '../lib/work_hours_calculator.php';
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
 ensurePayrollManualIncentivesTable($pdo);
+ensurePayrollPeriodsVisibilityColumn($pdo);
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
@@ -43,6 +44,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_period'])) {
     ");
     $stmt->execute([$name, $startDate, $endDate, $paymentDate, $periodId]);
     $successMsg = "Período actualizado correctamente.";
+}
+
+// Handle toggling visibility to agents
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_visibility'])) {
+    $periodId = (int)$_POST['period_id'];
+    $nextState = (int)($_POST['next_state'] ?? 0) === 1 ? 1 : 0;
+
+    $stmt = $pdo->prepare("UPDATE payroll_periods SET visible_to_agents = ? WHERE id = ?");
+    $stmt->execute([$nextState, $periodId]);
+
+    $successMsg = $nextState === 1
+        ? "Período habilitado para los agentes."
+        : "Período oculto para los agentes.";
 }
 
 // Handle period deletion
@@ -343,6 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
 // Get all periods
 $periods = $pdo->query("
     SELECT pp.id, pp.name, pp.period_type, pp.start_date, pp.end_date, pp.payment_date, pp.status,
+           pp.visible_to_agents,
            pp.total_gross, pp.total_deductions, pp.total_net,
            COUNT(pr.id) as employee_count,
            u.username as created_by_username
@@ -350,6 +365,7 @@ $periods = $pdo->query("
     LEFT JOIN payroll_records pr ON pr.payroll_period_id = pp.id
     LEFT JOIN users u ON u.id = pp.created_by
     GROUP BY pp.id, pp.name, pp.period_type, pp.start_date, pp.end_date, pp.payment_date, pp.status,
+             pp.visible_to_agents,
              pp.total_gross, pp.total_deductions, pp.total_net, u.username
     ORDER BY COALESCE(pp.updated_at, pp.created_at) DESC, pp.start_date DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
@@ -536,6 +552,24 @@ if ($selectedPeriodId) {
                                                     <i class="fas fa-file-excel"></i>
                                                 </a>
                                             <?php endif; ?>
+                                            <?php
+                                                $isVisibleToAgents = (int)($period['visible_to_agents'] ?? 0) === 1;
+                                                $visBtnClass = $isVisibleToAgents
+                                                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                                                    : 'bg-slate-600 hover:bg-slate-700';
+                                                $visBtnIcon = $isVisibleToAgents ? 'fa-eye' : 'fa-eye-slash';
+                                                $visBtnTitle = $isVisibleToAgents
+                                                    ? 'Visible para agentes (clic para ocultar)'
+                                                    : 'Oculto para agentes (clic para mostrar)';
+                                            ?>
+                                            <form method="POST" class="inline">
+                                                <input type="hidden" name="toggle_visibility" value="1">
+                                                <input type="hidden" name="period_id" value="<?= $period['id'] ?>">
+                                                <input type="hidden" name="next_state" value="<?= $isVisibleToAgents ? 0 : 1 ?>">
+                                                <button type="submit" class="px-2 py-1 rounded <?= $visBtnClass ?> text-white text-xs" title="<?= htmlspecialchars($visBtnTitle) ?>">
+                                                    <i class="fas <?= $visBtnIcon ?>"></i>
+                                                </button>
+                                            </form>
                                             <?php if ($period['status'] === 'DRAFT' || $period['status'] === 'CALCULATED'): ?>
                                                 <button onclick="editPeriod(<?= $period['id'] ?>, '<?= htmlspecialchars($period['name'], ENT_QUOTES) ?>', '<?= $period['start_date'] ?>', '<?= $period['end_date'] ?>', '<?= $period['payment_date'] ?>')" class="px-2 py-1 rounded bg-yellow-600 hover:bg-yellow-700 text-white text-xs" title="Editar">
                                                     <i class="fas fa-edit"></i>

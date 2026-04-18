@@ -228,6 +228,31 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
 }
 
 /**
+ * Garantiza la columna visible_to_agents en payroll_periods.
+ * Permite al admin controlar qué quincenas pueden ver los agentes
+ * en su panel de horas acumuladas.
+ */
+function ensurePayrollPeriodsVisibilityColumn(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM payroll_periods")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('visible_to_agents', $columns, true)) {
+            $pdo->exec("ALTER TABLE payroll_periods ADD COLUMN visible_to_agents TINYINT(1) NOT NULL DEFAULT 0 AFTER status");
+            $pdo->exec("CREATE INDEX idx_payroll_periods_visible_to_agents ON payroll_periods(visible_to_agents)");
+        }
+    } catch (PDOException $e) {
+        // Tabla aún no existe; se creará cuando se instale el módulo de nómina.
+    }
+
+    $ensured = true;
+}
+
+/**
  * Obtiene incentivos manuales por empleado dentro de un periodo.
  */
 function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
