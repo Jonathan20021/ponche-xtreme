@@ -37,13 +37,15 @@ if (!is_array($input)) {
 
 $targetUserId = isset($input['user_id']) ? (int)$input['user_id'] : 0;
 $typeSlug = sanitizeAttendanceTypeSlug($input['punch_type'] ?? '');
+$newDate = isset($input['new_date']) ? trim($input['new_date']) : '';
+$newTime = isset($input['new_time']) ? trim($input['new_time']) : '';
 
-error_log("CREATE - Parsed values - targetUserId: $targetUserId, typeSlug: $typeSlug");
+error_log("CREATE - Parsed values - targetUserId: $targetUserId, typeSlug: $typeSlug, newDate: $newDate, newTime: $newTime");
 
 if ($targetUserId <= 0 || $typeSlug === '') {
     http_response_code(400);
     echo json_encode([
-        'success' => false, 
+        'success' => false,
         'error' => 'Datos incompletos para registrar el punch.',
         'debug' => [
             'user_id' => $targetUserId,
@@ -53,6 +55,29 @@ if ($targetUserId <= 0 || $typeSlug === '') {
     ]);
     exit;
 }
+
+if ($newDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $newDate)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Formato de fecha inválido. Use YYYY-MM-DD']);
+    exit;
+}
+
+if ($newTime !== '' && !preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $newTime)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Formato de hora inválido. Use HH:MM']);
+    exit;
+}
+
+// Si se especifica fecha u hora, ambas son requeridas para construir un timestamp consistente
+if (($newDate !== '') !== ($newTime !== '')) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Debe proporcionar fecha y hora juntas para registrar un punch manual.']);
+    exit;
+}
+
+$hasCustomTimestamp = ($newDate !== '' && $newTime !== '');
+$effectiveDate = $hasCustomTimestamp ? $newDate : date('Y-m-d');
+$isTodayCorrection = $effectiveDate === date('Y-m-d');
 
 try {
     $typeStmt = $pdo->prepare("
@@ -79,22 +104,28 @@ try {
             FROM attendance
             WHERE user_id = ?
               AND type = ?
-              AND DATE(timestamp) = CURDATE()
+              AND DATE(timestamp) = ?
         ");
-        $checkStmt->execute([$targetUserId, $typeSlug]);
+        $checkStmt->execute([$targetUserId, $typeSlug, $effectiveDate]);
         if ((int)$checkStmt->fetchColumn() > 0) {
             http_response_code(409);
-            echo json_encode(['success' => false, 'error' => 'Ya existe un punch de este tipo registrado hoy.']);
+            $msg = $hasCustomTimestamp
+                ? "Ya existe un punch de este tipo registrado el {$effectiveDate}."
+                : 'Ya existe un punch de este tipo registrado hoy.';
+            echo json_encode(['success' => false, 'error' => $msg]);
             exit;
         }
     }
 
-    // Validar secuencia ENTRY/EXIT
-    $sequenceValidation = validateEntryExitSequence($pdo, $targetUserId, $typeSlug);
-    if (!$sequenceValidation['valid']) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => $sequenceValidation['message']]);
-        exit;
+    // Validar secuencia ENTRY/EXIT solo cuando se registra en tiempo real (día de hoy sin hora personalizada).
+    // En correcciones manuales de supervisor la secuencia se maneja de forma explícita.
+    if (!$hasCustomTimestamp) {
+        $sequenceValidation = validateEntryExitSequence($pdo, $targetUserId, $typeSlug);
+        if (!$sequenceValidation['valid']) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => $sequenceValidation['message']]);
+            exit;
+        }
     }
 
     $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
@@ -102,11 +133,20 @@ try {
         $ipAddress = '127.0.0.1';
     }
 
-    $insertStmt = $pdo->prepare("
-        INSERT INTO attendance (user_id, type, ip_address, timestamp)
-        VALUES (?, ?, ?, NOW())
-    ");
-    $insertStmt->execute([$targetUserId, $typeSlug, $ipAddress]);
+    if ($hasCustomTimestamp) {
+        $customTimestamp = $newDate . ' ' . $newTime . ':00';
+        $insertStmt = $pdo->prepare("
+            INSERT INTO attendance (user_id, type, ip_address, timestamp)
+            VALUES (?, ?, ?, ?)
+        ");
+        $insertStmt->execute([$targetUserId, $typeSlug, $ipAddress, $customTimestamp]);
+    } else {
+        $insertStmt = $pdo->prepare("
+            INSERT INTO attendance (user_id, type, ip_address, timestamp)
+            VALUES (?, ?, ?, NOW())
+        ");
+        $insertStmt->execute([$targetUserId, $typeSlug, $ipAddress]);
+    }
 
     $recordId = (int)$pdo->lastInsertId();
 
@@ -127,7 +167,9 @@ try {
         [
             'type' => $typeSlug,
             'is_unique_daily' => $isUniqueDaily,
-            'ip_address' => $ipAddress
+            'ip_address' => $ipAddress,
+            'custom_timestamp' => $hasCustomTimestamp ? ($newDate . ' ' . $newTime) : null,
+            'target_date' => $effectiveDate
         ]
     );
 

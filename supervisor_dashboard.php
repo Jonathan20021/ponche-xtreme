@@ -631,6 +631,68 @@ include 'header.php';
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.modal-date-picker {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-left: 0.5rem;
+}
+
+.modal-date-picker input[type="date"] {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.modal-date-picker input[type="date"]:hover {
+    border-color: var(--border-hover);
+}
+
+.modal-date-today-btn {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modal-date-today-btn:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.modal-past-date-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(251, 146, 60, 0.12);
+    border: 1px solid rgba(251, 146, 60, 0.35);
+    color: #fb923c;
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+.modal-past-date-banner.is-hidden {
+    display: none;
+}
+
+.pulse-dot.is-hidden {
+    display: none;
 }
 
 .punch-timeline {
@@ -865,6 +927,14 @@ include 'header.php';
     text-align: center;
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.2);
+}
+
+.punch-edit-hint {
+    margin-top: 0.4rem;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    text-align: center;
+    opacity: 0.8;
 }
 
 .interaction-indicator {
@@ -1161,7 +1231,18 @@ include 'header.php';
                     <div class="modal-section-title">
                         <i class="fas fa-history"></i>
                         Historial del Día
-                        <span class="pulse-dot" style="margin-left: auto;"></span>
+                        <div class="modal-date-picker">
+                            <label for="modalDateInput"><i class="fas fa-calendar-alt"></i> Fecha:</label>
+                            <input type="date" id="modalDateInput" onchange="changeModalDate(this.value)" />
+                            <button type="button" id="modalDateTodayBtn" class="modal-date-today-btn" onclick="resetModalDateToToday()" title="Volver a hoy">
+                                <i class="fas fa-calendar-day"></i> Hoy
+                            </button>
+                        </div>
+                        <span class="pulse-dot" id="modalLiveDot" style="margin-left: auto;"></span>
+                    </div>
+                    <div id="modalPastDateBanner" class="modal-past-date-banner is-hidden">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Estás corrigiendo una fecha pasada. La actualización automática está pausada.</span>
                     </div>
                     <div class="punch-timeline" id="punchTimeline">
                         <div class="text-center text-muted py-4">
@@ -1209,6 +1290,19 @@ let currentFilter = 'all';
 let refreshInterval;
 let isUserInteracting = false;
 let interactionTimeout = null;
+let currentModalDate = null; // YYYY-MM-DD de la fecha visualizada en el modal
+
+function getLocalTodayISO() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function isViewingToday() {
+    return !currentModalDate || currentModalDate === getLocalTodayISO();
+}
 
 // Inicializar al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
@@ -1407,21 +1501,74 @@ function openAgentModal(userId, fullName) {
     activePunchEditorId = null;
     punchStatusMessages = {};
     modalPunchesCache = [];
-    
-    // Cargar datos del agente
+
+    // Reset de fecha a hoy al abrir
+    currentModalDate = getLocalTodayISO();
+    const dateInput = document.getElementById('modalDateInput');
+    if (dateInput) {
+        dateInput.value = currentModalDate;
+        dateInput.max = currentModalDate; // no permitir fechas futuras
+    }
+    updateDateUIForCurrentDate();
+
+    // Cargar datos del agente para la fecha seleccionada
     loadAgentDetails(userId);
-    
+
     // Iniciar actualización automática del modal cada 3 segundos
+    startModalAutoRefresh();
+}
+
+function startModalAutoRefresh() {
     if (modalRefreshInterval) {
         clearInterval(modalRefreshInterval);
+        modalRefreshInterval = null;
+    }
+    // El auto-refresh solo tiene sentido cuando se visualiza HOY
+    if (!isViewingToday()) {
+        return;
     }
     modalRefreshInterval = setInterval(() => {
-        if (currentAgentId && !isUserInteracting) {
-            // Preservar el estado del editor activo durante las actualizaciones automáticas
-            // Solo si el usuario NO está interactuando con los controles
+        if (currentAgentId && !isUserInteracting && isViewingToday()) {
             loadAgentDetails(currentAgentId, true);
         }
     }, 3000);
+}
+
+function changeModalDate(newDate) {
+    if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+        return;
+    }
+    const today = getLocalTodayISO();
+    if (newDate > today) {
+        newDate = today;
+        const input = document.getElementById('modalDateInput');
+        if (input) input.value = today;
+    }
+    currentModalDate = newDate;
+    activePunchEditorId = null;
+    punchStatusMessages = {};
+    updateDateUIForCurrentDate();
+    if (currentAgentId) {
+        loadAgentDetails(currentAgentId, false);
+    }
+    startModalAutoRefresh();
+}
+
+function resetModalDateToToday() {
+    const today = getLocalTodayISO();
+    const input = document.getElementById('modalDateInput');
+    if (input) input.value = today;
+    changeModalDate(today);
+}
+
+function updateDateUIForCurrentDate() {
+    const banner = document.getElementById('modalPastDateBanner');
+    const liveDot = document.getElementById('modalLiveDot');
+    const todayBtn = document.getElementById('modalDateTodayBtn');
+    const viewingToday = isViewingToday();
+    if (banner) banner.classList.toggle('is-hidden', viewingToday);
+    if (liveDot) liveDot.classList.toggle('is-hidden', !viewingToday);
+    if (todayBtn) todayBtn.style.display = viewingToday ? 'none' : '';
 }
 
 function closeAgentModal() {
@@ -1432,6 +1579,7 @@ function closeAgentModal() {
     activePunchEditorId = null;
     punchStatusMessages = {};
     modalPunchesCache = [];
+    currentModalDate = null;
     
     // Limpiar estado de interacción
     isUserInteracting = false;
@@ -1465,7 +1613,8 @@ function closeModalOnOverlay(event) {
 async function loadAgentDetails(userId, preserveEditorState = false) {
     try {
         const timestamp = new Date().getTime();
-        const response = await fetch(`supervisor_agent_details_api.php?user_id=${userId}&_=${timestamp}`, {
+        const dateParam = currentModalDate ? `&date=${encodeURIComponent(currentModalDate)}` : '';
+        const response = await fetch(`supervisor_agent_details_api.php?user_id=${userId}${dateParam}&_=${timestamp}`, {
             cache: 'no-cache',
             headers: {
                 'Cache-Control': 'no-cache',
@@ -1814,12 +1963,29 @@ function openPunchCreate(event) {
         includePlaceholder: true
     });
     select.value = '';
+
+    const timeInput = document.getElementById('punch-create-time');
+    if (timeInput) {
+        // Prefill con la hora actual local en formato HH:MM
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        timeInput.value = `${hh}:${mm}`;
+        setupInteractionListeners(timeInput);
+    }
+
+    const hint = document.getElementById('punch-create-hint');
+    if (hint) {
+        const dateLabel = currentModalDate || getLocalTodayISO();
+        hint.textContent = `Se registrará el ${dateLabel} con la hora indicada.`;
+    }
+
     controls.classList.remove('is-hidden');
     applyStoredPunchStatus('new');
-    
+
     // Agregar listeners para detectar interacción del usuario
     setupInteractionListeners(select);
-    
+
     select.focus();
 }
 
@@ -1856,6 +2022,15 @@ async function submitPunchCreate() {
         return;
     }
 
+    const timeInput = document.getElementById('punch-create-time');
+    const newTime = timeInput ? timeInput.value : '';
+    if (!newTime) {
+        setPunchEditStatus('new', 'Ingresa una hora válida.', true);
+        return;
+    }
+
+    const targetDate = currentModalDate || getLocalTodayISO();
+
     const controls = document.getElementById('punch-create-controls');
     if (!controls) {
         return;
@@ -1869,10 +2044,12 @@ async function submitPunchCreate() {
 
     // Asegurar que currentAgentId sea número
     const numericUserId = parseInt(currentAgentId, 10);
-    
+
     const payload = {
         user_id: numericUserId,
-        punch_type: newType
+        punch_type: newType,
+        new_date: targetDate,
+        new_time: newTime
     };
     
     console.log('Creando punch:', payload);
@@ -1969,10 +2146,12 @@ function updatePunchTimeline(punches, preserveEditorState = false) {
                     <select id="punch-create-select">
                         ${buildPunchOptions('', { disableUniqueTaken: true, existingTypes, includePlaceholder: true })}
                     </select>
+                    <input type="time" id="punch-create-time" />
                     <button type="button" onclick="submitPunchCreate()">Registrar</button>
                     <button type="button" class="punch-edit-cancel" onclick="cancelPunchCreate()">Cancelar</button>
                 </div>
                 <div class="punch-edit-status" id="punch-create-status"></div>
+                <div class="punch-edit-hint" id="punch-create-hint"></div>
             </div>
         </div>
     ` : '';

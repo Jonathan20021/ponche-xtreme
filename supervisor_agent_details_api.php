@@ -32,6 +32,15 @@ if ($userId <= 0) {
     exit;
 }
 
+$requestedDate = isset($_GET['date']) ? trim($_GET['date']) : '';
+if ($requestedDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $requestedDate)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Formato de fecha inválido. Use YYYY-MM-DD']);
+    exit;
+}
+$targetDate = $requestedDate !== '' ? $requestedDate : date('Y-m-d');
+$isToday = $targetDate === date('Y-m-d');
+
 try {
     // Obtener tipos de punch con colores - usar UPPER en slug para match consistente
     $typesStmt = $pdo->query("
@@ -85,19 +94,19 @@ try {
         exit;
     }
     
-    // Historial de punches de hoy (ordenado del más reciente al más antiguo para mostrar)
+    // Historial de punches de la fecha solicitada (ordenado del más reciente al más antiguo para mostrar)
     $punchesStmt = $pdo->prepare("
-        SELECT 
+        SELECT
             id,
             type,
             timestamp,
             TIMESTAMPDIFF(SECOND, timestamp, NOW()) as seconds_ago
         FROM attendance
         WHERE user_id = ?
-        AND DATE(timestamp) = CURDATE()
+        AND DATE(timestamp) = ?
         ORDER BY timestamp DESC
     ");
-    $punchesStmt->execute([$userId]);
+    $punchesStmt->execute([$userId, $targetDate]);
     $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Procesar punches con información de tipo
@@ -138,15 +147,15 @@ try {
     
     // Obtener todos los punches ordenados cronológicamente para calcular duraciones
     $timeCalcStmt = $pdo->prepare("
-        SELECT 
+        SELECT
             type,
             timestamp
         FROM attendance
         WHERE user_id = ?
-        AND DATE(timestamp) = CURDATE()
+        AND DATE(timestamp) = ?
         ORDER BY timestamp ASC
     ");
-    $timeCalcStmt->execute([$userId]);
+    $timeCalcStmt->execute([$userId, $targetDate]);
     $timeData = $timeCalcStmt->fetchAll(PDO::FETCH_ASSOC);
     
     // Calcular duraciones entre punches consecutivos
@@ -195,15 +204,17 @@ try {
                 }
             }
         } else {
-            // Último punch - solo calcular si es pagado
-            $currentTime = time();
-            $punchTime = strtotime($currentPunch['timestamp']);
-            $duration = $currentTime - $punchTime;
-            
-            if ((int)$typeInfo['is_paid'] === 1) {
-                if ($duration > 0 && $duration < 43200) {
-                    $stats['by_type'][$typeSlug]['total_seconds'] += $duration;
-                    $stats['total_paid_time'] += $duration;
+            // Último punch - solo calcular "en curso" cuando la fecha consultada es hoy
+            if ($isToday) {
+                $currentTime = time();
+                $punchTime = strtotime($currentPunch['timestamp']);
+                $duration = $currentTime - $punchTime;
+
+                if ((int)$typeInfo['is_paid'] === 1) {
+                    if ($duration > 0 && $duration < 43200) {
+                        $stats['by_type'][$typeSlug]['total_seconds'] += $duration;
+                        $stats['total_paid_time'] += $duration;
+                    }
                 }
             }
         }
@@ -256,6 +267,8 @@ try {
     echo json_encode([
         'success' => true,
         'timestamp' => date('Y-m-d H:i:s'),
+        'date' => $targetDate,
+        'is_today' => $isToday,
         'user' => $user,
         'punches' => $punchesFormatted,
         'stats' => $stats,
