@@ -20,6 +20,7 @@ RewriteCond %{REQUEST_URI} !supervisor_.*_api\.php$
 RewriteCond %{REQUEST_URI} !_api\.php$
 RewriteCond %{REQUEST_URI} !delete_record\.php$
 RewriteCond %{REQUEST_URI} !edit_record\.php$
+RewriteCond %{REQUEST_URI} !create_manual_punch\.php$
 RewriteCond %{REQUEST_URI} !save_schedule_template\.php$
 RewriteCond %{REQUEST_URI} !update_schedule_template\.php$
 RewriteCond %{REQUEST_URI} !delete_schedule_template\.php$
