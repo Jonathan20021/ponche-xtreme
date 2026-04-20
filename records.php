@@ -449,6 +449,25 @@ if (!empty($usersParams)) {
     $users = $pdo->query($usersQuery)->fetchAll(PDO::FETCH_COLUMN);
 }
 
+// Lista completa (id, full_name, username) para el selector de registro manual,
+// respetando el scope del supervisor.
+$manualUsersQuery = "
+    SELECT DISTINCT users.id, users.full_name, users.username
+    FROM users
+    LEFT JOIN employees e ON e.user_id = users.id
+    WHERE 1=1
+";
+$manualUsersParams = [];
+$applySupervisorFilter($manualUsersQuery, $manualUsersParams);
+$manualUsersQuery .= " ORDER BY users.full_name";
+if (!empty($manualUsersParams)) {
+    $manualUsersStmt = $pdo->prepare($manualUsersQuery);
+    $manualUsersStmt->execute($manualUsersParams);
+    $manualUsersList = $manualUsersStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} else {
+    $manualUsersList = $pdo->query($manualUsersQuery)->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
 $summary_query = "
     SELECT 
         attendance.user_id,
@@ -1017,6 +1036,9 @@ $tardinessTotal = count($tardiness_data);
                 <p class="text-muted text-sm">Historial completo con clasificación por tipo de evento y acciones rápidas.</p>
             </div>
             <div class="table-actions w-full xl:w-auto">
+                <button type="button" id="btnOpenManualPunch" class="btn-success w-full sm:w-auto" title="Registrar manualmente un punch de un día pasado o actual">
+                    <i class="fas fa-plus-circle"></i> Agregar registro manual
+                </button>
                 <button id="exportCsv" class="btn-secondary w-full sm:w-auto"><i class="fas fa-file-csv"></i> Exportar CSV</button>
                 <button id="exportExcel" class="btn-primary w-full sm:w-auto"><i class="fas fa-file-excel"></i> Exportar Excel</button>
                 <button id="exportPDF" class="btn-secondary w-full sm:w-auto"><i class="fas fa-file-pdf"></i> Exportar PDF</button>
@@ -1821,7 +1843,8 @@ $(document).ready(function() {
     margin-bottom: 0.5rem;
 }
 
-.modal-input-group input {
+.modal-input-group input,
+.modal-input-group select {
     width: 100%;
     padding: 0.75rem;
     border: 1px solid rgba(226, 232, 240, 0.2);
@@ -1832,7 +1855,13 @@ $(document).ready(function() {
     transition: all 0.2s;
 }
 
-.modal-input-group input:focus {
+.modal-input-group select option {
+    background: #0f172a;
+    color: #f1f5f9;
+}
+
+.modal-input-group input:focus,
+.modal-input-group select:focus {
     outline: none;
     border-color: #3b82f6;
     background: rgba(248, 250, 252, 0.1);
@@ -1841,6 +1870,11 @@ $(document).ready(function() {
 
 .modal-input-group input::placeholder {
     color: #64748b;
+}
+
+.modal-input-group input[type="date"],
+.modal-input-group input[type="time"] {
+    color-scheme: dark;
 }
 
 .modal-info {
@@ -1998,6 +2032,135 @@ $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
     </div>
 </div>
 
+<!-- Modal: Agregar registro manual (para cuadre de nómina) -->
+<?php $manualAuthRequired = $editAuthRequired; ?>
+<div id="manualPunchModal" class="modal">
+    <div class="modal-content" style="max-width: 640px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-plus-circle"></i> Agregar registro manual</h3>
+            <button class="modal-close" onclick="closeManualPunchModal()">&times;</button>
+        </div>
+        <form id="manualPunchForm" method="POST" action="create_manual_punch.php" novalidate>
+            <div class="modal-body">
+                <div class="modal-info">
+                    <p>
+                        <i class="fas fa-info-circle"></i>
+                        Crea un punch manualmente para corregir olvidos del colaborador (salida, break, lunch, etc.)
+                        en cualquier fecha pasada. Todos los cambios se registran en el historial de auditoría.
+                    </p>
+                </div>
+
+                <div class="modal-input-group">
+                    <label for="manual_user_id">
+                        <i class="fas fa-user"></i> Colaborador *
+                    </label>
+                    <select id="manual_user_id" name="user_id" required>
+                        <option value="">Selecciona un colaborador…</option>
+                        <?php foreach ($manualUsersList as $mu): ?>
+                            <option value="<?= (int) $mu['id'] ?>">
+                                <?= htmlspecialchars($mu['full_name']) ?> (<?= htmlspecialchars($mu['username']) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="modal-input-group">
+                    <label for="manual_punch_type">
+                        <i class="fas fa-tag"></i> Tipo de evento *
+                    </label>
+                    <select id="manual_punch_type" name="punch_type" required>
+                        <option value="">Selecciona un tipo…</option>
+                        <?php foreach ($attendanceTypeMap as $slug => $meta): ?>
+                            <?php if ((int) ($meta['is_active'] ?? 0) !== 1) continue; ?>
+                            <option value="<?= htmlspecialchars($slug) ?>">
+                                <?= htmlspecialchars($meta['label'] ?? $slug) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="modal-input-group">
+                        <label for="manual_punch_date">
+                            <i class="fas fa-calendar-day"></i> Fecha *
+                        </label>
+                        <input
+                            type="date"
+                            id="manual_punch_date"
+                            name="punch_date"
+                            required
+                            max="<?= htmlspecialchars(date('Y-m-d')) ?>"
+                            value="<?= htmlspecialchars(date('Y-m-d')) ?>"
+                        >
+                    </div>
+                    <div class="modal-input-group">
+                        <label for="manual_punch_time">
+                            <i class="fas fa-clock"></i> Hora *
+                        </label>
+                        <input
+                            type="time"
+                            id="manual_punch_time"
+                            name="punch_time"
+                            required
+                            step="60"
+                            value="<?= htmlspecialchars(date('H:i')) ?>"
+                        >
+                    </div>
+                </div>
+
+                <div class="modal-input-group">
+                    <label for="manual_ip_address">
+                        <i class="fas fa-network-wired"></i> Dirección IP (opcional)
+                    </label>
+                    <input
+                        type="text"
+                        id="manual_ip_address"
+                        name="ip_address"
+                        placeholder="Se usará la IP del supervisor si se deja vacío"
+                        maxlength="45"
+                    >
+                </div>
+
+                <div class="modal-input-group">
+                    <label for="manual_notes">
+                        <i class="fas fa-comment-alt"></i> Motivo / Notas (opcional)
+                    </label>
+                    <input
+                        type="text"
+                        id="manual_notes"
+                        name="notes"
+                        placeholder="Ej: Olvidó marcar salida, corrección por cuadre de nómina…"
+                        maxlength="255"
+                    >
+                </div>
+
+                <?php if ($manualAuthRequired): ?>
+                <div class="modal-input-group">
+                    <label for="manual_auth_code">
+                        <i class="fas fa-lock"></i> Código de autorización *
+                    </label>
+                    <input
+                        type="text"
+                        id="manual_auth_code"
+                        name="authorization_code"
+                        placeholder="Ingresa el código de autorización"
+                        required
+                    >
+                </div>
+                <?php endif; ?>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn modal-btn-secondary" onclick="closeManualPunchModal()">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button type="submit" class="modal-btn modal-btn-primary">
+                    <i class="fas fa-save"></i> Registrar punch
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 // Edit modal functions
 function openEditModal(recordId) {
@@ -2055,15 +2218,88 @@ function submitDelete() {
     document.getElementById('deleteForm').submit();
 }
 
+// Manual punch modal functions
+function openManualPunchModal() {
+    const modal = document.getElementById('manualPunchModal');
+    if (!modal) return;
+    modal.style.display = 'block';
+    const form = document.getElementById('manualPunchForm');
+    if (form) form.reset();
+    // Restore default date/time to "now" each time the modal opens
+    const dateInput = document.getElementById('manual_punch_date');
+    const timeInput = document.getElementById('manual_punch_time');
+    if (dateInput) {
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        dateInput.value = `${y}-${m}-${d}`;
+        dateInput.max = `${y}-${m}-${d}`;
+    }
+    if (timeInput) {
+        const now = new Date();
+        const h = String(now.getHours()).padStart(2, '0');
+        const mi = String(now.getMinutes()).padStart(2, '0');
+        timeInput.value = `${h}:${mi}`;
+    }
+    const userSelect = document.getElementById('manual_user_id');
+    if (userSelect) userSelect.focus();
+}
+
+function closeManualPunchModal() {
+    const modal = document.getElementById('manualPunchModal');
+    if (modal) modal.style.display = 'none';
+}
+
+(function () {
+    const btn = document.getElementById('btnOpenManualPunch');
+    if (btn) btn.addEventListener('click', openManualPunchModal);
+
+    const form = document.getElementById('manualPunchForm');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            const userId = document.getElementById('manual_user_id').value;
+            const type = document.getElementById('manual_punch_type').value;
+            const date = document.getElementById('manual_punch_date').value;
+            const time = document.getElementById('manual_punch_time').value;
+            if (!userId || !type || !date || !time) {
+                e.preventDefault();
+                alert('Completa los campos obligatorios (colaborador, tipo, fecha y hora).');
+                return;
+            }
+            const today = new Date();
+            const todayIso = today.toISOString().slice(0, 10);
+            if (date > todayIso) {
+                e.preventDefault();
+                alert('No puedes registrar un punch en una fecha futura.');
+                return;
+            }
+            <?php if ($manualAuthRequired): ?>
+            const authInput = document.getElementById('manual_auth_code');
+            if (authInput && !authInput.value.trim()) {
+                e.preventDefault();
+                alert('Ingresa el código de autorización.');
+                authInput.focus();
+                return;
+            }
+            <?php endif; ?>
+        });
+    }
+})();
+
 // Close modals when clicking outside
 window.onclick = function(event) {
     const editModal = document.getElementById('editModal');
     const deleteModal = document.getElementById('deleteModal');
+    const manualModal = document.getElementById('manualPunchModal');
     if (event.target === editModal) {
         closeEditModal();
     }
     if (event.target === deleteModal) {
         closeDeleteModal();
+    }
+    if (event.target === manualModal) {
+        closeManualPunchModal();
     }
 }
 
@@ -2072,6 +2308,7 @@ document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         closeEditModal();
         closeDeleteModal();
+        closeManualPunchModal();
     }
 });
 </script>
