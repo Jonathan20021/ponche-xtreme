@@ -967,6 +967,118 @@ function sendDailyLoginHoursReport($htmlContent, $recipients, $reportData) {
 }
 
 /**
+ * Send daily payroll month-to-date report via email (with Excel attachment).
+ *
+ * @param string      $htmlContent     Rendered HTML body.
+ * @param array       $recipients      List of email addresses.
+ * @param array       $reportData      Report data from generateDailyPayrollReport().
+ * @param string|null $attachmentPath  Absolute path of the .xls file to attach, or null to skip.
+ * @return array{success: bool, message: string}
+ */
+function sendDailyPayrollReport($htmlContent, $recipients, $reportData, $attachmentPath = null) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        // Attach Excel if provided (detect MIME by extension: .xlsx uses OOXML MIME)
+        if ($attachmentPath && is_string($attachmentPath) && file_exists($attachmentPath)) {
+            $attachName = basename($attachmentPath);
+            $ext = strtolower(pathinfo($attachmentPath, PATHINFO_EXTENSION));
+            $mime = $ext === 'xlsx'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'application/vnd.ms-excel';
+            $mail->addAttachment($attachmentPath, $attachName, 'base64', $mime);
+        }
+
+        $period   = $reportData['period_label'] ?? (($reportData['start_date'] ?? '') . ' al ' . ($reportData['end_date'] ?? ''));
+        $totals   = $reportData['totals']    ?? [];
+        $payUsd   = number_format((float) ($totals['pay_usd'] ?? 0), 2);
+        $payDop   = number_format((float) ($totals['pay_dop'] ?? 0), 2);
+
+        $mail->isHTML(true);
+        $mail->Subject = "Corte diario de nómina - $period (USD \$$payUsd · RD\$$payDop)";
+        $mail->Body    = $htmlContent;
+
+        // Plain-text alternative
+        $plain  = "CORTE DIARIO DE NÓMINA ACUMULADA\n";
+        $plain .= "=================================\n\n";
+        $plain .= "Período: $period\n";
+        $plain .= "Pago acumulado USD: \$$payUsd\n";
+        $plain .= "Pago acumulado DOP: RD\$$payDop\n";
+        $plain .= "Horas productivas:  " . number_format((float) ($totals['hours'] ?? 0), 2) . "\n";
+        $plain .= "Colaboradores con actividad: " . ($totals['users_with_rows'] ?? 0) . "\n\n";
+
+        if (!empty($reportData['by_department'])) {
+            $plain .= "POR DEPARTAMENTO:\n";
+            foreach ($reportData['by_department'] as $d) {
+                $plain .= sprintf("  - %-30s | %3d colabs | %7.2f hrs | \$%10.2f USD | RD\$%10.2f DOP\n",
+                    $d['name'], $d['users'], $d['hours'], $d['pay_usd'], $d['pay_dop']);
+            }
+            $plain .= "\n";
+        }
+
+        if (!empty($reportData['by_user'])) {
+            $plain .= "TOP 15 COLABORADORES (USD):\n";
+            foreach (array_slice($reportData['by_user'], 0, 15) as $u) {
+                $plain .= sprintf("  - %-35s [%s] %7.2f hrs | \$%10.2f USD | RD\$%10.2f DOP\n",
+                    $u['full_name'], $u['department'], $u['hours'], $u['pay_usd'], $u['pay_dop']);
+            }
+        }
+
+        $plain .= "\n(Se adjunta el Excel con el detalle completo día por día.)\n";
+        $plain .= "\n---\nSistema de Control de Asistencia - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        $msg = "Reporte enviado a $validRecipients destinatario(s)";
+        if ($attachmentPath && file_exists($attachmentPath)) {
+            $msg .= ' con Excel adjunto.';
+        }
+        return ['success' => true, 'message' => $msg];
+
+    } catch (Exception $e) {
+        return [
+            'success' => false,
+            'message' => 'Error al enviar email: ' . $e->getMessage()
+        ];
+    }
+}
+
+/**
  * Send daily quality alerts report via email.
  *
  * @param string $htmlContent Rendered HTML body.

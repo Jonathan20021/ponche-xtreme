@@ -904,6 +904,45 @@ try {
                 }
                 break;
 
+            case 'update_payroll_report_config':
+                $prRecipients      = trim($_POST['payroll_report_recipients'] ?? '');
+                $prEnabled         = isset($_POST['payroll_report_enabled']) ? 1 : 0;
+                $prTime            = trim($_POST['payroll_report_time'] ?? '08:00');
+                $prPeriodMode      = trim($_POST['payroll_report_period_mode'] ?? 'month_to_yesterday');
+                $prClaudeEnabled   = isset($_POST['payroll_report_claude_enabled']) ? 1 : 0;
+                $prClaudeModel     = trim($_POST['payroll_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $prClaudeMaxTokens = max(100, (int) ($_POST['payroll_report_claude_max_tokens'] ?? 1000));
+                $prClaudePrompt    = trim($_POST['payroll_report_claude_prompt'] ?? '');
+
+                $validPeriodModes = ['month_to_yesterday', 'last_7_days'];
+                if (!in_array($prPeriodMode, $validPeriodModes, true)) {
+                    $prPeriodMode = 'month_to_yesterday';
+                }
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['payroll_report_recipients',        $prRecipients]);
+                    $stmt->execute(['payroll_report_enabled',           (string) $prEnabled]);
+                    $stmt->execute(['payroll_report_time',              $prTime]);
+                    $stmt->execute(['payroll_report_period_mode',       $prPeriodMode]);
+                    $stmt->execute(['payroll_report_claude_enabled',    (string) $prClaudeEnabled]);
+                    $stmt->execute(['payroll_report_claude_model',      $prClaudeModel]);
+                    $stmt->execute(['payroll_report_claude_max_tokens', (string) $prClaudeMaxTokens]);
+                    if ($prClaudePrompt !== '') {
+                        $stmt->execute(['payroll_report_claude_prompt', $prClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración del corte diario de nómina actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del corte de nómina.';
+                }
+                break;
+
             case 'update_global_ai_config':
                 $gAiKeyRaw = trim($_POST['anthropic_api_key'] ?? '');
                 $gAiModel  = trim($_POST['anthropic_default_model'] ?? 'claude-sonnet-4-6');
@@ -1250,6 +1289,36 @@ try {
     }
 } catch (Exception $e) {
     error_log("Error loading absence report settings: " . $e->getMessage());
+}
+
+// Get payroll report settings
+$payrollReport = [
+    'enabled'           => false,
+    'time'              => '08:00',
+    'recipients'        => '',
+    'period_mode'       => 'month_to_yesterday',
+    'claude_enabled'    => false,
+    'claude_model'      => 'claude-sonnet-4-6',
+    'claude_max_tokens' => 1000,
+    'claude_prompt'     => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'payroll_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'payroll_report_enabled':            $payrollReport['enabled']           = $val === '1'; break;
+            case 'payroll_report_time':               $payrollReport['time']              = $val ?: '08:00'; break;
+            case 'payroll_report_recipients':         $payrollReport['recipients']        = $val; break;
+            case 'payroll_report_period_mode':        $payrollReport['period_mode']       = $val ?: 'month_to_yesterday'; break;
+            case 'payroll_report_claude_enabled':     $payrollReport['claude_enabled']    = $val === '1'; break;
+            case 'payroll_report_claude_model':       $payrollReport['claude_model']      = $val ?: 'claude-sonnet-4-6'; break;
+            case 'payroll_report_claude_max_tokens':  $payrollReport['claude_max_tokens'] = (int) ($val ?: 1000); break;
+            case 'payroll_report_claude_prompt':      $payrollReport['claude_prompt']     = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading payroll report settings: ' . $e->getMessage());
 }
 
 // Get GLOBAL Claude AI config (shared across all reports)
@@ -2505,6 +2574,150 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Daily Payroll Month-to-Date Report Configuration -->
+        <section id="payroll-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-file-invoice-dollar text-emerald-400"></i>
+                        Reporte Diario de Nómina Acumulada
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Corte diario con el monto acumulado del mes en curso (colaboradores administrativos) por departamento
+                        y colaborador. Usa la misma lógica del botón <em>"Exportar diario"</em> del módulo de RH y adjunta el Excel.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $payrollReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $payrollReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_payroll_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="payroll_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $payrollReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se enviará cada mañana a los destinatarios de RH configurados.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="payroll_report_time"
+                            value="<?= htmlspecialchars($payrollReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Hora de Santo Domingo</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-alt"></i> Período del corte</label>
+                        <select name="payroll_report_period_mode" class="input-control">
+                            <option value="month_to_yesterday" <?= $payrollReport['period_mode'] === 'month_to_yesterday' ? 'selected' : '' ?>>
+                                Mes actual acumulado (1° del mes → ayer)
+                            </option>
+                            <option value="last_7_days" <?= $payrollReport['period_mode'] === 'last_7_days' ? 'selected' : '' ?>>
+                                Últimos 7 días
+                            </option>
+                        </select>
+                        <p class="text-xs text-muted mt-1">El corte mensual es el modo recomendado por RH.</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (RH / Gerencia)</label>
+                    <textarea name="payroll_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="rh@evallishbpo.com, gerencia@evallishbpo.com"><?= htmlspecialchars($payrollReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="payroll_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $payrollReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza el corte acumulado para identificar el departamento más costoso, top de colaboradores,
+                        colaboradores con baja actividad y proyectar el cierre del mes.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="payroll_report_claude_model"
+                                value="<?= htmlspecialchars($payrollReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="payroll_report_claude_max_tokens"
+                                value="<?= (int) $payrollReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="payroll_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($payrollReport['claude_prompt']) ?></textarea>
+                        <p class="text-xs text-muted mt-1">Claude recibe este system prompt + el JSON con totales, departamentos y colaboradores.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="downloadPayrollXls()" class="btn-secondary">
+                            <i class="fas fa-file-excel"></i> Descargar Excel ahora
+                        </button>
+                        <button type="button" onclick="sendPayrollReportPreview()" class="btn-secondary" id="sendPayrollPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendPayrollReportManually()" class="btn-secondary" id="sendPayrollReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío, configura este cron (ajusta la hora a la configurada arriba):
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    0 8 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_payroll_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    El corte se adjunta como Excel (.xls) con el mismo formato del botón "Exportar diario" del módulo de RH.
+                </p>
+            </div>
+        </section>
+
         <section id="schedule-card" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
@@ -3466,6 +3679,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Alertas Críticas Calidad',
                 icon: 'fas fa-exclamation-triangle',
                 selectors: ['#quality-alerts-report-config']
+            },
+            {
+                key: 'payroll_report',
+                label: 'Nómina Acumulada',
+                icon: 'fas fa-file-invoice-dollar',
+                selectors: ['#payroll-report-config']
             },
             {
                 key: 'schedule',
@@ -4602,6 +4821,88 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             btn.disabled = false;
             btn.innerHTML = original;
         }
+    }
+
+    // ---------- Payroll Report handlers ----------
+
+    function renderPayrollResult(success, message, data) {
+        const host = document.getElementById('payroll-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            const usd = Number(data.totals.pay_usd || 0).toFixed(2);
+            const dop = Number(data.totals.pay_dop || 0).toFixed(2);
+            const hrs = Number(data.totals.hours || 0).toFixed(2);
+            extra = `<p class="${subColor} text-sm mt-1">
+                Período: ${data.start_date} → ${data.end_date} ·
+                USD $${usd} · RD$${dop} · ${hrs} hrs ·
+                ${data.totals.users_with_rows} colabs
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendPayrollReportManually() {
+        const btn = document.getElementById('sendPayrollReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_payroll_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderPayrollResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderPayrollResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendPayrollReportPreview() {
+        const btn = document.getElementById('sendPayrollPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_payroll_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderPayrollResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderPayrollResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    function downloadPayrollXls() {
+        // Opens the xls download directly. The endpoint uses the session cookie.
+        window.location.href = 'send_payroll_report.php?mode=download_xls';
     }
 
     async function testQualityAlertsClaudeAPI() {
