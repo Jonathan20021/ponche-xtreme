@@ -904,6 +904,44 @@ try {
                 }
                 break;
 
+            case 'update_tardiness_report_config':
+                $tdRecipients      = trim($_POST['tardiness_report_recipients'] ?? '');
+                $tdEnabled         = isset($_POST['tardiness_report_enabled']) ? 1 : 0;
+                $tdTime            = trim($_POST['tardiness_report_time'] ?? '11:00');
+                $tdTolerance       = max(0, (int) ($_POST['tardiness_report_tolerance_minutes'] ?? 10));
+                $tdExcludeWeekends = isset($_POST['tardiness_report_exclude_weekends']) ? 1 : 0;
+                $tdOnlyWithTardies = isset($_POST['tardiness_report_only_with_tardies']) ? 1 : 0;
+                $tdClaudeEnabled   = isset($_POST['tardiness_report_claude_enabled']) ? 1 : 0;
+                $tdClaudeModel     = trim($_POST['tardiness_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $tdClaudeMaxTokens = max(100, (int) ($_POST['tardiness_report_claude_max_tokens'] ?? 700));
+                $tdClaudePrompt    = trim($_POST['tardiness_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['tardiness_report_recipients',           $tdRecipients]);
+                    $stmt->execute(['tardiness_report_enabled',              (string) $tdEnabled]);
+                    $stmt->execute(['tardiness_report_time',                 $tdTime]);
+                    $stmt->execute(['tardiness_report_tolerance_minutes',    (string) $tdTolerance]);
+                    $stmt->execute(['tardiness_report_exclude_weekends',    (string) $tdExcludeWeekends]);
+                    $stmt->execute(['tardiness_report_only_with_tardies',   (string) $tdOnlyWithTardies]);
+                    $stmt->execute(['tardiness_report_claude_enabled',       (string) $tdClaudeEnabled]);
+                    $stmt->execute(['tardiness_report_claude_model',         $tdClaudeModel]);
+                    $stmt->execute(['tardiness_report_claude_max_tokens',    (string) $tdClaudeMaxTokens]);
+                    if ($tdClaudePrompt !== '') {
+                        $stmt->execute(['tardiness_report_claude_prompt', $tdClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte de tardanzas actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de tardanzas.';
+                }
+                break;
+
             case 'update_payroll_report_config':
                 $prRecipients      = trim($_POST['payroll_report_recipients'] ?? '');
                 $prEnabled         = isset($_POST['payroll_report_enabled']) ? 1 : 0;
@@ -1289,6 +1327,40 @@ try {
     }
 } catch (Exception $e) {
     error_log("Error loading absence report settings: " . $e->getMessage());
+}
+
+// Get tardiness report settings
+$tardinessReport = [
+    'enabled'           => false,
+    'time'              => '11:00',
+    'recipients'        => '',
+    'tolerance'         => 10,
+    'exclude_weekends'  => true,
+    'only_with_tardies' => false,
+    'claude_enabled'    => false,
+    'claude_model'      => 'claude-sonnet-4-6',
+    'claude_max_tokens' => 700,
+    'claude_prompt'     => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'tardiness_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'tardiness_report_enabled':             $tardinessReport['enabled']           = $val === '1'; break;
+            case 'tardiness_report_time':                $tardinessReport['time']              = $val ?: '11:00'; break;
+            case 'tardiness_report_recipients':          $tardinessReport['recipients']        = $val; break;
+            case 'tardiness_report_tolerance_minutes':   $tardinessReport['tolerance']         = (int) ($val ?: 10); break;
+            case 'tardiness_report_exclude_weekends':    $tardinessReport['exclude_weekends']  = $val === '1'; break;
+            case 'tardiness_report_only_with_tardies':   $tardinessReport['only_with_tardies'] = $val === '1'; break;
+            case 'tardiness_report_claude_enabled':      $tardinessReport['claude_enabled']    = $val === '1'; break;
+            case 'tardiness_report_claude_model':        $tardinessReport['claude_model']      = $val ?: 'claude-sonnet-4-6'; break;
+            case 'tardiness_report_claude_max_tokens':   $tardinessReport['claude_max_tokens'] = (int) ($val ?: 700); break;
+            case 'tardiness_report_claude_prompt':       $tardinessReport['claude_prompt']     = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading tardiness report settings: ' . $e->getMessage());
 }
 
 // Get payroll report settings
@@ -2574,6 +2646,155 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Daily Tardiness Alert Report Configuration -->
+        <section id="tardiness-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-user-clock text-orange-400"></i>
+                        Reporte Diario de Tardanzas
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Alerta enviada a RH y supervisores a mitad de mañana con los empleados que llegaron tarde hoy,
+                        los minutos de retraso, la tasa del día vs. la tasa acumulada del mes y empleados recurrentes.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $tardinessReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $tardinessReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_tardiness_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="tardiness_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $tardinessReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada día a la hora configurada.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="tardiness_report_exclude_weekends" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $tardinessReport['exclude_weekends'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Excluir fines de semana</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">No enviar sábados ni domingos.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="tardiness_report_only_with_tardies" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $tardinessReport['only_with_tardies'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Solo enviar si hubo tardanzas</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Omitir el envío cuando todos llegaron a tiempo.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="tardiness_report_time"
+                            value="<?= htmlspecialchars($tardinessReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">11:00 es recomendado — da margen para que todos ya hayan llegado.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-stopwatch"></i> Tolerancia (minutos)</label>
+                        <input type="number" min="0" max="120" name="tardiness_report_tolerance_minutes"
+                            value="<?= (int) $tardinessReport['tolerance'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Minutos después del horario programado antes de contar como tardanza.</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (RH + supervisores)</label>
+                    <textarea name="tardiness_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="rh@evallishbpo.com, supervisor1@evallishbpo.com"><?= htmlspecialchars($tardinessReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="tardiness_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $tardinessReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude compara la tasa del día vs. el promedio mensual, identifica top retrasos, departamentos más afectados
+                        y empleados con tardanzas recurrentes — listo para accionar.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="tardiness_report_claude_model"
+                                value="<?= htmlspecialchars($tardinessReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="tardiness_report_claude_max_tokens"
+                                value="<?= (int) $tardinessReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="tardiness_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($tardinessReport['claude_prompt']) ?></textarea>
+                        <p class="text-xs text-muted mt-1">Claude recibe este system prompt + el JSON del día + el contexto mensual.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendTardinessReportPreview()" class="btn-secondary" id="sendTardinessPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendTardinessReportManually()" class="btn-secondary" id="sendTardinessReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío a mitad de mañana, configura este cron:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    0 11 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_tardiness_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    El reporte cubre las entradas del día en curso (no de ayer) — es un alerta accionable.
+                </p>
+            </div>
+        </section>
+
         <!-- Daily Payroll Month-to-Date Report Configuration -->
         <section id="payroll-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -3679,6 +3900,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Alertas Críticas Calidad',
                 icon: 'fas fa-exclamation-triangle',
                 selectors: ['#quality-alerts-report-config']
+            },
+            {
+                key: 'tardiness_report',
+                label: 'Tardanzas del Día',
+                icon: 'fas fa-user-clock',
+                selectors: ['#tardiness-report-config']
             },
             {
                 key: 'payroll_report',
@@ -4817,6 +5044,81 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderQualityAlertsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderQualityAlertsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Tardiness Report handlers ----------
+
+    function renderTardinessResult(success, message, data) {
+        const host = document.getElementById('tardiness-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            extra = `<p class="${subColor} text-sm mt-1">
+                Tolerancia: ${data.tolerance} min ·
+                Tardanzas hoy: ${data.totals.tardies_today} / ${data.totals.total_entries_today} ·
+                Tasa día: ${data.totals.today_rate_pct}% ·
+                Tasa mes: ${data.totals.month_rate_pct}%
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendTardinessReportManually() {
+        const btn = document.getElementById('sendTardinessReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_tardiness_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderTardinessResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderTardinessResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendTardinessReportPreview() {
+        const btn = document.getElementById('sendTardinessPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_tardiness_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderTardinessResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderTardinessResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;

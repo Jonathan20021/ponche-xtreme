@@ -967,6 +967,101 @@ function sendDailyLoginHoursReport($htmlContent, $recipients, $reportData) {
 }
 
 /**
+ * Send daily tardiness alert report via email.
+ *
+ * @param string $htmlContent Rendered HTML body.
+ * @param array  $recipients  List of email addresses.
+ * @param array  $reportData  Report data from generateDailyTardinessReport().
+ * @return array{success: bool, message: string}
+ */
+function sendDailyTardinessReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $dateFormatted = $reportData['date_formatted'] ?? ($reportData['date'] ?? date('Y-m-d'));
+        $totals = $reportData['totals'] ?? [];
+        $tardyCount = $totals['tardies_today'] ?? 0;
+        $todayRate = $totals['today_rate_pct'] ?? 0;
+
+        $mail->isHTML(true);
+        $mail->Subject = "Tardanzas del día - $dateFormatted ({$tardyCount} tardanzas · {$todayRate}%)";
+        $mail->Body    = $htmlContent;
+
+        // Plain-text alternative
+        $plain  = "REPORTE DE TARDANZAS DEL DÍA\n";
+        $plain .= "============================\n\n";
+        $plain .= "Fecha: $dateFormatted\n";
+        $plain .= "Tolerancia: " . ($reportData['tolerance_minutes'] ?? 10) . " minutos\n\n";
+        $plain .= "Tardanzas hoy:          " . $tardyCount . " de " . ($totals['total_entries_today'] ?? 0) . "\n";
+        $plain .= "Tasa del día:           " . $todayRate . "%\n";
+        $plain .= "Tasa acumulada del mes: " . ($totals['month_rate_pct'] ?? 0) . "% ({$totals['month_late_entries']}/{$totals['month_total_entries']})\n";
+        $plain .= "Retraso promedio:       " . ($totals['avg_late_minutes'] ?? 0) . " min\n\n";
+
+        if (!empty($reportData['tardies'])) {
+            $plain .= "LISTADO:\n";
+            foreach ($reportData['tardies'] as $t) {
+                $actual = date('H:i', strtotime($t['actual_entry']));
+                $plain .= sprintf("  - %-40s [%s] prog %s / real %s / +%d min\n",
+                    $t['full_name'], $t['department'], $t['scheduled_entry'], $actual, $t['late_minutes']);
+            }
+        } else {
+            $plain .= "Sin tardanzas hoy. ¡Excelente!\n";
+        }
+
+        if (!empty($reportData['recurring'])) {
+            $plain .= "\nRECURRENTES DEL MES (3+ días):\n";
+            foreach ($reportData['recurring'] as $o) {
+                $plain .= sprintf("  - %s: %d días\n", $o['full_name'], $o['count']);
+            }
+        }
+
+        $plain .= "\n---\nSistema de Control de Asistencia - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Reporte enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}
+
+/**
  * Send daily payroll month-to-date report via email (with Excel attachment).
  *
  * @param string      $htmlContent     Rendered HTML body.
