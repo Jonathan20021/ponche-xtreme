@@ -904,6 +904,50 @@ try {
                 }
                 break;
 
+            case 'update_login_hours_report_config':
+                $lhRecipients      = trim($_POST['login_hours_report_recipients'] ?? '');
+                $lhEnabled         = isset($_POST['login_hours_report_enabled']) ? 1 : 0;
+                $lhTime            = trim($_POST['login_hours_report_time'] ?? '07:00');
+                $lhLate            = max(0, (int) ($_POST['login_hours_report_late_threshold_minutes']  ?? 10));
+                $lhBreak           = max(0, (int) ($_POST['login_hours_report_break_threshold_minutes'] ?? 45));
+                $lhClaudeEnabled   = isset($_POST['login_hours_report_claude_enabled']) ? 1 : 0;
+                $lhClaudeKeyRaw    = trim($_POST['login_hours_report_claude_api_key'] ?? '');
+                $lhClaudeModel     = trim($_POST['login_hours_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $lhClaudeMaxTokens = max(100, (int) ($_POST['login_hours_report_claude_max_tokens'] ?? 800));
+                $lhClaudePrompt    = trim($_POST['login_hours_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['login_hours_report_recipients',              $lhRecipients]);
+                    $stmt->execute(['login_hours_report_enabled',                 (string) $lhEnabled]);
+                    $stmt->execute(['login_hours_report_time',                    $lhTime]);
+                    $stmt->execute(['login_hours_report_late_threshold_minutes',  (string) $lhLate]);
+                    $stmt->execute(['login_hours_report_break_threshold_minutes', (string) $lhBreak]);
+                    $stmt->execute(['login_hours_report_claude_enabled',          (string) $lhClaudeEnabled]);
+                    $stmt->execute(['login_hours_report_claude_model',            $lhClaudeModel]);
+                    $stmt->execute(['login_hours_report_claude_max_tokens',       (string) $lhClaudeMaxTokens]);
+                    if ($lhClaudePrompt !== '') {
+                        $stmt->execute(['login_hours_report_claude_prompt', $lhClaudePrompt]);
+                    }
+                    // Only overwrite API key when user actually typed a new value
+                    // (empty input means "keep current key"; '__CLEAR__' means "erase")
+                    if ($lhClaudeKeyRaw === '__CLEAR__') {
+                        $stmt->execute(['login_hours_report_claude_api_key', '']);
+                    } elseif ($lhClaudeKeyRaw !== '' && strpos($lhClaudeKeyRaw, '••••') === false) {
+                        $stmt->execute(['login_hours_report_claude_api_key', $lhClaudeKeyRaw]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte de horas de login actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del reporte de horas.';
+                }
+                break;
+
             case 'send_password_reset':
                 // Process only if triggered via row-action helper
                 if (!isset($_POST['from_row_action'])) {
@@ -1139,6 +1183,49 @@ try {
     }
 } catch (Exception $e) {
     error_log("Error loading absence report settings: " . $e->getMessage());
+}
+
+// Get login hours report settings
+$loginHoursReport = [
+    'enabled'               => false,
+    'time'                  => '07:00',
+    'recipients'            => '',
+    'late_threshold'        => 10,
+    'break_threshold'       => 45,
+    'claude_enabled'        => false,
+    'claude_api_key_masked' => '',
+    'claude_api_key_set'    => false,
+    'claude_model'          => 'claude-sonnet-4-6',
+    'claude_max_tokens'     => 800,
+    'claude_prompt'         => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'login_hours_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'login_hours_report_enabled':                 $loginHoursReport['enabled']          = $val === '1'; break;
+            case 'login_hours_report_time':                    $loginHoursReport['time']             = $val ?: '07:00'; break;
+            case 'login_hours_report_recipients':              $loginHoursReport['recipients']       = $val; break;
+            case 'login_hours_report_late_threshold_minutes':  $loginHoursReport['late_threshold']   = (int) $val; break;
+            case 'login_hours_report_break_threshold_minutes': $loginHoursReport['break_threshold']  = (int) $val; break;
+            case 'login_hours_report_claude_enabled':          $loginHoursReport['claude_enabled']   = $val === '1'; break;
+            case 'login_hours_report_claude_model':            $loginHoursReport['claude_model']     = $val ?: 'claude-sonnet-4-6'; break;
+            case 'login_hours_report_claude_max_tokens':       $loginHoursReport['claude_max_tokens']= (int) ($val ?: 800); break;
+            case 'login_hours_report_claude_prompt':           $loginHoursReport['claude_prompt']    = $val; break;
+            case 'login_hours_report_claude_api_key':
+                if ($val !== '') {
+                    $loginHoursReport['claude_api_key_set'] = true;
+                    // Show only prefix and last 4 chars
+                    $prefix = substr($val, 0, 8);
+                    $suffix = substr($val, -4);
+                    $loginHoursReport['claude_api_key_masked'] = $prefix . str_repeat('•', 8) . $suffix;
+                }
+                break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading login hours report settings: ' . $e->getMessage());
 }
 
 $permStmt = $pdo->query("SELECT section_key, role FROM section_permissions ORDER BY section_key, role");
@@ -1901,6 +1988,160 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <i class="fas fa-lightbulb"></i>
                     Esto ejecutará el reporte automáticamente todos los días a las 8:00 AM GMT-4.
                     También puede usar wget/curl si su servidor no soporta ejecución PHP directa.
+                </p>
+            </div>
+        </section>
+
+        <!-- Daily Login Hours Report Configuration -->
+        <section id="login-hours-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-user-clock text-sky-400"></i>
+                        Reporte Diario de Horas de Login
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Resumen del día anterior por empleado: Entry, Exit, horas netas, breaks y estados productivos.
+                        Opcionalmente enriquecido con un resumen ejecutivo generado por Claude AI.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $loginHoursReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $loginHoursReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_login_hours_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="login_hours_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $loginHoursReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se enviará cada mañana a los supervisores configurados.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="login_hours_report_time"
+                            value="<?= htmlspecialchars($loginHoursReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Hora de Santo Domingo</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-stopwatch"></i> Tardanza (min)</label>
+                        <input type="number" min="0" max="120" name="login_hours_report_late_threshold_minutes"
+                            value="<?= (int) $loginHoursReport['late_threshold'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Tolerancia para marcar entrada tardía</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-coffee"></i> Exceso de breaks (min)</label>
+                        <input type="number" min="0" max="480" name="login_hours_report_break_threshold_minutes"
+                            value="<?= (int) $loginHoursReport['break_threshold'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Total BREAK + PAUSA + BAÑO antes de marcar exceso</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (supervisores)</label>
+                    <textarea name="login_hours_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="supervisor1@evallishbpo.com, supervisor2@evallishbpo.com"><?= htmlspecialchars($loginHoursReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="login_hours_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $loginHoursReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Cuando está activo, Claude genera un párrafo narrativo con tardanzas, excesos de break y anomalías detectadas
+                        sobre los datos del reporte, que aparece arriba de la tabla.
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-key"></i> API Key (Anthropic)</label>
+                            <input type="text" name="login_hours_report_claude_api_key"
+                                value="<?= htmlspecialchars($loginHoursReport['claude_api_key_masked']) ?>"
+                                placeholder="sk-ant-..."
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">
+                                <?php if ($loginHoursReport['claude_api_key_set']): ?>
+                                    Ya configurada. Deja el valor enmascarado para conservarla. Escribe <code>__CLEAR__</code> para borrarla.
+                                <?php else: ?>
+                                    Obtén una en <a href="https://console.anthropic.com/settings/keys" target="_blank" class="underline">console.anthropic.com</a>.
+                                <?php endif; ?>
+                            </p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo</label>
+                            <input type="text" name="login_hours_report_claude_model"
+                                value="<?= htmlspecialchars($loginHoursReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Ej: <code>claude-sonnet-4-6</code>, <code>claude-opus-4-7</code>, <code>claude-haiku-4-5-20251001</code></p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="login_hours_report_claude_max_tokens"
+                                value="<?= (int) $loginHoursReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                        <div class="flex items-end">
+                            <button type="button" onclick="testLoginHoursClaudeAPI()" class="btn-secondary w-full" id="testClaudeBtn">
+                                <i class="fas fa-plug"></i> Probar conexión a Claude
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="login_hours_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($loginHoursReport['claude_prompt']) ?></textarea>
+                        <p class="text-xs text-muted mt-1">Claude recibe este system prompt + el JSON del reporte del día.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2">
+                        <button type="button" onclick="sendLoginHoursReportPreview()" class="btn-secondary" id="sendLoginHoursPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendLoginHoursReportManually()" class="btn-secondary" id="sendLoginHoursReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío nocturno, configura este cron (ajusta la hora a la configurada arriba):
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    0 7 * * * /usr/bin/php <?= __DIR__ ?>/cron_daily_login_hours_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    El cron procesa los registros del día anterior (yesterday) y los envía por email.
                 </p>
             </div>
         </section>
@@ -2850,6 +3091,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#absence-report-config']
             },
             {
+                key: 'login_hours_report',
+                label: 'Reporte Horas de Login',
+                icon: 'fas fa-user-clock',
+                selectors: ['#login-hours-report-config']
+            },
+            {
                 key: 'schedule',
                 label: 'Horario objetivo',
                 icon: 'fas fa-clock',
@@ -3751,6 +3998,110 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             // Re-enable button
             btn.disabled = false;
             btn.innerHTML = originalHTML;
+        }
+    }
+
+    // ---------- Login Hours Report handlers ----------
+
+    function renderLoginHoursResult(success, message, totals) {
+        const host = document.getElementById('login-hours-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && totals) {
+            extra = `<p class="${subColor} text-sm mt-1">
+                Empleados: ${totals.employees_with_activity ?? 0} ·
+                Tardanzas: ${totals.late_count ?? 0} ·
+                Sin Exit: ${totals.no_exit_count ?? 0} ·
+                Exceso breaks: ${totals.break_excess_count ?? 0}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendLoginHoursReportManually() {
+        const btn = document.getElementById('sendLoginHoursReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_login_hours_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderLoginHoursResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data && json.data.totals);
+        } catch (e) {
+            renderLoginHoursResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendLoginHoursReportPreview() {
+        const btn = document.getElementById('sendLoginHoursPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_login_hours_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderLoginHoursResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data && json.data.totals);
+        } catch (e) {
+            renderLoginHoursResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function testLoginHoursClaudeAPI() {
+        const btn = document.getElementById('testClaudeBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Probando...';
+        try {
+            const apiKeyInput = document.querySelector('input[name="login_hours_report_claude_api_key"]');
+            const modelInput  = document.querySelector('input[name="login_hours_report_claude_model"]');
+            const fd = new FormData();
+            fd.append('mode', 'test_claude');
+            const apiKey = (apiKeyInput && apiKeyInput.value || '').trim();
+            // Only send the key if user typed a new one (not the masked placeholder)
+            if (apiKey && apiKey.indexOf('••••') === -1) {
+                fd.append('api_key', apiKey);
+            }
+            if (modelInput && modelInput.value) {
+                fd.append('model', modelInput.value.trim());
+            }
+            const res = await fetch('send_login_hours_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderLoginHoursResult(!!json.success, json.message || json.error || 'Sin respuesta');
+        } catch (e) {
+            renderLoginHoursResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
         }
     }
 </script>
