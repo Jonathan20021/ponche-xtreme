@@ -17,28 +17,107 @@
  *   if ($result['success']) echo $result['content'];
  */
 
+if (!function_exists('resolveAnthropicApiKey')) {
+    /**
+     * Resolve the Anthropic API key using this priority:
+     *   1. Explicit `$explicit` argument (per-call override).
+     *   2. Global `anthropic_api_key` setting in system_settings.
+     *   3. ANTHROPIC_API_KEY environment variable.
+     *
+     * @param PDO|null $pdo Optional PDO connection to look up the global setting.
+     * @param string   $explicit Optional explicit key provided by the caller.
+     * @return string The resolved key, or '' if none is available.
+     */
+    function resolveAnthropicApiKey(?PDO $pdo = null, string $explicit = ''): string
+    {
+        $explicit = trim($explicit);
+        if ($explicit !== '') {
+            return $explicit;
+        }
+
+        if ($pdo instanceof PDO) {
+            try {
+                $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'anthropic_api_key'");
+                $stmt->execute();
+                $global = (string) ($stmt->fetchColumn() ?: '');
+                if (trim($global) !== '') {
+                    return trim($global);
+                }
+            } catch (PDOException $e) {
+                error_log('resolveAnthropicApiKey: ' . $e->getMessage());
+            }
+        } else {
+            // Try global $pdo if present
+            global $pdo;
+            if ($pdo instanceof PDO) {
+                try {
+                    $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'anthropic_api_key'");
+                    $stmt->execute();
+                    $global = (string) ($stmt->fetchColumn() ?: '');
+                    if (trim($global) !== '') {
+                        return trim($global);
+                    }
+                } catch (PDOException $e) {
+                    error_log('resolveAnthropicApiKey: ' . $e->getMessage());
+                }
+            }
+        }
+
+        $env = (string) (getenv('ANTHROPIC_API_KEY') ?: '');
+        return trim($env);
+    }
+}
+
+if (!function_exists('resolveAnthropicDefaultModel')) {
+    /**
+     * Resolve the default Claude model (global setting, with fallback).
+     */
+    function resolveAnthropicDefaultModel(?PDO $pdo = null, string $fallback = 'claude-sonnet-4-6'): string
+    {
+        if (!$pdo instanceof PDO) {
+            global $pdo;
+        }
+        if ($pdo instanceof PDO) {
+            try {
+                $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'anthropic_default_model'");
+                $stmt->execute();
+                $val = trim((string) ($stmt->fetchColumn() ?: ''));
+                if ($val !== '') {
+                    return $val;
+                }
+            } catch (PDOException $e) {
+                error_log('resolveAnthropicDefaultModel: ' . $e->getMessage());
+            }
+        }
+        return $fallback;
+    }
+}
+
 if (!function_exists('callClaudeAPI')) {
     /**
      * Call the Anthropic Messages API with a single user turn.
      *
      * @param array $opts {
-     *     @var string $api_key        Anthropic API key (required). Takes precedence over env var.
-     *     @var string $model          Model id (default: claude-sonnet-4-6).
-     *     @var string $system_prompt  System prompt (optional).
-     *     @var string $user_prompt    User message (required).
-     *     @var int    $max_tokens     Max output tokens (default: 1024).
-     *     @var float  $temperature    Sampling temperature (default: 0.5).
-     *     @var int    $timeout        cURL timeout in seconds (default: 60).
-     *     @var string $api_version    Anthropic API version header (default: 2023-06-01).
+     *     @var string   $api_key        Anthropic API key. Optional — if empty, resolveAnthropicApiKey() is used.
+     *     @var string   $model          Model id (default: claude-sonnet-4-6).
+     *     @var string   $system_prompt  System prompt (optional).
+     *     @var string   $user_prompt    User message (required).
+     *     @var int      $max_tokens     Max output tokens (default: 1024).
+     *     @var float    $temperature    Sampling temperature (default: 0.5).
+     *     @var int      $timeout        cURL timeout in seconds (default: 60).
+     *     @var string   $api_version    Anthropic API version header (default: 2023-06-01).
+     *     @var PDO|null $pdo            Optional PDO for global-setting resolution when api_key is empty.
      * }
      * @return array{success: bool, content: string, error: ?string, usage: ?array, raw: ?array, http_code: int}
      */
     function callClaudeAPI(array $opts): array
     {
-        $apiKey      = trim((string) ($opts['api_key'] ?? ''));
-        if ($apiKey === '') {
-            $apiKey = (string) (getenv('ANTHROPIC_API_KEY') ?: '');
+        $explicitKey = trim((string) ($opts['api_key'] ?? ''));
+        $pdoArg = $opts['pdo'] ?? null;
+        if (!($pdoArg instanceof PDO)) {
+            $pdoArg = null;
         }
+        $apiKey = resolveAnthropicApiKey($pdoArg, $explicitKey);
         $model       = trim((string) ($opts['model']        ?? 'claude-sonnet-4-6'));
         $systemPrompt = (string) ($opts['system_prompt']    ?? '');
         $userPrompt  = (string) ($opts['user_prompt']       ?? '');
@@ -160,9 +239,14 @@ if (!function_exists('testClaudeAPIConnection')) {
     /**
      * Quick connectivity / auth test. Sends a trivial prompt and returns
      * whether the credentials and network path are working.
+     *
+     * If $apiKey is empty, the global setting or ANTHROPIC_API_KEY env var is used.
      */
-    function testClaudeAPIConnection(string $apiKey, string $model = 'claude-sonnet-4-6'): array
+    function testClaudeAPIConnection(string $apiKey = '', string $model = '', ?PDO $pdo = null): array
     {
+        if ($model === '') {
+            $model = resolveAnthropicDefaultModel($pdo);
+        }
         return callClaudeAPI([
             'api_key'     => $apiKey,
             'model'       => $model,
@@ -170,6 +254,7 @@ if (!function_exists('testClaudeAPIConnection')) {
             'max_tokens'  => 10,
             'temperature' => 0.0,
             'timeout'     => 20,
+            'pdo'         => $pdo,
         ]);
     }
 }

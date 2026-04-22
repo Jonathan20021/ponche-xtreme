@@ -904,6 +904,73 @@ try {
                 }
                 break;
 
+            case 'update_global_ai_config':
+                $gAiKeyRaw = trim($_POST['anthropic_api_key'] ?? '');
+                $gAiModel  = trim($_POST['anthropic_default_model'] ?? 'claude-sonnet-4-6');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'ai')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    $stmt->execute(['anthropic_default_model', $gAiModel]);
+
+                    // Same masking protocol as per-report keys
+                    if ($gAiKeyRaw === '__CLEAR__') {
+                        $stmt->execute(['anthropic_api_key', '']);
+                    } elseif ($gAiKeyRaw !== '' && strpos($gAiKeyRaw, '••••') === false) {
+                        $stmt->execute(['anthropic_api_key', $gAiKeyRaw]);
+                    }
+
+                    $successMessages[] = 'Configuración global de Claude AI actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración global de Claude AI.';
+                }
+                break;
+
+            case 'update_quality_alerts_report_config':
+                $qaRecipients      = trim($_POST['quality_alerts_report_recipients'] ?? '');
+                $qaEnabled         = isset($_POST['quality_alerts_report_enabled']) ? 1 : 0;
+                $qaTime            = trim($_POST['quality_alerts_report_time'] ?? '07:30');
+                $qaThreshold       = max(0, min(100, (int) ($_POST['quality_alerts_report_threshold'] ?? 80)));
+                $qaOnlyWithEvals   = isset($_POST['quality_alerts_report_only_with_evals']) ? 1 : 0;
+                $qaClaudeEnabled   = isset($_POST['quality_alerts_report_claude_enabled']) ? 1 : 0;
+                $qaClaudeKeyRaw    = trim($_POST['quality_alerts_report_claude_api_key'] ?? '');
+                $qaClaudeModel     = trim($_POST['quality_alerts_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $qaClaudeMaxTokens = max(100, (int) ($_POST['quality_alerts_report_claude_max_tokens'] ?? 900));
+                $qaClaudePrompt    = trim($_POST['quality_alerts_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['quality_alerts_report_recipients',         $qaRecipients]);
+                    $stmt->execute(['quality_alerts_report_enabled',            (string) $qaEnabled]);
+                    $stmt->execute(['quality_alerts_report_time',               $qaTime]);
+                    $stmt->execute(['quality_alerts_report_threshold',          (string) $qaThreshold]);
+                    $stmt->execute(['quality_alerts_report_only_with_evals',    (string) $qaOnlyWithEvals]);
+                    $stmt->execute(['quality_alerts_report_claude_enabled',     (string) $qaClaudeEnabled]);
+                    $stmt->execute(['quality_alerts_report_claude_model',       $qaClaudeModel]);
+                    $stmt->execute(['quality_alerts_report_claude_max_tokens',  (string) $qaClaudeMaxTokens]);
+                    if ($qaClaudePrompt !== '') {
+                        $stmt->execute(['quality_alerts_report_claude_prompt', $qaClaudePrompt]);
+                    }
+                    if ($qaClaudeKeyRaw === '__CLEAR__') {
+                        $stmt->execute(['quality_alerts_report_claude_api_key', '']);
+                    } elseif ($qaClaudeKeyRaw !== '' && strpos($qaClaudeKeyRaw, '••••') === false) {
+                        $stmt->execute(['quality_alerts_report_claude_api_key', $qaClaudeKeyRaw]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte de alertas críticas de calidad actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del reporte de alertas de calidad.';
+                }
+                break;
+
             case 'update_login_hours_report_config':
                 $lhRecipients      = trim($_POST['login_hours_report_recipients'] ?? '');
                 $lhEnabled         = isset($_POST['login_hours_report_enabled']) ? 1 : 0;
@@ -1183,6 +1250,68 @@ try {
     }
 } catch (Exception $e) {
     error_log("Error loading absence report settings: " . $e->getMessage());
+}
+
+// Get GLOBAL Claude AI config (shared across all reports)
+$globalAi = [
+    'api_key_masked' => '',
+    'api_key_set'    => false,
+    'default_model'  => 'claude-sonnet-4-6',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('anthropic_api_key','anthropic_default_model')");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = (string) ($row['setting_value'] ?? '');
+        if ($row['setting_key'] === 'anthropic_api_key' && $val !== '') {
+            $globalAi['api_key_set'] = true;
+            $globalAi['api_key_masked'] = substr($val, 0, 8) . str_repeat('•', 8) . substr($val, -4);
+        }
+        if ($row['setting_key'] === 'anthropic_default_model' && $val !== '') {
+            $globalAi['default_model'] = $val;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading global AI settings: ' . $e->getMessage());
+}
+
+// Get quality alerts report settings
+$qualityAlertsReport = [
+    'enabled'               => false,
+    'time'                  => '07:30',
+    'recipients'            => '',
+    'threshold'             => 80,
+    'only_with_evals'       => true,
+    'claude_enabled'        => false,
+    'claude_api_key_masked' => '',
+    'claude_api_key_set'    => false,
+    'claude_model'          => 'claude-sonnet-4-6',
+    'claude_max_tokens'     => 900,
+    'claude_prompt'         => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'quality_alerts_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'quality_alerts_report_enabled':            $qualityAlertsReport['enabled']          = $val === '1'; break;
+            case 'quality_alerts_report_time':               $qualityAlertsReport['time']             = $val ?: '07:30'; break;
+            case 'quality_alerts_report_recipients':         $qualityAlertsReport['recipients']       = $val; break;
+            case 'quality_alerts_report_threshold':          $qualityAlertsReport['threshold']        = (int) ($val ?: 80); break;
+            case 'quality_alerts_report_only_with_evals':    $qualityAlertsReport['only_with_evals']  = $val === '1'; break;
+            case 'quality_alerts_report_claude_enabled':     $qualityAlertsReport['claude_enabled']   = $val === '1'; break;
+            case 'quality_alerts_report_claude_model':       $qualityAlertsReport['claude_model']     = $val ?: 'claude-sonnet-4-6'; break;
+            case 'quality_alerts_report_claude_max_tokens':  $qualityAlertsReport['claude_max_tokens']= (int) ($val ?: 900); break;
+            case 'quality_alerts_report_claude_prompt':      $qualityAlertsReport['claude_prompt']    = $val; break;
+            case 'quality_alerts_report_claude_api_key':
+                if ($val !== '') {
+                    $qualityAlertsReport['claude_api_key_set'] = true;
+                    $qualityAlertsReport['claude_api_key_masked'] = substr($val, 0, 8) . str_repeat('•', 8) . substr($val, -4);
+                }
+                break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading quality alerts report settings: ' . $e->getMessage());
 }
 
 // Get login hours report settings
@@ -1884,6 +2013,78 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             <?php endif; ?>
         </section>
 
+        <!-- Global Claude AI Integration -->
+        <section id="claude-global-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-robot text-amber-400"></i>
+                        Integración con Claude AI (global)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        API Key y modelo por defecto compartidos por todas las automatizaciones con IA (reportes diarios, análisis).
+                        Configúralo una vez aquí y cada reporte lo reusará automáticamente.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $globalAi['api_key_set'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $globalAi['api_key_set'] ? 'API Key configurada' : 'API Key ausente' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_global_ai_config">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-key"></i> API Key de Anthropic</label>
+                        <input type="text" name="anthropic_api_key"
+                            value="<?= htmlspecialchars($globalAi['api_key_masked']) ?>"
+                            placeholder="sk-ant-..."
+                            class="input-control font-mono text-xs">
+                        <p class="text-xs text-muted mt-1">
+                            <?php if ($globalAi['api_key_set']): ?>
+                                Ya configurada. Deja el valor enmascarado para conservarla. Escribe <code>__CLEAR__</code> para borrarla.
+                            <?php else: ?>
+                                Obtén una en <a href="https://console.anthropic.com/settings/keys" target="_blank" class="underline">console.anthropic.com</a>.
+                            <?php endif; ?>
+                        </p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-microchip"></i> Modelo por defecto</label>
+                        <input type="text" name="anthropic_default_model"
+                            value="<?= htmlspecialchars($globalAi['default_model']) ?>"
+                            class="input-control font-mono text-xs">
+                        <p class="text-xs text-muted mt-1">
+                            Ej: <code>claude-sonnet-4-6</code>, <code>claude-opus-4-7</code>, <code>claude-haiku-4-5-20251001</code>.
+                            Cada reporte puede sobrescribirlo en su sección.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar API Key global
+                    </button>
+                    <button type="button" onclick="testGlobalClaudeAPI()" class="btn-secondary" id="testGlobalClaudeBtn">
+                        <i class="fas fa-plug"></i> Probar conexión a Claude
+                    </button>
+                </div>
+            </form>
+
+            <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                <h3 class="text-blue-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-info-circle"></i> Cómo funciona
+                </h3>
+                <ul class="text-sm text-blue-200 space-y-1 list-disc list-inside">
+                    <li>Esta API key se usa para el <strong>resumen ejecutivo</strong> del reporte de horas de login.</li>
+                    <li>Y para el <strong>análisis de patrones</strong> del reporte de alertas críticas de calidad.</li>
+                    <li>Futuras automatizaciones con IA (análisis de reclutamiento, voice AI, etc) también la reutilizarán.</li>
+                    <li>Si necesitas usar keys distintas por reporte, cada sección individual tiene su propio campo de override (vacío = usa la global).</li>
+                </ul>
+            </div>
+        </section>
+
         <!-- Daily Absence Report Configuration -->
         <section id="absence-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -2069,37 +2270,39 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         sobre los datos del reporte, que aparece arriba de la tabla.
                     </p>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Este reporte usa la <strong>API Key global de Claude</strong> configurada en la sección
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                        Si necesitas una key distinta solo para este reporte, ponla en el campo "Override".
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label class="form-label"><i class="fas fa-key"></i> API Key (Anthropic)</label>
-                            <input type="text" name="login_hours_report_claude_api_key"
-                                value="<?= htmlspecialchars($loginHoursReport['claude_api_key_masked']) ?>"
-                                placeholder="sk-ant-..."
-                                class="input-control font-mono text-xs">
-                            <p class="text-xs text-muted mt-1">
-                                <?php if ($loginHoursReport['claude_api_key_set']): ?>
-                                    Ya configurada. Deja el valor enmascarado para conservarla. Escribe <code>__CLEAR__</code> para borrarla.
-                                <?php else: ?>
-                                    Obtén una en <a href="https://console.anthropic.com/settings/keys" target="_blank" class="underline">console.anthropic.com</a>.
-                                <?php endif; ?>
-                            </p>
-                        </div>
-                        <div>
-                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo</label>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
                             <input type="text" name="login_hours_report_claude_model"
                                 value="<?= htmlspecialchars($loginHoursReport['claude_model']) ?>"
                                 class="input-control font-mono text-xs">
-                            <p class="text-xs text-muted mt-1">Ej: <code>claude-sonnet-4-6</code>, <code>claude-opus-4-7</code>, <code>claude-haiku-4-5-20251001</code></p>
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
                         </div>
                         <div>
                             <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
                             <input type="number" min="100" max="4096" name="login_hours_report_claude_max_tokens"
                                 value="<?= (int) $loginHoursReport['claude_max_tokens'] ?>" class="input-control">
                         </div>
-                        <div class="flex items-end">
-                            <button type="button" onclick="testLoginHoursClaudeAPI()" class="btn-secondary w-full" id="testClaudeBtn">
-                                <i class="fas fa-plug"></i> Probar conexión a Claude
-                            </button>
+                        <div>
+                            <label class="form-label"><i class="fas fa-key"></i> API Key (override, opcional)</label>
+                            <input type="text" name="login_hours_report_claude_api_key"
+                                value="<?= htmlspecialchars($loginHoursReport['claude_api_key_masked']) ?>"
+                                placeholder="Vacío = usa la global"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">
+                                <?php if ($loginHoursReport['claude_api_key_set']): ?>
+                                    Override configurado. Escribe <code>__CLEAR__</code> para borrarlo y volver a usar la global.
+                                <?php else: ?>
+                                    Déjalo vacío para usar la API Key global.
+                                <?php endif; ?>
+                            </p>
                         </div>
                     </div>
 
@@ -2142,6 +2345,162 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 <p class="text-xs text-purple-200 mt-2">
                     <i class="fas fa-lightbulb"></i>
                     El cron procesa los registros del día anterior (yesterday) y los envía por email.
+                </p>
+            </div>
+        </section>
+
+        <!-- Daily Quality Alerts Report Configuration -->
+        <section id="quality-alerts-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-exclamation-triangle text-red-400"></i>
+                        Reporte Diario de Alertas Críticas de Calidad
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Lista de evaluaciones del día anterior por debajo del umbral de calidad, agrupadas por agente y campaña.
+                        Enviado automáticamente a supervisores con opción de resumen ejecutivo generado por Claude AI.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $qualityAlertsReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $qualityAlertsReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_quality_alerts_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="quality_alerts_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $qualityAlertsReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se enviará cada mañana a los supervisores configurados.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="quality_alerts_report_only_with_evals" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $qualityAlertsReport['only_with_evals'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Solo enviar si hay alertas</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Omite el envío en días sin alertas críticas (evita emails vacíos).</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="quality_alerts_report_time"
+                            value="<?= htmlspecialchars($qualityAlertsReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Hora de Santo Domingo</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-percentage"></i> Umbral de calidad (%)</label>
+                        <input type="number" min="0" max="100" name="quality_alerts_report_threshold"
+                            value="<?= (int) $qualityAlertsReport['threshold'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Evaluaciones con score &lt; umbral son alertas críticas</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (supervisores)</label>
+                    <textarea name="quality_alerts_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="supervisor1@evallishbpo.com, supervisor2@evallishbpo.com"><?= htmlspecialchars($qualityAlertsReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="quality_alerts_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $qualityAlertsReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza las alertas del día para identificar patrones recurrentes (áreas de mejora comunes, campañas más afectadas, agentes con fallas repetidas) y sugerir acciones priorizadas.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Este reporte usa la <strong>API Key global de Claude</strong> configurada en la sección
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                        Si necesitas una key distinta solo para este reporte, ponla en el campo "Override".
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="quality_alerts_report_claude_model"
+                                value="<?= htmlspecialchars($qualityAlertsReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="quality_alerts_report_claude_max_tokens"
+                                value="<?= (int) $qualityAlertsReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-key"></i> API Key (override, opcional)</label>
+                            <input type="text" name="quality_alerts_report_claude_api_key"
+                                value="<?= htmlspecialchars($qualityAlertsReport['claude_api_key_masked']) ?>"
+                                placeholder="Vacío = usa la global"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">
+                                <?php if ($qualityAlertsReport['claude_api_key_set']): ?>
+                                    Override configurado. Escribe <code>__CLEAR__</code> para borrarlo y volver a usar la global.
+                                <?php else: ?>
+                                    Déjalo vacío para usar la API Key global.
+                                <?php endif; ?>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="quality_alerts_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($qualityAlertsReport['claude_prompt']) ?></textarea>
+                        <p class="text-xs text-muted mt-1">Claude recibe este system prompt + el JSON con las alertas del día.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2">
+                        <button type="button" onclick="sendQualityAlertsReportPreview()" class="btn-secondary" id="sendQualityAlertsPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendQualityAlertsReportManually()" class="btn-secondary" id="sendQualityAlertsReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío nocturno, configura este cron (ajusta la hora a la configurada arriba):
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    30 7 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_quality_alerts_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    El cron procesa las evaluaciones del día anterior desde <code>hhempeos_calidad</code> y envía el resumen.
                 </p>
             </div>
         </section>
@@ -3085,6 +3444,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#authorization-system-config', '#create-auth-code-card', '#authorization-codes-section']
             },
             {
+                key: 'claude_global',
+                label: 'Claude AI (global)',
+                icon: 'fas fa-robot',
+                selectors: ['#claude-global-config']
+            },
+            {
                 key: 'absence_report',
                 label: 'Reporte de Ausencias',
                 icon: 'fas fa-file-medical-alt',
@@ -3095,6 +3460,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Reporte Horas de Login',
                 icon: 'fas fa-user-clock',
                 selectors: ['#login-hours-report-config']
+            },
+            {
+                key: 'quality_alerts_report',
+                label: 'Alertas Críticas Calidad',
+                icon: 'fas fa-exclamation-triangle',
+                selectors: ['#quality-alerts-report-config']
             },
             {
                 key: 'schedule',
@@ -4001,6 +4372,58 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         }
     }
 
+    // ---------- Global Claude AI handler ----------
+
+    function renderGlobalAiResult(success, message) {
+        const host = document.getElementById('claude-global-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const color = success ? 'text-green-300' : 'text-red-300';
+        div.innerHTML = `
+            <div class="flex items-center gap-2">
+                <i class="fas fa-${icon}"></i>
+                <p class="${color} font-semibold">${message}</p>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function testGlobalClaudeAPI() {
+        const btn = document.getElementById('testGlobalClaudeBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Probando...';
+        try {
+            const apiKeyInput = document.querySelector('input[name="anthropic_api_key"]');
+            const modelInput  = document.querySelector('input[name="anthropic_default_model"]');
+            const fd = new FormData();
+            fd.append('mode', 'test_claude');
+            fd.append('use_global', '1');
+            const apiKey = (apiKeyInput && apiKeyInput.value || '').trim();
+            // If user typed a new (non-masked) value, use it for the test — otherwise let the server resolve the stored global key.
+            if (apiKey && apiKey.indexOf('••••') === -1) {
+                fd.append('api_key', apiKey);
+            }
+            if (modelInput && modelInput.value) {
+                fd.append('model', modelInput.value.trim());
+            }
+            // Reuse any send_*_report endpoint — they all share the same test_claude logic.
+            const res = await fetch('send_login_hours_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderGlobalAiResult(!!json.success, json.message || json.error || 'Sin respuesta');
+        } catch (e) {
+            renderGlobalAiResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
     // ---------- Login Hours Report handlers ----------
 
     function renderLoginHoursResult(success, message, totals) {
@@ -4099,6 +4522,110 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderLoginHoursResult(!!json.success, json.message || json.error || 'Sin respuesta');
         } catch (e) {
             renderLoginHoursResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Quality Alerts Report handlers ----------
+
+    function renderQualityAlertsResult(success, message, data) {
+        const host = document.getElementById('quality-alerts-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            extra = `<p class="${subColor} text-sm mt-1">
+                Umbral: ${data.threshold ?? '?'}% ·
+                Alertas: ${data.totals.total_alerts ?? 0} ·
+                Agentes: ${data.totals.agents_affected ?? 0} ·
+                Campañas: ${data.totals.campaigns_affected ?? 0} ·
+                Score min: ${data.totals.lowest_score ?? '—'}%
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendQualityAlertsReportManually() {
+        const btn = document.getElementById('sendQualityAlertsReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_quality_alerts_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderQualityAlertsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderQualityAlertsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendQualityAlertsReportPreview() {
+        const btn = document.getElementById('sendQualityAlertsPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_quality_alerts_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderQualityAlertsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderQualityAlertsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function testQualityAlertsClaudeAPI() {
+        const btn = document.getElementById('testQualityClaudeBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Probando...';
+        try {
+            const apiKeyInput = document.querySelector('input[name="quality_alerts_report_claude_api_key"]');
+            const modelInput  = document.querySelector('input[name="quality_alerts_report_claude_model"]');
+            const fd = new FormData();
+            fd.append('mode', 'test_claude');
+            const apiKey = (apiKeyInput && apiKeyInput.value || '').trim();
+            if (apiKey && apiKey.indexOf('••••') === -1) {
+                fd.append('api_key', apiKey);
+            }
+            if (modelInput && modelInput.value) {
+                fd.append('model', modelInput.value.trim());
+            }
+            const res = await fetch('send_quality_alerts_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderQualityAlertsResult(!!json.success, json.message || json.error || 'Sin respuesta');
+        } catch (e) {
+            renderQualityAlertsResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;

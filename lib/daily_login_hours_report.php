@@ -316,10 +316,12 @@ if (!function_exists('generateAILoginHoursSummary')) {
             return '';
         }
 
-        $apiKey = trim((string) ($settings['login_hours_report_claude_api_key'] ?? ''));
-        $model  = trim((string) ($settings['login_hours_report_claude_model']   ?? 'claude-sonnet-4-6')) ?: 'claude-sonnet-4-6';
-        $maxTokens = max(100, (int) ($settings['login_hours_report_claude_max_tokens'] ?? 800));
-        $systemPrompt = (string) ($settings['login_hours_report_claude_prompt'] ?? '');
+        // API key is resolved globally via resolveAnthropicApiKey() in claude_api_client.php.
+        // Per-report 'login_hours_report_claude_api_key' is only used as an override if set.
+        $apiKeyOverride = trim((string) ($settings['login_hours_report_claude_api_key'] ?? ''));
+        $model          = trim((string) ($settings['login_hours_report_claude_model']   ?? '')) ?: resolveAnthropicDefaultModel($pdo);
+        $maxTokens      = max(100, (int) ($settings['login_hours_report_claude_max_tokens'] ?? 800));
+        $systemPrompt   = (string) ($settings['login_hours_report_claude_prompt'] ?? '');
 
         // Compact JSON payload (avoid huge tokens)
         $payload = [
@@ -352,12 +354,13 @@ if (!function_exists('generateAILoginHoursSummary')) {
             . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
         $result = callClaudeAPI([
-            'api_key'       => $apiKey,
+            'api_key'       => $apiKeyOverride, // '' → resolver uses global setting
             'model'         => $model,
             'system_prompt' => $systemPrompt,
             'user_prompt'   => $userPrompt,
             'max_tokens'    => $maxTokens,
             'temperature'   => 0.3,
+            'pdo'           => $pdo,
         ]);
 
         if (!$result['success']) {
