@@ -904,6 +904,42 @@ try {
                 }
                 break;
 
+            case 'update_workforce_report_config':
+                $wfRecipients       = trim($_POST['workforce_report_recipients'] ?? '');
+                $wfEnabled          = isset($_POST['workforce_report_enabled']) ? 1 : 0;
+                $wfTime             = trim($_POST['workforce_report_time'] ?? '09:00');
+                $wfExcludeWeekends  = isset($_POST['workforce_report_exclude_weekends']) ? 1 : 0;
+                $wfOnlyWithAbsences = isset($_POST['workforce_report_only_with_absences']) ? 1 : 0;
+                $wfClaudeEnabled    = isset($_POST['workforce_report_claude_enabled']) ? 1 : 0;
+                $wfClaudeModel      = trim($_POST['workforce_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $wfClaudeMaxTokens  = max(100, (int) ($_POST['workforce_report_claude_max_tokens'] ?? 700));
+                $wfClaudePrompt     = trim($_POST['workforce_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['workforce_report_recipients',          $wfRecipients]);
+                    $stmt->execute(['workforce_report_enabled',             (string) $wfEnabled]);
+                    $stmt->execute(['workforce_report_time',                $wfTime]);
+                    $stmt->execute(['workforce_report_exclude_weekends',    (string) $wfExcludeWeekends]);
+                    $stmt->execute(['workforce_report_only_with_absences',  (string) $wfOnlyWithAbsences]);
+                    $stmt->execute(['workforce_report_claude_enabled',      (string) $wfClaudeEnabled]);
+                    $stmt->execute(['workforce_report_claude_model',        $wfClaudeModel]);
+                    $stmt->execute(['workforce_report_claude_max_tokens',   (string) $wfClaudeMaxTokens]);
+                    if ($wfClaudePrompt !== '') {
+                        $stmt->execute(['workforce_report_claude_prompt', $wfClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte de fuerza laboral actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de fuerza laboral.';
+                }
+                break;
+
             case 'update_tardiness_report_config':
                 $tdRecipients      = trim($_POST['tardiness_report_recipients'] ?? '');
                 $tdEnabled         = isset($_POST['tardiness_report_enabled']) ? 1 : 0;
@@ -1327,6 +1363,38 @@ try {
     }
 } catch (Exception $e) {
     error_log("Error loading absence report settings: " . $e->getMessage());
+}
+
+// Get workforce report settings
+$workforceReport = [
+    'enabled'            => false,
+    'time'               => '09:00',
+    'recipients'         => '',
+    'exclude_weekends'   => true,
+    'only_with_absences' => false,
+    'claude_enabled'     => false,
+    'claude_model'       => 'claude-sonnet-4-6',
+    'claude_max_tokens'  => 700,
+    'claude_prompt'      => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'workforce_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'workforce_report_enabled':             $workforceReport['enabled']            = $val === '1'; break;
+            case 'workforce_report_time':                $workforceReport['time']               = $val ?: '09:00'; break;
+            case 'workforce_report_recipients':          $workforceReport['recipients']         = $val; break;
+            case 'workforce_report_exclude_weekends':    $workforceReport['exclude_weekends']   = $val === '1'; break;
+            case 'workforce_report_only_with_absences':  $workforceReport['only_with_absences'] = $val === '1'; break;
+            case 'workforce_report_claude_enabled':      $workforceReport['claude_enabled']     = $val === '1'; break;
+            case 'workforce_report_claude_model':        $workforceReport['claude_model']       = $val ?: 'claude-sonnet-4-6'; break;
+            case 'workforce_report_claude_max_tokens':   $workforceReport['claude_max_tokens']  = (int) ($val ?: 700); break;
+            case 'workforce_report_claude_prompt':       $workforceReport['claude_prompt']      = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading workforce report settings: ' . $e->getMessage());
 }
 
 // Get tardiness report settings
@@ -2646,6 +2714,147 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Daily Workforce (Active vs Absent) Report Configuration -->
+        <section id="workforce-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-users text-indigo-400"></i>
+                        Reporte de Fuerza Laboral (Activos vs Ausentes)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Foto al inicio del turno con conteos de Activos, En Prueba, Presentes y Ausentes. Incluye lista de
+                        ausentes con días sin ponchar y destaca empleados En Prueba ausentes (riesgo del período de prueba).
+                        Usa la misma lógica del Dashboard Ejecutivo.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $workforceReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $workforceReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_workforce_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="workforce_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $workforceReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada día a la hora configurada.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="workforce_report_exclude_weekends" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $workforceReport['exclude_weekends'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Excluir fines de semana</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">No enviar sábados ni domingos.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="workforce_report_only_with_absences" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $workforceReport['only_with_absences'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Solo enviar si hay ausentes</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Omitir el envío cuando todos están presentes.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                    <input type="time" name="workforce_report_time"
+                        value="<?= htmlspecialchars($workforceReport['time']) ?>" class="input-control" required>
+                    <p class="text-xs text-muted mt-1">09:00 es recomendado — al inicio del turno para visibilidad temprana.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (RH + supervisores + gerencia)</label>
+                    <textarea name="workforce_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="rh@evallishbpo.com, gerencia@evallishbpo.com"><?= htmlspecialchars($workforceReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="workforce_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $workforceReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude identifica el % de asistencia del día, departamento y rol más afectados, y alerta específicamente
+                        sobre empleados En Prueba ausentes (riesgo crítico en el período de 90 días).
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="workforce_report_claude_model"
+                                value="<?= htmlspecialchars($workforceReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="workforce_report_claude_max_tokens"
+                                value="<?= (int) $workforceReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="workforce_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($workforceReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendWorkforceReportPreview()" class="btn-secondary" id="sendWorkforcePreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendWorkforceReportManually()" class="btn-secondary" id="sendWorkforceReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío al inicio del turno, configura este cron:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    0 9 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_workforce_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    El reporte captura el estado del día en curso (no de ayer) — visibilidad al inicio del turno.
+                </p>
+            </div>
+        </section>
+
         <!-- Daily Tardiness Alert Report Configuration -->
         <section id="tardiness-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -3902,6 +4111,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#quality-alerts-report-config']
             },
             {
+                key: 'workforce_report',
+                label: 'Fuerza Laboral',
+                icon: 'fas fa-users',
+                selectors: ['#workforce-report-config']
+            },
+            {
                 key: 'tardiness_report',
                 label: 'Tardanzas del Día',
                 icon: 'fas fa-user-clock',
@@ -5044,6 +5259,80 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderQualityAlertsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderQualityAlertsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Workforce Report handlers ----------
+
+    function renderWorkforceResult(success, message, data) {
+        const host = document.getElementById('workforce-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            extra = `<p class="${subColor} text-sm mt-1">
+                Presentes: ${data.totals.present_today} / ${data.totals.total_eligible} (${data.totals.present_rate_pct}%) ·
+                Ausentes: ${data.totals.absent_today} ·
+                En prueba ausentes: ${data.totals.trial_absent}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendWorkforceReportManually() {
+        const btn = document.getElementById('sendWorkforceReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_workforce_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderWorkforceResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderWorkforceResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendWorkforceReportPreview() {
+        const btn = document.getElementById('sendWorkforcePreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_workforce_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderWorkforceResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderWorkforceResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
