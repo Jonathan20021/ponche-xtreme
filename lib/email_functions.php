@@ -967,6 +967,99 @@ function sendDailyLoginHoursReport($htmlContent, $recipients, $reportData) {
 }
 
 /**
+ * Send daily login logs (security audit) report via email.
+ *
+ * @param string $htmlContent Rendered HTML body.
+ * @param array  $recipients  List of email addresses.
+ * @param array  $reportData  Report data from generateDailyLoginLogsReport().
+ * @return array{success: bool, message: string}
+ */
+function sendDailyLoginLogsReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $dateFormatted = $reportData['date_formatted'] ?? ($reportData['date'] ?? date('Y-m-d'));
+        $totals = $reportData['totals'] ?? [];
+
+        $mail->isHTML(true);
+        $mail->Subject = "Auditoría de accesos - $dateFormatted ({$totals['total_logins']} accesos · {$totals['unique_users']} usuarios)";
+        $mail->Body    = $htmlContent;
+
+        // Plain-text alternative
+        $plain  = "AUDITORÍA DE ACCESOS AL SISTEMA\n";
+        $plain .= "================================\n\n";
+        $plain .= "Fecha: $dateFormatted\n\n";
+        $plain .= "Total accesos:    " . ($totals['total_logins']     ?? 0) . "\n";
+        $plain .= "Usuarios únicos:  " . ($totals['unique_users']     ?? 0) . "\n";
+        $plain .= "IPs únicas:       " . ($totals['unique_ips']       ?? 0) . "\n";
+        $plain .= "IPs compartidas:  " . ($totals['shared_ips']       ?? 0) . "\n";
+        $plain .= "Fuera de horario: " . ($totals['off_hours']        ?? 0) . "\n";
+        $plain .= "Accesos excesivos:" . ($totals['excessive_users']  ?? 0) . "\n\n";
+
+        if (!empty($reportData['shared_ips'])) {
+            $plain .= "IPs COMPARTIDAS:\n";
+            foreach ($reportData['shared_ips'] as $ip) {
+                $users = implode(', ', $ip['users']);
+                $plain .= sprintf("  - %s [%s]: %d usuarios (%s)\n", $ip['ip'], $ip['location'] ?? '—', $ip['users_count'], $users);
+            }
+            $plain .= "\n";
+        }
+
+        if (!empty($reportData['off_hours'])) {
+            $plain .= "FUERA DE HORARIO:\n";
+            foreach ($reportData['off_hours'] as $o) {
+                $plain .= sprintf("  - %s %s (%s) desde %s\n",
+                    date('H:i', strtotime($o['login_time'])), $o['username'], $o['role'], $o['ip']);
+            }
+        }
+
+        $plain .= "\n---\nSistema de Control de Asistencia - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Reporte enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}
+
+/**
  * Send daily workforce (active vs. absent) report via email.
  *
  * @param string $htmlContent Rendered HTML body.

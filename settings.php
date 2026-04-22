@@ -904,6 +904,46 @@ try {
                 }
                 break;
 
+            case 'update_login_logs_report_config':
+                $llRecipients       = trim($_POST['login_logs_report_recipients'] ?? '');
+                $llEnabled          = isset($_POST['login_logs_report_enabled']) ? 1 : 0;
+                $llTime             = trim($_POST['login_logs_report_time'] ?? '07:45');
+                $llOffStart         = trim($_POST['login_logs_report_off_hours_start'] ?? '22:00');
+                $llOffEnd           = trim($_POST['login_logs_report_off_hours_end'] ?? '06:00');
+                $llSharedIp         = max(2, (int) ($_POST['login_logs_report_shared_ip_threshold'] ?? 3));
+                $llExcessive        = max(2, (int) ($_POST['login_logs_report_excessive_logins'] ?? 5));
+                $llClaudeEnabled    = isset($_POST['login_logs_report_claude_enabled']) ? 1 : 0;
+                $llClaudeModel      = trim($_POST['login_logs_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $llClaudeMaxTokens  = max(100, (int) ($_POST['login_logs_report_claude_max_tokens'] ?? 800));
+                $llClaudePrompt     = trim($_POST['login_logs_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['login_logs_report_recipients',          $llRecipients]);
+                    $stmt->execute(['login_logs_report_enabled',             (string) $llEnabled]);
+                    $stmt->execute(['login_logs_report_time',                $llTime]);
+                    $stmt->execute(['login_logs_report_off_hours_start',     $llOffStart]);
+                    $stmt->execute(['login_logs_report_off_hours_end',       $llOffEnd]);
+                    $stmt->execute(['login_logs_report_shared_ip_threshold', (string) $llSharedIp]);
+                    $stmt->execute(['login_logs_report_excessive_logins',    (string) $llExcessive]);
+                    $stmt->execute(['login_logs_report_claude_enabled',      (string) $llClaudeEnabled]);
+                    $stmt->execute(['login_logs_report_claude_model',        $llClaudeModel]);
+                    $stmt->execute(['login_logs_report_claude_max_tokens',   (string) $llClaudeMaxTokens]);
+                    if ($llClaudePrompt !== '') {
+                        $stmt->execute(['login_logs_report_claude_prompt', $llClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración de auditoría de accesos actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de auditoría de accesos.';
+                }
+                break;
+
             case 'update_workforce_report_config':
                 $wfRecipients       = trim($_POST['workforce_report_recipients'] ?? '');
                 $wfEnabled          = isset($_POST['workforce_report_enabled']) ? 1 : 0;
@@ -1363,6 +1403,42 @@ try {
     }
 } catch (Exception $e) {
     error_log("Error loading absence report settings: " . $e->getMessage());
+}
+
+// Get login logs report settings
+$loginLogsReport = [
+    'enabled'              => false,
+    'time'                 => '07:45',
+    'recipients'           => '',
+    'off_hours_start'      => '22:00',
+    'off_hours_end'        => '06:00',
+    'shared_ip_threshold'  => 3,
+    'excessive_logins'     => 5,
+    'claude_enabled'       => false,
+    'claude_model'         => 'claude-sonnet-4-6',
+    'claude_max_tokens'    => 800,
+    'claude_prompt'        => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'login_logs_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'login_logs_report_enabled':             $loginLogsReport['enabled']             = $val === '1'; break;
+            case 'login_logs_report_time':                $loginLogsReport['time']                = $val ?: '07:45'; break;
+            case 'login_logs_report_recipients':          $loginLogsReport['recipients']          = $val; break;
+            case 'login_logs_report_off_hours_start':     $loginLogsReport['off_hours_start']     = $val ?: '22:00'; break;
+            case 'login_logs_report_off_hours_end':       $loginLogsReport['off_hours_end']       = $val ?: '06:00'; break;
+            case 'login_logs_report_shared_ip_threshold': $loginLogsReport['shared_ip_threshold'] = (int) ($val ?: 3); break;
+            case 'login_logs_report_excessive_logins':    $loginLogsReport['excessive_logins']    = (int) ($val ?: 5); break;
+            case 'login_logs_report_claude_enabled':      $loginLogsReport['claude_enabled']      = $val === '1'; break;
+            case 'login_logs_report_claude_model':        $loginLogsReport['claude_model']        = $val ?: 'claude-sonnet-4-6'; break;
+            case 'login_logs_report_claude_max_tokens':   $loginLogsReport['claude_max_tokens']   = (int) ($val ?: 800); break;
+            case 'login_logs_report_claude_prompt':       $loginLogsReport['claude_prompt']       = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading login logs report settings: ' . $e->getMessage());
 }
 
 // Get workforce report settings
@@ -2710,6 +2786,169 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 <p class="text-xs text-purple-200 mt-2">
                     <i class="fas fa-lightbulb"></i>
                     El cron procesa las evaluaciones del día anterior desde <code>hhempeos_calidad</code> y envía el resumen.
+                </p>
+            </div>
+        </section>
+
+        <!-- Daily Login Logs Security Audit Report Configuration -->
+        <section id="login-logs-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-shield-alt text-slate-400"></i>
+                        Auditoría de Accesos (Login Logs)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Reporte diario de seguridad con todos los accesos al sistema del día anterior (tabla
+                        <code>admin_login_logs</code>): por rol, IP, hora pico, IPs compartidas, accesos fuera de horario
+                        y usuarios con accesos excesivos. Pensado para el Administrador e IT.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $loginLogsReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $loginLogsReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_login_logs_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="login_logs_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $loginLogsReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada mañana al Administrador con los accesos del día anterior.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="login_logs_report_time"
+                            value="<?= htmlspecialchars($loginLogsReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Default 07:45 — entre login hours (07:00) y nómina (08:00).</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (Administrador + IT)</label>
+                    <textarea name="login_logs_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="admin@evallishbpo.com, it@evallishbpo.com"><?= htmlspecialchars($loginLogsReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <div class="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 space-y-4">
+                    <h3 class="text-slate-300 font-semibold flex items-center gap-2">
+                        <i class="fas fa-sliders-h"></i>
+                        Umbrales de detección de anomalías
+                    </h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-moon"></i> Inicio de fuera de horario</label>
+                            <input type="time" name="login_logs_report_off_hours_start"
+                                value="<?= htmlspecialchars($loginLogsReport['off_hours_start']) ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Accesos a partir de esta hora se marcan como fuera de horario.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-sun"></i> Fin de fuera de horario</label>
+                            <input type="time" name="login_logs_report_off_hours_end"
+                                value="<?= htmlspecialchars($loginLogsReport['off_hours_end']) ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Accesos antes de esta hora también se marcan.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-network-wired"></i> Umbral de IP compartida</label>
+                            <input type="number" min="2" max="50" name="login_logs_report_shared_ip_threshold"
+                                value="<?= (int) $loginLogsReport['shared_ip_threshold'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Usuarios distintos desde la misma IP para marcarla.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-sync-alt"></i> Umbral de accesos excesivos</label>
+                            <input type="number" min="2" max="100" name="login_logs_report_excessive_logins"
+                                value="<?= (int) $loginLogsReport['excessive_logins'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Accesos por usuario/día antes de marcarlo.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="login_logs_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $loginLogsReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza los accesos del día con enfoque en seguridad: detecta IPs sospechosas, accesos fuera de horario,
+                        ubicaciones geográficas inusuales y usuarios con comportamiento atípico.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="login_logs_report_claude_model"
+                                value="<?= htmlspecialchars($loginLogsReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="login_logs_report_claude_max_tokens"
+                                value="<?= (int) $loginLogsReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="login_logs_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($loginLogsReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendLoginLogsReportPreview()" class="btn-secondary" id="sendLoginLogsPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendLoginLogsReportManually()" class="btn-secondary" id="sendLoginLogsReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío matutino:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    45 7 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_login_logs_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    Procesa todos los accesos del día anterior y genera el reporte de auditoría.
                 </p>
             </div>
         </section>
@@ -4111,6 +4350,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#quality-alerts-report-config']
             },
             {
+                key: 'login_logs_report',
+                label: 'Auditoría de Accesos',
+                icon: 'fas fa-shield-alt',
+                selectors: ['#login-logs-report-config']
+            },
+            {
                 key: 'workforce_report',
                 label: 'Fuerza Laboral',
                 icon: 'fas fa-users',
@@ -5259,6 +5504,82 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderQualityAlertsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderQualityAlertsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Login Logs Report handlers ----------
+
+    function renderLoginLogsResult(success, message, data) {
+        const host = document.getElementById('login-logs-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            extra = `<p class="${subColor} text-sm mt-1">
+                Accesos: ${data.totals.total_logins} ·
+                Usuarios: ${data.totals.unique_users} ·
+                IPs: ${data.totals.unique_ips} ·
+                Compartidas: ${data.totals.shared_ips} ·
+                Fuera horario: ${data.totals.off_hours}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendLoginLogsReportManually() {
+        const btn = document.getElementById('sendLoginLogsReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_login_logs_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderLoginLogsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderLoginLogsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendLoginLogsReportPreview() {
+        const btn = document.getElementById('sendLoginLogsPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_login_logs_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderLoginLogsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderLoginLogsResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
