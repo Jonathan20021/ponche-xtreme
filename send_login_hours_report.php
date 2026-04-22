@@ -22,11 +22,32 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$allowedRoles = ['administrator', 'desarrollador', 'it', 'hr', 'recursos humanos', 'admin'];
-$userRole = strtolower($_SESSION['role'] ?? '');
-if (!in_array($userRole, $allowedRoles, true)) {
+// Permission gate: the user must have access to the 'settings' section.
+// Anyone who can open settings.php to configure this report can also trigger it.
+// Falls back to a role list if the permission system is unavailable.
+$hasAccess = false;
+if (function_exists('userHasPermission')) {
+    try {
+        $hasAccess = userHasPermission('settings');
+    } catch (Throwable $e) {
+        $hasAccess = false;
+    }
+}
+if (!$hasAccess) {
+    // Defensive fallback by role (case-insensitive)
+    $allowedRoles = ['ADMIN', 'ADMINISTRATOR', 'DESARROLLADOR', 'IT', 'HR', 'RECURSOS HUMANOS', 'DIRECTOR', 'GENERALMANAGER', 'OPERATIONSMANAGER', 'GERENTEDEOPERACIONES', 'ENCARGADODEGESTIONHUMANA'];
+    $userRole = strtoupper(trim((string) ($_SESSION['role'] ?? '')));
+    if (in_array($userRole, $allowedRoles, true)) {
+        $hasAccess = true;
+    }
+}
+if (!$hasAccess) {
     http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'No tienes permisos para esta acción']);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'No tienes permisos para esta acción',
+        'debug'   => ['role_in_session' => $_SESSION['role'] ?? null],
+    ]);
     exit;
 }
 
