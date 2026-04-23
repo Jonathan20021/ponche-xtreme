@@ -984,6 +984,42 @@ try {
                 }
                 break;
 
+            case 'update_executive_dashboard_report_config':
+                $edRecipients       = trim($_POST['executive_dashboard_report_recipients'] ?? '');
+                $edEnabled          = isset($_POST['executive_dashboard_report_enabled']) ? 1 : 0;
+                $edTime             = trim($_POST['executive_dashboard_report_time'] ?? '19:00');
+                $edTopEmployees     = max(5, (int) ($_POST['executive_dashboard_report_top_employees_count'] ?? 10));
+                $edExcludeWeekends  = isset($_POST['executive_dashboard_report_exclude_weekends']) ? 1 : 0;
+                $edClaudeEnabled    = isset($_POST['executive_dashboard_report_claude_enabled']) ? 1 : 0;
+                $edClaudeModel      = trim($_POST['executive_dashboard_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $edClaudeMaxTokens  = max(100, (int) ($_POST['executive_dashboard_report_claude_max_tokens'] ?? 900));
+                $edClaudePrompt     = trim($_POST['executive_dashboard_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['executive_dashboard_report_recipients',          $edRecipients]);
+                    $stmt->execute(['executive_dashboard_report_enabled',             (string) $edEnabled]);
+                    $stmt->execute(['executive_dashboard_report_time',                $edTime]);
+                    $stmt->execute(['executive_dashboard_report_top_employees_count', (string) $edTopEmployees]);
+                    $stmt->execute(['executive_dashboard_report_exclude_weekends',    (string) $edExcludeWeekends]);
+                    $stmt->execute(['executive_dashboard_report_claude_enabled',      (string) $edClaudeEnabled]);
+                    $stmt->execute(['executive_dashboard_report_claude_model',        $edClaudeModel]);
+                    $stmt->execute(['executive_dashboard_report_claude_max_tokens',   (string) $edClaudeMaxTokens]);
+                    if ($edClaudePrompt !== '') {
+                        $stmt->execute(['executive_dashboard_report_claude_prompt', $edClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración del cierre ejecutivo actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del cierre ejecutivo.';
+                }
+                break;
+
             case 'update_workforce_report_config':
                 $wfRecipients       = trim($_POST['workforce_report_recipients'] ?? '');
                 $wfEnabled          = isset($_POST['workforce_report_enabled']) ? 1 : 0;
@@ -1515,6 +1551,38 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading activity logs report settings: ' . $e->getMessage());
+}
+
+// Get executive dashboard closing report settings
+$executiveDashboardReport = [
+    'enabled'              => false,
+    'time'                 => '19:00',
+    'recipients'           => '',
+    'top_employees_count'  => 10,
+    'exclude_weekends'     => false,
+    'claude_enabled'       => false,
+    'claude_model'         => 'claude-sonnet-4-6',
+    'claude_max_tokens'    => 900,
+    'claude_prompt'        => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'executive_dashboard_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'executive_dashboard_report_enabled':             $executiveDashboardReport['enabled']             = $val === '1'; break;
+            case 'executive_dashboard_report_time':                $executiveDashboardReport['time']                = $val ?: '19:00'; break;
+            case 'executive_dashboard_report_recipients':          $executiveDashboardReport['recipients']          = $val; break;
+            case 'executive_dashboard_report_top_employees_count': $executiveDashboardReport['top_employees_count'] = (int) ($val ?: 10); break;
+            case 'executive_dashboard_report_exclude_weekends':    $executiveDashboardReport['exclude_weekends']    = $val === '1'; break;
+            case 'executive_dashboard_report_claude_enabled':      $executiveDashboardReport['claude_enabled']      = $val === '1'; break;
+            case 'executive_dashboard_report_claude_model':        $executiveDashboardReport['claude_model']        = $val ?: 'claude-sonnet-4-6'; break;
+            case 'executive_dashboard_report_claude_max_tokens':   $executiveDashboardReport['claude_max_tokens']   = (int) ($val ?: 900); break;
+            case 'executive_dashboard_report_claude_prompt':       $executiveDashboardReport['claude_prompt']       = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading executive dashboard report settings: ' . $e->getMessage());
 }
 
 // Get workforce report settings
@@ -3203,6 +3271,150 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Executive Dashboard Daily Closing Report Configuration -->
+        <section id="executive-dashboard-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-chart-line text-blue-400"></i>
+                        Cierre Ejecutivo del Día (Dashboard Ejecutivo)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Reporte de cierre enviado al final de la jornada con el snapshot del Dashboard Ejecutivo: asistencia,
+                        horas pagadas, costo USD/DOP (con tasa de cambio), campañas activas, departamentos y top empleados del día.
+                        Pensado para CEO, COO y Directores.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $executiveDashboardReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $executiveDashboardReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_executive_dashboard_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="executive_dashboard_report_enabled" value="1" class="w-5 h-5 accent-blue-500"
+                            <?= $executiveDashboardReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada tarde con el cierre del día.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="executive_dashboard_report_time"
+                            value="<?= htmlspecialchars($executiveDashboardReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Default 19:00 — después de que cierre la jornada.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-user-friends"></i> Top N empleados</label>
+                        <input type="number" min="5" max="50" name="executive_dashboard_report_top_employees_count"
+                            value="<?= (int) $executiveDashboardReport['top_employees_count'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Empleados destacados por horas del día.</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (CEO, COO, Directores)</label>
+                    <textarea name="executive_dashboard_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="ceo@evallishbpo.com, coo@evallishbpo.com, director@evallishbpo.com"><?= htmlspecialchars($executiveDashboardReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <div class="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 space-y-3">
+                    <label class="inline-flex items-center gap-3 text-sm cursor-pointer">
+                        <input type="checkbox" name="executive_dashboard_report_exclude_weekends" value="1" class="w-5 h-5 accent-slate-400"
+                            <?= $executiveDashboardReport['exclude_weekends'] ? 'checked' : '' ?>>
+                        <span>No enviar los fines de semana (sábado y domingo)</span>
+                    </label>
+                    <p class="text-xs text-muted ml-8">Útil si tu operación es de lunes a viernes.</p>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="executive_dashboard_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $executiveDashboardReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza el cierre del día con enfoque ejecutivo: resalta campañas líderes, departamento más activo,
+                        alertas de costo/asistencia, y ofrece una línea de recomendación accionable para mañana.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="executive_dashboard_report_claude_model"
+                                value="<?= htmlspecialchars($executiveDashboardReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="executive_dashboard_report_claude_max_tokens"
+                                value="<?= (int) $executiveDashboardReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="executive_dashboard_report_claude_prompt" rows="10" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($executiveDashboardReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendExecutiveDashboardReportPreview()" class="btn-secondary" id="sendExecutiveDashboardPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendExecutiveDashboardReportManually()" class="btn-secondary" id="sendExecutiveDashboardReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío al final de la jornada:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    0 19 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_executive_dashboard_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    Captura el snapshot del Dashboard Ejecutivo al cierre del día y lo envía por correo.
+                </p>
+            </div>
+        </section>
+
         <!-- Daily Workforce (Active vs Absent) Report Configuration -->
         <section id="workforce-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -4612,6 +4824,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#activity-logs-report-config']
             },
             {
+                key: 'executive_dashboard_report',
+                label: 'Cierre Ejecutivo',
+                icon: 'fas fa-chart-line',
+                selectors: ['#executive-dashboard-report-config']
+            },
+            {
                 key: 'workforce_report',
                 label: 'Fuerza Laboral',
                 icon: 'fas fa-users',
@@ -5836,6 +6054,80 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderLoginLogsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderLoginLogsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Executive Dashboard Report handlers ----------
+
+    function renderExecutiveDashboardResult(success, message, data) {
+        const host = document.getElementById('executive-dashboard-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            extra = `<p class="${subColor} text-sm mt-1">
+                Asistencia: ${data.totals.worked_today}/${data.totals.eligible} (${data.totals.attendance_rate_pct}%) ·
+                Horas: ${data.totals.hours_total}h ·
+                Costo USD equiv.: $${Number(data.totals.earnings_combined_usd).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendExecutiveDashboardReportManually() {
+        const btn = document.getElementById('sendExecutiveDashboardReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_executive_dashboard_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderExecutiveDashboardResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderExecutiveDashboardResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendExecutiveDashboardReportPreview() {
+        const btn = document.getElementById('sendExecutiveDashboardPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_executive_dashboard_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderExecutiveDashboardResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderExecutiveDashboardResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;

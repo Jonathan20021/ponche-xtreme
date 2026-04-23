@@ -1171,6 +1171,108 @@ function sendDailyActivityLogsReport($htmlContent, $recipients, $reportData) {
 }
 
 /**
+ * Send daily executive dashboard summary ("cierre del día") via email.
+ *
+ * @param string $htmlContent Rendered HTML body.
+ * @param array  $recipients  List of email addresses.
+ * @param array  $reportData  Report data from generateDailyExecutiveDashboardReport().
+ * @return array{success: bool, message: string}
+ */
+function sendDailyExecutiveDashboardReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $dateFormatted = $reportData['date_formatted'] ?? ($reportData['date'] ?? date('Y-m-d'));
+        $totals = $reportData['totals'] ?? [];
+        $workforce = $reportData['workforce'] ?? [];
+
+        $mail->isHTML(true);
+        $mail->Subject = "Cierre ejecutivo - $dateFormatted ("
+            . (int) ($totals['worked_today'] ?? 0) . '/' . (int) ($totals['eligible'] ?? 0)
+            . ' presentes · '
+            . '$' . number_format((float) ($totals['earnings_combined_usd'] ?? 0), 2)
+            . ' USD)';
+        $mail->Body    = $htmlContent;
+
+        // Plain-text alternative
+        $plain  = "CIERRE EJECUTIVO DEL DÍA\n";
+        $plain .= "==========================\n\n";
+        $plain .= "Fecha: $dateFormatted\n\n";
+        $plain .= "Asistencia:         " . (int) ($totals['worked_today'] ?? 0) . ' / ' . (int) ($totals['eligible'] ?? 0)
+            . ' (' . (float) ($totals['attendance_rate_pct'] ?? 0) . "%)\n";
+        $plain .= "Horas pagadas:      " . number_format((float) ($totals['hours_total'] ?? 0), 2) . " h\n";
+        $plain .= "Horas prom./pers:   " . number_format((float) ($totals['hours_avg_per_worker'] ?? 0), 2) . " h\n";
+        $plain .= "Costo USD:          $" . number_format((float) ($totals['earnings_usd'] ?? 0), 2) . "\n";
+        $plain .= "Costo DOP:          RD$" . number_format((float) ($totals['earnings_dop'] ?? 0), 2) . "\n";
+        $plain .= "Costo USD equiv.:   $" . number_format((float) ($totals['earnings_combined_usd'] ?? 0), 2) . "\n";
+        $plain .= "Tasa de cambio:     RD$" . number_format((float) ($reportData['exchange_rate'] ?? 58.5), 2) . " / USD\n\n";
+
+        $plain .= "FUERZA LABORAL:\n";
+        $plain .= "  Activos:      " . (int) ($workforce['active_employees']    ?? 0) . "\n";
+        $plain .= "  En prueba:    " . (int) ($workforce['trial_employees']     ?? 0) . "\n";
+        $plain .= "  Ausentes hoy: " . (int) ($workforce['absent_employees']    ?? 0) . "\n\n";
+
+        if (!empty($reportData['campaigns'])) {
+            $plain .= "CAMPAÑAS:\n";
+            foreach ($reportData['campaigns'] as $c) {
+                $hours = (float) ($c['hours_usd'] ?? 0) + (float) ($c['hours_dop'] ?? 0);
+                $plain .= sprintf("  - %-25s %d/%d · %.2fh · $%s USD · RD$%s DOP\n",
+                    (string) $c['name'],
+                    (int) $c['worked_today'],
+                    (int) $c['employees'],
+                    $hours,
+                    number_format((float) $c['cost_usd'], 2),
+                    number_format((float) $c['cost_dop'], 2));
+            }
+        }
+
+        $plain .= "\n---\nSistema de Control de Asistencia - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Reporte enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}
+
+/**
  * Send daily workforce (active vs. absent) report via email.
  *
  * @param string $htmlContent Rendered HTML body.
