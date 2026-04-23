@@ -944,6 +944,46 @@ try {
                 }
                 break;
 
+            case 'update_activity_logs_report_config':
+                $alRecipients       = trim($_POST['activity_logs_report_recipients'] ?? '');
+                $alEnabled          = isset($_POST['activity_logs_report_enabled']) ? 1 : 0;
+                $alTime             = trim($_POST['activity_logs_report_time'] ?? '08:15');
+                $alExcludeModules   = trim($_POST['activity_logs_report_exclude_modules'] ?? 'reports');
+                $alSensitiveModules = trim($_POST['activity_logs_report_sensitive_modules'] ?? 'permissions,rates,banking,system_settings,users');
+                $alTopUsersLimit    = max(5, (int) ($_POST['activity_logs_report_top_users_limit'] ?? 15));
+                $alRecentTail       = max(5, (int) ($_POST['activity_logs_report_recent_tail'] ?? 20));
+                $alClaudeEnabled    = isset($_POST['activity_logs_report_claude_enabled']) ? 1 : 0;
+                $alClaudeModel      = trim($_POST['activity_logs_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $alClaudeMaxTokens  = max(100, (int) ($_POST['activity_logs_report_claude_max_tokens'] ?? 800));
+                $alClaudePrompt     = trim($_POST['activity_logs_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['activity_logs_report_recipients',         $alRecipients]);
+                    $stmt->execute(['activity_logs_report_enabled',            (string) $alEnabled]);
+                    $stmt->execute(['activity_logs_report_time',               $alTime]);
+                    $stmt->execute(['activity_logs_report_exclude_modules',    $alExcludeModules]);
+                    $stmt->execute(['activity_logs_report_sensitive_modules',  $alSensitiveModules]);
+                    $stmt->execute(['activity_logs_report_top_users_limit',    (string) $alTopUsersLimit]);
+                    $stmt->execute(['activity_logs_report_recent_tail',        (string) $alRecentTail]);
+                    $stmt->execute(['activity_logs_report_claude_enabled',     (string) $alClaudeEnabled]);
+                    $stmt->execute(['activity_logs_report_claude_model',       $alClaudeModel]);
+                    $stmt->execute(['activity_logs_report_claude_max_tokens',  (string) $alClaudeMaxTokens]);
+                    if ($alClaudePrompt !== '') {
+                        $stmt->execute(['activity_logs_report_claude_prompt', $alClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración de auditoría de actividad actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de auditoría de actividad.';
+                }
+                break;
+
             case 'update_workforce_report_config':
                 $wfRecipients       = trim($_POST['workforce_report_recipients'] ?? '');
                 $wfEnabled          = isset($_POST['workforce_report_enabled']) ? 1 : 0;
@@ -1439,6 +1479,42 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading login logs report settings: ' . $e->getMessage());
+}
+
+// Get activity logs (admin audit) report settings
+$activityLogsReport = [
+    'enabled'             => false,
+    'time'                => '08:15',
+    'recipients'          => '',
+    'exclude_modules'     => 'reports',
+    'sensitive_modules'   => 'permissions,rates,banking,system_settings,users',
+    'top_users_limit'     => 15,
+    'recent_tail'         => 20,
+    'claude_enabled'      => false,
+    'claude_model'        => 'claude-sonnet-4-6',
+    'claude_max_tokens'   => 800,
+    'claude_prompt'       => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'activity_logs_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'activity_logs_report_enabled':           $activityLogsReport['enabled']           = $val === '1'; break;
+            case 'activity_logs_report_time':              $activityLogsReport['time']              = $val ?: '08:15'; break;
+            case 'activity_logs_report_recipients':        $activityLogsReport['recipients']        = $val; break;
+            case 'activity_logs_report_exclude_modules':   $activityLogsReport['exclude_modules']   = $val; break;
+            case 'activity_logs_report_sensitive_modules': $activityLogsReport['sensitive_modules'] = $val ?: 'permissions,rates,banking,system_settings,users'; break;
+            case 'activity_logs_report_top_users_limit':   $activityLogsReport['top_users_limit']   = (int) ($val ?: 15); break;
+            case 'activity_logs_report_recent_tail':       $activityLogsReport['recent_tail']       = (int) ($val ?: 20); break;
+            case 'activity_logs_report_claude_enabled':    $activityLogsReport['claude_enabled']    = $val === '1'; break;
+            case 'activity_logs_report_claude_model':      $activityLogsReport['claude_model']      = $val ?: 'claude-sonnet-4-6'; break;
+            case 'activity_logs_report_claude_max_tokens': $activityLogsReport['claude_max_tokens'] = (int) ($val ?: 800); break;
+            case 'activity_logs_report_claude_prompt':     $activityLogsReport['claude_prompt']     = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading activity logs report settings: ' . $e->getMessage());
 }
 
 // Get workforce report settings
@@ -2953,6 +3029,180 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Daily Activity Logs Audit Report Configuration -->
+        <section id="activity-logs-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-clipboard-list text-blue-400"></i>
+                        Auditoría de Actividad (Activity Logs)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Reporte diario con toda la actividad administrativa del día anterior (tabla
+                        <code>activity_logs</code>): qué módulos se tocaron, quién los tocó, eliminaciones,
+                        cambios en permisos/tarifas/banking/configuración del sistema. Pensado para Administrador y cumplimiento.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $activityLogsReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $activityLogsReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_activity_logs_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="activity_logs_report_enabled" value="1" class="w-5 h-5 accent-blue-500"
+                            <?= $activityLogsReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada mañana con la actividad administrativa del día anterior.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="activity_logs_report_time"
+                            value="<?= htmlspecialchars($activityLogsReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Default 08:15 — entre payroll (08:00) y workforce (09:00).</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (Administrador + cumplimiento)</label>
+                    <textarea name="activity_logs_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="admin@evallishbpo.com, auditoria@evallishbpo.com"><?= htmlspecialchars($activityLogsReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <div class="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 space-y-4">
+                    <h3 class="text-slate-300 font-semibold flex items-center gap-2">
+                        <i class="fas fa-sliders-h"></i>
+                        Filtros y resaltados
+                    </h3>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-eye-slash"></i> Módulos a excluir (CSV)</label>
+                        <input type="text" name="activity_logs_report_exclude_modules"
+                            value="<?= htmlspecialchars($activityLogsReport['exclude_modules']) ?>"
+                            class="input-control font-mono text-sm"
+                            placeholder="reports">
+                        <p class="text-xs text-muted mt-1">
+                            Módulos cuya actividad se omite del reporte. Default <code>reports</code> para esconder el ruido de los cron de automatización.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-exclamation-triangle"></i> Módulos sensibles (CSV)</label>
+                        <input type="text" name="activity_logs_report_sensitive_modules"
+                            value="<?= htmlspecialchars($activityLogsReport['sensitive_modules']) ?>"
+                            class="input-control font-mono text-sm"
+                            placeholder="permissions,rates,banking,system_settings,users">
+                        <p class="text-xs text-muted mt-1">
+                            Módulos que aparecen en la sección destacada "🚨 Acciones sensibles".
+                            Además, cualquier acción <code>delete</code> siempre aparece destacada.
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-friends"></i> Top N usuarios</label>
+                            <input type="number" min="5" max="50" name="activity_logs_report_top_users_limit"
+                                value="<?= (int) $activityLogsReport['top_users_limit'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Usuarios más activos listados en el top.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-history"></i> Cola reciente</label>
+                            <input type="number" min="5" max="100" name="activity_logs_report_recent_tail"
+                                value="<?= (int) $activityLogsReport['recent_tail'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Últimas N acciones del día (orden cronológico inverso).</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="activity_logs_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $activityLogsReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza toda la actividad con enfoque de cumplimiento: destaca cambios en permisos, tarifas,
+                        información bancaria y configuración del sistema; marca eliminaciones y usuarios con actividad atípica.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="activity_logs_report_claude_model"
+                                value="<?= htmlspecialchars($activityLogsReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="activity_logs_report_claude_max_tokens"
+                                value="<?= (int) $activityLogsReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="activity_logs_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($activityLogsReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendActivityLogsReportPreview()" class="btn-secondary" id="sendActivityLogsPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendActivityLogsReportManually()" class="btn-secondary" id="sendActivityLogsReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío matutino:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    15 8 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_activity_logs_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    Procesa toda la actividad administrativa del día anterior y genera el reporte de auditoría.
+                </p>
+            </div>
+        </section>
+
         <!-- Daily Workforce (Active vs Absent) Report Configuration -->
         <section id="workforce-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -4356,6 +4606,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#login-logs-report-config']
             },
             {
+                key: 'activity_logs_report',
+                label: 'Auditoría de Actividad',
+                icon: 'fas fa-clipboard-list',
+                selectors: ['#activity-logs-report-config']
+            },
+            {
                 key: 'workforce_report',
                 label: 'Fuerza Laboral',
                 icon: 'fas fa-users',
@@ -5580,6 +5836,82 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderLoginLogsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderLoginLogsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Activity Logs Report handlers ----------
+
+    function renderActivityLogsResult(success, message, data) {
+        const host = document.getElementById('activity-logs-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            extra = `<p class="${subColor} text-sm mt-1">
+                Acciones: ${data.totals.total_actions} ·
+                Módulos: ${data.totals.modules_touched} ·
+                Usuarios: ${data.totals.unique_users} ·
+                Sensibles: ${data.totals.sensitive} ·
+                Deletes: ${data.totals.deletes}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendActivityLogsReportManually() {
+        const btn = document.getElementById('sendActivityLogsReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_activity_logs_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderActivityLogsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderActivityLogsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendActivityLogsReportPreview() {
+        const btn = document.getElementById('sendActivityLogsPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_activity_logs_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderActivityLogsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderActivityLogsResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
