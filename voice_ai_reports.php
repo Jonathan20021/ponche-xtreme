@@ -16,35 +16,150 @@ require_once __DIR__ . '/header.php';
 ?>
 
 <style>
-    [x-cloak] {
-        display: none !important;
+    [x-cloak] { display: none !important; }
+
+    /* =========================================================
+       Voice AI Reports — Design System (unified visual tokens)
+       ========================================================= */
+    .va-shell {
+        --va-bg:           rgba(2, 6, 23, 0.55);
+        --va-card:         rgba(15, 23, 42, 0.72);
+        --va-card-elev:    rgba(15, 23, 42, 0.88);
+        --va-border:       rgba(51, 65, 85, 0.65);
+        --va-border-soft:  rgba(30, 41, 59, 0.85);
+        --va-accent:       #22d3ee;
+        --va-accent-soft:  rgba(34, 211, 238, 0.16);
+        --va-text:         #e2e8f0;
+        --va-muted:        #94a3b8;
     }
+    .va-card {
+        background: var(--va-card);
+        border: 1px solid var(--va-border);
+        border-radius: 1rem;
+        backdrop-filter: blur(8px);
+        transition: border-color .2s ease;
+    }
+    .va-card:hover { border-color: rgba(34, 211, 238, 0.35); }
+    .va-card-flat {
+        background: var(--va-card);
+        border: 1px solid var(--va-border-soft);
+        border-radius: 1rem;
+    }
+    .va-kpi {
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.6));
+        border: 1px solid var(--va-border-soft);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .va-kpi::before {
+        content: ''; position: absolute; inset: 0;
+        background: radial-gradient(80% 100% at 100% 0%, var(--va-accent-soft), transparent 55%);
+        opacity: 0.55; pointer-events: none;
+    }
+    .va-chip {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 0.4rem 0.85rem; border-radius: 9999px;
+        background: rgba(15, 23, 42, 0.8); border: 1px solid var(--va-border);
+        color: var(--va-muted); font-size: 0.75rem; font-weight: 500;
+    }
+    .va-chip-active {
+        background: var(--va-accent); color: #0f172a; border-color: var(--va-accent);
+    }
+    .va-section-title {
+        display: flex; align-items: center; gap: 0.75rem;
+        font-weight: 600; color: #f8fafc; font-size: 1rem;
+    }
+    .va-section-title::before {
+        content: ''; width: 3px; height: 1.25rem; border-radius: 9999px;
+        background: linear-gradient(180deg, #22d3ee, #0ea5e9);
+    }
+    .va-table thead th {
+        font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--va-muted); padding: 0.75rem 1rem;
+        background: rgba(2, 6, 23, 0.6); border-bottom: 1px solid var(--va-border-soft);
+    }
+    .va-table tbody td { padding: 0.75rem 1rem; font-size: 0.875rem; color: var(--va-text); }
+    .va-table tbody tr { border-bottom: 1px solid rgba(30, 41, 59, 0.6); }
+    .va-table tbody tr:hover { background: rgba(30, 41, 59, 0.35); }
+
+    /* Tab rails for the mega section */
+    .va-tab-rail { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .va-tab {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 0.55rem 1rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 600;
+        border: 1px solid var(--va-border); background: rgba(2, 6, 23, 0.6);
+        color: var(--va-text); cursor: pointer; transition: all .15s ease;
+    }
+    .va-tab:hover { border-color: rgba(34, 211, 238, 0.5); color: #f8fafc; }
+    .va-tab.is-active { background: var(--va-accent); color: #0f172a; border-color: var(--va-accent); }
+    .va-tab-group-sep { width: 1px; align-self: stretch; background: var(--va-border-soft); margin: 0 0.25rem; }
+
+    /* Filter bar */
+    .va-filter-grid { display: grid; gap: 1rem; grid-template-columns: repeat(1, 1fr); }
+    @media (min-width: 768px) { .va-filter-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1280px) { .va-filter-grid { grid-template-columns: repeat(9, 1fr); } }
+
+    .va-input, .va-select {
+        width: 100%;
+        background: rgba(2, 6, 23, 0.85);
+        border: 1px solid var(--va-border);
+        border-radius: 0.75rem; padding: 0.65rem 0.9rem;
+        color: var(--va-text); font-size: 0.875rem;
+        transition: border-color .15s ease;
+    }
+    .va-input:focus, .va-select:focus { outline: none; border-color: var(--va-accent); }
+
+    .va-btn-primary {
+        background: var(--va-accent); color: #0f172a; font-weight: 600;
+        padding: 0.65rem 1.1rem; border-radius: 0.75rem; font-size: 0.875rem;
+        transition: all .15s ease;
+    }
+    .va-btn-primary:hover:not(:disabled) { background: #67e8f9; }
+    .va-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .va-btn-ghost {
+        background: transparent; color: var(--va-text);
+        border: 1px solid var(--va-border);
+        padding: 0.65rem 1.1rem; border-radius: 0.75rem; font-size: 0.875rem;
+    }
+    .va-btn-ghost:hover { border-color: var(--va-accent); color: #f8fafc; }
 </style>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="voiceAiReports()">
-    <div class="mb-8 rounded-3xl border border-cyan-500/20 bg-slate-900/80 overflow-hidden relative">
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_38%),radial-gradient(circle_at_bottom_right,_rgba(249,115,22,0.15),_transparent_35%)]"></div>
-        <div class="relative p-6 md:p-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div class="max-w-3xl">
-                <p class="text-cyan-300/80 text-xs uppercase tracking-[0.35em] mb-3">GoHighLevel Communications</p>
-                <h1 class="text-3xl md:text-4xl font-bold text-white">Reporteria integral de llamadas, mensajes y uso</h1>
-                <p class="text-slate-300 mt-3 text-sm md:text-base">
-                    Dashboard operativo construido sobre los endpoints publicos de Conversations, Phone System, Users y Voice AI para exprimir toda la data operativa disponible del location.
-                </p>
+<div class="va-shell max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="voiceAiReports()">
+    <!-- Professional hero header -->
+    <header class="mb-6 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden relative">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,_rgba(34,211,238,0.12),_transparent_42%),radial-gradient(circle_at_100%_100%,_rgba(99,102,241,0.1),_transparent_40%)] pointer-events-none"></div>
+        <div class="relative px-6 md:px-8 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex items-center gap-4">
+                <div class="h-12 w-12 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
+                    <i class="fas fa-satellite-dish text-cyan-300 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-cyan-300/80 text-[10px] uppercase tracking-[0.35em] font-semibold">GoHighLevel · Comms Intelligence</p>
+                    <h1 class="text-xl md:text-2xl font-bold text-white mt-1">Reportería integral · llamadas, mensajes &amp; disposiciones</h1>
+                    <p class="text-slate-400 text-xs md:text-sm mt-1">
+                        Conversations + Phone System + Voice AI + Pipeline unificados con capa IA opcional.
+                    </p>
+                </div>
             </div>
-            <div class="flex flex-wrap gap-3">
-                <span class="px-4 py-2 rounded-full text-sm font-semibold"
-                    :class="configStatus.is_ready ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30' : 'bg-amber-500/15 text-amber-200 border border-amber-400/30'">
-                    <i class="fas mr-2" :class="configStatus.is_ready ? 'fa-circle-check' : 'fa-triangle-exclamation'"></i>
-                    <span x-text="configStatus.is_ready ? 'Integracion lista' : 'Configuracion pendiente'"></span>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="va-chip"
+                    :class="configStatus.is_ready ? '!text-emerald-300 !border-emerald-500/40 !bg-emerald-500/10' : '!text-amber-300 !border-amber-500/40 !bg-amber-500/10'">
+                    <i class="fas" :class="configStatus.is_ready ? 'fa-circle-check' : 'fa-triangle-exclamation'"></i>
+                    <span x-text="configStatus.is_ready ? 'Integración lista' : 'Configuración pendiente'"></span>
                 </span>
-                <button @click="exportCsv" type="button"
-                    class="px-4 py-2 rounded-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-semibold transition-colors">
+                <span x-show="configStatus.integration_name" class="va-chip" style="display:none;">
+                    <i class="fas fa-building"></i>
+                    <span x-text="configStatus.integration_name"></span>
+                </span>
+                <button @click="exportCsv" type="button" class="va-btn-primary">
                     <i class="fas fa-file-csv mr-2"></i>Exportar CSV
                 </button>
             </div>
         </div>
-    </div>
+    </header>
 
     <!-- Location Selector -->
     <div x-show="(configStatus.integrations || []).length > 1" style="display:none;" class="mb-8 rounded-2xl border border-cyan-500/20 bg-slate-950/50 p-5 backdrop-blur-sm">
@@ -1307,37 +1422,58 @@ require_once __DIR__ . '/header.php';
         </div>
     </div>
 
-    <!-- ========== MEGA REPORTES GHL + IA ========== -->
-    <section class="mb-8 rounded-3xl border border-cyan-500/25 bg-slate-900/70 overflow-hidden">
-        <div class="px-6 py-5 border-b border-cyan-500/20 bg-gradient-to-r from-slate-950 to-slate-900 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <p class="text-cyan-300/80 text-xs uppercase tracking-[0.3em]">Extensiones GHL + Claude AI</p>
-                <h2 class="text-2xl font-bold text-white mt-1">Mega reportes &amp; análisis con IA</h2>
-                <p class="text-sm text-slate-400 mt-1">Oportunidades, pipeline, citas, formularios, encuestas, workflows, campañas y narrativas generadas por Claude sobre el dataset actual.</p>
+    <!-- ============================================================
+         MEGA — Reportes avanzados GHL + capa IA de Claude
+         ============================================================ -->
+    <section class="mb-8 va-card overflow-hidden">
+        <div class="px-6 py-5 border-b border-slate-800 bg-slate-950/60 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
+                    <i class="fas fa-layer-group text-indigo-300"></i>
+                </div>
+                <div>
+                    <p class="text-indigo-300/80 text-[10px] uppercase tracking-[0.3em] font-semibold">Extensiones API + IA</p>
+                    <h2 class="text-lg font-bold text-white">Centro de análisis avanzado</h2>
+                    <p class="text-xs text-slate-400">Disposiciones, pipeline, citas, automatizaciones y narrativas Claude.</p>
+                </div>
             </div>
-            <div class="flex flex-wrap gap-2 text-xs text-slate-400">
-                <span class="px-3 py-1 rounded-full bg-slate-800 border border-slate-700">
-                    IA: <span x-text="megaAi.enabled ? 'activa' : 'desactivada'"
-                        :class="megaAi.enabled ? 'text-emerald-300' : 'text-amber-300'"></span>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="va-chip" :class="megaAi.enabled ? '!text-emerald-300 !border-emerald-500/40 !bg-emerald-500/10' : '!text-amber-300 !border-amber-500/40 !bg-amber-500/10'">
+                    <i class="fas fa-robot"></i>
+                    <span x-text="megaAi.enabled ? 'IA activa' : 'IA desactivada'"></span>
                 </span>
-                <button @click="fetchAiHealth()" type="button" class="px-3 py-1 rounded-full border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/10">
-                    <i class="fas fa-heart-pulse mr-1"></i> Revisar IA
+                <button @click="fetchAiHealth()" type="button" class="va-btn-ghost">
+                    <i class="fas fa-heart-pulse mr-1.5"></i> Revisar IA
                 </button>
             </div>
         </div>
 
-        <div class="px-6 pt-5">
-            <div class="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
-                <template x-for="tab in megaTabs" :key="tab.key">
-                    <button @click="setMegaTab(tab.key)" type="button"
-                        :class="activeMegaTab === tab.key
-                            ? 'bg-cyan-500 text-slate-950 border-cyan-400'
-                            : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-cyan-500/50'"
-                        class="px-4 py-2 rounded-full border text-sm font-semibold transition-colors">
-                        <i class="fas mr-2" :class="tab.icon"></i>
-                        <span x-text="tab.label"></span>
-                    </button>
-                </template>
+        <div class="px-6 pt-5 pb-4 border-b border-slate-800 bg-slate-950/30">
+            <div class="flex flex-col gap-3">
+                <div>
+                    <p class="text-[10px] uppercase tracking-[0.25em] text-slate-500 mb-2 font-semibold">Data · desde la API</p>
+                    <div class="va-tab-rail">
+                        <template x-for="tab in megaTabs.filter(t => t.group === 'data')" :key="tab.key">
+                            <button @click="setMegaTab(tab.key)" type="button" class="va-tab"
+                                :class="activeMegaTab === tab.key ? 'is-active' : ''">
+                                <i class="fas" :class="tab.icon"></i>
+                                <span x-text="tab.label"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase tracking-[0.25em] text-slate-500 mb-2 font-semibold">Inteligencia · Claude AI</p>
+                    <div class="va-tab-rail">
+                        <template x-for="tab in megaTabs.filter(t => t.group === 'ai')" :key="tab.key">
+                            <button @click="setMegaTab(tab.key)" type="button" class="va-tab"
+                                :class="activeMegaTab === tab.key ? 'is-active' : ''">
+                                <i class="fas" :class="tab.icon"></i>
+                                <span x-text="tab.label"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1483,6 +1619,231 @@ require_once __DIR__ . '/header.php';
                     Sin preguntas aún.
                 </p>
             </div>
+        </div>
+
+        <!-- ============================================================
+             Tab: Dispositions — full breakdown cruzando conversations + Voice AI
+             ============================================================ -->
+        <div x-show="activeMegaTab === 'dispositions'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Desglose completo de disposiciones</h3>
+                    <p class="text-sm text-slate-400">
+                        Cruzado desde <code class="text-cyan-300">/conversations/messages/export</code> +
+                        <code class="text-cyan-300">/voice-ai/dashboard/call-logs</code>. Incluye outcome, duración, grabación,
+                        transcripción, distribución por usuario, hora y día.
+                    </p>
+                </div>
+                <button @click="loadDispositionsReport()" type="button" :disabled="dispositionsReport.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold transition-colors">
+                    <i class="fas mr-2" :class="dispositionsReport.loading ? 'fa-spinner fa-spin' : 'fa-rotate-right'"></i>
+                    Actualizar
+                </button>
+            </div>
+
+            <!-- Empty / error states -->
+            <div x-show="dispositionsReport.error" class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 text-sm" style="display:none;">
+                <i class="fas fa-circle-exclamation mr-2"></i><span x-text="dispositionsReport.error"></span>
+            </div>
+            <div x-show="!dispositionsReport.loaded && !dispositionsReport.loading && !dispositionsReport.error"
+                class="rounded-xl border border-slate-800 bg-slate-950/40 p-8 text-center text-slate-400 text-sm" style="display:none;">
+                Pulsa "Actualizar" para cargar el desglose de disposiciones del periodo.
+            </div>
+
+            <template x-if="dispositionsReport.loaded && dispositionsReport.data">
+                <div class="space-y-6">
+                    <!-- KPI band -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Total llamadas</p>
+                            <p class="text-2xl font-bold text-white mt-1" x-text="(dispositionsReport.data.summary || {}).total_calls || 0"></p>
+                        </div>
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Disposiciones únicas</p>
+                            <p class="text-2xl font-bold text-cyan-300 mt-1" x-text="(dispositionsReport.data.summary || {}).dispositions_unique || 0"></p>
+                        </div>
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Top disposición</p>
+                            <p class="text-sm font-semibold text-white mt-2 truncate" x-text="(dispositionsReport.data.summary || {}).top_disposition || '--'"></p>
+                            <p class="text-xs text-slate-400 mt-1" x-text="`${(dispositionsReport.data.summary || {}).top_disposition_share_pct || 0}% del total`"></p>
+                        </div>
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Sin disposición</p>
+                            <p class="text-2xl font-bold mt-1"
+                                :class="((dispositionsReport.data.summary || {}).no_disposition_pct || 0) > 30 ? 'text-rose-300' : 'text-amber-300'"
+                                x-text="`${(dispositionsReport.data.summary || {}).no_disposition_pct || 0}%`"></p>
+                            <p class="text-xs text-slate-400 mt-1" x-text="`${(dispositionsReport.data.summary || {}).no_disposition_count || 0} llamadas`"></p>
+                        </div>
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Grabación</p>
+                            <p class="text-2xl font-bold text-emerald-300 mt-1" x-text="`${(dispositionsReport.data.summary || {}).recording_coverage_pct || 0}%`"></p>
+                            <p class="text-xs text-slate-400 mt-1" x-text="`${(dispositionsReport.data.summary || {}).recorded_calls || 0} grabadas`"></p>
+                        </div>
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Transcripción</p>
+                            <p class="text-2xl font-bold text-sky-300 mt-1" x-text="`${(dispositionsReport.data.summary || {}).transcript_coverage_pct || 0}%`"></p>
+                            <p class="text-xs text-slate-400 mt-1" x-text="`${(dispositionsReport.data.summary || {}).transcribed_calls || 0} con transcript`"></p>
+                        </div>
+                    </div>
+
+                    <!-- Outcome strip -->
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="text-sm font-semibold text-slate-200">Outcomes (clasificación automática)</h4>
+                            <span class="text-xs text-slate-500">Basado en nombre de disposición + call status</span>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+                            <template x-for="outcome in ['positive','negative','pending','unreachable','other','unknown']" :key="outcome">
+                                <div class="rounded-lg border px-3 py-2.5"
+                                    :class="dispositionOutcomeColor(outcome)">
+                                    <p class="text-[10px] uppercase tracking-widest opacity-70" x-text="({positive:'Positivo',negative:'Negativo',pending:'Pendiente',unreachable:'No alcanzado',other:'Otro',unknown:'Sin outcome'})[outcome]"></p>
+                                    <p class="text-lg font-bold mt-1"
+                                        x-text="`${(((dispositionsReport.data.summary || {}).outcome_pct || {})[outcome] || 0)}%`"></p>
+                                    <p class="text-xs opacity-75"
+                                        x-text="`${(((dispositionsReport.data.summary || {}).outcome_counts || {})[outcome] || 0)} llamadas`"></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Charts: donut + direction -->
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+                            <h4 class="text-sm font-semibold text-slate-200 mb-3">Distribución por disposición</h4>
+                            <div class="relative h-72"><canvas id="vaDispoDonut"></canvas></div>
+                        </div>
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+                            <h4 class="text-sm font-semibold text-slate-200 mb-3">Inbound vs Outbound por disposición</h4>
+                            <div class="relative h-72"><canvas id="vaDispoDirectionChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <!-- Charts: timeline + duration -->
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+                            <h4 class="text-sm font-semibold text-slate-200 mb-3">Evolución diaria (top 6)</h4>
+                            <div class="relative h-72"><canvas id="vaDispoTimeline"></canvas></div>
+                        </div>
+                        <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-5">
+                            <h4 class="text-sm font-semibold text-slate-200 mb-3">Duración por disposición</h4>
+                            <div class="relative h-72"><canvas id="vaDispoDurationChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <!-- Disposition stats table -->
+                    <div class="rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="px-5 py-3 border-b border-slate-800 bg-slate-950/50 flex items-center justify-between">
+                            <h4 class="text-sm font-semibold text-slate-200">Tabla completa</h4>
+                            <span class="text-xs text-slate-400" x-text="`${(dispositionsReport.data.stats || []).length} disposiciones`"></span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Disposición</th>
+                                        <th class="px-4 py-3 text-left">Outcome</th>
+                                        <th class="px-4 py-3 text-right">Total</th>
+                                        <th class="px-4 py-3 text-right">%</th>
+                                        <th class="px-4 py-3 text-right">Inbound</th>
+                                        <th class="px-4 py-3 text-right">Outbound</th>
+                                        <th class="px-4 py-3 text-right">Dur. prom</th>
+                                        <th class="px-4 py-3 text-right">Grabadas</th>
+                                        <th class="px-4 py-3 text-right">Usuarios</th>
+                                        <th class="px-4 py-3 text-right">Contactos</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/70">
+                                    <template x-for="row in (dispositionsReport.data.stats || [])" :key="row.disposition">
+                                        <tr class="hover:bg-slate-800/30">
+                                            <td class="px-4 py-3 text-white font-medium" x-text="row.disposition"></td>
+                                            <td class="px-4 py-3">
+                                                <span class="px-2 py-0.5 rounded-full text-[11px] border capitalize"
+                                                    :class="dispositionOutcomeColor(row.outcome)"
+                                                    x-text="row.outcome"></span>
+                                            </td>
+                                            <td class="px-4 py-3 text-right font-mono text-cyan-200" x-text="row.total"></td>
+                                            <td class="px-4 py-3 text-right text-slate-300" x-text="`${row.share_pct || 0}%`"></td>
+                                            <td class="px-4 py-3 text-right text-slate-300" x-text="row.inbound"></td>
+                                            <td class="px-4 py-3 text-right text-slate-300" x-text="row.outbound"></td>
+                                            <td class="px-4 py-3 text-right text-slate-300" x-text="formatDuration(row.avg_duration_seconds)"></td>
+                                            <td class="px-4 py-3 text-right text-emerald-300" x-text="`${row.recording_pct || 0}%`"></td>
+                                            <td class="px-4 py-3 text-right text-slate-300" x-text="row.users_unique"></td>
+                                            <td class="px-4 py-3 text-right text-slate-300" x-text="row.contacts_unique"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- By user heatmap-style matrix -->
+                    <div class="rounded-xl border border-slate-800 overflow-hidden">
+                        <div class="px-5 py-3 border-b border-slate-800 bg-slate-950/50">
+                            <h4 class="text-sm font-semibold text-slate-200">Disposición por usuario</h4>
+                            <p class="text-xs text-slate-400 mt-0.5">Usuario ordenado por volumen total</p>
+                        </div>
+                        <div class="overflow-x-auto max-h-[500px]">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-950/60 text-slate-400 text-xs uppercase tracking-wider sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Usuario</th>
+                                        <th class="px-4 py-3 text-right">Llamadas</th>
+                                        <th class="px-4 py-3 text-right">Dur. prom</th>
+                                        <th class="px-4 py-3 text-left">Top disposición</th>
+                                        <th class="px-4 py-3 text-right">% positivas</th>
+                                        <th class="px-4 py-3 text-right">Positivas</th>
+                                        <th class="px-4 py-3 text-right">No alcanzadas</th>
+                                        <th class="px-4 py-3 text-right">Sin outcome</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/70">
+                                    <template x-for="u in (dispositionsReport.data.by_user || [])" :key="u.user_id || u.user_name">
+                                        <tr class="hover:bg-slate-800/30">
+                                            <td class="px-4 py-3 text-white font-medium" x-text="u.user_name"></td>
+                                            <td class="px-4 py-3 text-right font-mono text-cyan-200" x-text="u.total_calls"></td>
+                                            <td class="px-4 py-3 text-right text-slate-300" x-text="formatDuration(u.avg_duration_seconds)"></td>
+                                            <td class="px-4 py-3">
+                                                <span class="text-white" x-text="u.top_disposition || '--'"></span>
+                                                <span class="text-xs text-slate-400 ml-1" x-text="u.top_disposition_count ? `(${u.top_disposition_count})` : ''"></span>
+                                            </td>
+                                            <td class="px-4 py-3 text-right"
+                                                :class="(u.positive_rate_pct || 0) >= 30 ? 'text-emerald-300' : (u.positive_rate_pct || 0) >= 10 ? 'text-amber-300' : 'text-rose-300'"
+                                                x-text="`${u.positive_rate_pct || 0}%`"></td>
+                                            <td class="px-4 py-3 text-right text-emerald-300" x-text="(u.outcomes || {}).positive || 0"></td>
+                                            <td class="px-4 py-3 text-right text-sky-300" x-text="(u.outcomes || {}).unreachable || 0"></td>
+                                            <td class="px-4 py-3 text-right text-slate-400" x-text="(u.outcomes || {}).unknown || 0"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Sources strip -->
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                        <div class="flex flex-wrap items-center gap-3 text-xs">
+                            <span class="text-slate-400 font-semibold uppercase tracking-wider">Fuentes API:</span>
+                            <span class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300">
+                                conversations: <span class="text-cyan-300 font-mono" x-text="(dispositionsReport.data.sources || {}).conversations_messages_export || 0"></span>
+                            </span>
+                            <span class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300">
+                                voice-ai: <span class="text-cyan-300 font-mono" x-text="(dispositionsReport.data.sources || {}).voice_ai_dashboard_call_logs || 0"></span>
+                            </span>
+                            <span class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300">
+                                cruzadas: <span class="text-cyan-300 font-mono" x-text="(dispositionsReport.data.sources || {}).cross_referenced || 0"></span>
+                            </span>
+                            <span class="ml-auto text-slate-500" x-text="`Generado en ${dispositionsReport.data.elapsed_ms || 0} ms`"></span>
+                        </div>
+                        <template x-if="(dispositionsReport.data.warnings || []).length">
+                            <div class="mt-3 pt-3 border-t border-slate-800 space-y-1">
+                                <template x-for="w in dispositionsReport.data.warnings" :key="w">
+                                    <p class="text-xs text-amber-300"><i class="fas fa-triangle-exclamation mr-1.5"></i><span x-text="w"></span></p>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
         </div>
 
         <!-- Tab: Opportunities -->
@@ -2086,20 +2447,22 @@ require_once __DIR__ . '/header.php';
             loadingStage: '',
             loadingStageProgress: 0,
 
-            activeMegaTab: 'ai_executive',
+            activeMegaTab: 'dispositions',
             megaTabs: [
-                { key: 'ai_executive',  label: 'Resumen IA',       icon: 'fa-wand-magic-sparkles' },
-                { key: 'ai_coaching',   label: 'Coaching IA',      icon: 'fa-headset' },
-                { key: 'ai_risk',       label: 'Riesgo & Oport.',  icon: 'fa-shield-halved' },
-                { key: 'ai_anomalies',  label: 'Anomalías',        icon: 'fa-triangle-exclamation' },
-                { key: 'ai_forecast',   label: 'Forecast',         icon: 'fa-arrow-trend-up' },
-                { key: 'ai_chat',       label: 'Pregunta natural', icon: 'fa-comments' },
-                { key: 'opportunities', label: 'Pipeline',         icon: 'fa-sack-dollar' },
-                { key: 'appointments',  label: 'Citas',            icon: 'fa-calendar-check' },
-                { key: 'forms',         label: 'Forms/Surveys',    icon: 'fa-clipboard-list' },
-                { key: 'automations',   label: 'Workflows/Campañas', icon: 'fa-diagram-project' },
-                { key: 'contacts',      label: 'Contactos',        icon: 'fa-users' }
+                { key: 'dispositions',  label: 'Disposiciones',    icon: 'fa-list-check',  group: 'data' },
+                { key: 'opportunities', label: 'Pipeline',         icon: 'fa-sack-dollar', group: 'data' },
+                { key: 'appointments',  label: 'Citas',            icon: 'fa-calendar-check', group: 'data' },
+                { key: 'forms',         label: 'Forms/Surveys',    icon: 'fa-clipboard-list', group: 'data' },
+                { key: 'automations',   label: 'Workflows/Campañas', icon: 'fa-diagram-project', group: 'data' },
+                { key: 'contacts',      label: 'Contactos',        icon: 'fa-users',       group: 'data' },
+                { key: 'ai_executive',  label: 'Resumen IA',       icon: 'fa-wand-magic-sparkles', group: 'ai' },
+                { key: 'ai_coaching',   label: 'Coaching IA',      icon: 'fa-headset',     group: 'ai' },
+                { key: 'ai_risk',       label: 'Riesgo & Oport.',  icon: 'fa-shield-halved', group: 'ai' },
+                { key: 'ai_anomalies',  label: 'Anomalías',        icon: 'fa-triangle-exclamation', group: 'ai' },
+                { key: 'ai_forecast',   label: 'Forecast',         icon: 'fa-arrow-trend-up', group: 'ai' },
+                { key: 'ai_chat',       label: 'Pregunta natural', icon: 'fa-comments',    group: 'ai' }
             ],
+            dispositionsReport: { loading: false, data: null, error: null, loaded: false },
             megaAi: { enabled: true, model: '', message: '' },
             megaReports: {
                 opportunities: { loading: false, data: null, error: null },
@@ -2385,19 +2748,29 @@ require_once __DIR__ . '/header.php';
                     return;
                 }
 
-                // Cambiar la location seleccionada
                 this.filters.integration_id = integrationId;
-
-                // Guardar en localStorage para persistencia
                 localStorage.setItem('voiceai_selected_location', integrationId);
-
-                // Resetear la paginación de tablas
                 this.resetTablePages();
+                this.invalidateMegaCaches();
 
-                // Recargar el dashboard con la nueva location
                 if (this.configStatus.is_ready) {
                     this.fetchDashboard();
                 }
+            },
+
+            invalidateMegaCaches() {
+                // Clear dashboard cache (uses query string as key)
+                this.dashboardCache = {};
+                // Clear dispositions report
+                this.dispositionsReport = { loading: false, data: null, error: null, loaded: false };
+                // Clear mega reports (pipeline/appointments/forms/surveys/etc)
+                Object.keys(this.megaReports).forEach(k => {
+                    this.megaReports[k] = { loading: false, data: null, error: null };
+                });
+                // Clear AI insights
+                Object.keys(this.aiInsights).forEach(k => {
+                    this.aiInsights[k] = { loading: false, content: '', error: null, meta: '' };
+                });
             },
 
             buildQueryParams() {
@@ -2537,6 +2910,10 @@ require_once __DIR__ . '/header.php';
                 if (!this.configStatus.is_ready) {
                     return;
                 }
+
+                // When user triggers a manual refresh, also drop the mega
+                // caches so every tab re-fetches with the current filters.
+                this.invalidateMegaCaches();
 
                 const query = this.buildQueryParams().toString();
                 const cacheEntry = this.dashboardCache[query];
@@ -2916,11 +3293,124 @@ require_once __DIR__ . '/header.php';
 
             setMegaTab(key) {
                 this.activeMegaTab = key;
+                if (key === 'dispositions'  && !this.dispositionsReport.loaded)      this.loadDispositionsReport();
                 if (key === 'opportunities' && !this.megaReports.opportunities.data) this.loadMegaReport('opportunities');
                 if (key === 'appointments'  && !this.megaReports.appointments.data)  this.loadMegaReport('appointments');
                 if (key === 'forms'         && !this.megaReports.forms.data)         { this.loadMegaReport('forms'); this.loadMegaReport('surveys'); }
                 if (key === 'automations'   && !this.megaReports.workflows.data)     { this.loadMegaReport('workflows'); this.loadMegaReport('campaigns'); }
                 if (key === 'contacts'      && !this.megaReports.contacts_growth.data) this.loadMegaReport('contacts_growth');
+            },
+
+            async loadDispositionsReport() {
+                this.dispositionsReport.loading = true;
+                this.dispositionsReport.error = null;
+                try {
+                    const response = await fetch(`api/voice_ai_reports.php?action=dispositions_full&${this.buildMegaQuery()}`, { headers: { Accept: 'application/json' } });
+                    const payload = await this.parseJsonResponse(response, 'No se pudo cargar el reporte de disposiciones.');
+                    if (!response.ok || !payload.success) throw new Error(payload.message || 'Error al cargar disposiciones.');
+                    this.dispositionsReport.data = payload;
+                    this.dispositionsReport.loaded = true;
+                    this.$nextTick(() => this.renderDispositionsCharts());
+                } catch (e) {
+                    this.dispositionsReport.error = e.message || 'Error desconocido.';
+                } finally {
+                    this.dispositionsReport.loading = false;
+                }
+            },
+
+            dispositionOutcomeColor(outcome) {
+                return ({
+                    positive: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+                    negative: 'text-rose-300 bg-rose-500/15 border-rose-500/30',
+                    pending:  'text-amber-300 bg-amber-500/15 border-amber-500/30',
+                    unreachable: 'text-sky-300 bg-sky-500/15 border-sky-500/30',
+                    other:    'text-slate-300 bg-slate-500/15 border-slate-500/30',
+                    unknown:  'text-slate-400 bg-slate-500/10 border-slate-600/40'
+                })[outcome] || 'text-slate-300 bg-slate-500/15 border-slate-500/30';
+            },
+
+            renderDispositionsCharts() {
+                const data = this.dispositionsReport.data;
+                if (!data) return;
+                const stats = Array.isArray(data.stats) ? data.stats.slice(0, 12) : [];
+                if (!stats.length) return;
+
+                const palette = this.chartPalette(stats.length);
+
+                upsertChart('vaDispoDonut', {
+                    type: 'doughnut',
+                    data: {
+                        labels: stats.map(s => s.disposition),
+                        datasets: [{ data: stats.map(s => s.total), backgroundColor: palette, borderWidth: 0 }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        cutout: '62%',
+                        plugins: {
+                            legend: { position: 'right', labels: { color: '#cbd5e1', boxWidth: 10, boxHeight: 10 } }
+                        }
+                    }
+                });
+
+                upsertChart('vaDispoDirectionChart', {
+                    type: 'bar',
+                    data: {
+                        labels: stats.map(s => s.disposition),
+                        datasets: [
+                            { label: 'Inbound',  data: stats.map(s => s.inbound),  backgroundColor: '#22d3ee' },
+                            { label: 'Outbound', data: stats.map(s => s.outbound), backgroundColor: '#f97316' }
+                        ]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1' } } },
+                        scales: { x: { stacked: true, ticks: { color: '#94a3b8' } }, y: { stacked: true, beginAtZero: true, ticks: { color: '#94a3b8' } } }
+                    }
+                });
+
+                const timeline = Array.isArray(data.timeline) ? data.timeline : [];
+                const topDispositions = stats.slice(0, 6).map(s => s.disposition);
+                const timelineDatasets = topDispositions.map((name, i) => ({
+                    label: name,
+                    data: timeline.map(t => t[name] || 0),
+                    borderColor: palette[i],
+                    backgroundColor: palette[i] + '33',
+                    fill: true,
+                    tension: 0.3
+                }));
+                upsertChart('vaDispoTimeline', {
+                    type: 'line',
+                    data: { labels: timeline.map(t => t.date), datasets: timelineDatasets },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1' } } },
+                        scales: { y: { beginAtZero: true, stacked: false, ticks: { color: '#94a3b8' } }, x: { ticks: { color: '#94a3b8' } } }
+                    }
+                });
+
+                const buckets = data.duration_buckets || {};
+                const labels = Object.keys(buckets).slice(0, 8);
+                const bucketKeys = ['0-30s', '31-120s', '2-5m', '5-15m', '15m+'];
+                const bucketPalette = ['#f97316', '#facc15', '#4ade80', '#22d3ee', '#818cf8'];
+                upsertChart('vaDispoDurationChart', {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: bucketKeys.map((bk, i) => ({
+                            label: bk,
+                            data: labels.map(l => (buckets[l] || {})[bk] || 0),
+                            backgroundColor: bucketPalette[i]
+                        }))
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1' } } },
+                        scales: {
+                            x: { stacked: true, ticks: { color: '#94a3b8' } },
+                            y: { stacked: true, beginAtZero: true, ticks: { color: '#94a3b8' } }
+                        }
+                    }
+                });
             },
 
             formatMoney(value) {

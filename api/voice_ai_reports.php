@@ -13,6 +13,7 @@ require_once __DIR__ . '/../lib/authorization_functions.php';
 require_once __DIR__ . '/../lib/voice_ai_client.php';
 require_once __DIR__ . '/../lib/voice_ai_extended_reports.php';
 require_once __DIR__ . '/../lib/voice_ai_mega_reports.php';
+require_once __DIR__ . '/../lib/voice_ai_dispositions.php';
 require_once __DIR__ . '/../lib/voice_ai_ai_insights.php';
 
 $voiceAiJsonResponseSent = false;
@@ -187,6 +188,13 @@ try {
             }
 
             $result = voiceAiGetCallDetail($pdo, $callId);
+            voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
+            break;
+
+        case 'dispositions_full':
+            voiceAiSetContextIntegrationId($_GET['integration_id'] ?? null);
+            $filters = voiceAiBuildFiltersFromRequest();
+            $result = voiceAiFetchUnifiedDispositions($pdo, $filters);
             voiceAiSendJsonResponse($result, !empty($result['success']) ? 200 : 400);
             break;
 
