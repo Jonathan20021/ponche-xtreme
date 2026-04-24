@@ -7,6 +7,182 @@ if (!isset($_SESSION['user_id'])) {
 }
 ?>
 
+<style>
+/*
+ * Claude UI scoped overrides (see index.php for rationale).
+ * Forces correct Tailwind text/bg colors for the Claude strategy tab, which
+ * otherwise gets overwritten by the global `body { color: !important }` rule.
+ */
+.claude-ui, .claude-ui * { color: #1f2937; }
+.claude-ui .text-white, .claude-ui .text-white * { color: #ffffff !important; }
+.claude-ui .text-gray-300 { color: #d1d5db !important; }
+.claude-ui .text-gray-400 { color: #9ca3af !important; }
+.claude-ui .text-gray-500 { color: #6b7280 !important; }
+.claude-ui .text-gray-600 { color: #4b5563 !important; }
+.claude-ui .text-gray-700 { color: #374151 !important; }
+.claude-ui .text-gray-800 { color: #1f2937 !important; }
+.claude-ui .text-gray-900 { color: #111827 !important; }
+.claude-ui .text-indigo-500 { color: #6366f1 !important; }
+.claude-ui .text-indigo-600 { color: #4f46e5 !important; }
+.claude-ui .text-indigo-700 { color: #4338ca !important; }
+.claude-ui .text-indigo-800 { color: #3730a3 !important; }
+.claude-ui .text-violet-500 { color: #8b5cf6 !important; }
+.claude-ui .text-violet-600 { color: #7c3aed !important; }
+.claude-ui .text-fuchsia-400 { color: #e879f9 !important; }
+.claude-ui .text-emerald-400 { color: #34d399 !important; }
+.claude-ui .text-emerald-500 { color: #10b981 !important; }
+.claude-ui .text-emerald-600 { color: #059669 !important; }
+.claude-ui .text-emerald-700 { color: #047857 !important; }
+.claude-ui .text-emerald-800 { color: #065f46 !important; }
+.claude-ui .text-teal-500 { color: #14b8a6 !important; }
+.claude-ui .text-teal-600 { color: #0d9488 !important; }
+.claude-ui .text-amber-400 { color: #fbbf24 !important; }
+.claude-ui .text-amber-500 { color: #f59e0b !important; }
+.claude-ui .text-amber-600 { color: #d97706 !important; }
+.claude-ui .text-amber-700 { color: #b45309 !important; }
+.claude-ui .text-amber-800 { color: #92400e !important; }
+.claude-ui .text-yellow-700 { color: #a16207 !important; }
+.claude-ui .text-orange-500 { color: #f97316 !important; }
+.claude-ui .text-orange-600 { color: #ea580c !important; }
+.claude-ui .text-rose-500 { color: #f43f5e !important; }
+.claude-ui .text-rose-600 { color: #e11d48 !important; }
+.claude-ui .text-rose-700 { color: #be123c !important; }
+.claude-ui .text-rose-800 { color: #9f1239 !important; }
+.claude-ui .text-red-500 { color: #ef4444 !important; }
+.claude-ui .text-red-600 { color: #dc2626 !important; }
+.claude-ui .text-red-700 { color: #b91c1c !important; }
+.claude-ui .text-blue-500 { color: #3b82f6 !important; }
+.claude-ui .text-blue-600 { color: #2563eb !important; }
+
+.claude-ui .bg-gradient-to-br.text-white,
+.claude-ui .bg-gradient-to-br.text-white *,
+.claude-ui .bg-gradient-to-r.text-white,
+.claude-ui .bg-gradient-to-r.text-white *,
+.claude-ui .bg-gray-900,
+.claude-ui .bg-gray-900 * {
+    color: #ffffff !important;
+}
+.claude-ui .bg-gray-900 .text-fuchsia-400 { color: #e879f9 !important; }
+.claude-ui .bg-gray-900 .text-gray-400 { color: #9ca3af !important; }
+
+.claude-ui .font-mono, .claude-ui code { color: #4338ca !important; }
+
+.claude-ui .bg-white { background-color: #ffffff !important; }
+.claude-ui .bg-gray-50 { background-color: #f9fafb !important; }
+.claude-ui .bg-gray-100 { background-color: #f3f4f6 !important; }
+.claude-ui .bg-gray-200 { background-color: #e5e7eb !important; }
+.claude-ui .bg-gray-900 { background-color: #111827 !important; }
+
+/* Extended Tailwind palette — Tailwind 2.2.19 CDN doesn't ship these */
+.claude-ui .bg-emerald-50 { background-color: #ecfdf5 !important; }
+.claude-ui .bg-emerald-100 { background-color: #d1fae5 !important; }
+.claude-ui .bg-emerald-500 { background-color: #10b981 !important; }
+.claude-ui .bg-emerald-600 { background-color: #059669 !important; }
+.claude-ui .bg-teal-50 { background-color: #f0fdfa !important; }
+.claude-ui .bg-teal-500 { background-color: #14b8a6 !important; }
+.claude-ui .bg-teal-600 { background-color: #0d9488 !important; }
+.claude-ui .bg-amber-50 { background-color: #fffbeb !important; }
+.claude-ui .bg-amber-100 { background-color: #fef3c7 !important; }
+.claude-ui .bg-amber-200 { background-color: #fde68a !important; }
+.claude-ui .bg-amber-500 { background-color: #f59e0b !important; }
+.claude-ui .bg-amber-600 { background-color: #d97706 !important; }
+.claude-ui .bg-orange-500 { background-color: #f97316 !important; }
+.claude-ui .bg-orange-600 { background-color: #ea580c !important; }
+.claude-ui .bg-rose-50 { background-color: #fff1f2 !important; }
+.claude-ui .bg-rose-100 { background-color: #ffe4e6 !important; }
+.claude-ui .bg-rose-500 { background-color: #f43f5e !important; }
+.claude-ui .bg-rose-600 { background-color: #e11d48 !important; }
+.claude-ui .bg-rose-800 { background-color: #9f1239 !important; }
+.claude-ui .bg-fuchsia-100 { background-color: #fae8ff !important; }
+.claude-ui .bg-fuchsia-600 { background-color: #c026d3 !important; }
+.claude-ui .bg-violet-50 { background-color: #f5f3ff !important; }
+.claude-ui .bg-violet-100 { background-color: #ede9fe !important; }
+.claude-ui .bg-violet-200 { background-color: #ddd6fe !important; }
+.claude-ui .bg-violet-500 { background-color: #8b5cf6 !important; }
+.claude-ui .bg-violet-600 { background-color: #7c3aed !important; }
+.claude-ui .bg-violet-700 { background-color: #6d28d9 !important; }
+.claude-ui .bg-cyan-500 { background-color: #06b6d4 !important; }
+.claude-ui .bg-indigo-50 { background-color: #eef2ff !important; }
+.claude-ui .bg-indigo-100 { background-color: #e0e7ff !important; }
+.claude-ui .bg-indigo-200 { background-color: #c7d2fe !important; }
+.claude-ui .bg-indigo-500 { background-color: #6366f1 !important; }
+.claude-ui .bg-indigo-600 { background-color: #4f46e5 !important; }
+.claude-ui .bg-indigo-700 { background-color: #4338ca !important; }
+.claude-ui .bg-blue-50 { background-color: #eff6ff !important; }
+.claude-ui .bg-blue-100 { background-color: #dbeafe !important; }
+.claude-ui .bg-blue-500 { background-color: #3b82f6 !important; }
+.claude-ui .bg-red-50 { background-color: #fef2f2 !important; }
+.claude-ui .bg-red-100 { background-color: #fee2e2 !important; }
+.claude-ui .bg-red-500 { background-color: #ef4444 !important; }
+.claude-ui .bg-red-600 { background-color: #dc2626 !important; }
+.claude-ui .bg-red-700 { background-color: #b91c1c !important; }
+.claude-ui .bg-red-800 { background-color: #991b1b !important; }
+.claude-ui .bg-yellow-100 { background-color: #fef3c7 !important; }
+
+.claude-ui .border-emerald-100 { border-color: #d1fae5 !important; }
+.claude-ui .border-emerald-200 { border-color: #a7f3d0 !important; }
+.claude-ui .border-emerald-400 { border-color: #34d399 !important; }
+.claude-ui .border-amber-100 { border-color: #fef3c7 !important; }
+.claude-ui .border-amber-200 { border-color: #fde68a !important; }
+.claude-ui .border-amber-400 { border-color: #fbbf24 !important; }
+.claude-ui .border-rose-200 { border-color: #fecdd3 !important; }
+.claude-ui .border-rose-400 { border-color: #fb7185 !important; }
+.claude-ui .border-rose-500 { border-color: #f43f5e !important; }
+.claude-ui .border-indigo-100 { border-color: #e0e7ff !important; }
+.claude-ui .border-indigo-200 { border-color: #c7d2fe !important; }
+.claude-ui .border-violet-100 { border-color: #ede9fe !important; }
+.claude-ui .border-violet-200 { border-color: #ddd6fe !important; }
+.claude-ui .border-violet-400 { border-color: #a78bfa !important; }
+.claude-ui .border-red-300 { border-color: #fca5a5 !important; }
+.claude-ui .border-red-500 { border-color: #ef4444 !important; }
+
+/* from-* defaults to 2 stops (no transparent via flare). */
+.claude-ui [class*="from-emerald-500"] { --tw-gradient-from: #10b981 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(16, 185, 129, 0)) !important; }
+.claude-ui [class*="from-teal-500"]    { --tw-gradient-from: #14b8a6 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(20, 184, 166, 0)) !important; }
+.claude-ui [class*="from-amber-500"]   { --tw-gradient-from: #f59e0b !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(245, 158, 11, 0)) !important; }
+.claude-ui [class*="from-rose-500"]    { --tw-gradient-from: #f43f5e !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(244, 63, 94, 0)) !important; }
+.claude-ui [class*="from-violet-600"]  { --tw-gradient-from: #7c3aed !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
+.claude-ui [class*="from-fuchsia-500"] { --tw-gradient-from: #d946ef !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(217, 70, 239, 0)) !important; }
+.claude-ui [class*="from-indigo-500"]  { --tw-gradient-from: #6366f1 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(99, 102, 241, 0)) !important; }
+.claude-ui [class*="from-indigo-600"]  { --tw-gradient-from: #4f46e5 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(79, 70, 229, 0)) !important; }
+.claude-ui [class*="from-red-600"]     { --tw-gradient-from: #dc2626 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(220, 38, 38, 0)) !important; }
+.claude-ui [class*="from-gray-50"]     { --tw-gradient-from: #f9fafb !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(249, 250, 251, 0)) !important; }
+.claude-ui [class*="from-amber-50"]    { --tw-gradient-from: #fffbeb !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(255, 251, 235, 0)) !important; }
+.claude-ui [class*="from-emerald-50"]  { --tw-gradient-from: #ecfdf5 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(236, 253, 245, 0)) !important; }
+.claude-ui [class*="from-indigo-50"]   { --tw-gradient-from: #eef2ff !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(238, 242, 255, 0)) !important; }
+.claude-ui [class*="from-violet-50"]   { --tw-gradient-from: #f5f3ff !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(245, 243, 255, 0)) !important; }
+
+/* via-* overrides stops to 3 stops. Must come AFTER from-*. */
+.claude-ui [class*="via-violet-600"]   { --tw-gradient-stops: var(--tw-gradient-from), #7c3aed, var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
+
+.claude-ui [class*="to-teal-600"]      { --tw-gradient-to: #0d9488 !important; }
+.claude-ui [class*="to-teal-500"]      { --tw-gradient-to: #14b8a6 !important; }
+.claude-ui [class*="to-orange-600"]    { --tw-gradient-to: #ea580c !important; }
+.claude-ui [class*="to-orange-500"]    { --tw-gradient-to: #f97316 !important; }
+.claude-ui [class*="to-red-600"]       { --tw-gradient-to: #dc2626 !important; }
+.claude-ui [class*="to-red-800"]       { --tw-gradient-to: #991b1b !important; }
+.claude-ui [class*="to-rose-500"]      { --tw-gradient-to: #f43f5e !important; }
+.claude-ui [class*="to-rose-600"]      { --tw-gradient-to: #e11d48 !important; }
+.claude-ui [class*="to-rose-800"]      { --tw-gradient-to: #9f1239 !important; }
+.claude-ui [class*="to-violet-600"]    { --tw-gradient-to: #7c3aed !important; }
+.claude-ui [class*="to-violet-700"]    { --tw-gradient-to: #6d28d9 !important; }
+.claude-ui [class*="to-indigo-600"]    { --tw-gradient-to: #4f46e5 !important; }
+.claude-ui [class*="to-indigo-700"]    { --tw-gradient-to: #4338ca !important; }
+.claude-ui [class*="to-fuchsia-500"]   { --tw-gradient-to: #d946ef !important; }
+.claude-ui [class*="to-fuchsia-600"]   { --tw-gradient-to: #c026d3 !important; }
+.claude-ui [class*="to-white"]         { --tw-gradient-to: #ffffff !important; }
+.claude-ui [class*="to-orange-50"]     { --tw-gradient-to: #fff7ed !important; }
+.claude-ui [class*="to-emerald-50"]    { --tw-gradient-to: #ecfdf5 !important; }
+.claude-ui [class*="to-teal-50"]       { --tw-gradient-to: #f0fdfa !important; }
+.claude-ui [class*="to-violet-50"]     { --tw-gradient-to: #f5f3ff !important; }
+.claude-ui [class*="to-gray-200"]      { --tw-gradient-to: #e5e7eb !important; }
+.claude-ui [class*="to-gray-100"]      { --tw-gradient-to: #f3f4f6 !important; }
+
+.claude-ui .bg-gradient-to-r  { background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important; }
+.claude-ui .bg-gradient-to-br { background-image: linear-gradient(to bottom right, var(--tw-gradient-stops)) !important; }
+.claude-ui .bg-gradient-to-b  { background-image: linear-gradient(to bottom, var(--tw-gradient-stops)) !important; }
+</style>
+
 <div class="container mx-auto px-4 py-8" x-data="advancedReportsDashboard()">
     <!-- Dashboard Header -->
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
@@ -72,10 +248,15 @@ if (!isset($_SESSION['user_id'])) {
             class="px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2">
             <i class="fas fa-balance-scale"></i> Comparativas
         </button>
-        <button @click="activeTab = 'staffing'" 
+        <button @click="activeTab = 'staffing'"
             :class="activeTab === 'staffing' ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
             class="px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2">
             <i class="fas fa-user-clock"></i> Staffing & Demanda
+        </button>
+        <button @click="activeTab = 'claude'"
+            :class="activeTab === 'claude' ? 'bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
+            class="px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2">
+            <i class="fas fa-brain"></i> Estrategia Claude IA
         </button>
     </div>
 
@@ -1132,6 +1313,453 @@ if (!isset($_SESSION['user_id'])) {
             </div>
         </div>
     </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB: ESTRATEGIA CLAUDE IA — Reporte ejecutivo con Claude -->
+    <!-- ============================================================ -->
+    <div x-show="activeTab === 'claude' && !isLoading" x-transition class="claude-ui" style="color:#1f2937;">
+        <!-- Hero -->
+        <div class="rounded-2xl p-6 mb-8 text-white shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600">
+            <div class="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
+                <div class="flex items-start gap-4">
+                    <div class="h-12 w-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
+                        <i class="fas fa-brain text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold flex items-center gap-2">Estrategia con Claude AI
+                            <span class="text-[10px] font-bold uppercase bg-white/25 px-2 py-0.5 rounded">Anthropic</span>
+                        </h2>
+                        <p class="text-white/85 text-sm mt-1">Reporte ejecutivo, diagnóstico operativo, radar de riesgos, forecast y optimización de campañas.</p>
+                        <p class="text-white/60 text-xs mt-1" x-show="claude.model">Modelo: <span x-text="claude.model"></span></p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button @click="runClaudeAction('executive_report')" :disabled="claude.loading"
+                        :class="claude.action === 'executive_report' ? 'bg-white text-indigo-700' : 'bg-white/15 hover:bg-white/25 text-white'"
+                        class="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50">
+                        <i class="fas fa-chart-pie"></i> Reporte Ejecutivo
+                    </button>
+                    <button @click="runClaudeAction('operations_diagnosis')" :disabled="claude.loading"
+                        :class="claude.action === 'operations_diagnosis' ? 'bg-white text-indigo-700' : 'bg-white/15 hover:bg-white/25 text-white'"
+                        class="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50">
+                        <i class="fas fa-stethoscope"></i> Diagnóstico
+                    </button>
+                    <button @click="runClaudeAction('risk_radar')" :disabled="claude.loading"
+                        :class="claude.action === 'risk_radar' ? 'bg-white text-indigo-700' : 'bg-white/15 hover:bg-white/25 text-white'"
+                        class="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50">
+                        <i class="fas fa-shield-alt"></i> Radar Riesgos
+                    </button>
+                    <button @click="runClaudeAction('staffing_forecast')" :disabled="claude.loading"
+                        :class="claude.action === 'staffing_forecast' ? 'bg-white text-indigo-700' : 'bg-white/15 hover:bg-white/25 text-white'"
+                        class="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50">
+                        <i class="fas fa-calendar-week"></i> Forecast
+                    </button>
+                    <button @click="runClaudeAction('campaign_optimizer')" :disabled="claude.loading"
+                        :class="claude.action === 'campaign_optimizer' ? 'bg-white text-indigo-700' : 'bg-white/15 hover:bg-white/25 text-white'"
+                        class="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50">
+                        <i class="fas fa-bullseye"></i> Campañas
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration warning -->
+        <div x-show="claude.needsConfig" class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <div class="flex items-start gap-3">
+                <i class="fas fa-key text-amber-500 mt-1"></i>
+                <div class="flex-1">
+                    <p class="text-amber-800 font-semibold">Claude no está configurado</p>
+                    <p class="text-amber-700 text-sm">Agrega tu clave de Anthropic en <a href="../settings.php#global-ai" class="underline">Ajustes → API de IA Global</a> para habilitar los análisis avanzados.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error -->
+        <div x-show="claude.error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <p class="text-red-700 font-semibold"><i class="fas fa-triangle-exclamation mr-2"></i>No se pudo generar el análisis</p>
+            <p class="text-red-600 text-sm" x-text="claude.error"></p>
+        </div>
+
+        <!-- Loading -->
+        <div x-show="claude.loading" class="flex flex-col items-center justify-center py-16">
+            <div class="relative">
+                <div class="w-24 h-24 border-4 border-indigo-100 rounded-full"></div>
+                <div class="absolute inset-0 w-24 h-24 border-4 border-transparent border-t-indigo-500 border-r-fuchsia-500 rounded-full animate-spin"></div>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <i class="fas fa-brain text-indigo-500 text-2xl"></i>
+                </div>
+            </div>
+            <p class="text-gray-700 mt-5 font-medium text-lg">Claude está procesando tus datos</p>
+            <p class="text-gray-500 text-sm mt-1" x-text="claude.loadingLabel"></p>
+            <div class="mt-4 flex items-center gap-3 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-full">
+                <i class="fas fa-hourglass-half text-indigo-500 text-xs animate-pulse"></i>
+                <span class="text-indigo-700 text-sm font-mono" x-text="claude.elapsed + 's transcurridos'"></span>
+                <span class="text-gray-400 text-xs">(~30-60s)</span>
+            </div>
+            <div class="w-full mt-8 max-w-3xl space-y-3 opacity-60">
+                <div class="h-24 rounded-xl bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse"></div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="h-20 rounded-xl bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse"></div>
+                    <div class="h-20 rounded-xl bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse"></div>
+                    <div class="h-20 rounded-xl bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty (nothing loaded) -->
+        <div x-show="!claude.loading && !claude.error && !claude.report && !claude.diagnosis && !claude.radar && !claude.forecast && !claude.optimizer && !claude.needsConfig" class="bg-white rounded-xl shadow p-12 text-center">
+            <div class="h-20 w-20 mx-auto rounded-2xl bg-gradient-to-br from-indigo-100 via-violet-100 to-fuchsia-100 flex items-center justify-center mb-4">
+                <i class="fas fa-brain text-indigo-500 text-3xl"></i>
+            </div>
+            <h3 class="text-gray-800 font-semibold text-lg mb-2">Análisis estratégico con Claude</h3>
+            <p class="text-gray-500 text-sm max-w-md mx-auto">Elige uno de los tipos de análisis arriba. Claude leerá los datos del período seleccionado y generará insights listos para toma de decisiones.</p>
+        </div>
+
+        <!-- EXECUTIVE REPORT -->
+        <div x-show="!claude.loading && claude.action === 'executive_report' && claude.report" class="space-y-5">
+            <div class="rounded-2xl p-6 text-white shadow-lg"
+                :class="{
+                    'bg-gradient-to-br from-emerald-500 to-teal-600': (claude.report?.health_score || 0) >= 80,
+                    'bg-gradient-to-br from-indigo-500 to-violet-600': (claude.report?.health_score || 0) >= 60 && (claude.report?.health_score || 0) < 80,
+                    'bg-gradient-to-br from-amber-500 to-orange-600': (claude.report?.health_score || 0) >= 40 && (claude.report?.health_score || 0) < 60,
+                    'bg-gradient-to-br from-rose-500 to-red-600': (claude.report?.health_score || 0) < 40
+                }">
+                <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div class="flex-1">
+                        <p class="text-xs uppercase tracking-widest opacity-90">Estado general · <span x-text="claude.report?.health_label || '—'"></span></p>
+                        <h3 class="text-3xl font-bold mt-2 leading-tight" x-text="claude.report?.headline"></h3>
+                        <p class="text-base mt-3 opacity-95 leading-relaxed" x-text="claude.report?.executive_summary"></p>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-6xl font-black" x-text="claude.report?.health_score || 0"></div>
+                        <div class="text-xs uppercase opacity-90 tracking-widest">Health Score</div>
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="(claude.report?.kpi_snapshot || []).length" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-clipboard-list text-indigo-500"></i> KPIs Snapshot</h4>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    <template x-for="(k, i) in (claude.report?.kpi_snapshot || [])" :key="i">
+                        <div class="bg-gradient-to-br from-gray-50 to-white border border-gray-100 rounded-lg p-4">
+                            <p class="text-[10px] uppercase text-gray-500 tracking-widest" x-text="k.label"></p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <p class="text-xl font-bold text-gray-800" x-text="k.value"></p>
+                                <i class="fas"
+                                    :class="k.trend === 'up' ? 'fa-arrow-up text-emerald-500' : k.trend === 'down' ? 'fa-arrow-down text-rose-500' : 'fa-minus text-gray-400'"></i>
+                            </div>
+                            <p class="text-[11px] text-gray-500 mt-1" x-show="k.target">Objetivo: <span class="font-semibold" x-text="k.target"></span></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div class="bg-white rounded-xl shadow p-5">
+                    <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-lightbulb text-amber-500"></i> Hallazgos clave</h4>
+                    <div class="space-y-2">
+                        <template x-for="(f, i) in (claude.report?.key_findings || [])" :key="i">
+                            <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                                <div class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
+                                    :class="f.icon === 'trend-up' ? 'bg-emerald-100 text-emerald-600' : f.icon === 'trend-down' ? 'bg-rose-100 text-rose-600' : f.icon === 'alert' ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'">
+                                    <i class="fas"
+                                        :class="f.icon === 'trend-up' ? 'fa-arrow-trend-up' : f.icon === 'trend-down' ? 'fa-arrow-trend-down' : f.icon === 'alert' ? 'fa-triangle-exclamation' : 'fa-circle-check'"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-800" x-text="f.title"></p>
+                                    <p class="text-gray-600 text-sm" x-text="f.detail"></p>
+                                    <p class="text-indigo-600 text-xs mt-1 font-mono" x-show="f.metric" x-text="f.metric"></p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="space-y-5">
+                    <div class="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-400">
+                        <h4 class="text-emerald-700 font-semibold mb-2 flex items-center gap-2"><i class="fas fa-check-double"></i> Fortalezas</h4>
+                        <ul class="space-y-1 text-sm text-gray-700">
+                            <template x-for="(s, i) in (claude.report?.strengths || [])" :key="i">
+                                <li class="flex items-start gap-2"><i class="fas fa-circle text-emerald-400 text-[6px] mt-1.5"></i><span x-text="s"></span></li>
+                            </template>
+                        </ul>
+                    </div>
+                    <div class="bg-white rounded-xl shadow p-5 border-l-4 border-rose-400">
+                        <h4 class="text-rose-700 font-semibold mb-2 flex items-center gap-2"><i class="fas fa-triangle-exclamation"></i> Riesgos</h4>
+                        <div class="space-y-2 text-sm">
+                            <template x-for="(r, i) in (claude.report?.risks || [])" :key="i">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded"
+                                            :class="{'bg-rose-100 text-rose-700': r.severity === 'critical','bg-amber-100 text-amber-700': r.severity === 'high','bg-yellow-100 text-yellow-700': r.severity === 'medium','bg-gray-100 text-gray-700': r.severity === 'low'}"
+                                            x-text="r.severity"></span>
+                                        <p class="font-semibold text-gray-800" x-text="r.title"></p>
+                                    </div>
+                                    <p class="text-gray-600 ml-1" x-text="r.detail"></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="(claude.report?.opportunities || []).length" class="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-xl p-5">
+                <h4 class="font-semibold text-indigo-800 mb-3 flex items-center gap-2"><i class="fas fa-rocket"></i> Oportunidades</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <template x-for="(o, i) in (claude.report?.opportunities || [])" :key="i">
+                        <div class="bg-white rounded-lg p-3 shadow-sm">
+                            <p class="font-semibold text-gray-800 text-sm" x-text="o.title"></p>
+                            <p class="text-gray-600 text-sm mt-1" x-text="o.detail"></p>
+                            <p class="text-indigo-600 text-xs mt-2" x-show="o.estimated_impact"><i class="fas fa-chart-line mr-1"></i><span x-text="o.estimated_impact"></span></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="(claude.report?.action_plan || []).length" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-list-check text-violet-500"></i> Plan de acción priorizado</h4>
+                <div class="space-y-2">
+                    <template x-for="(a, i) in (claude.report?.action_plan || [])" :key="i">
+                        <div class="flex items-start gap-3 p-3 bg-gradient-to-r from-violet-50 to-white border border-violet-100 rounded-lg">
+                            <span class="flex-shrink-0 w-7 h-7 rounded-full bg-violet-600 text-white flex items-center justify-center text-xs font-bold" x-text="a.priority || i + 1"></span>
+                            <div class="flex-1">
+                                <p class="text-gray-800 font-medium" x-text="a.action"></p>
+                                <div class="flex flex-wrap gap-2 mt-2 text-xs">
+                                    <span class="bg-white border border-gray-200 text-gray-700 px-2 py-0.5 rounded" x-show="a.owner"><i class="fas fa-user-tag mr-1"></i><span x-text="a.owner"></span></span>
+                                    <span class="bg-white border border-gray-200 text-gray-700 px-2 py-0.5 rounded" x-show="a.timeframe"><i class="far fa-clock mr-1"></i><span x-text="a.timeframe"></span></span>
+                                    <span class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded" x-show="a.expected_outcome"><i class="fas fa-arrow-up mr-1"></i><span x-text="a.expected_outcome"></span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="claude.report?.board_message" class="bg-gray-900 text-white rounded-xl p-5 shadow-lg">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-quote-left text-fuchsia-400"></i>
+                    <p class="text-xs uppercase tracking-widest text-gray-400">Mensaje para dirección</p>
+                </div>
+                <p class="text-lg leading-relaxed" x-text="claude.report?.board_message"></p>
+            </div>
+        </div>
+
+        <!-- OPERATIONS DIAGNOSIS -->
+        <div x-show="!claude.loading && claude.action === 'operations_diagnosis' && claude.diagnosis" class="space-y-5">
+            <div class="bg-gradient-to-br from-violet-600 to-indigo-700 text-white rounded-xl p-6 shadow-lg">
+                <p class="text-xs uppercase tracking-widest opacity-90">Diagnóstico operativo</p>
+                <p class="text-base mt-2 leading-relaxed" x-text="claude.diagnosis?.diagnosis_overview"></p>
+            </div>
+            <div x-show="(claude.diagnosis?.bottlenecks || []).length" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-filter text-violet-500 mr-2"></i>Cuellos de botella</h4>
+                <div class="space-y-3">
+                    <template x-for="(b, i) in (claude.diagnosis?.bottlenecks || [])" :key="i">
+                        <div class="border-l-4 border-violet-400 pl-4 py-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] uppercase bg-violet-100 text-violet-700 px-2 py-0.5 rounded font-bold" x-text="b.area"></span>
+                                <p class="font-semibold text-gray-800" x-text="b.title"></p>
+                            </div>
+                            <p class="text-gray-600 text-sm mt-1" x-text="b.detail"></p>
+                            <p class="text-violet-600 text-xs mt-1 font-mono" x-show="b.evidence" x-text="b.evidence"></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div x-show="claude.diagnosis?.plan_30_60_90" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-route text-emerald-500 mr-2"></i>Plan 30/60/90</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <template x-for="bucket in ['next_24h','next_30d','next_60d','next_90d']" :key="bucket">
+                        <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2" x-text="bucket.replace('next_','').replace('_',' ')"></p>
+                            <ul class="space-y-2">
+                                <template x-for="(item, i) in (claude.diagnosis?.plan_30_60_90?.[bucket] || [])" :key="i">
+                                    <li class="text-sm">
+                                        <span class="text-gray-800" x-text="item.action"></span>
+                                        <span class="block text-xs text-gray-500 mt-0.5">
+                                            <span x-show="item.owner" class="mr-2"><i class="fas fa-user-tag"></i> <span x-text="item.owner"></span></span>
+                                            <span x-show="item.kpi_target" class="text-emerald-600"><i class="fas fa-bullseye"></i> <span x-text="item.kpi_target"></span></span>
+                                        </span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div x-show="(claude.diagnosis?.quick_wins || []).length" class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-xl p-5">
+                <h4 class="font-semibold text-emerald-800 mb-3"><i class="fas fa-bolt mr-2"></i>Quick wins</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <template x-for="(q, i) in (claude.diagnosis?.quick_wins || [])" :key="i">
+                        <div class="bg-white rounded-lg p-3 shadow-sm">
+                            <p class="font-semibold text-gray-800 text-sm" x-text="q.title"></p>
+                            <p class="text-xs text-gray-500 mt-1">Impacto: <span class="text-emerald-600 font-medium" x-text="q.expected_impact"></span> · Esfuerzo: <span x-text="q.effort"></span></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- RISK RADAR -->
+        <div x-show="!claude.loading && claude.action === 'risk_radar' && claude.radar" class="space-y-5">
+            <div class="rounded-xl p-6 text-white shadow-lg"
+                :class="{
+                    'bg-gradient-to-br from-emerald-500 to-teal-600': claude.radar?.overall_risk_level === 'low',
+                    'bg-gradient-to-br from-amber-500 to-orange-600': claude.radar?.overall_risk_level === 'medium',
+                    'bg-gradient-to-br from-rose-500 to-red-600': claude.radar?.overall_risk_level === 'high',
+                    'bg-gradient-to-br from-red-600 to-rose-800': claude.radar?.overall_risk_level === 'critical'
+                }">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <p class="text-xs uppercase tracking-widest opacity-90">Radar de riesgos</p>
+                        <h3 class="text-2xl font-bold mt-1" x-text="claude.radar?.summary"></h3>
+                        <p class="text-sm opacity-90 mt-2">Nivel: <span class="font-bold uppercase" x-text="claude.radar?.overall_risk_level"></span></p>
+                    </div>
+                    <div class="text-right"><div class="text-5xl font-black" x-text="claude.radar?.overall_score || 0"></div><div class="text-xs uppercase opacity-90">Score</div></div>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-satellite-dish text-rose-500 mr-2"></i>Riesgos detectados</h4>
+                <div class="space-y-3">
+                    <template x-for="(r, i) in (claude.radar?.risks || [])" :key="i">
+                        <div class="border-l-4 rounded-r-lg p-3 bg-gray-50"
+                            :class="{'border-red-500': r.severity === 'critical','border-rose-400': r.severity === 'high','border-amber-400': r.severity === 'medium','border-emerald-400': r.severity === 'low'}">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-[10px] font-bold uppercase bg-gray-100 text-gray-700 px-2 py-0.5 rounded" x-text="r.category"></span>
+                                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded"
+                                    :class="{'bg-red-100 text-red-700': r.severity === 'critical','bg-rose-100 text-rose-700': r.severity === 'high','bg-amber-100 text-amber-700': r.severity === 'medium','bg-emerald-100 text-emerald-700': r.severity === 'low'}"
+                                    x-text="r.severity"></span>
+                                <span class="text-[10px] text-gray-500">prob: <span x-text="r.likelihood"></span></span>
+                                <span class="text-[10px] text-gray-500">impacto: <span x-text="r.impact"></span></span>
+                                <span class="text-[10px] ml-auto bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded" x-show="r.eta" x-text="'ETA ' + r.eta"></span>
+                            </div>
+                            <p class="font-semibold text-gray-800 mt-1" x-text="r.title"></p>
+                            <p class="text-gray-600 text-sm" x-text="r.evidence"></p>
+                            <p class="text-indigo-600 text-sm mt-1"><i class="fas fa-arrow-right mr-1 text-xs"></i><span x-text="r.recommendation"></span></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div x-show="(claude.radar?.early_warnings || []).length" class="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                <h4 class="font-semibold text-amber-800 mb-2"><i class="fas fa-bell mr-2"></i>Señales tempranas</h4>
+                <ul class="space-y-1 text-sm text-amber-900">
+                    <template x-for="(w, i) in (claude.radar?.early_warnings || [])" :key="i">
+                        <li class="flex items-start gap-2"><i class="fas fa-dot-circle text-amber-500 mt-1 text-[8px]"></i><span x-text="w"></span></li>
+                    </template>
+                </ul>
+            </div>
+        </div>
+
+        <!-- STAFFING FORECAST -->
+        <div x-show="!claude.loading && claude.action === 'staffing_forecast' && claude.forecast" class="space-y-5">
+            <div class="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl p-6 shadow-lg">
+                <p class="text-xs uppercase tracking-widest opacity-90">Forecast de staffing</p>
+                <p class="text-base mt-2 opacity-95" x-text="claude.forecast?.cost_vs_service_tradeoff"></p>
+            </div>
+            <div x-show="(claude.forecast?.forecast_next_7_days || []).length" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-chart-line text-emerald-500 mr-2"></i>Próximos 7 días</h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                    <template x-for="(d, i) in (claude.forecast?.forecast_next_7_days || [])" :key="i">
+                        <div class="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-lg p-3 text-center">
+                            <p class="text-[10px] uppercase text-gray-500" x-text="d.weekday"></p>
+                            <p class="text-[11px] text-gray-400" x-text="d.date"></p>
+                            <p class="text-xl font-bold text-emerald-600 mt-1" x-text="d.expected_conversations"></p>
+                            <p class="text-[10px] text-gray-500">conv.</p>
+                            <div class="mt-1 text-xs font-semibold text-indigo-600"><i class="fas fa-headset"></i> <span x-text="d.suggested_agents"></span></div>
+                            <span class="text-[9px] uppercase mt-1 inline-block px-1.5 py-0.5 rounded"
+                                :class="{'bg-emerald-100 text-emerald-700': d.confidence === 'alta','bg-amber-100 text-amber-700': d.confidence === 'media','bg-gray-100 text-gray-600': d.confidence === 'baja'}"
+                                x-text="d.confidence"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div x-show="(claude.forecast?.weekly_plan || []).length" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-calendar-check text-indigo-500 mr-2"></i>Plan semanal</h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 text-xs uppercase text-gray-500">
+                                <th class="text-left px-3 py-2">Día</th>
+                                <th class="text-left px-3 py-2">Turno</th>
+                                <th class="text-center px-3 py-2">Agentes</th>
+                                <th class="text-left px-3 py-2">Notas</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <template x-for="(row, i) in (claude.forecast?.weekly_plan || [])" :key="i">
+                                <tr><td class="px-3 py-2 font-medium text-gray-800" x-text="row.day"></td><td class="px-3 py-2 text-gray-600" x-text="row.shift"></td><td class="px-3 py-2 text-center font-bold text-indigo-600" x-text="row.agents"></td><td class="px-3 py-2 text-gray-600" x-text="row.notes"></td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div x-show="claude.forecast?.hiring_recommendation" class="rounded-xl p-5 shadow"
+                :class="claude.forecast?.hiring_recommendation?.needed ? 'bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200' : 'bg-gradient-to-br from-gray-50 to-white border border-gray-200'">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-user-plus text-amber-500 mr-2"></i>Recomendación de contratación</h4>
+                <div class="flex items-start gap-4">
+                    <div class="text-center">
+                        <div class="text-4xl font-black" :class="claude.forecast?.hiring_recommendation?.needed ? 'text-amber-600' : 'text-gray-500'" x-text="claude.forecast?.hiring_recommendation?.count || 0"></div>
+                        <div class="text-[10px] uppercase text-gray-500">contrataciones</div>
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-semibold text-gray-800" x-text="claude.forecast?.hiring_recommendation?.profile"></p>
+                        <p class="text-gray-600 text-sm mt-1" x-text="claude.forecast?.hiring_recommendation?.reasoning"></p>
+                        <span class="mt-2 inline-block text-[10px] uppercase px-2 py-0.5 rounded font-bold"
+                            :class="{'bg-rose-100 text-rose-700': claude.forecast?.hiring_recommendation?.priority === 'alta','bg-amber-100 text-amber-700': claude.forecast?.hiring_recommendation?.priority === 'media','bg-gray-100 text-gray-700': claude.forecast?.hiring_recommendation?.priority === 'baja'}"
+                            x-text="'Prioridad ' + (claude.forecast?.hiring_recommendation?.priority || '')"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAMPAIGN OPTIMIZER -->
+        <div x-show="!claude.loading && claude.action === 'campaign_optimizer' && claude.optimizer" class="space-y-5">
+            <div class="bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-xl p-6 shadow-lg">
+                <p class="text-xs uppercase tracking-widest opacity-90">Optimizador de campañas</p>
+                <p class="text-base mt-2 opacity-95 leading-relaxed" x-text="claude.optimizer?.overview"></p>
+            </div>
+            <div x-show="(claude.optimizer?.campaign_insights || []).length" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-bullhorn text-amber-500 mr-2"></i>Campañas</h4>
+                <div class="space-y-3">
+                    <template x-for="(c, i) in (claude.optimizer?.campaign_insights || [])" :key="i">
+                        <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <p class="font-semibold text-gray-800" x-text="c.campaign"></p>
+                                <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded"
+                                    :class="{'bg-emerald-100 text-emerald-700': c.status === 'saludable','bg-amber-100 text-amber-700': c.status === 'en_riesgo','bg-rose-100 text-rose-700': c.status === 'crítica'}"
+                                    x-text="c.status"></span>
+                            </div>
+                            <p class="text-gray-600 text-sm mt-1" x-text="c.insight"></p>
+                            <p class="text-amber-600 text-sm mt-1"><i class="fas fa-arrow-right mr-1 text-xs"></i><span x-text="c.recommendation"></span></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div x-show="(claude.optimizer?.reassignments || []).length" class="bg-white rounded-xl shadow p-5">
+                <h4 class="font-semibold text-gray-800 mb-3"><i class="fas fa-shuffle text-indigo-500 mr-2"></i>Reasignaciones sugeridas</h4>
+                <div class="space-y-2">
+                    <template x-for="(r, i) in (claude.optimizer?.reassignments || [])" :key="i">
+                        <div class="bg-gradient-to-r from-indigo-50 to-white rounded-lg p-3 flex items-center gap-3">
+                            <i class="fas fa-user-tag text-indigo-500"></i>
+                            <div class="flex-1">
+                                <p class="font-semibold text-gray-800 text-sm" x-text="r.agent"></p>
+                                <p class="text-xs text-gray-500"><span x-text="r.from || 'N/A'"></span> <i class="fas fa-arrow-right mx-1"></i> <span class="text-indigo-600 font-medium" x-text="r.to"></span></p>
+                                <p class="text-gray-600 text-sm mt-1" x-text="r.reason"></p>
+                            </div>
+                            <div class="text-xs text-emerald-600 font-semibold flex-shrink-0" x-show="r.expected_gain" x-text="r.expected_gain"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model footer -->
+        <div x-show="claude.model && !claude.loading" class="mt-6 pt-4 text-center">
+            <p class="text-[10px] uppercase tracking-widest text-gray-400">
+                Análisis generado por Claude · <span x-text="claude.model"></span>
+                <span x-show="claude.usage?.input_tokens" class="ml-2">· <span x-text="claude.usage?.input_tokens"></span>↑ <span x-text="claude.usage?.output_tokens"></span>↓ tokens</span>
+            </p>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1158,7 +1786,25 @@ function advancedReportsDashboard() {
         rankings: { by_productivity: [], by_resolution_rate: [], by_speed: [], by_first_response: [] },
         comparison: { comparison: {}, periods: {} },
         staffing: { daily_analysis: [], recommendations: {}, alerts: [], weekly_distribution: {} },
-        
+
+        // Claude AI
+        claude: {
+            loading: false,
+            loadingLabel: '',
+            action: null,
+            error: null,
+            needsConfig: false,
+            model: '',
+            usage: null,
+            elapsed: 0,
+            _timer: null,
+            report: null,
+            diagnosis: null,
+            radar: null,
+            forecast: null,
+            optimizer: null
+        },
+
         // Filters
         agentSearch: '',
         filteredPerformanceAgents: [],
@@ -1602,6 +2248,76 @@ function advancedReportsDashboard() {
                     }
                 }
             });
+        },
+
+        // ===================================================
+        // CLAUDE AI — Strategy reports
+        // ===================================================
+        resetClaude() {
+            this.claude.report = null;
+            this.claude.diagnosis = null;
+            this.claude.radar = null;
+            this.claude.forecast = null;
+            this.claude.optimizer = null;
+            this.claude.error = null;
+            this.claude.needsConfig = false;
+        },
+
+        async runClaudeAction(action) {
+            this.claude.action = action;
+            this.resetClaude();
+            this.claude.loading = true;
+            const labels = {
+                executive_report: 'Construyendo reporte ejecutivo integral...',
+                operations_diagnosis: 'Diagnosticando operación y SLAs...',
+                risk_radar: 'Escaneando señales de riesgo...',
+                staffing_forecast: 'Proyectando demanda y staffing...',
+                campaign_optimizer: 'Optimizando mezcla de campañas...'
+            };
+            this.claude.loadingLabel = labels[action] || 'Procesando...';
+            this.claude.elapsed = 0;
+            if (this.claude._timer) clearInterval(this.claude._timer);
+            this.claude._timer = setInterval(() => { this.claude.elapsed++; }, 1000);
+
+            try {
+                const url = `api/claude_insights.php?action=${encodeURIComponent(action)}&start_date=${this.filters.startDate}&end_date=${this.filters.endDate}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.needs_configuration) { this.claude.needsConfig = true; return; }
+                if (!data.success) { this.claude.error = data.error || 'No se pudo generar el análisis'; return; }
+
+                this.claude.model = data.model || '';
+                this.claude.usage = data.usage || null;
+
+                switch (action) {
+                    case 'executive_report':
+                        this.claude.report = data.report;
+                        if (!data.report) this.claude.error = 'Claude respondió pero no fue JSON válido. Reintenta.';
+                        break;
+                    case 'operations_diagnosis':
+                        this.claude.diagnosis = data.diagnosis;
+                        if (!data.diagnosis) this.claude.error = 'Respuesta no estructurada. Reintenta.';
+                        break;
+                    case 'risk_radar':
+                        this.claude.radar = data.radar;
+                        if (!data.radar) this.claude.error = 'Respuesta no estructurada. Reintenta.';
+                        break;
+                    case 'staffing_forecast':
+                        this.claude.forecast = data.forecast;
+                        if (!data.forecast) this.claude.error = 'Respuesta no estructurada. Reintenta.';
+                        break;
+                    case 'campaign_optimizer':
+                        this.claude.optimizer = data.optimizer;
+                        if (!data.optimizer) this.claude.error = 'Respuesta no estructurada. Reintenta.';
+                        break;
+                }
+            } catch (e) {
+                this.claude.error = e.message || 'Error de red';
+            } finally {
+                this.claude.loading = false;
+                if (this.claude._timer) { clearInterval(this.claude._timer); this.claude._timer = null; }
+            }
         }
     };
 }
