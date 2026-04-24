@@ -1307,6 +1307,527 @@ require_once __DIR__ . '/header.php';
         </div>
     </div>
 
+    <!-- ========== MEGA REPORTES GHL + IA ========== -->
+    <section class="mb-8 rounded-3xl border border-cyan-500/25 bg-slate-900/70 overflow-hidden">
+        <div class="px-6 py-5 border-b border-cyan-500/20 bg-gradient-to-r from-slate-950 to-slate-900 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <p class="text-cyan-300/80 text-xs uppercase tracking-[0.3em]">Extensiones GHL + Claude AI</p>
+                <h2 class="text-2xl font-bold text-white mt-1">Mega reportes &amp; análisis con IA</h2>
+                <p class="text-sm text-slate-400 mt-1">Oportunidades, pipeline, citas, formularios, encuestas, workflows, campañas y narrativas generadas por Claude sobre el dataset actual.</p>
+            </div>
+            <div class="flex flex-wrap gap-2 text-xs text-slate-400">
+                <span class="px-3 py-1 rounded-full bg-slate-800 border border-slate-700">
+                    IA: <span x-text="megaAi.enabled ? 'activa' : 'desactivada'"
+                        :class="megaAi.enabled ? 'text-emerald-300' : 'text-amber-300'"></span>
+                </span>
+                <button @click="fetchAiHealth()" type="button" class="px-3 py-1 rounded-full border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/10">
+                    <i class="fas fa-heart-pulse mr-1"></i> Revisar IA
+                </button>
+            </div>
+        </div>
+
+        <div class="px-6 pt-5">
+            <div class="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+                <template x-for="tab in megaTabs" :key="tab.key">
+                    <button @click="setMegaTab(tab.key)" type="button"
+                        :class="activeMegaTab === tab.key
+                            ? 'bg-cyan-500 text-slate-950 border-cyan-400'
+                            : 'bg-slate-950 text-slate-300 border-slate-700 hover:border-cyan-500/50'"
+                        class="px-4 py-2 rounded-full border text-sm font-semibold transition-colors">
+                        <i class="fas mr-2" :class="tab.icon"></i>
+                        <span x-text="tab.label"></span>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <!-- Tab: IA Executive -->
+        <div x-show="activeMegaTab === 'ai_executive'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Resumen ejecutivo con IA</h3>
+                    <p class="text-sm text-slate-400">Veredicto, KPIs críticos, qué funcionó, qué preocupa y acciones sugeridas.</p>
+                </div>
+                <button @click="runAiInsight('executive')" type="button" :disabled="aiInsights.executive.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="aiInsights.executive.loading ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>
+                    Generar resumen
+                </button>
+            </div>
+            <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-5 min-h-[140px]">
+                <div x-show="aiInsights.executive.error" class="text-rose-300 text-sm" x-text="aiInsights.executive.error" style="display:none;"></div>
+                <div x-show="!aiInsights.executive.content && !aiInsights.executive.loading && !aiInsights.executive.error" class="text-slate-500 text-sm italic">
+                    Aún no se ha generado un resumen. Pulsa “Generar resumen”.
+                </div>
+                <div x-show="aiInsights.executive.content" x-html="renderMarkdown(aiInsights.executive.content)" class="prose prose-invert prose-sm max-w-none" style="display:none;"></div>
+                <p x-show="aiInsights.executive.meta" class="text-xs text-slate-500 mt-4" x-text="aiInsights.executive.meta" style="display:none;"></p>
+            </div>
+        </div>
+
+        <!-- Tab: IA Coaching -->
+        <div x-show="activeMegaTab === 'ai_coaching'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Coaching para agentes (IA)</h3>
+                    <p class="text-sm text-slate-400">Top y bottom 3 con fortalezas, riesgos y acciones concretas.</p>
+                </div>
+                <button @click="runAiInsight('coaching')" type="button" :disabled="aiInsights.coaching.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="aiInsights.coaching.loading ? 'fa-spinner fa-spin' : 'fa-headset'"></i>
+                    Generar coaching
+                </button>
+            </div>
+            <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-5 min-h-[140px]">
+                <div x-show="aiInsights.coaching.error" class="text-rose-300 text-sm" x-text="aiInsights.coaching.error" style="display:none;"></div>
+                <div x-show="!aiInsights.coaching.content && !aiInsights.coaching.loading && !aiInsights.coaching.error" class="text-slate-500 text-sm italic">
+                    Aún no hay diagnóstico de coaching.
+                </div>
+                <div x-show="aiInsights.coaching.content" x-html="renderMarkdown(aiInsights.coaching.content)" class="prose prose-invert prose-sm max-w-none" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: IA Risk + Opportunity -->
+        <div x-show="activeMegaTab === 'ai_risk'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Riesgo &amp; oportunidades (IA)</h3>
+                    <p class="text-sm text-slate-400">Churn, leads calientes y alertas operativas cruzando llamadas + pipeline.</p>
+                </div>
+                <button @click="runAiInsight('risk')" type="button" :disabled="aiInsights.risk.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="aiInsights.risk.loading ? 'fa-spinner fa-spin' : 'fa-shield-halved'"></i>
+                    Ejecutar análisis
+                </button>
+            </div>
+            <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-5 min-h-[140px]">
+                <div x-show="aiInsights.risk.error" class="text-rose-300 text-sm" x-text="aiInsights.risk.error" style="display:none;"></div>
+                <div x-show="!aiInsights.risk.content && !aiInsights.risk.loading && !aiInsights.risk.error" class="text-slate-500 text-sm italic">
+                    Aún no se ha ejecutado el análisis.
+                </div>
+                <div x-show="aiInsights.risk.content" x-html="renderMarkdown(aiInsights.risk.content)" class="prose prose-invert prose-sm max-w-none" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: IA Anomalies -->
+        <div x-show="activeMegaTab === 'ai_anomalies'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Detección de anomalías (IA)</h3>
+                    <p class="text-sm text-slate-400">Outliers y desviaciones materiales respecto al patrón del periodo.</p>
+                </div>
+                <button @click="runAiInsight('anomalies')" type="button" :disabled="aiInsights.anomalies.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="aiInsights.anomalies.loading ? 'fa-spinner fa-spin' : 'fa-triangle-exclamation'"></i>
+                    Buscar anomalías
+                </button>
+            </div>
+            <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-5 min-h-[140px]">
+                <div x-show="aiInsights.anomalies.error" class="text-rose-300 text-sm" x-text="aiInsights.anomalies.error" style="display:none;"></div>
+                <div x-show="!aiInsights.anomalies.content && !aiInsights.anomalies.loading && !aiInsights.anomalies.error" class="text-slate-500 text-sm italic">
+                    Aún no se han buscado anomalías.
+                </div>
+                <div x-show="aiInsights.anomalies.content" x-html="renderMarkdown(aiInsights.anomalies.content)" class="prose prose-invert prose-sm max-w-none" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: IA Forecast -->
+        <div x-show="activeMegaTab === 'ai_forecast'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Forecast 7 días (IA)</h3>
+                    <p class="text-sm text-slate-400">Predicción con tendencia + estacionalidad + recomendaciones de staffing.</p>
+                </div>
+                <button @click="runAiInsight('forecast')" type="button" :disabled="aiInsights.forecast.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="aiInsights.forecast.loading ? 'fa-spinner fa-spin' : 'fa-arrow-trend-up'"></i>
+                    Generar forecast
+                </button>
+            </div>
+            <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-5 min-h-[140px]">
+                <div x-show="aiInsights.forecast.error" class="text-rose-300 text-sm" x-text="aiInsights.forecast.error" style="display:none;"></div>
+                <div x-show="!aiInsights.forecast.content && !aiInsights.forecast.loading && !aiInsights.forecast.error" class="text-slate-500 text-sm italic">
+                    Aún no hay forecast.
+                </div>
+                <div x-show="aiInsights.forecast.content" x-html="renderMarkdown(aiInsights.forecast.content)" class="prose prose-invert prose-sm max-w-none" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: IA Natural Q&A -->
+        <div x-show="activeMegaTab === 'ai_chat'" class="p-6 space-y-6" style="display:none;">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Pregunta natural sobre los datos</h3>
+                <p class="text-sm text-slate-400">Ejemplos: “¿cuál es el canal con más volumen?”, “¿qué agente tiene mejor disposición de ventas?”, “¿cuántas interacciones el martes?”</p>
+            </div>
+            <form @submit.prevent="askNatural" class="flex flex-col md:flex-row gap-3">
+                <input x-model="naturalQuestion" type="text" required
+                    placeholder="Escribe tu pregunta sobre el periodo..."
+                    class="flex-1 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 px-4 py-3">
+                <button type="submit" :disabled="aiInsights.chat.loading || !naturalQuestion.trim()"
+                    class="px-5 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="aiInsights.chat.loading ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
+                    Preguntar
+                </button>
+            </form>
+            <div class="space-y-3">
+                <template x-for="(item, idx) in naturalHistory" :key="idx">
+                    <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                        <p class="text-sm text-cyan-300 font-semibold">
+                            <i class="fas fa-user mr-2"></i>
+                            <span x-text="item.question"></span>
+                        </p>
+                        <div x-show="item.answer" x-html="renderMarkdown(item.answer)" class="prose prose-invert prose-sm max-w-none mt-3" style="display:none;"></div>
+                        <p x-show="item.error" class="text-rose-300 text-sm mt-2" x-text="item.error" style="display:none;"></p>
+                    </div>
+                </template>
+                <p x-show="naturalHistory.length === 0" class="text-slate-500 text-sm italic" style="display:none;">
+                    Sin preguntas aún.
+                </p>
+            </div>
+        </div>
+
+        <!-- Tab: Opportunities -->
+        <div x-show="activeMegaTab === 'opportunities'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Pipeline &amp; oportunidades</h3>
+                    <p class="text-sm text-slate-400">Datos directos del endpoint <code>/opportunities/search</code>.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="loadMegaReport('opportunities')" type="button" :disabled="megaReports.opportunities.loading"
+                        class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                        <i class="fas mr-2" :class="megaReports.opportunities.loading ? 'fa-spinner fa-spin' : 'fa-rotate-right'"></i>
+                        Actualizar
+                    </button>
+                    <button @click="runAiInsight('opportunities')" type="button" :disabled="aiInsights.opportunities.loading"
+                        class="px-4 py-2 rounded-xl border border-cyan-500/40 text-cyan-200 hover:bg-cyan-500/10">
+                        <i class="fas mr-2" :class="aiInsights.opportunities.loading ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>
+                        IA sobre pipeline
+                    </button>
+                </div>
+            </div>
+            <div x-show="megaReports.opportunities.data && megaReports.opportunities.data.summary" class="grid grid-cols-2 md:grid-cols-4 gap-3" style="display:none;">
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Total oportunidades</p>
+                    <p class="text-xl font-bold text-white mt-1" x-text="(megaReports.opportunities.data.summary || {}).total || 0"></p>
+                </div>
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Monto total</p>
+                    <p class="text-xl font-bold text-emerald-300 mt-1" x-text="formatMoney((megaReports.opportunities.data.summary || {}).total_value || 0)"></p>
+                </div>
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Win rate</p>
+                    <p class="text-xl font-bold text-cyan-300 mt-1" x-text="`${(megaReports.opportunities.data.summary || {}).win_rate_pct || 0}%`"></p>
+                </div>
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Ticket promedio</p>
+                    <p class="text-xl font-bold text-amber-300 mt-1" x-text="formatMoney((megaReports.opportunities.data.summary || {}).avg_ticket || 0)"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200">Por estado</div>
+                    <div class="p-4">
+                        <template x-for="(count, status) in ((megaReports.opportunities.data || {}).summary || {}).by_status || {}" :key="status">
+                            <div class="flex items-center justify-between text-sm py-1.5 border-b border-slate-800/60 last:border-0">
+                                <span class="text-slate-200 capitalize" x-text="status"></span>
+                                <span class="text-cyan-300 font-mono" x-text="count"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200">Por pipeline</div>
+                    <div class="p-4">
+                        <template x-for="(count, pipeline) in ((megaReports.opportunities.data || {}).summary || {}).by_pipeline || {}" :key="pipeline">
+                            <div class="flex items-center justify-between text-sm py-1.5 border-b border-slate-800/60 last:border-0">
+                                <span class="text-slate-200" x-text="pipeline"></span>
+                                <span class="text-cyan-300 font-mono" x-text="count"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-slate-700 overflow-hidden">
+                <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200">Top 25 oportunidades</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-950/60 text-slate-400">
+                            <tr>
+                                <th class="px-5 py-3 text-left">Oportunidad</th>
+                                <th class="px-5 py-3 text-left">Pipeline / etapa</th>
+                                <th class="px-5 py-3 text-left">Contacto</th>
+                                <th class="px-5 py-3 text-right">Monto</th>
+                                <th class="px-5 py-3 text-left">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            <template x-for="opp in (megaReports.opportunities.data?.opportunities || []).slice(0, 25)" :key="opp.id">
+                                <tr class="hover:bg-slate-800/50">
+                                    <td class="px-5 py-3 text-white" x-text="opp.name || '--'"></td>
+                                    <td class="px-5 py-3 text-slate-300" x-text="`${opp.pipeline_name || '--'} · ${opp.stage_name || '--'}`"></td>
+                                    <td class="px-5 py-3 text-slate-300" x-text="opp.contact_name || opp.contact_email || opp.contact_phone || '--'"></td>
+                                    <td class="px-5 py-3 text-right text-emerald-300 font-mono" x-text="formatMoney(opp.monetary_value)"></td>
+                                    <td class="px-5 py-3 text-slate-200 capitalize" x-text="opp.status"></td>
+                                </tr>
+                            </template>
+                            <tr x-show="(megaReports.opportunities.data?.opportunities || []).length === 0">
+                                <td colspan="5" class="px-5 py-8 text-center text-slate-500">Sin oportunidades para el rango o plan actual.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div x-show="aiInsights.opportunities.content || aiInsights.opportunities.error" class="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4" style="display:none;">
+                <p class="text-xs uppercase tracking-widest text-cyan-300 mb-2">Narrativa de IA</p>
+                <div x-show="aiInsights.opportunities.error" class="text-rose-300 text-sm" x-text="aiInsights.opportunities.error" style="display:none;"></div>
+                <div x-show="aiInsights.opportunities.content" x-html="renderMarkdown(aiInsights.opportunities.content)" class="prose prose-invert prose-sm max-w-none" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Appointments -->
+        <div x-show="activeMegaTab === 'appointments'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Calendario &amp; citas</h3>
+                    <p class="text-sm text-slate-400">Citas agregadas desde <code>/calendars/events</code> para todos los calendarios del location.</p>
+                </div>
+                <button @click="loadMegaReport('appointments')" type="button" :disabled="megaReports.appointments.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="megaReports.appointments.loading ? 'fa-spinner fa-spin' : 'fa-rotate-right'"></i>
+                    Actualizar
+                </button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Total citas</p>
+                    <p class="text-xl font-bold text-white mt-1" x-text="(megaReports.appointments.data?.summary || {}).total || 0"></p>
+                </div>
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Show rate</p>
+                    <p class="text-xl font-bold text-emerald-300 mt-1" x-text="`${(megaReports.appointments.data?.summary || {}).show_rate_pct || 0}%`"></p>
+                </div>
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Canceladas</p>
+                    <p class="text-xl font-bold text-rose-300 mt-1" x-text="(megaReports.appointments.data?.summary || {}).cancelled || 0"></p>
+                </div>
+                <div class="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
+                    <p class="text-xs text-slate-400">Calendarios activos</p>
+                    <p class="text-xl font-bold text-cyan-300 mt-1" x-text="Object.keys((megaReports.appointments.data?.summary || {}).by_calendar || {}).length"></p>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-slate-700 overflow-hidden">
+                <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200">Próximas 30 citas</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-950/60 text-slate-400">
+                            <tr>
+                                <th class="px-5 py-3 text-left">Título</th>
+                                <th class="px-5 py-3 text-left">Calendario</th>
+                                <th class="px-5 py-3 text-left">Inicio</th>
+                                <th class="px-5 py-3 text-left">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            <template x-for="appt in (megaReports.appointments.data?.appointments || []).slice(0, 30)" :key="appt.id">
+                                <tr class="hover:bg-slate-800/50">
+                                    <td class="px-5 py-3 text-white" x-text="appt.title || '--'"></td>
+                                    <td class="px-5 py-3 text-slate-300" x-text="appt.calendar_name || '--'"></td>
+                                    <td class="px-5 py-3 text-slate-300" x-text="formatDate(appt.start_time)"></td>
+                                    <td class="px-5 py-3 text-slate-200 capitalize" x-text="appt.status || '--'"></td>
+                                </tr>
+                            </template>
+                            <tr x-show="(megaReports.appointments.data?.appointments || []).length === 0">
+                                <td colspan="4" class="px-5 py-8 text-center text-slate-500">Sin citas en el rango o el plan no incluye calendarios.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Forms -->
+        <div x-show="activeMegaTab === 'forms'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Forms &amp; encuestas</h3>
+                    <p class="text-sm text-slate-400">Submissions de formularios y encuestas del periodo.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="loadMegaReport('forms')" type="button" :disabled="megaReports.forms.loading"
+                        class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                        <i class="fas fa-file-lines mr-2"></i> Forms
+                    </button>
+                    <button @click="loadMegaReport('surveys')" type="button" :disabled="megaReports.surveys.loading"
+                        class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                        <i class="fas fa-clipboard-list mr-2"></i> Surveys
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200 flex items-center justify-between">
+                        <span>Formularios</span>
+                        <span class="text-xs text-slate-400"
+                            x-text="`${(megaReports.forms.data?.summary || {}).total_submissions || 0} envíos`"></span>
+                    </div>
+                    <div class="p-4 space-y-2">
+                        <template x-for="(count, name) in ((megaReports.forms.data?.summary || {}).by_form) || {}" :key="name">
+                            <div class="flex items-center justify-between text-sm py-1.5 border-b border-slate-800/60 last:border-0">
+                                <span class="text-slate-200" x-text="name"></span>
+                                <span class="text-cyan-300 font-mono" x-text="count"></span>
+                            </div>
+                        </template>
+                        <p x-show="!megaReports.forms.data?.summary?.total_submissions" class="text-xs text-slate-500 italic">Sin envíos.</p>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200 flex items-center justify-between">
+                        <span>Encuestas</span>
+                        <span class="text-xs text-slate-400"
+                            x-text="`${(megaReports.surveys.data?.summary || {}).total_submissions || 0} respuestas`"></span>
+                    </div>
+                    <div class="p-4 space-y-2">
+                        <template x-for="(count, name) in ((megaReports.surveys.data?.summary || {}).by_survey) || {}" :key="name">
+                            <div class="flex items-center justify-between text-sm py-1.5 border-b border-slate-800/60 last:border-0">
+                                <span class="text-slate-200" x-text="name"></span>
+                                <span class="text-cyan-300 font-mono" x-text="count"></span>
+                            </div>
+                        </template>
+                        <p x-show="!megaReports.surveys.data?.summary?.total_submissions" class="text-xs text-slate-500 italic">Sin respuestas.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Automations -->
+        <div x-show="activeMegaTab === 'automations'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Workflows &amp; campañas</h3>
+                    <p class="text-sm text-slate-400">Catálogo directo desde los endpoints <code>/workflows/</code> y <code>/campaigns/</code>.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="loadMegaReport('workflows')" type="button" :disabled="megaReports.workflows.loading"
+                        class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                        <i class="fas fa-diagram-project mr-2"></i> Workflows
+                    </button>
+                    <button @click="loadMegaReport('campaigns')" type="button" :disabled="megaReports.campaigns.loading"
+                        class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                        <i class="fas fa-bullhorn mr-2"></i> Campañas
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200 flex items-center justify-between">
+                        <span>Workflows</span>
+                        <span class="text-xs text-slate-400" x-text="`${(megaReports.workflows.data?.workflows || []).length} totales`"></span>
+                    </div>
+                    <div class="overflow-x-auto max-h-96">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-950/60 text-slate-400 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 text-left">Nombre</th>
+                                    <th class="px-4 py-2 text-left">Estado</th>
+                                    <th class="px-4 py-2 text-right">Versión</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                                <template x-for="wf in (megaReports.workflows.data?.workflows || [])" :key="wf.id">
+                                    <tr class="hover:bg-slate-800/50">
+                                        <td class="px-4 py-2 text-slate-200" x-text="wf.name"></td>
+                                        <td class="px-4 py-2 text-slate-300 capitalize" x-text="wf.status"></td>
+                                        <td class="px-4 py-2 text-right text-slate-300" x-text="wf.version"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200 flex items-center justify-between">
+                        <span>Campañas</span>
+                        <span class="text-xs text-slate-400" x-text="`${(megaReports.campaigns.data?.campaigns || []).length} totales`"></span>
+                    </div>
+                    <div class="overflow-x-auto max-h-96">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-950/60 text-slate-400 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 text-left">Nombre</th>
+                                    <th class="px-4 py-2 text-left">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                                <template x-for="camp in (megaReports.campaigns.data?.campaigns || [])" :key="camp.id">
+                                    <tr class="hover:bg-slate-800/50">
+                                        <td class="px-4 py-2 text-slate-200" x-text="camp.name"></td>
+                                        <td class="px-4 py-2 text-slate-300 capitalize" x-text="camp.status"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Contacts Growth -->
+        <div x-show="activeMegaTab === 'contacts'" class="p-6 space-y-6" style="display:none;">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Crecimiento de contactos</h3>
+                    <p class="text-sm text-slate-400">Contactos nuevos en el rango, por origen, usuario y tag.</p>
+                </div>
+                <button @click="loadMegaReport('contacts_growth')" type="button" :disabled="megaReports.contacts_growth.loading"
+                    class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold">
+                    <i class="fas mr-2" :class="megaReports.contacts_growth.loading ? 'fa-spinner fa-spin' : 'fa-users'"></i>
+                    Actualizar
+                </button>
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200">Por origen</div>
+                    <div class="p-4 space-y-1 max-h-80 overflow-y-auto">
+                        <template x-for="(count, source) in (megaReports.contacts_growth.data?.summary?.by_source) || {}" :key="source">
+                            <div class="flex items-center justify-between text-sm py-1 border-b border-slate-800/60 last:border-0">
+                                <span class="text-slate-200" x-text="source"></span>
+                                <span class="text-cyan-300 font-mono" x-text="count"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200">Por usuario asignado</div>
+                    <div class="p-4 space-y-1 max-h-80 overflow-y-auto">
+                        <template x-for="(count, user) in (megaReports.contacts_growth.data?.summary?.by_user) || {}" :key="user">
+                            <div class="flex items-center justify-between text-sm py-1 border-b border-slate-800/60 last:border-0">
+                                <span class="text-slate-200" x-text="user"></span>
+                                <span class="text-cyan-300 font-mono" x-text="count"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-slate-700 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-700 bg-slate-950/50 text-sm font-semibold text-slate-200">Top tags</div>
+                    <div class="p-4 space-y-1 max-h-80 overflow-y-auto">
+                        <template x-for="(count, tag) in (megaReports.contacts_growth.data?.summary?.by_tag) || {}" :key="tag">
+                            <div class="flex items-center justify-between text-sm py-1 border-b border-slate-800/60 last:border-0">
+                                <span class="text-slate-200" x-text="tag"></span>
+                                <span class="text-cyan-300 font-mono" x-text="count"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </section>
+
     <div x-show="apiHealthModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" style="display:none;">
         <div class="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-700 bg-slate-900 shadow-2xl">
             <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
@@ -1564,6 +2085,42 @@ require_once __DIR__ . '/header.php';
             activeDashboardRequest: null,
             loadingStage: '',
             loadingStageProgress: 0,
+
+            activeMegaTab: 'ai_executive',
+            megaTabs: [
+                { key: 'ai_executive',  label: 'Resumen IA',       icon: 'fa-wand-magic-sparkles' },
+                { key: 'ai_coaching',   label: 'Coaching IA',      icon: 'fa-headset' },
+                { key: 'ai_risk',       label: 'Riesgo & Oport.',  icon: 'fa-shield-halved' },
+                { key: 'ai_anomalies',  label: 'Anomalías',        icon: 'fa-triangle-exclamation' },
+                { key: 'ai_forecast',   label: 'Forecast',         icon: 'fa-arrow-trend-up' },
+                { key: 'ai_chat',       label: 'Pregunta natural', icon: 'fa-comments' },
+                { key: 'opportunities', label: 'Pipeline',         icon: 'fa-sack-dollar' },
+                { key: 'appointments',  label: 'Citas',            icon: 'fa-calendar-check' },
+                { key: 'forms',         label: 'Forms/Surveys',    icon: 'fa-clipboard-list' },
+                { key: 'automations',   label: 'Workflows/Campañas', icon: 'fa-diagram-project' },
+                { key: 'contacts',      label: 'Contactos',        icon: 'fa-users' }
+            ],
+            megaAi: { enabled: true, model: '', message: '' },
+            megaReports: {
+                opportunities: { loading: false, data: null, error: null },
+                appointments: { loading: false, data: null, error: null },
+                forms: { loading: false, data: null, error: null },
+                surveys: { loading: false, data: null, error: null },
+                workflows: { loading: false, data: null, error: null },
+                campaigns: { loading: false, data: null, error: null },
+                contacts_growth: { loading: false, data: null, error: null }
+            },
+            aiInsights: {
+                executive: { loading: false, content: '', error: null, meta: '' },
+                coaching: { loading: false, content: '', error: null, meta: '' },
+                risk: { loading: false, content: '', error: null, meta: '' },
+                anomalies: { loading: false, content: '', error: null, meta: '' },
+                forecast: { loading: false, content: '', error: null, meta: '' },
+                opportunities: { loading: false, content: '', error: null, meta: '' },
+                chat: { loading: false, content: '', error: null, meta: '' }
+            },
+            naturalQuestion: '',
+            naturalHistory: [],
 
             init() {
                 Chart.defaults.color = '#94a3b8';
@@ -2355,6 +2912,222 @@ require_once __DIR__ . '/header.php';
                 return Array.from({
                     length: size
                 }, (_, index) => palette[index % palette.length]);
+            },
+
+            setMegaTab(key) {
+                this.activeMegaTab = key;
+                if (key === 'opportunities' && !this.megaReports.opportunities.data) this.loadMegaReport('opportunities');
+                if (key === 'appointments'  && !this.megaReports.appointments.data)  this.loadMegaReport('appointments');
+                if (key === 'forms'         && !this.megaReports.forms.data)         { this.loadMegaReport('forms'); this.loadMegaReport('surveys'); }
+                if (key === 'automations'   && !this.megaReports.workflows.data)     { this.loadMegaReport('workflows'); this.loadMegaReport('campaigns'); }
+                if (key === 'contacts'      && !this.megaReports.contacts_growth.data) this.loadMegaReport('contacts_growth');
+            },
+
+            formatMoney(value) {
+                const n = Number(value || 0);
+                if (!Number.isFinite(n)) return '$0';
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+            },
+
+            renderMarkdown(text) {
+                if (!text) return '';
+                const escape = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const lines = String(text).split(/\r?\n/);
+                let html = '';
+                let listType = null;
+                let inTable = false;
+                let tableRows = [];
+
+                const flushList = () => {
+                    if (listType) { html += `</${listType}>`; listType = null; }
+                };
+                const flushTable = () => {
+                    if (inTable) {
+                        html += '<table class="min-w-full text-sm border border-slate-700 my-3"><tbody>';
+                        for (const row of tableRows) {
+                            const cells = row.split('|').slice(1, -1).map(c => c.trim());
+                            html += '<tr>' + cells.map(c => `<td class="border border-slate-700 px-3 py-2">${escape(c)}</td>`).join('') + '</tr>';
+                        }
+                        html += '</tbody></table>';
+                        tableRows = [];
+                        inTable = false;
+                    }
+                };
+
+                for (let raw of lines) {
+                    const line = raw.trimEnd();
+                    if (/^\|.*\|$/.test(line)) {
+                        if (!inTable) { flushList(); inTable = true; }
+                        if (/^\|[\s\-:|]+\|$/.test(line)) continue;
+                        tableRows.push(line);
+                        continue;
+                    } else if (inTable) {
+                        flushTable();
+                    }
+
+                    if (/^###\s+/.test(line)) { flushList(); html += `<h3 class="text-base font-semibold text-white mt-4">${escape(line.replace(/^###\s+/, ''))}</h3>`; continue; }
+                    if (/^##\s+/.test(line))  { flushList(); html += `<h2 class="text-lg font-semibold text-cyan-200 mt-4">${escape(line.replace(/^##\s+/, ''))}</h2>`; continue; }
+                    if (/^#\s+/.test(line))   { flushList(); html += `<h1 class="text-xl font-bold text-white mt-4">${escape(line.replace(/^#\s+/, ''))}</h1>`; continue; }
+                    if (/^[-*]\s+/.test(line)) {
+                        if (listType !== 'ul') { flushList(); html += '<ul class="list-disc ml-5 space-y-1 text-slate-200">'; listType = 'ul'; }
+                        html += `<li>${this.mdInline(line.replace(/^[-*]\s+/, ''))}</li>`;
+                        continue;
+                    }
+                    if (/^\d+\.\s+/.test(line)) {
+                        if (listType !== 'ol') { flushList(); html += '<ol class="list-decimal ml-5 space-y-1 text-slate-200">'; listType = 'ol'; }
+                        html += `<li>${this.mdInline(line.replace(/^\d+\.\s+/, ''))}</li>`;
+                        continue;
+                    }
+                    if (line.trim() === '') { flushList(); html += '<div class="h-2"></div>'; continue; }
+                    flushList();
+                    html += `<p class="text-slate-200 leading-relaxed">${this.mdInline(line)}</p>`;
+                }
+                flushList();
+                flushTable();
+                return html;
+            },
+
+            mdInline(s) {
+                const escape = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                let out = escape(s);
+                out = out.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>');
+                out = out.replace(/`([^`]+)`/g, '<code class="bg-slate-800 text-cyan-200 px-1 rounded">$1</code>');
+                out = out.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                return out;
+            },
+
+            buildMegaQuery() {
+                const qp = this.buildQueryParams();
+                return qp.toString();
+            },
+
+            async loadMegaReport(reportKey) {
+                const endpoints = {
+                    opportunities: 'opportunities_report',
+                    appointments: 'appointments_report',
+                    forms: 'forms_report',
+                    surveys: 'surveys_report',
+                    workflows: 'workflows_report',
+                    campaigns: 'campaigns_report',
+                    contacts_growth: 'contacts_growth'
+                };
+                const action = endpoints[reportKey];
+                if (!action) return;
+                const slot = this.megaReports[reportKey];
+                slot.loading = true;
+                slot.error = null;
+                try {
+                    const response = await fetch(`api/voice_ai_reports.php?action=${action}&${this.buildMegaQuery()}`, { headers: { Accept: 'application/json' } });
+                    const payload = await this.parseJsonResponse(response, 'No se pudo cargar el reporte.');
+                    if (!response.ok || !payload.success) throw new Error(payload.message || 'Error al cargar reporte.');
+                    slot.data = payload;
+                } catch (e) {
+                    slot.error = e.message || 'Error desconocido.';
+                } finally {
+                    slot.loading = false;
+                }
+            },
+
+            dashboardHasData() {
+                const d = this.dashboard || {};
+                const kpis = d.kpis || {};
+                for (const k in kpis) {
+                    if ((kpis[k]?.value || 0) > 0) return true;
+                }
+                if (Array.isArray(d.recent_interactions) && d.recent_interactions.length > 0) return true;
+                if (Array.isArray(d.call_dispositions) && d.call_dispositions.length > 0) return true;
+                if (Array.isArray(d.agents) && d.agents.length > 0) return true;
+                return false;
+            },
+
+            async runAiInsight(kind) {
+                const actionMap = {
+                    executive: 'ai_executive_summary',
+                    coaching: 'ai_agent_coaching',
+                    risk: 'ai_risk_opportunity',
+                    anomalies: 'ai_anomalies',
+                    forecast: 'ai_forecast',
+                    opportunities: 'ai_opportunities'
+                };
+                const action = actionMap[kind];
+                if (!action) return;
+                const slot = this.aiInsights[kind];
+                slot.loading = true;
+                slot.error = null;
+
+                // Prefetch dashboard if we don't have any data yet —
+                // saves the user from the "Sin datos disponibles" answer.
+                if (!this.dashboardHasData() && this.configStatus.is_ready) {
+                    slot.meta = 'Cargando dashboard primero...';
+                    try {
+                        await this.fetchDashboard();
+                    } catch (e) {
+                        // ignore, the AI call will still surface the issue
+                    }
+                }
+
+                try {
+                    const response = await fetch(`api/voice_ai_reports.php?action=${action}&${this.buildMegaQuery()}`, { headers: { Accept: 'application/json' } });
+                    const payload = await this.parseJsonResponse(response, 'No se pudo generar el análisis.');
+                    if (!payload.success) {
+                        // Treat the backend's "no data" response as a soft
+                        // error (message field), not a hard failure.
+                        throw new Error(payload.error || payload.message || 'Fallo al generar.');
+                    }
+                    slot.content = payload.content || '';
+                    slot.meta = `Modelo: ${payload.model || '?'} · ${payload.cached ? 'cache hit' : 'cache miss'} · ${payload.generated_at || ''}`;
+                } catch (e) {
+                    slot.error = e.message || 'Error desconocido.';
+                } finally {
+                    slot.loading = false;
+                }
+            },
+
+            async askNatural() {
+                if (!this.naturalQuestion.trim()) return;
+                const entry = { question: this.naturalQuestion.trim(), answer: '', error: null };
+                this.naturalHistory.unshift(entry);
+                const originalQ = entry.question;
+                this.naturalQuestion = '';
+                this.aiInsights.chat.loading = true;
+
+                if (!this.dashboardHasData() && this.configStatus.is_ready) {
+                    try { await this.fetchDashboard(); } catch (e) {}
+                }
+
+                try {
+                    const response = await fetch(`api/voice_ai_reports.php?action=ai_natural_query&${this.buildMegaQuery()}`, {
+                        method: 'POST',
+                        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question: originalQ })
+                    });
+                    const payload = await this.parseJsonResponse(response, 'No se pudo procesar la pregunta.');
+                    if (!response.ok || !payload.success) throw new Error(payload.error || payload.message || 'Error al consultar.');
+                    entry.answer = payload.content || '';
+                } catch (e) {
+                    entry.error = e.message || 'Error desconocido.';
+                } finally {
+                    this.aiInsights.chat.loading = false;
+                }
+            },
+
+            async fetchAiHealth() {
+                try {
+                    const response = await fetch('api/voice_ai_reports.php?action=ai_health', { headers: { Accept: 'application/json' } });
+                    const payload = await response.json();
+                    this.megaAi = {
+                        enabled: !!payload.enabled,
+                        model: payload.model || '',
+                        message: payload.message || ''
+                    };
+                    if (!payload.success) {
+                        this.error = `IA: ${payload.message || 'sin estado'}`;
+                    } else {
+                        this.notice = `IA lista — modelo ${payload.model || '(default)'}`;
+                    }
+                } catch (e) {
+                    this.error = 'No se pudo verificar la IA: ' + e.message;
+                }
             },
 
             renderCharts() {

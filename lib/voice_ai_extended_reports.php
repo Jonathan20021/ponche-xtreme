@@ -482,7 +482,7 @@ if (!function_exists('voiceAiFetchInteractions')) {
                 $response = voiceAiHttpRequest(
                     $config,
                     'GET',
-                    '/conversations/messages',
+                    '/conversations/messages/export',
                     voiceAiBuildMessageExportQuery($config, $filters, $channel, $cursor)
                 );
 

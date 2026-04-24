@@ -1244,6 +1244,49 @@ try {
                 }
                 break;
 
+            case 'update_voice_ai_claude_config':
+                $vaEnabled         = isset($_POST['voice_ai_claude_enabled']) ? 1 : 0;
+                $vaModel           = trim($_POST['voice_ai_claude_model'] ?? 'claude-sonnet-4-6');
+                $vaTemperature     = trim($_POST['voice_ai_claude_temperature'] ?? '0.4');
+                $vaMaxTokens       = max(200, (int) ($_POST['voice_ai_claude_max_tokens'] ?? 1400));
+                $vaCacheTtl        = max(0, (int) ($_POST['voice_ai_claude_cache_ttl'] ?? 900));
+
+                $vaPrompts = [
+                    'voice_ai_claude_executive_prompt' => trim($_POST['voice_ai_claude_executive_prompt'] ?? ''),
+                    'voice_ai_claude_coaching_prompt' => trim($_POST['voice_ai_claude_coaching_prompt'] ?? ''),
+                    'voice_ai_claude_risk_prompt' => trim($_POST['voice_ai_claude_risk_prompt'] ?? ''),
+                    'voice_ai_claude_anomaly_prompt' => trim($_POST['voice_ai_claude_anomaly_prompt'] ?? ''),
+                    'voice_ai_claude_forecast_prompt' => trim($_POST['voice_ai_claude_forecast_prompt'] ?? ''),
+                    'voice_ai_claude_natural_prompt' => trim($_POST['voice_ai_claude_natural_prompt'] ?? ''),
+                    'voice_ai_claude_call_prompt' => trim($_POST['voice_ai_claude_call_prompt'] ?? ''),
+                    'voice_ai_claude_opportunity_prompt' => trim($_POST['voice_ai_claude_opportunity_prompt'] ?? ''),
+                ];
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'voice_ai')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['voice_ai_claude_enabled',      (string) $vaEnabled]);
+                    $stmt->execute(['voice_ai_claude_model',        $vaModel]);
+                    $stmt->execute(['voice_ai_claude_temperature',  $vaTemperature]);
+                    $stmt->execute(['voice_ai_claude_max_tokens',   (string) $vaMaxTokens]);
+                    $stmt->execute(['voice_ai_claude_cache_ttl',    (string) $vaCacheTtl]);
+
+                    foreach ($vaPrompts as $key => $value) {
+                        if ($value !== '') {
+                            $stmt->execute([$key, $value]);
+                        }
+                    }
+
+                    $successMessages[] = 'Configuración de Voice AI · Claude actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de Voice AI · Claude: ' . $e->getMessage();
+                }
+                break;
+
             case 'send_password_reset':
                 // Process only if triggered via row-action helper
                 if (!isset($_POST['from_row_action'])) {
@@ -1701,6 +1744,34 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading global AI settings: ' . $e->getMessage());
+}
+
+// Get Voice AI + Claude configuration (insights on top of GHL reports)
+require_once __DIR__ . '/lib/voice_ai_ai_insights.php';
+$voiceAiClaude = array_merge(
+    [
+        'voice_ai_claude_enabled' => '1',
+        'voice_ai_claude_model' => 'claude-sonnet-4-6',
+        'voice_ai_claude_temperature' => '0.4',
+        'voice_ai_claude_max_tokens' => '1400',
+        'voice_ai_claude_cache_ttl' => '900',
+    ],
+    voiceAiInsightDefaults()
+);
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'voice_ai_claude_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $key = (string) ($row['setting_key'] ?? '');
+        $val = (string) ($row['setting_value'] ?? '');
+        if ($key === '') {
+            continue;
+        }
+        if ($val !== '' || !isset($voiceAiClaude[$key])) {
+            $voiceAiClaude[$key] = $val;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading voice_ai claude settings: ' . $e->getMessage());
 }
 
 // Get quality alerts report settings
@@ -2513,6 +2584,154 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 </ul>
             </div>
         </section>
+
+        <!-- Voice AI · Claude AI Insights Configuration -->
+        <section id="voice-ai-claude-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-brain text-cyan-400"></i>
+                        Voice AI · Claude AI (GHL Reports)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Controla la capa de IA que potencia el dashboard <code>voice_ai_reports.php</code>. Cada reporte
+                        (resumen ejecutivo, coaching, riesgo/churn, forecast, anomalías, pipeline, Q&amp;A natural,
+                        análisis de llamada individual) reutiliza estos prompts y parámetros. Si la IA está deshabilitada,
+                        el dashboard sigue funcionando sin narrativas generadas.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= ((string) ($voiceAiClaude['voice_ai_claude_enabled'] ?? '0')) === '1' ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= ((string) ($voiceAiClaude['voice_ai_claude_enabled'] ?? '0')) === '1' ? 'IA activa' : 'IA desactivada' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_voice_ai_claude_config">
+
+                <div class="space-y-3">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="voice_ai_claude_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= ((string) ($voiceAiClaude['voice_ai_claude_enabled'] ?? '0')) === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar capa de IA para los reportes de GHL</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Al desactivarla los paneles de IA se muestran en blanco y no hay
+                        consumo de Claude.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-microchip"></i> Modelo</label>
+                        <input type="text" name="voice_ai_claude_model"
+                            value="<?= htmlspecialchars((string) ($voiceAiClaude['voice_ai_claude_model'] ?? 'claude-sonnet-4-6')) ?>"
+                            class="input-control font-mono text-xs"
+                            placeholder="claude-sonnet-4-6">
+                        <p class="text-xs text-muted mt-1">Vacío = usa el modelo global.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-temperature-half"></i> Temperature</label>
+                        <input type="number" step="0.05" min="0" max="1" name="voice_ai_claude_temperature"
+                            value="<?= htmlspecialchars((string) ($voiceAiClaude['voice_ai_claude_temperature'] ?? '0.4')) ?>"
+                            class="input-control">
+                        <p class="text-xs text-muted mt-1">0.0 = determinista, 0.7+ = creativo.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-file-lines"></i> Max tokens</label>
+                        <input type="number" min="200" max="8192" name="voice_ai_claude_max_tokens"
+                            value="<?= htmlspecialchars((string) ($voiceAiClaude['voice_ai_claude_max_tokens'] ?? '1400')) ?>"
+                            class="input-control">
+                        <p class="text-xs text-muted mt-1">Tope de tokens de salida por llamada.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-stopwatch"></i> Cache TTL (seg)</label>
+                        <input type="number" min="0" max="86400" name="voice_ai_claude_cache_ttl"
+                            value="<?= htmlspecialchars((string) ($voiceAiClaude['voice_ai_claude_cache_ttl'] ?? '900')) ?>"
+                            class="input-control">
+                        <p class="text-xs text-muted mt-1">0 = sin caché. 900 = 15 min.</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <?php
+                    $voiceAiPrompts = [
+                        'voice_ai_claude_executive_prompt' => ['label' => 'Prompt · Resumen ejecutivo',       'icon' => 'fa-chart-line',    'rows' => 7,  'desc' => 'Se usa en /ai_executive_summary. Debe devolver secciones en Markdown.'],
+                        'voice_ai_claude_coaching_prompt'  => ['label' => 'Prompt · Coaching por agente',     'icon' => 'fa-headset',       'rows' => 7,  'desc' => 'Se usa en /ai_agent_coaching. Top + bottom agentes.'],
+                        'voice_ai_claude_risk_prompt'      => ['label' => 'Prompt · Riesgo churn & oportunidades', 'icon' => 'fa-shield-halved', 'rows' => 7, 'desc' => 'Se usa en /ai_risk_opportunity. Incluye señales de pipeline.'],
+                        'voice_ai_claude_anomaly_prompt'   => ['label' => 'Prompt · Detección de anomalías',  'icon' => 'fa-triangle-exclamation', 'rows' => 5, 'desc' => 'Se usa en /ai_anomalies. Debe ser factual, no alarmista.'],
+                        'voice_ai_claude_forecast_prompt'  => ['label' => 'Prompt · Forecast 7 días',         'icon' => 'fa-arrow-trend-up','rows' => 5,  'desc' => 'Se usa en /ai_forecast. Tabla + supuestos + staffing.'],
+                        'voice_ai_claude_natural_prompt'   => ['label' => 'Prompt · Pregunta natural',        'icon' => 'fa-comments',      'rows' => 4,  'desc' => 'Se usa en /ai_natural_query. El user_prompt incluye la pregunta del usuario.'],
+                        'voice_ai_claude_call_prompt'      => ['label' => 'Prompt · Análisis de llamada',     'icon' => 'fa-phone-volume',  'rows' => 7,  'desc' => 'Se usa en /ai_call_analysis. Recibe detalle + transcript resumido.'],
+                        'voice_ai_claude_opportunity_prompt' => ['label' => 'Prompt · Pipeline & oportunidades', 'icon' => 'fa-sack-dollar', 'rows' => 5, 'desc' => 'Se usa en /ai_opportunities. Top 5 + cuellos de botella.'],
+                    ];
+                    foreach ($voiceAiPrompts as $promptKey => $meta):
+                        $value = (string) ($voiceAiClaude[$promptKey] ?? '');
+                    ?>
+                    <details class="rounded-xl border border-slate-700/60 bg-slate-900/40">
+                        <summary class="cursor-pointer px-4 py-3 text-sm font-semibold flex items-center gap-2">
+                            <i class="fas <?= htmlspecialchars($meta['icon']) ?> text-cyan-300"></i>
+                            <?= htmlspecialchars($meta['label']) ?>
+                            <span class="ml-auto text-xs text-muted"><?= strlen($value) ?> caracteres</span>
+                        </summary>
+                        <div class="p-4 space-y-2">
+                            <p class="text-xs text-muted"><?= htmlspecialchars($meta['desc']) ?></p>
+                            <textarea name="<?= htmlspecialchars($promptKey) ?>" rows="<?= (int) $meta['rows'] ?>"
+                                class="input-control font-mono text-xs leading-relaxed"><?= htmlspecialchars($value) ?></textarea>
+                            <p class="text-xs text-muted">Deja vacío para conservar el prompt actual. Escribe algo para
+                                sobreescribirlo.</p>
+                        </div>
+                    </details>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200/20">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar configuración de IA
+                    </button>
+                    <button type="button" onclick="testVoiceAiClaude()" class="btn-secondary" id="testVoiceAiClaudeBtn">
+                        <i class="fas fa-plug"></i> Probar conexión
+                    </button>
+                </div>
+            </form>
+
+            <div class="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-4">
+                <h3 class="text-cyan-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-info-circle"></i> ¿Qué activa esta configuración?
+                </h3>
+                <ul class="text-sm text-cyan-200 space-y-1 list-disc list-inside">
+                    <li><strong>Resumen ejecutivo</strong> del periodo en la pestaña “IA” de voice_ai_reports.php.</li>
+                    <li><strong>Coaching</strong> para los 3 mejores y 3 más débiles agentes.</li>
+                    <li><strong>Riesgo de churn</strong> + oportunidades calientes en un solo panel.</li>
+                    <li><strong>Detección de anomalías</strong> en timeline y distribuciones.</li>
+                    <li><strong>Forecast</strong> a 7 días de volumen y recomendaciones de staffing.</li>
+                    <li><strong>Pregunta natural</strong> — chat Q&amp;A con Claude sobre los datos cargados.</li>
+                    <li><strong>Análisis de llamada individual</strong> — botón “IA” en cada detalle de llamada.</li>
+                    <li><strong>Pipeline</strong> — top oportunidades, cuellos de botella, win-rate.</li>
+                </ul>
+            </div>
+        </section>
+
+        <script>
+        async function testVoiceAiClaude() {
+            const btn = document.getElementById('testVoiceAiClaudeBtn');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Probando...';
+            try {
+                const resp = await fetch('api/voice_ai_reports.php?action=ai_health', { headers: { Accept: 'application/json' } });
+                const data = await resp.json();
+                if (data.success) {
+                    alert('OK: Claude respondió correctamente con el modelo ' + (data.model || '(default)'));
+                } else {
+                    alert('Falló: ' + (data.message || 'Sin detalle'));
+                }
+            } catch (e) {
+                alert('Error de red: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = original;
+            }
+        }
+        </script>
 
         <!-- Daily Absence Report Configuration -->
         <section id="absence-report-config" class="glass-card space-y-6">

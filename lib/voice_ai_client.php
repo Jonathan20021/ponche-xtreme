@@ -575,6 +575,90 @@ if (!function_exists('voiceAiHttpRequest')) {
     }
 }
 
+if (!function_exists('voiceAiHttpBatch')) {
+    /**
+     * Parallel GET batcher using curl_multi. Each request is described as:
+     *   ['key' => 'pipelines', 'path' => '/opportunities/pipelines', 'query' => [...]]
+     * Returns an associative array keyed by 'key' with the same shape as
+     * voiceAiHttpRequest(): success, status_code, data, message.
+     *
+     * This is the single biggest speed-up for the mega report — it turns
+     * 8-10 sequential HTTP calls into ~1 round-trip.
+     */
+    function voiceAiHttpBatch(array $config, array $requests, int $timeout = 45): array
+    {
+        if (empty($requests)) return [];
+
+        $multi = curl_multi_init();
+        $handles = [];
+        $baseUrl = rtrim($config['base_url'], '/');
+        $headers = [
+            'Authorization: Bearer ' . $config['api_key'],
+            'Version: ' . $config['version'],
+            'Accept: application/json',
+            'Content-Type: application/json',
+        ];
+
+        foreach ($requests as $req) {
+            if (!isset($req['key'], $req['path'])) continue;
+            $url = $baseUrl . '/' . ltrim((string) $req['path'], '/');
+            $query = isset($req['query']) && is_array($req['query']) ? $req['query'] : [];
+            if (!empty($query)) {
+                $url .= '?' . http_build_query($query);
+            }
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => strtoupper($req['method'] ?? 'GET'),
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => 10,
+            ]);
+            if (!empty($req['body'])) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, voiceAiJsonEncode($req['body']));
+            }
+            curl_multi_add_handle($multi, $ch);
+            $handles[$req['key']] = $ch;
+        }
+
+        $active = null;
+        do {
+            $status = curl_multi_exec($multi, $active);
+            if ($active) {
+                curl_multi_select($multi, 1.0);
+            }
+        } while ($active && $status === CURLM_OK);
+
+        $results = [];
+        foreach ($handles as $key => $ch) {
+            $body = curl_multi_getcontent($ch);
+            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $err = curl_error($ch);
+            curl_multi_remove_handle($multi, $ch);
+            curl_close($ch);
+
+            if ($body === false || $body === null) {
+                $results[$key] = ['success' => false, 'status_code' => $httpCode, 'message' => $err ?: 'network_error', 'data' => []];
+                continue;
+            }
+            $decoded = json_decode($body, true);
+            if ($httpCode < 200 || $httpCode >= 300) {
+                $message = 'HTTP ' . $httpCode;
+                if (is_array($decoded)) {
+                    $rawMsg = $decoded['message'] ?? ($decoded['error'] ?? $message);
+                    $message = is_array($rawMsg) ? implode('; ', array_map('strval', $rawMsg)) : (string) $rawMsg;
+                }
+                $results[$key] = ['success' => false, 'status_code' => $httpCode, 'message' => $message, 'data' => is_array($decoded) ? $decoded : []];
+            } else {
+                $results[$key] = ['success' => true, 'status_code' => $httpCode, 'data' => is_array($decoded) ? $decoded : []];
+            }
+        }
+        curl_multi_close($multi);
+
+        return $results;
+    }
+}
+
 if (!function_exists('voiceAiIsList')) {
     function voiceAiIsList($value): bool
     {
