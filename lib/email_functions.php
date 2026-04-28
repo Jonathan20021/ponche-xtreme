@@ -1661,3 +1661,252 @@ function sendDailyQualityAlertsReport($htmlContent, $recipients, $reportData) {
         ];
     }
 }
+
+/**
+ * Send daily Wasapi (WhatsApp) executive report via email.
+ *
+ * @param string $htmlContent Rendered HTML body.
+ * @param array  $recipients  List of email addresses.
+ * @param array  $reportData  Report data from generateDailyWasapiReport().
+ * @return array{success: bool, message: string}
+ */
+function sendDailyWasapiReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+        if (!empty($config['reply_to_email'])) {
+            $mail->addReplyTo($config['reply_to_email'], $config['reply_to_name'] ?? '');
+        }
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $dateFormatted = $reportData['date_formatted'] ?? ($reportData['date'] ?? date('Y-m-d'));
+        $totals  = $reportData['totals'] ?? [];
+        $byStat  = $totals['conversations_by_status'] ?? ['open' => 0, 'closed' => 0, 'pending' => 0, 'hold' => 0];
+
+        $mail->isHTML(true);
+        $mail->Subject = "Reporte Wasapi WhatsApp - $dateFormatted ("
+            . (int) ($totals['total_conversations'] ?? 0) . ' convs, '
+            . (int) $byStat['closed'] . ' cerradas, '
+            . number_format((float) ($totals['team_resolution_rate'] ?? 0), 1) . '%)';
+        $mail->Body    = $htmlContent;
+
+        $plain  = "REPORTE EJECUTIVO WASAPI (WHATSAPP)\n";
+        $plain .= "====================================\n\n";
+        $plain .= "Fecha: $dateFormatted\n\n";
+        $plain .= "Conversaciones totales:   " . (int) ($totals['total_conversations'] ?? 0) . "\n";
+        $plain .= "  - Abiertas:             " . (int) $byStat['open']    . "\n";
+        $plain .= "  - Cerradas:             " . (int) $byStat['closed']  . "\n";
+        $plain .= "  - Pendientes:           " . (int) $byStat['pending'] . "\n";
+        $plain .= "  - En espera (hold):     " . (int) $byStat['hold']    . "\n\n";
+        $plain .= "Tasa de resolución:       " . number_format((float) ($totals['team_resolution_rate'] ?? 0), 1) . "%\n";
+        $plain .= "1ª respuesta promedio:    " . ($totals['avg_first_response_formatted'] ?? '—') . "\n";
+        $plain .= "Resolución promedio:      " . ($totals['avg_resolution_formatted'] ?? '—') . "\n";
+        $plain .= "Escalaciones:             " . (int) ($totals['total_escalations'] ?? 0) . "\n\n";
+        $plain .= "Agentes en línea:         " . (int) ($totals['agents_online'] ?? 0) . " / " . (int) ($totals['agents_total'] ?? 0)
+               . " (" . number_format((float) ($totals['agents_availability_rate'] ?? 0), 1) . "%)\n";
+        $plain .= "Agentes con actividad:    " . (int) ($totals['agents_with_activity'] ?? 0) . "\n\n";
+
+        if (!empty($reportData['top_agents'])) {
+            $plain .= "TOP AGENTES (por cerradas):\n";
+            foreach (array_slice($reportData['top_agents'], 0, 10) as $a) {
+                $plain .= sprintf("  - %-30s %d cerradas · %.1f%% res · 1ª %s\n",
+                    (string) $a['name'],
+                    (int) $a['closed'],
+                    (float) $a['resolution_rate'],
+                    (string) $a['avg_first_response_formatted']);
+            }
+            $plain .= "\n";
+        }
+
+        if (!empty($reportData['alerts'])) {
+            $plain .= "ALERTAS:\n";
+            foreach ($reportData['alerts'] as $a) {
+                $plain .= "  ! " . (string) ($a['text'] ?? '') . "\n";
+            }
+            $plain .= "\n";
+        }
+
+        $plain .= "---\nSistema Ponche Xtreme - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Reporte enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}
+
+/**
+ * Send daily GHL / Voice AI executive report via email.
+ *
+ * @param string $htmlContent Rendered HTML body.
+ * @param array  $recipients  List of email addresses.
+ * @param array  $reportData  Report data from generateDailyGhlReport().
+ * @return array{success: bool, message: string}
+ */
+function sendDailyGhlReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+        if (!empty($config['reply_to_email'])) {
+            $mail->addReplyTo($config['reply_to_email'], $config['reply_to_name'] ?? '');
+        }
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $dateFormatted = $reportData['date_formatted'] ?? ($reportData['date'] ?? date('Y-m-d'));
+        $totals = $reportData['totals'] ?? [];
+
+        $mail->isHTML(true);
+        $integCountSubj = (int) ($reportData['integrations_count'] ?? 1);
+        $integLabelSubj = $integCountSubj === 1 ? '1 integración' : ($integCountSubj . ' integraciones');
+        $mail->Subject = "Reporte GHL Voice AI - $dateFormatted ($integLabelSubj, "
+            . (int) ($totals['total_calls'] ?? 0) . ' llamadas, '
+            . number_format((float) ($totals['recording_coverage_pct'] ?? 0), 1) . '% grab., '
+            . (int) ($totals['unique_agents'] ?? 0) . ' agentes)';
+        $mail->Body    = $htmlContent;
+
+        $plain  = "REPORTE EJECUTIVO GHL VOICE AI\n";
+        $plain .= "================================\n\n";
+        $plain .= "Fecha: $dateFormatted\n";
+        $plain .= "Integraciones procesadas: " . (int) ($reportData['integrations_count'] ?? 1) . "\n\n";
+
+        if (!empty($reportData['integrations_summary'])) {
+            $plain .= "DESGLOSE POR INTEGRACIÓN:\n";
+            foreach ($reportData['integrations_summary'] as $is) {
+                if (empty($is['available'])) {
+                    $plain .= sprintf("  - %-30s [ERROR] %s\n",
+                        (string) $is['integration'],
+                        (string) ($is['error'] ?? 'sin datos'));
+                    continue;
+                }
+                $plain .= sprintf("  - %-30s %d llamadas (in %d/out %d) · %d agentes · grab %.1f%% · sin disp %d (%.1f%%)\n",
+                    (string) $is['integration'],
+                    (int)    $is['total_calls'],
+                    (int)    $is['inbound_calls'],
+                    (int)    $is['outbound_calls'],
+                    (int)    $is['unique_agents'],
+                    (float)  $is['recording_coverage_pct'],
+                    (int)    $is['no_disposition'],
+                    (float)  $is['no_disposition_pct']);
+            }
+            $plain .= "\nTOTALES AGREGADOS:\n";
+        }
+
+        $plain .= "Llamadas totales:        " . (int) ($totals['total_calls'] ?? 0) . "\n";
+        $plain .= "  - Inbound:             " . (int) ($totals['inbound_calls'] ?? 0) . "\n";
+        $plain .= "  - Outbound:            " . (int) ($totals['outbound_calls'] ?? 0) . "\n\n";
+        $plain .= "Duración total:          " . ($totals['total_duration_formatted'] ?? '—') . "\n";
+        $plain .= "Duración promedio:       " . ($totals['avg_duration_formatted'] ?? '—') . "\n\n";
+        $plain .= "Cobertura de grabación:  " . number_format((float) ($totals['recording_coverage_pct'] ?? 0), 1) . "%\n";
+        $plain .= "Cobertura de transcrip.: " . number_format((float) ($totals['transcript_coverage_pct'] ?? 0), 1) . "%\n";
+        $plain .= "Cobertura de resumen:    " . number_format((float) ($totals['summary_coverage_pct'] ?? 0), 1) . "%\n\n";
+        $plain .= "Agentes únicos:          " . (int) ($totals['unique_agents'] ?? 0) . "\n";
+        $plain .= "Sin disposición:         " . (int) ($totals['no_disposition'] ?? 0) . "\n\n";
+
+        if (!empty($reportData['top_dispositions'])) {
+            $plain .= "TOP DISPOSICIONES:\n";
+            foreach (array_slice($reportData['top_dispositions'], 0, 10) as $d) {
+                $plain .= sprintf("  - %-30s %d (%.1f%%)\n",
+                    (string) $d['disposition'],
+                    (int) $d['total'],
+                    (float) ($d['pct'] ?? 0));
+            }
+            $plain .= "\n";
+        }
+
+        if (!empty($reportData['top_agents'])) {
+            $plain .= "TOP AGENTES (por volumen):\n";
+            foreach (array_slice($reportData['top_agents'], 0, 10) as $a) {
+                $plain .= sprintf("  - %-30s %d llamadas · %.1f%% disp · calidad %.1f\n",
+                    (string) $a['agent_name'],
+                    (int) $a['total_calls'],
+                    (float) ($a['handled_pct'] ?? 0),
+                    (float) ($a['quality_score'] ?? 0));
+            }
+            $plain .= "\n";
+        }
+
+        if (!empty($reportData['alerts'])) {
+            $plain .= "ALERTAS:\n";
+            foreach ($reportData['alerts'] as $a) {
+                $plain .= "  ! " . (string) ($a['text'] ?? '') . "\n";
+            }
+        }
+
+        $plain .= "\n---\nSistema Ponche Xtreme - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Reporte enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}

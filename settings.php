@@ -984,6 +984,106 @@ try {
                 }
                 break;
 
+            case 'update_wasapi_report_config':
+                $waRecipients         = trim($_POST['wasapi_report_recipients'] ?? '');
+                $waEnabled            = isset($_POST['wasapi_report_enabled']) ? 1 : 0;
+                $waTime               = trim($_POST['wasapi_report_time'] ?? '08:30');
+                $waDaysBack           = max(1, (int) ($_POST['wasapi_report_days_back'] ?? 1));
+                $waTopAgentsLimit     = max(3, (int) ($_POST['wasapi_report_top_agents_limit'] ?? 10));
+                $waPendingThreshold   = max(1, (int) ($_POST['wasapi_report_pending_alert_threshold'] ?? 15));
+                $waExcludeWeekends    = isset($_POST['wasapi_report_exclude_weekends']) ? 1 : 0;
+                $waApiToken           = trim($_POST['wasapi_api_token'] ?? '');
+                $waBaseUrl            = trim($_POST['wasapi_base_url'] ?? 'https://api.wasapi.io/prod/api/v1/');
+                $waClaudeEnabled      = isset($_POST['wasapi_report_claude_enabled']) ? 1 : 0;
+                $waClaudeModel        = trim($_POST['wasapi_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $waClaudeMaxTokens    = max(200, (int) ($_POST['wasapi_report_claude_max_tokens'] ?? 1200));
+                $waClaudePrompt       = trim($_POST['wasapi_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['wasapi_report_recipients',              $waRecipients]);
+                    $stmt->execute(['wasapi_report_enabled',                 (string) $waEnabled]);
+                    $stmt->execute(['wasapi_report_time',                    $waTime]);
+                    $stmt->execute(['wasapi_report_days_back',               (string) $waDaysBack]);
+                    $stmt->execute(['wasapi_report_top_agents_limit',        (string) $waTopAgentsLimit]);
+                    $stmt->execute(['wasapi_report_pending_alert_threshold', (string) $waPendingThreshold]);
+                    $stmt->execute(['wasapi_report_exclude_weekends',        (string) $waExcludeWeekends]);
+                    $stmt->execute(['wasapi_report_claude_enabled',          (string) $waClaudeEnabled]);
+                    $stmt->execute(['wasapi_report_claude_model',            $waClaudeModel]);
+                    $stmt->execute(['wasapi_report_claude_max_tokens',       (string) $waClaudeMaxTokens]);
+                    if ($waClaudePrompt !== '') {
+                        $stmt->execute(['wasapi_report_claude_prompt', $waClaudePrompt]);
+                    }
+                    if ($waApiToken !== '') {
+                        $stmt->execute(['wasapi_api_token', $waApiToken]);
+                    }
+                    if ($waBaseUrl !== '') {
+                        $stmt->execute(['wasapi_base_url', $waBaseUrl]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte Wasapi actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del reporte Wasapi.';
+                }
+                break;
+
+            case 'update_ghl_report_config':
+                $ghlRecipients         = trim($_POST['ghl_report_recipients'] ?? '');
+                $ghlEnabled            = isset($_POST['ghl_report_enabled']) ? 1 : 0;
+                $ghlTime               = trim($_POST['ghl_report_time'] ?? '08:45');
+                $ghlDaysBack           = max(1, (int) ($_POST['ghl_report_days_back'] ?? 1));
+                $ghlMaxPages           = max(1, min(50, (int) ($_POST['ghl_report_max_pages'] ?? 10)));
+                $ghlPageSize           = max(10, min(50, (int) ($_POST['ghl_report_page_size'] ?? 50)));
+                $ghlTopAgents          = max(3, (int) ($_POST['ghl_report_top_agents_limit'] ?? 10));
+                $ghlTopDispositions    = max(3, (int) ($_POST['ghl_report_top_dispositions_limit'] ?? 10));
+                $ghlQualityThreshold   = max(0, min(100, (int) ($_POST['ghl_report_quality_alert_threshold'] ?? 70)));
+                $ghlRecordingThreshold = max(0, min(100, (int) ($_POST['ghl_report_recording_alert_threshold'] ?? 90)));
+                $ghlNoDispoPct         = max(0, (float) ($_POST['ghl_report_no_disposition_alert_pct'] ?? 10));
+                $ghlExcludeWeekends    = isset($_POST['ghl_report_exclude_weekends']) ? 1 : 0;
+                $ghlIntegrationId      = trim($_POST['ghl_report_integration_id'] ?? '');
+                $ghlClaudeEnabled      = isset($_POST['ghl_report_claude_enabled']) ? 1 : 0;
+                $ghlClaudeModel        = trim($_POST['ghl_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $ghlClaudeMaxTokens    = max(200, (int) ($_POST['ghl_report_claude_max_tokens'] ?? 1400));
+                $ghlClaudePrompt       = trim($_POST['ghl_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['ghl_report_recipients',                  $ghlRecipients]);
+                    $stmt->execute(['ghl_report_enabled',                     (string) $ghlEnabled]);
+                    $stmt->execute(['ghl_report_time',                        $ghlTime]);
+                    $stmt->execute(['ghl_report_days_back',                   (string) $ghlDaysBack]);
+                    $stmt->execute(['ghl_report_max_pages',                   (string) $ghlMaxPages]);
+                    $stmt->execute(['ghl_report_page_size',                   (string) $ghlPageSize]);
+                    $stmt->execute(['ghl_report_top_agents_limit',            (string) $ghlTopAgents]);
+                    $stmt->execute(['ghl_report_top_dispositions_limit',      (string) $ghlTopDispositions]);
+                    $stmt->execute(['ghl_report_quality_alert_threshold',     (string) $ghlQualityThreshold]);
+                    $stmt->execute(['ghl_report_recording_alert_threshold',   (string) $ghlRecordingThreshold]);
+                    $stmt->execute(['ghl_report_no_disposition_alert_pct',    (string) $ghlNoDispoPct]);
+                    $stmt->execute(['ghl_report_exclude_weekends',            (string) $ghlExcludeWeekends]);
+                    $stmt->execute(['ghl_report_integration_id',              $ghlIntegrationId]);
+                    $stmt->execute(['ghl_report_claude_enabled',              (string) $ghlClaudeEnabled]);
+                    $stmt->execute(['ghl_report_claude_model',                $ghlClaudeModel]);
+                    $stmt->execute(['ghl_report_claude_max_tokens',           (string) $ghlClaudeMaxTokens]);
+                    if ($ghlClaudePrompt !== '') {
+                        $stmt->execute(['ghl_report_claude_prompt', $ghlClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte GHL Voice AI actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del reporte GHL Voice AI.';
+                }
+                break;
+
             case 'update_executive_dashboard_report_config':
                 $edRecipients       = trim($_POST['executive_dashboard_report_recipients'] ?? '');
                 $edEnabled          = isset($_POST['executive_dashboard_report_enabled']) ? 1 : 0;
@@ -1594,6 +1694,94 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading activity logs report settings: ' . $e->getMessage());
+}
+
+// Get Wasapi (WhatsApp) executive report settings
+$wasapiReport = [
+    'enabled'                  => false,
+    'time'                     => '08:30',
+    'recipients'               => '',
+    'days_back'                => 1,
+    'top_agents_limit'         => 10,
+    'pending_alert_threshold'  => 15,
+    'exclude_weekends'         => false,
+    'api_token'                => '',
+    'base_url'                 => 'https://api.wasapi.io/prod/api/v1/',
+    'claude_enabled'           => false,
+    'claude_model'             => 'claude-sonnet-4-6',
+    'claude_max_tokens'        => 1200,
+    'claude_prompt'            => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'wasapi_report_%' OR setting_key IN ('wasapi_api_token','wasapi_base_url')");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'wasapi_report_enabled':                  $wasapiReport['enabled']                  = $val === '1'; break;
+            case 'wasapi_report_time':                     $wasapiReport['time']                     = $val ?: '08:30'; break;
+            case 'wasapi_report_recipients':               $wasapiReport['recipients']               = $val; break;
+            case 'wasapi_report_days_back':                $wasapiReport['days_back']                = (int) ($val ?: 1); break;
+            case 'wasapi_report_top_agents_limit':         $wasapiReport['top_agents_limit']         = (int) ($val ?: 10); break;
+            case 'wasapi_report_pending_alert_threshold':  $wasapiReport['pending_alert_threshold']  = (int) ($val ?: 15); break;
+            case 'wasapi_report_exclude_weekends':         $wasapiReport['exclude_weekends']         = $val === '1'; break;
+            case 'wasapi_api_token':                       $wasapiReport['api_token']                = $val; break;
+            case 'wasapi_base_url':                        $wasapiReport['base_url']                 = $val ?: 'https://api.wasapi.io/prod/api/v1/'; break;
+            case 'wasapi_report_claude_enabled':           $wasapiReport['claude_enabled']           = $val === '1'; break;
+            case 'wasapi_report_claude_model':             $wasapiReport['claude_model']             = $val ?: 'claude-sonnet-4-6'; break;
+            case 'wasapi_report_claude_max_tokens':        $wasapiReport['claude_max_tokens']        = (int) ($val ?: 1200); break;
+            case 'wasapi_report_claude_prompt':            $wasapiReport['claude_prompt']            = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading wasapi report settings: ' . $e->getMessage());
+}
+
+// Get GHL Voice AI executive report settings
+$ghlReport = [
+    'enabled'                   => false,
+    'time'                      => '08:45',
+    'recipients'                => '',
+    'days_back'                 => 1,
+    'max_pages'                 => 10,
+    'page_size'                 => 50,
+    'top_agents_limit'          => 10,
+    'top_dispositions_limit'    => 10,
+    'quality_alert_threshold'   => 70,
+    'recording_alert_threshold' => 90,
+    'no_disposition_alert_pct'  => 10,
+    'exclude_weekends'          => false,
+    'integration_id'            => '',
+    'claude_enabled'            => false,
+    'claude_model'              => 'claude-sonnet-4-6',
+    'claude_max_tokens'         => 1400,
+    'claude_prompt'             => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'ghl_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'ghl_report_enabled':                   $ghlReport['enabled']                   = $val === '1'; break;
+            case 'ghl_report_time':                      $ghlReport['time']                      = $val ?: '08:45'; break;
+            case 'ghl_report_recipients':                $ghlReport['recipients']                = $val; break;
+            case 'ghl_report_days_back':                 $ghlReport['days_back']                 = (int) ($val ?: 1); break;
+            case 'ghl_report_max_pages':                 $ghlReport['max_pages']                 = (int) ($val ?: 10); break;
+            case 'ghl_report_page_size':                 $ghlReport['page_size']                 = (int) ($val ?: 50); break;
+            case 'ghl_report_top_agents_limit':          $ghlReport['top_agents_limit']          = (int) ($val ?: 10); break;
+            case 'ghl_report_top_dispositions_limit':    $ghlReport['top_dispositions_limit']    = (int) ($val ?: 10); break;
+            case 'ghl_report_quality_alert_threshold':   $ghlReport['quality_alert_threshold']   = (int) ($val ?: 70); break;
+            case 'ghl_report_recording_alert_threshold': $ghlReport['recording_alert_threshold'] = (int) ($val ?: 90); break;
+            case 'ghl_report_no_disposition_alert_pct':  $ghlReport['no_disposition_alert_pct']  = (float) ($val ?: 10); break;
+            case 'ghl_report_exclude_weekends':          $ghlReport['exclude_weekends']          = $val === '1'; break;
+            case 'ghl_report_integration_id':            $ghlReport['integration_id']            = $val; break;
+            case 'ghl_report_claude_enabled':            $ghlReport['claude_enabled']            = $val === '1'; break;
+            case 'ghl_report_claude_model':              $ghlReport['claude_model']              = $val ?: 'claude-sonnet-4-6'; break;
+            case 'ghl_report_claude_max_tokens':         $ghlReport['claude_max_tokens']         = (int) ($val ?: 1400); break;
+            case 'ghl_report_claude_prompt':             $ghlReport['claude_prompt']             = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading GHL report settings: ' . $e->getMessage());
 }
 
 // Get executive dashboard closing report settings
@@ -3490,6 +3678,405 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Daily Wasapi (WhatsApp) Executive Report Configuration -->
+        <section id="wasapi-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fab fa-whatsapp text-green-400"></i>
+                        Reporte Ejecutivo Wasapi (WhatsApp)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Reporte diario completo del canal WhatsApp en Wasapi: KPIs (conversaciones por estado,
+                        tasa de resolución, SLA P50/P90/P95), top agentes, agentes en línea, tendencia 14d,
+                        distribución por día de la semana, campañas activas y alertas de pendientes/hold.
+                        Pensado para gerencia de operaciones.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $wasapiReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $wasapiReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_wasapi_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="wasapi_report_enabled" value="1" class="w-5 h-5 accent-green-500"
+                            <?= $wasapiReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada mañana con los datos del día anterior.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="wasapi_report_time"
+                            value="<?= htmlspecialchars($wasapiReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Default 08:30.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-day"></i> Días hacia atrás</label>
+                        <input type="number" min="1" max="14" name="wasapi_report_days_back"
+                            value="<?= (int) $wasapiReport['days_back'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">1 = ayer.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-toggle-on"></i> Excluir fines de semana</label>
+                        <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
+                            <input type="checkbox" name="wasapi_report_exclude_weekends" value="1" class="w-5 h-5 accent-green-500"
+                                <?= $wasapiReport['exclude_weekends'] ? 'checked' : '' ?>>
+                            <span class="text-sm">No enviar sábados/domingos</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (gerencia + operaciones)</label>
+                    <textarea name="wasapi_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="ops@evallishbpo.com, gerencia@evallishbpo.com"><?= htmlspecialchars($wasapiReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <div class="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 space-y-4">
+                    <h3 class="text-slate-300 font-semibold flex items-center gap-2">
+                        <i class="fas fa-sliders-h"></i>
+                        Umbrales y filtros
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-friends"></i> Top N agentes</label>
+                            <input type="number" min="3" max="50" name="wasapi_report_top_agents_limit"
+                                value="<?= (int) $wasapiReport['top_agents_limit'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Cantidad de agentes en el ranking del día.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-bell"></i> Umbral alerta de pendientes</label>
+                            <input type="number" min="1" max="500" name="wasapi_report_pending_alert_threshold"
+                                value="<?= (int) $wasapiReport['pending_alert_threshold'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Si quedan ≥ X conversaciones pendientes/hold al cierre, se dispara alerta.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 space-y-4">
+                    <h3 class="text-blue-300 font-semibold flex items-center gap-2">
+                        <i class="fas fa-key"></i>
+                        Credenciales API de Wasapi
+                    </h3>
+                    <p class="text-xs text-blue-200">
+                        El token se usa también para los dashboards de <a href="wasapi_reports/" class="underline">/wasapi_reports/</a>.
+                        Puedes regenerarlo en tu cuenta de Wasapi.
+                    </p>
+                    <div>
+                        <label class="form-label"><i class="fas fa-shield-alt"></i> API Token (Bearer)</label>
+                        <input type="text" name="wasapi_api_token"
+                            value="<?= htmlspecialchars($wasapiReport['api_token']) ?>"
+                            class="input-control font-mono text-xs"
+                            placeholder="338529|...">
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-link"></i> URL base API</label>
+                        <input type="text" name="wasapi_base_url"
+                            value="<?= htmlspecialchars($wasapiReport['base_url']) ?>"
+                            class="input-control font-mono text-xs">
+                        <p class="text-xs text-muted mt-1">Default: https://api.wasapi.io/prod/api/v1/</p>
+                    </div>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Análisis ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="wasapi_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $wasapiReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza KPIs, top/bottom agentes, SLA, tendencia 14d y alertas; produce veredicto,
+                        lo que funcionó/preocupa y acciones priorizadas para hoy.
+                    </p>
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="wasapi_report_claude_model"
+                                value="<?= htmlspecialchars($wasapiReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="200" max="4096" name="wasapi_report_claude_max_tokens"
+                                value="<?= (int) $wasapiReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="wasapi_report_claude_prompt" rows="10" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($wasapiReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendWasapiReportPreview()" class="btn-secondary" id="sendWasapiPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendWasapiReportManually()" class="btn-secondary" id="sendWasapiReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">Para automatizar el envío matutino:</p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    30 8 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_wasapi_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    Trae datos en vivo desde la API de Wasapi y arma el reporte ejecutivo del día anterior.
+                </p>
+            </div>
+        </section>
+
+        <!-- Daily GHL Voice AI Executive Report Configuration -->
+        <section id="ghl-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-phone-volume text-indigo-400"></i>
+                        Reporte Ejecutivo GHL Voice AI
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Reporte diario completo del canal de voz en GoHighLevel: KPIs (llamadas in/out, duración,
+                        cobertura grabación/transcripción/resumen), top disposiciones, top agentes con score de
+                        calidad, agentes con problemas, distribución por canal y por duración, sentimiento y
+                        alertas. Pensado para gerencia de operaciones.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $ghlReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $ghlReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_ghl_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="ghl_report_enabled" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $ghlReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Requiere tener configurada la integración GHL/Voice AI.
+                        <a href="ghl_voice_ai_dashboard.php" class="underline text-indigo-400">Ir a configuración GHL</a>.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                        <input type="time" name="ghl_report_time"
+                            value="<?= htmlspecialchars($ghlReport['time']) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Default 08:45.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-day"></i> Días hacia atrás</label>
+                        <input type="number" min="1" max="14" name="ghl_report_days_back"
+                            value="<?= (int) $ghlReport['days_back'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">1 = ayer.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-toggle-on"></i> Excluir fines de semana</label>
+                        <label class="inline-flex items-center gap-2 mt-2 cursor-pointer">
+                            <input type="checkbox" name="ghl_report_exclude_weekends" value="1" class="w-5 h-5 accent-indigo-500"
+                                <?= $ghlReport['exclude_weekends'] ? 'checked' : '' ?>>
+                            <span class="text-sm">No enviar sábados/domingos</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios</label>
+                    <textarea name="ghl_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="ops@evallishbpo.com, gerencia@evallishbpo.com"><?= htmlspecialchars($ghlReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-id-card"></i> ID de integración GHL (opcional)</label>
+                    <input type="text" name="ghl_report_integration_id"
+                        value="<?= htmlspecialchars($ghlReport['integration_id']) ?>"
+                        class="input-control font-mono text-xs"
+                        placeholder="Vacío = todas las integraciones habilitadas">
+                    <p class="text-xs text-muted mt-1">
+                        <strong>Vacío (recomendado)</strong>: el reporte itera <strong>todas</strong> las integraciones GHL habilitadas
+                        en <a href="ghl_voice_ai_dashboard.php" class="underline">/ghl_voice_ai_dashboard.php</a> y entrega un reporte
+                        agregado con desglose por cuenta. Pon un ID específico solo si quieres limitar a una sola integración.
+                    </p>
+                </div>
+
+                <div class="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 space-y-4">
+                    <h3 class="text-slate-300 font-semibold flex items-center gap-2">
+                        <i class="fas fa-sliders-h"></i>
+                        Volumen de datos a traer (cuidado con timeouts)
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-layer-group"></i> Páginas máx (1-50)</label>
+                            <input type="number" min="1" max="50" name="ghl_report_max_pages"
+                                value="<?= (int) $ghlReport['max_pages'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Más páginas = más datos pero más lento. 10 suele bastar para 1 día.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-list-ol"></i> Tamaño de página (10-50)</label>
+                            <input type="number" min="10" max="50" name="ghl_report_page_size"
+                                value="<?= (int) $ghlReport['page_size'] ?>" class="input-control" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 space-y-4">
+                    <h3 class="text-slate-300 font-semibold flex items-center gap-2">
+                        <i class="fas fa-bullseye"></i>
+                        Tops y umbrales de alerta
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-friends"></i> Top N agentes</label>
+                            <input type="number" min="3" max="50" name="ghl_report_top_agents_limit"
+                                value="<?= (int) $ghlReport['top_agents_limit'] ?>" class="input-control" required>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-tags"></i> Top N disposiciones</label>
+                            <input type="number" min="3" max="30" name="ghl_report_top_dispositions_limit"
+                                value="<?= (int) $ghlReport['top_dispositions_limit'] ?>" class="input-control" required>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-star"></i> Umbral score de calidad agente (0-100)</label>
+                            <input type="number" min="0" max="100" name="ghl_report_quality_alert_threshold"
+                                value="<?= (int) $ghlReport['quality_alert_threshold'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Agentes con score por debajo aparecen en sección "atención requerida".</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-microphone"></i> Umbral cobertura grabación (%)</label>
+                            <input type="number" min="0" max="100" name="ghl_report_recording_alert_threshold"
+                                value="<?= (int) $ghlReport['recording_alert_threshold'] ?>" class="input-control" required>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-question-circle"></i> Umbral % sin disposición</label>
+                            <input type="number" min="0" max="100" step="0.1" name="ghl_report_no_disposition_alert_pct"
+                                value="<?= htmlspecialchars((string) $ghlReport['no_disposition_alert_pct']) ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Si % de llamadas sin disposición supera esto, se dispara alerta.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Análisis ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="ghl_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $ghlReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza disposiciones, calidad por agente, cobertura de grabación, sentimiento y
+                        distribución por duración; produce veredicto, qué funcionó/preocupa y acciones priorizadas.
+                    </p>
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="ghl_report_claude_model"
+                                value="<?= htmlspecialchars($ghlReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="200" max="4096" name="ghl_report_claude_max_tokens"
+                                value="<?= (int) $ghlReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="ghl_report_claude_prompt" rows="12" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($ghlReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendGhlReportPreview()" class="btn-secondary" id="sendGhlPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendGhlReportManually()" class="btn-secondary" id="sendGhlReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">Para automatizar el envío matutino:</p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    45 8 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_ghl_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    Trae datos en vivo desde la API de GHL Voice AI y arma el reporte ejecutivo del día anterior.
+                </p>
+            </div>
+        </section>
+
         <!-- Executive Dashboard Daily Closing Report Configuration -->
         <section id="executive-dashboard-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -5043,6 +5630,18 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#activity-logs-report-config']
             },
             {
+                key: 'wasapi_report',
+                label: 'Wasapi (WhatsApp)',
+                icon: 'fab fa-whatsapp',
+                selectors: ['#wasapi-report-config']
+            },
+            {
+                key: 'ghl_report',
+                label: 'GHL Voice AI',
+                icon: 'fas fa-phone-volume',
+                selectors: ['#ghl-report-config']
+            },
+            {
                 key: 'executive_dashboard_report',
                 label: 'Cierre Ejecutivo',
                 icon: 'fas fa-chart-line',
@@ -6423,6 +7022,167 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderActivityLogsResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderActivityLogsResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Wasapi Report handlers ----------
+
+    function renderWasapiResult(success, message, data) {
+        const host = document.getElementById('wasapi-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            const t = data.totals;
+            const byStat = t.conversations_by_status || {};
+            extra = `<p class="${subColor} text-sm mt-1">
+                Conversaciones: ${t.total_conversations} ·
+                Cerradas: ${byStat.closed || 0} ·
+                Pendientes: ${byStat.pending || 0} ·
+                Resolución: ${t.team_resolution_rate}% ·
+                Online: ${t.agents_online}/${t.agents_total}
+                ${data.ai_generated ? ' · 🤖 IA generada' : ''}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 12000);
+    }
+
+    async function sendWasapiReportManually() {
+        const btn = document.getElementById('sendWasapiReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_wasapi_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderWasapiResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderWasapiResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendWasapiReportPreview() {
+        const btn = document.getElementById('sendWasapiPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_wasapi_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderWasapiResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderWasapiResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- GHL Voice AI Report handlers ----------
+
+    function renderGhlResult(success, message, data) {
+        const host = document.getElementById('ghl-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            const t = data.totals;
+            const integLabel = data.integrations_count
+                ? `${data.integrations_count} integración(es)`
+                : '1 integración';
+            extra = `<p class="${subColor} text-sm mt-1">
+                ${integLabel} ·
+                Llamadas: ${t.total_calls} (in ${t.inbound_calls} / out ${t.outbound_calls}) ·
+                Grab: ${t.recording_coverage_pct}% ·
+                Trans: ${t.transcript_coverage_pct}% ·
+                Agentes: ${t.unique_agents} ·
+                Sin disp: ${t.no_disposition} (${t.no_disposition_pct}%)
+                ${data.ai_generated ? ' · 🤖 IA generada' : ''}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 12000);
+    }
+
+    async function sendGhlReportManually() {
+        const btn = document.getElementById('sendGhlReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Trayendo datos en vivo (puede tardar 30-60s)...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_ghl_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderGhlResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderGhlResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendGhlReportPreview() {
+        const btn = document.getElementById('sendGhlPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Trayendo datos en vivo (puede tardar 30-60s)...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_ghl_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderGhlResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderGhlResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;

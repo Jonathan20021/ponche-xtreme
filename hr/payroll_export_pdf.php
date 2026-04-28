@@ -33,15 +33,18 @@ while ($row = $ratesStmt->fetch(PDO::FETCH_ASSOC)) {
     $deductionRates[$row['code']] = $row;
 }
 
-// Get payroll records
+// Get payroll records (include user salary fields so we can show base hourly/fixed rates)
 $recordsStmt = $pdo->prepare("
-    SELECT pr.*, 
+    SELECT pr.*,
            e.first_name, e.last_name, e.employee_code, e.identification_number, e.position,
            d.name as department_name,
+           u.hourly_rate, u.monthly_salary, u.hourly_rate_dop, u.monthly_salary_dop,
+           u.daily_salary_usd, u.daily_salary_dop, u.preferred_currency, u.compensation_type, u.role,
            COALESCE(pmi.sales_incentive, 0) as sales_incentive,
            COALESCE(pmi.night_incentive, 0) as night_incentive
     FROM payroll_records pr
     JOIN employees e ON e.id = pr.employee_id
+    LEFT JOIN users u ON u.id = e.user_id
     LEFT JOIN departments d ON d.id = e.department_id
     LEFT JOIN payroll_manual_incentives pmi
         ON pmi.payroll_period_id = pr.payroll_period_id
@@ -51,6 +54,42 @@ $recordsStmt = $pdo->prepare("
 ");
 $recordsStmt->execute([$periodId]);
 $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Resolve effective compensation type and base rate (in DOP) for an employee row.
+$resolveBaseRate = function (array $r) use ($pdo) {
+    $hourlyRateUsd = (float)($r['hourly_rate'] ?? 0);
+    $hourlyRateDop = (float)($r['hourly_rate_dop'] ?? 0);
+    $monthlySalaryUsd = (float)($r['monthly_salary'] ?? 0);
+    $monthlySalaryDop = (float)($r['monthly_salary_dop'] ?? 0);
+    $dailySalaryUsd = (float)($r['daily_salary_usd'] ?? 0);
+    $dailySalaryDop = (float)($r['daily_salary_dop'] ?? 0);
+
+    $hourlyDop = $hourlyRateDop > 0
+        ? $hourlyRateDop
+        : ($hourlyRateUsd > 0 ? convertCurrency($pdo, $hourlyRateUsd, 'USD', 'DOP') : 0.0);
+    $monthlyDop = $monthlySalaryDop > 0
+        ? $monthlySalaryDop
+        : ($monthlySalaryUsd > 0 ? convertCurrency($pdo, $monthlySalaryUsd, 'USD', 'DOP') : 0.0);
+    $dailyDop = $dailySalaryDop > 0
+        ? $dailySalaryDop
+        : ($dailySalaryUsd > 0 ? convertCurrency($pdo, $dailySalaryUsd, 'USD', 'DOP') : 0.0);
+
+    $compType = strtolower(trim($r['compensation_type'] ?? 'hourly'));
+    $role = strtoupper(trim($r['role'] ?? ''));
+    if ($compType === '' || $compType === 'hourly') {
+        if ($role !== 'AGENT' && $monthlyDop > 0) {
+            $compType = 'fixed';
+        }
+    }
+
+    if ($compType === 'fixed') {
+        return ['label' => 'Fijo', 'rate' => $monthlyDop];
+    }
+    if ($compType === 'daily') {
+        return ['label' => 'Diario', 'rate' => $dailyDop];
+    }
+    return ['label' => 'Por Hora', 'rate' => $hourlyDop];
+};
 
 // Calculate totals
 $totals = [
@@ -218,6 +257,8 @@ ob_start();
                 <th>Código</th>
                 <th>Empleado</th>
                 <th>Cédula</th>
+                <th>Tipo Comp.</th>
+                <th class="text-right">Salario Base</th>
                 <th class="text-right">Inc. Ventas</th>
                 <th class="text-right">Inc. Nocturno</th>
                 <th class="text-right">Salario Bruto</th>
@@ -231,10 +272,13 @@ ob_start();
         </thead>
         <tbody>
             <?php foreach ($records as $record): ?>
+            <?php $base = $resolveBaseRate($record); ?>
             <tr>
                 <td><?= htmlspecialchars($record['employee_code']) ?></td>
                 <td><?= htmlspecialchars($record['first_name'] . ' ' . $record['last_name']) ?></td>
                 <td><?= htmlspecialchars($record['identification_number'] ?: 'N/A') ?></td>
+                <td><?= htmlspecialchars($base['label']) ?></td>
+                <td class="text-right"><?= formatDOP($base['rate']) ?></td>
                 <td class="text-right"><?= formatDOP($record['sales_incentive']) ?></td>
                 <td class="text-right"><?= formatDOP($record['night_incentive']) ?></td>
                 <td class="text-right"><?= formatDOP($record['gross_salary']) ?></td>
@@ -247,7 +291,7 @@ ob_start();
             </tr>
             <?php endforeach; ?>
             <tr class="totals-row">
-                <td colspan="3"><strong>TOTALES</strong></td>
+                <td colspan="5"><strong>TOTALES</strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['sales_incentive']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['night_incentive']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['gross']) ?></strong></td>
