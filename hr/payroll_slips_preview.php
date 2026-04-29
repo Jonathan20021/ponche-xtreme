@@ -249,7 +249,7 @@ function generatePayrollSlipPreview($data) {
                 <td style="padding: 6px; border-bottom: 1px solid #e5e7eb;">
                     ISR
                     <div style="font-size: 9px; color: #6b7280; margin-top: 1px;">
-                        <?php 
+                        <?php
                         $annualSalary = $data['gross_salary'] * 12;
                         if ($annualSalary <= 416220.00) {
                             echo "Exento";
@@ -268,6 +268,41 @@ function generatePayrollSlipPreview($data) {
                 </td>
             </tr>
             <?php endif; ?>
+            <?php
+            $coopAmt = (float)($data['cooperative_deduction'] ?? 0);
+            $addAmt = (float)($data['additional_deduction'] ?? 0);
+            $othersOnly = max(0, (float)($data['other_deductions'] ?? 0) - $coopAmt - $addAmt);
+            ?>
+            <?php if ($coopAmt > 0): ?>
+            <tr>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb;">Cooperativa</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #dc2626;">
+                    -<?= formatDOP($coopAmt) ?>
+                </td>
+            </tr>
+            <?php endif; ?>
+            <?php if ($addAmt > 0): ?>
+            <tr>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb;">Descuento</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #dc2626;">
+                    -<?= formatDOP($addAmt) ?>
+                </td>
+            </tr>
+            <?php endif; ?>
+            <?php if ($othersOnly > 0): ?>
+            <tr>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb;">Otras Deducciones</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #dc2626;">
+                    -<?= formatDOP($othersOnly) ?>
+                </td>
+            </tr>
+            <?php endif; ?>
+            <tr style="background: #fee2e2; font-weight: bold;">
+                <td style="padding: 8px;">TOTAL DEDUCCIONES</td>
+                <td style="padding: 8px; text-align: right; color: #dc2626;">
+                    -<?= formatDOP($data['total_deductions']) ?>
+                </td>
+            </tr>
             <tr style="background: #dbeafe; font-weight: bold; font-size: 13px;">
                 <td style="padding: 10px;">SALARIO NETO</td>
                 <td style="padding: 10px; text-align: right; color: #059669;">

@@ -41,7 +41,9 @@ $recordsStmt = $pdo->prepare("
            u.hourly_rate, u.monthly_salary, u.hourly_rate_dop, u.monthly_salary_dop,
            u.daily_salary_usd, u.daily_salary_dop, u.preferred_currency, u.compensation_type, u.role,
            COALESCE(pmi.sales_incentive, 0) as sales_incentive,
-           COALESCE(pmi.night_incentive, 0) as night_incentive
+           COALESCE(pmi.night_incentive, 0) as night_incentive,
+           COALESCE(pmi.cooperative_deduction, 0) as cooperative_deduction,
+           COALESCE(pmi.additional_deduction, 0) as additional_deduction
     FROM payroll_records pr
     JOIN employees e ON e.id = pr.employee_id
     LEFT JOIN users u ON u.id = e.user_id
@@ -99,7 +101,9 @@ $totals = [
     'afp_employee' => 0,
     'sfs_employee' => 0,
     'isr' => 0,
-    'other_deductions' => 0,
+    'cooperative' => 0,
+    'additional' => 0,
+    'others_only' => 0,
     'total_deductions' => 0,
     'afp_employer' => 0,
     'sfs_employer' => 0,
@@ -110,13 +114,20 @@ $totals = [
 ];
 
 foreach ($records as $record) {
+    // other_deductions includes cooperativa + descuento + custom; split for the report.
+    $coopAmt = (float)$record['cooperative_deduction'];
+    $addAmt = (float)$record['additional_deduction'];
+    $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt);
+
     $totals['sales_incentive'] += $record['sales_incentive'];
     $totals['night_incentive'] += $record['night_incentive'];
     $totals['gross'] += $record['gross_salary'];
     $totals['afp_employee'] += $record['afp_employee'];
     $totals['sfs_employee'] += $record['sfs_employee'];
     $totals['isr'] += $record['isr'];
-    $totals['other_deductions'] += $record['other_deductions'];
+    $totals['cooperative'] += $coopAmt;
+    $totals['additional'] += $addAmt;
+    $totals['others_only'] += $othersOnly;
     $totals['total_deductions'] += $record['total_deductions'];
     $totals['afp_employer'] += $record['afp_employer'];
     $totals['sfs_employer'] += $record['sfs_employer'];
@@ -265,14 +276,20 @@ ob_start();
                 <th class="text-right">AFP (<?= number_format($deductionRates['AFP']['employee_percentage'], 2) ?>%)</th>
                 <th class="text-right">SFS (<?= number_format($deductionRates['SFS']['employee_percentage'], 2) ?>%)</th>
                 <th class="text-right">ISR</th>
+                <th class="text-right">Cooperativa</th>
+                <th class="text-right">Descuento</th>
                 <th class="text-right">Otros</th>
                 <th class="text-right">Total Desc.</th>
                 <th class="text-right">Salario Neto</th>
             </tr>
         </thead>
         <tbody>
-            <?php foreach ($records as $record): ?>
-            <?php $base = $resolveBaseRate($record); ?>
+            <?php foreach ($records as $record):
+                $base = $resolveBaseRate($record);
+                $coopAmt = (float)$record['cooperative_deduction'];
+                $addAmt = (float)$record['additional_deduction'];
+                $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt);
+            ?>
             <tr>
                 <td><?= htmlspecialchars($record['employee_code']) ?></td>
                 <td><?= htmlspecialchars($record['first_name'] . ' ' . $record['last_name']) ?></td>
@@ -285,7 +302,9 @@ ob_start();
                 <td class="text-right"><?= formatDOP($record['afp_employee']) ?></td>
                 <td class="text-right"><?= formatDOP($record['sfs_employee']) ?></td>
                 <td class="text-right"><?= formatDOP($record['isr']) ?></td>
-                <td class="text-right"><?= formatDOP($record['other_deductions']) ?></td>
+                <td class="text-right"><?= formatDOP($coopAmt) ?></td>
+                <td class="text-right"><?= formatDOP($addAmt) ?></td>
+                <td class="text-right"><?= formatDOP($othersOnly) ?></td>
                 <td class="text-right"><?= formatDOP($record['total_deductions']) ?></td>
                 <td class="text-right"><strong><?= formatDOP($record['net_salary']) ?></strong></td>
             </tr>
@@ -298,7 +317,9 @@ ob_start();
                 <td class="text-right"><strong><?= formatDOP($totals['afp_employee']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['sfs_employee']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['isr']) ?></strong></td>
-                <td class="text-right"><strong><?= formatDOP($totals['other_deductions']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['cooperative']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['additional']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['others_only']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['total_deductions']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['net']) ?></strong></td>
             </tr>

@@ -193,6 +193,7 @@ function getEmployeePayrollData(PDO $pdo, int $periodId, int $employeeId): ?arra
                COALESCE(pmi.sales_incentive, 0) as sales_incentive,
                COALESCE(pmi.night_incentive, 0) as night_incentive,
                COALESCE(pmi.cooperative_deduction, 0) as cooperative_deduction,
+               COALESCE(pmi.additional_deduction, 0) as additional_deduction,
                pmi.notes as incentive_notes
         FROM payroll_records pr
         JOIN payroll_periods pp ON pp.id = pr.payroll_period_id
@@ -484,16 +485,29 @@ function generatePayrollSlipHTML(array $data): string {
                         <td class="amount negative">-<?= formatDOP($data['isr']) ?></td>
                     </tr>
                     <?php endif; ?>
-                    <?php if (($data['cooperative_deduction'] ?? 0) > 0): ?>
+                    <?php
+                    // other_deductions incluye cooperativa + descuento adicional + custom.
+                    // Separamos los que se capturan manualmente para no contarlos dos veces.
+                    $coopAmt = (float)($data['cooperative_deduction'] ?? 0);
+                    $addAmt = (float)($data['additional_deduction'] ?? 0);
+                    $othersOnly = max(0, (float)$data['other_deductions'] - $coopAmt - $addAmt);
+                    ?>
+                    <?php if ($coopAmt > 0): ?>
                     <tr>
                         <td>Cooperativa</td>
-                        <td class="amount negative">-<?= formatDOP($data['cooperative_deduction']) ?></td>
+                        <td class="amount negative">-<?= formatDOP($coopAmt) ?></td>
                     </tr>
                     <?php endif; ?>
-                    <?php if ($data['other_deductions'] > 0): ?>
+                    <?php if ($addAmt > 0): ?>
+                    <tr>
+                        <td>Descuento</td>
+                        <td class="amount negative">-<?= formatDOP($addAmt) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php if ($othersOnly > 0): ?>
                     <tr>
                         <td>Otras Deducciones</td>
-                        <td class="amount negative">-<?= formatDOP($data['other_deductions']) ?></td>
+                        <td class="amount negative">-<?= formatDOP($othersOnly) ?></td>
                     </tr>
                     <?php endif; ?>
                     <tr style="background: #fee2e2; font-weight: bold;">
@@ -603,11 +617,17 @@ function generatePayrollSlipPlainText(array $data): string {
             $text .= "RD$ 79,775 + 25% sobre excedente de RD$ 867,123\n";
         }
     }
-    if (($data['cooperative_deduction'] ?? 0) > 0) {
-        $text .= "Cooperativa: -" . formatDOP($data['cooperative_deduction']) . "\n";
+    $coopAmt = (float)($data['cooperative_deduction'] ?? 0);
+    $addAmt = (float)($data['additional_deduction'] ?? 0);
+    $othersOnly = max(0, (float)$data['other_deductions'] - $coopAmt - $addAmt);
+    if ($coopAmt > 0) {
+        $text .= "Cooperativa: -" . formatDOP($coopAmt) . "\n";
     }
-    if ($data['other_deductions'] > 0) {
-        $text .= "Otras Deducciones: -" . formatDOP($data['other_deductions']) . "\n";
+    if ($addAmt > 0) {
+        $text .= "Descuento: -" . formatDOP($addAmt) . "\n";
+    }
+    if ($othersOnly > 0) {
+        $text .= "Otras Deducciones: -" . formatDOP($othersOnly) . "\n";
     }
 
     $text .= "TOTAL DEDUCCIONES: -" . formatDOP($data['total_deductions']) . "\n\n";

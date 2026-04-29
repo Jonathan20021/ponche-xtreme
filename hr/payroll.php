@@ -177,18 +177,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $manualRegularHours = max(0, round((float) ($manualInput['manual_regular_hours'] ?? 0), 2));
             $manualOvertimeHours = max(0, round((float) ($manualInput['manual_overtime_hours'] ?? 0), 2));
 
-            // "Corregir Base" only overrides ponche hours when at least one manual value is > 0.
-            // If both are 0, treat as a no-op (user likely toggled the checkbox while editing
-            // an unrelated field like Cooperativa) and keep the real punched hours intact.
-            $hasManualOverride = !empty($manualInput['use_manual_hours'])
-                && ($manualRegularHours > 0 || $manualOvertimeHours > 0);
-
-            if ($hasManualOverride) {
+            // Manual hours ONLY apply when "Corregir Base" is checked AND at least one
+            // value is > 0. Otherwise the punched hours are authoritative — never sum
+            // (summing was error-prone and caused doubled hours on every recalculation).
+            if (!empty($manualInput['use_manual_hours'])
+                && ($manualRegularHours > 0 || $manualOvertimeHours > 0)) {
                 $totalRegularHours = $manualRegularHours;
                 $totalOvertimeHours = $manualOvertimeHours;
-            } else {
-                $totalRegularHours += $manualRegularHours;
-                $totalOvertimeHours += $manualOvertimeHours;
             }
 
             $daysWorked = (int) ceil(max($totalRegularHours + $totalOvertimeHours, 0) / max($scheduledHours, 0.01));
@@ -632,7 +627,7 @@ if ($selectedPeriodId) {
                             <i class="fas fa-moon text-amber-400 mr-2"></i>
                             Ajustes Manuales por Empleado
                         </h2>
-                        <p class="text-sm text-slate-400">Las horas de ponche siguen siendo la base. Las horas manuales se suman por defecto; si marcas la casilla, corrigen el total calculado para ese empleado.</p>
+                        <p class="text-sm text-slate-400">Las horas reales del ponche son la base. Solo si marcas <strong>"Corregir Base"</strong> y escribes valores, las horas manuales <strong>reemplazan</strong> el cálculo del ponche para ese empleado. Si la casilla está apagada, el valor escrito se ignora.</p>
                     </div>
                     <div class="text-sm text-slate-400">
                         Estado del periodo: <span class="font-semibold text-slate-200"><?= htmlspecialchars($selectedPeriod['status']) ?></span>
@@ -674,16 +669,12 @@ if ($selectedPeriodId) {
                                             'cooperative_deduction' => 0,
                                             'additional_deduction' => 0,
                                         ];
-                                        // Pre-fill manual-hour inputs with the actual punched hours
-                                        // when the override is off, so the user has a real reference.
+                                        // Inputs always show the stored manual override value (or 0 if none).
+                                        // Pre-filling with punched hours caused doubled-hours bugs because old
+                                        // calculate logic summed the input into the punch total.
                                         $punchHours = $payrollHoursMap[(int)$agent['id']] ?? ['regular_hours' => 0.0, 'overtime_hours' => 0.0];
-                                        $useManualHoursActive = !empty($agentIncentive['use_manual_hours']);
-                                        $regularDisplay = $useManualHoursActive
-                                            ? (float)$agentIncentive['manual_regular_hours']
-                                            : $punchHours['regular_hours'];
-                                        $overtimeDisplay = $useManualHoursActive
-                                            ? (float)$agentIncentive['manual_overtime_hours']
-                                            : $punchHours['overtime_hours'];
+                                        $regularDisplay = (float)$agentIncentive['manual_regular_hours'];
+                                        $overtimeDisplay = (float)$agentIncentive['manual_overtime_hours'];
                                     ?>
                                         <tr class="border-b border-slate-800 hover:bg-slate-800/40">
                                             <td class="py-2 px-2">
