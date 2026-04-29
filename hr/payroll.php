@@ -202,6 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 'commissions' => (float)($manualIncentivesMap[$employeeId]['sales_incentive'] ?? 0),
                 'other_income' => 0,
                 'cooperative_deduction' => (float)($manualIncentivesMap[$employeeId]['cooperative_deduction'] ?? 0),
+                'additional_deduction' => (float)($manualIncentivesMap[$employeeId]['additional_deduction'] ?? 0),
             ];
             
             $payrollData = calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData);
@@ -305,9 +306,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
             $upsertStmt = $pdo->prepare("
                 INSERT INTO payroll_manual_incentives (
                     payroll_period_id, employee_id, sales_incentive, night_incentive,
-                    use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction
+                    use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     sales_incentive = VALUES(sales_incentive),
                     night_incentive = VALUES(night_incentive),
@@ -315,7 +316,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                     manual_regular_hours = VALUES(manual_regular_hours),
                     manual_overtime_hours = VALUES(manual_overtime_hours),
                     notes = VALUES(notes),
-                    cooperative_deduction = VALUES(cooperative_deduction)
+                    cooperative_deduction = VALUES(cooperative_deduction),
+                    additional_deduction = VALUES(additional_deduction)
             ");
 
             foreach ($rows as $employeeId => $values) {
@@ -337,8 +339,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                 $notes = trim((string)($values['notes'] ?? ''));
                 $notes = $notes !== '' ? mb_substr($notes, 0, 255) : null;
                 $cooperative = isset($values['cooperative']) ? round(max((float)$values['cooperative'], 0), 2) : 0.00;
+                $additional = isset($values['additional']) ? round(max((float)$values['additional'], 0), 2) : 0.00;
 
-                if ($sales == 0.0 && $night == 0.0 && $useManualHours === 0 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0 && $notes === null && $cooperative == 0.0) {
+                if ($sales == 0.0 && $night == 0.0 && $useManualHours === 0 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0 && $notes === null && $cooperative == 0.0 && $additional == 0.0) {
                     $deleteStmt->execute([$periodId, $employeeId]);
                     continue;
                 }
@@ -352,7 +355,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                     $manualRegularHours,
                     $manualOvertimeHours,
                     $notes,
-                    $cooperative
+                    $cooperative,
+                    $additional
                 ]);
             }
 
@@ -429,7 +433,8 @@ if ($selectedPeriodId) {
                    COALESCE(pmi.use_manual_hours, 0) as use_manual_hours,
                    COALESCE(pmi.manual_regular_hours, 0) as manual_regular_hours,
                    COALESCE(pmi.manual_overtime_hours, 0) as manual_overtime_hours,
-                   COALESCE(pmi.cooperative_deduction, 0) as cooperative_deduction
+                   COALESCE(pmi.cooperative_deduction, 0) as cooperative_deduction,
+                   COALESCE(pmi.additional_deduction, 0) as additional_deduction
             FROM payroll_records pr
             JOIN employees e ON e.id = pr.employee_id
             LEFT JOIN departments d ON d.id = e.department_id
@@ -653,6 +658,7 @@ if ($selectedPeriodId) {
                                         <th class="text-right py-2 px-2">Incentivo Ventas</th>
                                         <th class="text-right py-2 px-2">Incentivo Nocturno</th>
                                         <th class="text-right py-2 px-2">Cooperativa</th>
+                                        <th class="text-right py-2 px-2">Descuento</th>
                                         <th class="text-left py-2 px-2">Nota</th>
                                     </tr>
                                 </thead>
@@ -666,6 +672,7 @@ if ($selectedPeriodId) {
                                             'manual_overtime_hours' => 0,
                                             'notes' => '',
                                             'cooperative_deduction' => 0,
+                                            'additional_deduction' => 0,
                                         ];
                                         // Pre-fill manual-hour inputs with the actual punched hours
                                         // when the override is off, so the user has a real reference.
@@ -748,6 +755,17 @@ if ($selectedPeriodId) {
                                             </td>
                                             <td class="py-2 px-2">
                                                 <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    name="manual_incentives[<?= (int)$agent['id'] ?>][additional]"
+                                                    value="<?= htmlspecialchars(number_format((float)($agentIncentive['additional_deduction'] ?? 0), 2, '.', '')) ?>"
+                                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                                    placeholder="0.00"
+                                                >
+                                            </td>
+                                            <td class="py-2 px-2">
+                                                <input
                                                     type="text"
                                                     maxlength="255"
                                                     name="manual_incentives[<?= (int)$agent['id'] ?>][notes]"
@@ -820,15 +838,22 @@ if ($selectedPeriodId) {
                                 <th class="text-right py-2 px-2">SFS (<?= number_format($deductionRates['SFS'], 2) ?>%)</th>
                                 <th class="text-right py-2 px-2">ISR</th>
                                 <th class="text-right py-2 px-2">Cooperativa</th>
+                                <th class="text-right py-2 px-2">Descuento</th>
                                 <th class="text-right py-2 px-2">Otros Desc.</th>
                                 <th class="text-right py-2 px-2">Total Desc.</th>
                                 <th class="text-right py-2 px-2">Salario Neto</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php 
-                            $totals = ['hours' => 0, 'overtime_hours' => 0, 'sales' => 0, 'night' => 0, 'gross' => 0, 'afp' => 0, 'sfs' => 0, 'isr' => 0, 'cooperative' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0];
+                            <?php
+                            $totals = ['hours' => 0, 'overtime_hours' => 0, 'sales' => 0, 'night' => 0, 'gross' => 0, 'afp' => 0, 'sfs' => 0, 'isr' => 0, 'cooperative' => 0, 'additional' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0];
                             foreach ($payrollRecords as $record):
+                                // pr.other_deductions includes per-employee custom deductions + cooperativa + descuento.
+                                // Subtract the manually-entered ones so "Otros Desc." reflects only the rest.
+                                $coopAmt = (float)$record['cooperative_deduction'];
+                                $addAmt = (float)$record['additional_deduction'];
+                                $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt);
+
                                 $totals['hours'] += $record['total_hours'];
                                 $totals['overtime_hours'] += $record['overtime_hours'];
                                 $totals['sales'] += $record['sales_incentive'];
@@ -837,8 +862,9 @@ if ($selectedPeriodId) {
                                 $totals['afp'] += $record['afp_employee'];
                                 $totals['sfs'] += $record['sfs_employee'];
                                 $totals['isr'] += $record['isr'];
-                                $totals['cooperative'] += $record['cooperative_deduction'];
-                                $totals['other'] += $record['other_deductions'];
+                                $totals['cooperative'] += $coopAmt;
+                                $totals['additional'] += $addAmt;
+                                $totals['other'] += $othersOnly;
                                 $totals['deductions'] += $record['total_deductions'];
                                 $totals['net'] += $record['net_salary'];
                             ?>
@@ -872,8 +898,9 @@ if ($selectedPeriodId) {
                                     <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($record['afp_employee']) ?></td>
                                     <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($record['sfs_employee']) ?></td>
                                     <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($record['isr']) ?></td>
-                                    <td class="py-2 px-2 text-right text-red-400"><?= $record['cooperative_deduction'] > 0 ? formatDOP($record['cooperative_deduction']) : '-' ?></td>
-                                    <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($record['other_deductions']) ?></td>
+                                    <td class="py-2 px-2 text-right text-red-400"><?= $coopAmt > 0 ? formatDOP($coopAmt) : '-' ?></td>
+                                    <td class="py-2 px-2 text-right text-red-400"><?= $addAmt > 0 ? formatDOP($addAmt) : '-' ?></td>
+                                    <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($othersOnly) ?></td>
                                     <td class="py-2 px-2 text-right text-red-500 font-semibold"><?= formatDOP($record['total_deductions']) ?></td>
                                     <td class="py-2 px-2 text-right text-green-400 font-bold"><?= formatDOP($record['net_salary']) ?></td>
                                 </tr>
@@ -890,6 +917,7 @@ if ($selectedPeriodId) {
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['sfs']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['isr']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['cooperative']) ?></td>
+                                <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['additional']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['other']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-500"><?= formatDOP($totals['deductions']) ?></td>
                                 <td class="py-3 px-2 text-right text-green-400"><?= formatDOP($totals['net']) ?></td>

@@ -223,6 +223,9 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
     if (!in_array('cooperative_deduction', $columns, true)) {
         $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN cooperative_deduction DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER notes");
     }
+    if (!in_array('additional_deduction', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN additional_deduction DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER cooperative_deduction");
+    }
 
     $ensured = true;
 }
@@ -260,7 +263,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
     ensurePayrollManualIncentivesTable($pdo);
 
     $stmt = $pdo->prepare("
-        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction
+        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction
         FROM payroll_manual_incentives
         WHERE payroll_period_id = ?
     ");
@@ -276,6 +279,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
             'manual_overtime_hours' => (float) ($row['manual_overtime_hours'] ?? 0),
             'notes' => $row['notes'] ?? null,
             'cooperative_deduction' => (float) ($row['cooperative_deduction'] ?? 0),
+            'additional_deduction' => (float) ($row['additional_deduction'] ?? 0),
         ];
     }
 
@@ -428,6 +432,13 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     if ($cooperativeDeduction > 0) {
         $deductions['custom_deductions'] = round($deductions['custom_deductions'] + $cooperativeDeduction, 2);
         $deductions['total_deductions'] = round($deductions['total_deductions'] + $cooperativeDeduction, 2);
+    }
+
+    // Aplicar descuento adicional libre (monto fijo manual)
+    $additionalDeduction = round((float)($hoursData['additional_deduction'] ?? 0), 2);
+    if ($additionalDeduction > 0) {
+        $deductions['custom_deductions'] = round($deductions['custom_deductions'] + $additionalDeduction, 2);
+        $deductions['total_deductions'] = round($deductions['total_deductions'] + $additionalDeduction, 2);
     }
 
     // Calcular aportes empleador
