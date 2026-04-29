@@ -177,7 +177,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $manualRegularHours = max(0, round((float) ($manualInput['manual_regular_hours'] ?? 0), 2));
             $manualOvertimeHours = max(0, round((float) ($manualInput['manual_overtime_hours'] ?? 0), 2));
 
-            if (!empty($manualInput['use_manual_hours'])) {
+            // "Corregir Base" only overrides ponche hours when at least one manual value is > 0.
+            // If both are 0, treat as a no-op (user likely toggled the checkbox while editing
+            // an unrelated field like Cooperativa) and keep the real punched hours intact.
+            $hasManualOverride = !empty($manualInput['use_manual_hours'])
+                && ($manualRegularHours > 0 || $manualOvertimeHours > 0);
+
+            if ($hasManualOverride) {
                 $totalRegularHours = $manualRegularHours;
                 $totalOvertimeHours = $manualOvertimeHours;
             } else {
@@ -323,6 +329,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                 $useManualHours = !empty($values['use_manual_hours']) ? 1 : 0;
                 $manualRegularHours = isset($values['manual_regular_hours']) ? round(max((float)$values['manual_regular_hours'], 0), 2) : 0.00;
                 $manualOvertimeHours = isset($values['manual_overtime_hours']) ? round(max((float)$values['manual_overtime_hours'], 0), 2) : 0.00;
+                // Defensive: a "Corregir Base" flag with both hour inputs at 0 would silently
+                // wipe the real punched hours on the next recalculation. Treat it as off.
+                if ($useManualHours === 1 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0) {
+                    $useManualHours = 0;
+                }
                 $notes = trim((string)($values['notes'] ?? ''));
                 $notes = $notes !== '' ? mb_substr($notes, 0, 255) : null;
                 $cooperative = isset($values['cooperative']) ? round(max((float)$values['cooperative'], 0), 2) : 0.00;
@@ -394,6 +405,22 @@ if ($selectedPeriodId) {
         ");
         $agentsStmt->execute();
         $editableEmployees = $agentsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Hours actually computed for this period, used as defaults in the manual-hours
+        // inputs so the user has a reference value instead of seeing 0.00.
+        $hoursStmt = $pdo->prepare("
+            SELECT employee_id, regular_hours, overtime_hours
+            FROM payroll_records
+            WHERE payroll_period_id = ?
+        ");
+        $hoursStmt->execute([$selectedPeriodId]);
+        $payrollHoursMap = [];
+        foreach ($hoursStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $payrollHoursMap[(int)$r['employee_id']] = [
+                'regular_hours' => (float)$r['regular_hours'],
+                'overtime_hours' => (float)$r['overtime_hours'],
+            ];
+        }
 
         $recordsStmt = $pdo->prepare("
             SELECT pr.*, e.first_name, e.last_name, e.employee_code, e.identification_number, d.name as department_name,
@@ -640,6 +667,16 @@ if ($selectedPeriodId) {
                                             'notes' => '',
                                             'cooperative_deduction' => 0,
                                         ];
+                                        // Pre-fill manual-hour inputs with the actual punched hours
+                                        // when the override is off, so the user has a real reference.
+                                        $punchHours = $payrollHoursMap[(int)$agent['id']] ?? ['regular_hours' => 0.0, 'overtime_hours' => 0.0];
+                                        $useManualHoursActive = !empty($agentIncentive['use_manual_hours']);
+                                        $regularDisplay = $useManualHoursActive
+                                            ? (float)$agentIncentive['manual_regular_hours']
+                                            : $punchHours['regular_hours'];
+                                        $overtimeDisplay = $useManualHoursActive
+                                            ? (float)$agentIncentive['manual_overtime_hours']
+                                            : $punchHours['overtime_hours'];
                                     ?>
                                         <tr class="border-b border-slate-800 hover:bg-slate-800/40">
                                             <td class="py-2 px-2">
@@ -662,8 +699,9 @@ if ($selectedPeriodId) {
                                                     step="0.01"
                                                     min="0"
                                                     name="manual_incentives[<?= (int)$agent['id'] ?>][manual_regular_hours]"
-                                                    value="<?= htmlspecialchars(number_format((float)$agentIncentive['manual_regular_hours'], 2, '.', '')) ?>"
+                                                    value="<?= htmlspecialchars(number_format($regularDisplay, 2, '.', '')) ?>"
                                                     class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                                    title="Horas reales del ponche: <?= number_format($punchHours['regular_hours'], 2) ?>"
                                                 >
                                             </td>
                                             <td class="py-2 px-2">
@@ -672,8 +710,9 @@ if ($selectedPeriodId) {
                                                     step="0.01"
                                                     min="0"
                                                     name="manual_incentives[<?= (int)$agent['id'] ?>][manual_overtime_hours]"
-                                                    value="<?= htmlspecialchars(number_format((float)$agentIncentive['manual_overtime_hours'], 2, '.', '')) ?>"
+                                                    value="<?= htmlspecialchars(number_format($overtimeDisplay, 2, '.', '')) ?>"
                                                     class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                                    title="Horas extra reales del ponche: <?= number_format($punchHours['overtime_hours'], 2) ?>"
                                                 >
                                             </td>
                                             <td class="py-2 px-2">
