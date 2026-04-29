@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) &&
                         'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
                         'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
                         'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
-                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, '17:00:00'),
+                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, null),
                         'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
                         'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
                         'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
@@ -320,7 +320,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                         'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
                         'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
                         'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
-                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, '17:00:00'),
+                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, null),
                         'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
                         'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
                         'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
@@ -1068,7 +1068,7 @@ $terminatedEmployees = $pdo->query("
                                 document.getElementById('new_entry_time_edit').value = template.entry_time.substring(0, 5);
                                 document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
                                 document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
-                                document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '17:00';
+                                document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '';
 
                                 document.getElementById('newScheduleModalEdit').classList.remove('hidden');
                                 document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
@@ -1193,15 +1193,28 @@ $terminatedEmployees = $pdo->query("
                                 const timeInfo = entryTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
                                     ' - ' + exitTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
+                                const applyTemplateOptionData = (option, currentTemplate) => {
+                                    option.dataset.name = currentTemplate.name || '';
+                                    option.dataset.entry = currentTemplate.entry_time || '';
+                                    option.dataset.exit = currentTemplate.exit_time || '';
+                                    option.dataset.lunch = currentTemplate.lunch_time || '';
+                                    option.dataset.break = currentTemplate.break_time || '';
+                                    option.dataset.lunchMinutes = currentTemplate.lunch_minutes || '0';
+                                    option.dataset.breakMinutes = currentTemplate.break_minutes || '0';
+                                    option.dataset.hours = currentTemplate.scheduled_hours || '0';
+                                };
+
                                 if (isEditModeEdit) {
                                     const option = select.querySelector('option[value="' + template.id + '"]');
                                     if (option) {
                                         option.textContent = template.name + ' (' + timeInfo + ')';
+                                        applyTemplateOptionData(option, template);
                                     }
                                 } else {
                                     const option = document.createElement('option');
                                     option.value = template.id;
                                     option.textContent = template.name + ' (' + timeInfo + ')';
+                                    applyTemplateOptionData(option, template);
                                     option.selected = true;
                                     select.appendChild(option);
                                 }
@@ -2107,8 +2120,8 @@ $terminatedEmployees = $pdo->query("
                                                 data-name="<?= htmlspecialchars($template['name'], ENT_QUOTES, 'UTF-8') ?>"
                                                 data-entry="<?= htmlspecialchars($template['entry_time'], ENT_QUOTES, 'UTF-8') ?>"
                                                 data-exit="<?= htmlspecialchars($template['exit_time'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-lunch="<?= htmlspecialchars($template['lunch_time'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-break="<?= htmlspecialchars($template['break_time'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-lunch="<?= htmlspecialchars((string) ($template['lunch_time'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                data-break="<?= htmlspecialchars((string) ($template['break_time'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
                                                 data-lunch-minutes="<?= htmlspecialchars((string) $template['lunch_minutes'], ENT_QUOTES, 'UTF-8') ?>"
                                                 data-break-minutes="<?= htmlspecialchars((string) $template['break_minutes'], ENT_QUOTES, 'UTF-8') ?>"
                                                 data-hours="<?= htmlspecialchars((string) $template['scheduled_hours'], ENT_QUOTES, 'UTF-8') ?>">
@@ -2261,8 +2274,8 @@ $terminatedEmployees = $pdo->query("
                         <input type="time" id="new_lunch_time_edit" name="lunch_time" value="14:00">
                     </div>
                     <div class="form-group">
-                        <label for="new_break_time_edit">Hora de Descanso</label>
-                        <input type="time" id="new_break_time_edit" name="break_time" value="17:00">
+                        <label for="new_break_time_edit">Hora de Descanso (opcional)</label>
+                        <input type="time" id="new_break_time_edit" name="break_time">
                     </div>
                 </div>
 

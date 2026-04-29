@@ -47,11 +47,14 @@ if (!function_exists('normalizeScheduleTimeValue')) {
     /**
      * Standardizes a time value to HH:MM:SS format.
      */
-    function normalizeScheduleTimeValue(?string $value, string $fallback): string
+    function normalizeScheduleTimeValue(?string $value, ?string $fallback): ?string
     {
         $value = trim((string) $value);
         if ($value === '') {
-            $value = $fallback;
+            $value = trim((string) $fallback);
+            if ($value === '') {
+                return null;
+            }
         }
         if (strlen($value) === 5) {
             $value .= ':00';
@@ -739,7 +742,7 @@ if (!function_exists('createEmployeeSchedule')) {
                 $scheduleData['entry_time'] ?? '10:00:00',
                 $scheduleData['exit_time'] ?? '19:00:00',
                 $scheduleData['lunch_time'] ?? '14:00:00',
-                $scheduleData['break_time'] ?? '17:00:00',
+                array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : '17:00:00',
                 $scheduleData['lunch_minutes'] ?? 45,
                 $scheduleData['break_minutes'] ?? 15,
                 $scheduleData['scheduled_hours'] ?? 8.00,
@@ -774,7 +777,7 @@ if (!function_exists('createEmployeeSchedule')) {
                     $scheduleData['entry_time'] ?? '10:00:00',
                     $scheduleData['exit_time'] ?? '19:00:00',
                     $scheduleData['lunch_time'] ?? '14:00:00',
-                    $scheduleData['break_time'] ?? '17:00:00',
+                    array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : '17:00:00',
                     $scheduleData['lunch_minutes'] ?? 45,
                     $scheduleData['break_minutes'] ?? 15,
                     $scheduleData['scheduled_hours'] ?? 8.00,
@@ -858,7 +861,7 @@ if (!function_exists('updateEmployeeSchedule')) {
                 $scheduleData['entry_time'] ?? '10:00:00',
                 $scheduleData['exit_time'] ?? '19:00:00',
                 $scheduleData['lunch_time'] ?? '14:00:00',
-                $scheduleData['break_time'] ?? '17:00:00',
+                array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : '17:00:00',
                 $scheduleData['lunch_minutes'] ?? 45,
                 $scheduleData['break_minutes'] ?? 15,
                 $scheduleData['scheduled_hours'] ?? 8.00,

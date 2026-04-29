@@ -189,7 +189,7 @@ class GeminiAPI {
             $context .= "- Entrada: " . ($sched['entry_time'] ?? '10:00:00') . "\n";
             $context .= "- Salida: " . ($sched['exit_time'] ?? '19:00:00') . "\n";
             $context .= "- Almuerzo: " . ($sched['lunch_time'] ?? '14:00:00') . " (" . ($sched['lunch_minutes'] ?? 45) . " min)\n";
-            $context .= "- Break: " . ($sched['break_time'] ?? '17:00:00') . " (" . ($sched['break_minutes'] ?? 15) . " min)\n";
+            $context .= "- Break: " . (!empty($sched['break_time']) ? $sched['break_time'] : 'Sin hora fija') . " (" . ($sched['break_minutes'] ?? 15) . " min)\n";
             $context .= "- Horas programadas: " . ($sched['scheduled_hours'] ?? 8) . " horas/día\n";
         }
         

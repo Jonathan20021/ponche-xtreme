@@ -19,10 +19,10 @@ try {
     $id = (int)($_POST['id'] ?? 0);
     $name = trim($_POST['name'] ?? '');
     $description = trim($_POST['description'] ?? '');
-    $entryTime = trim($_POST['entry_time'] ?? '10:00');
-    $exitTime = trim($_POST['exit_time'] ?? '19:00');
-    $lunchTime = trim($_POST['lunch_time'] ?? '14:00');
-    $breakTime = trim($_POST['break_time'] ?? '17:00');
+    $entryTime = normalizeScheduleTimeValue($_POST['entry_time'] ?? null, '10:00:00');
+    $exitTime = normalizeScheduleTimeValue($_POST['exit_time'] ?? null, '19:00:00');
+    $lunchTime = normalizeScheduleTimeValue($_POST['lunch_time'] ?? null, '14:00:00');
+    $breakTime = normalizeScheduleTimeValue($_POST['break_time'] ?? null, null);
     $lunchMinutes = (int)($_POST['lunch_minutes'] ?? 45);
     $breakMinutes = (int)($_POST['break_minutes'] ?? 15);
     $scheduledHours = (float)($_POST['scheduled_hours'] ?? 8.00);
@@ -37,12 +37,6 @@ try {
         echo json_encode(['success' => false, 'error' => 'El nombre del turno es obligatorio']);
         exit;
     }
-    
-    // Add seconds if not present
-    if (strlen($entryTime) === 5) $entryTime .= ':00';
-    if (strlen($exitTime) === 5) $exitTime .= ':00';
-    if (strlen($lunchTime) === 5) $lunchTime .= ':00';
-    if (strlen($breakTime) === 5) $breakTime .= ':00';
     
     // Check if template name already exists (excluding current)
     $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM schedule_templates WHERE name = ? AND id != ?");

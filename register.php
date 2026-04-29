@@ -351,8 +351,8 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         <input type="time" id="new_lunch_time" name="lunch_time" value="14:00">
                     </div>
                     <div class="form-group">
-                        <label for="new_break_time">Hora de Descanso</label>
-                        <input type="time" id="new_break_time" name="break_time" value="17:00">
+                        <label for="new_break_time">Hora de Descanso (opcional)</label>
+                        <input type="time" id="new_break_time" name="break_time">
                     </div>
                 </div>
 
@@ -441,7 +441,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         document.getElementById('new_entry_time').value = template.entry_time.substring(0, 5);
                         document.getElementById('new_exit_time').value = template.exit_time.substring(0, 5);
                         document.getElementById('new_lunch_time').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
-                        document.getElementById('new_break_time').value = template.break_time ? template.break_time.substring(0, 5) : '17:00';
+                        document.getElementById('new_break_time').value = template.break_time ? template.break_time.substring(0, 5) : '';
                         document.getElementById('new_lunch_minutes').value = template.lunch_minutes;
                         document.getElementById('new_break_minutes').value = template.break_minutes;
                         document.getElementById('new_scheduled_hours').value = template.scheduled_hours;
