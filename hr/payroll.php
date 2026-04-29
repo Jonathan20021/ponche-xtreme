@@ -100,7 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         
         // Get all active employees
         $employees = $pdo->query("
-            SELECT e.*, u.id as user_id, u.hourly_rate, u.monthly_salary, u.overtime_multiplier
+            SELECT e.id, e.employment_status,
+                   u.id as user_id, u.hourly_rate, u.monthly_salary, u.overtime_multiplier,
+                   u.compensation_type, u.role
             FROM employees e
             JOIN users u ON u.id = e.user_id
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
@@ -180,10 +182,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             // Manual hours ONLY apply when "Corregir Base" is checked AND at least one
             // value is > 0. Otherwise the punched hours are authoritative — never sum
             // (summing was error-prone and caused doubled hours on every recalculation).
-            if (!empty($manualInput['use_manual_hours'])
-                && ($manualRegularHours > 0 || $manualOvertimeHours > 0)) {
+            $hasManualOverride = !empty($manualInput['use_manual_hours'])
+                && ($manualRegularHours > 0 || $manualOvertimeHours > 0);
+            if ($hasManualOverride) {
                 $totalRegularHours = $manualRegularHours;
                 $totalOvertimeHours = $manualOvertimeHours;
+            }
+
+            // Determine effective compensation type (mirrors calculateEmployeePayroll).
+            $compTypeForOt = strtolower(trim($emp['compensation_type'] ?? 'hourly'));
+            $roleForOt = strtoupper(trim($emp['role'] ?? ''));
+            if ($compTypeForOt === '' || $compTypeForOt === 'hourly') {
+                if ($roleForOt !== 'AGENT' && (float)($emp['monthly_salary'] ?? 0) > 0) {
+                    $compTypeForOt = 'fixed';
+                }
+            }
+
+            // Fixed-salary employees (monthly) don't accrue auto overtime — their salary
+            // covers all hours worked. The HR can still pay overtime explicitly via
+            // "Corregir Base". Roll the auto-detected overtime into regular hours so the
+            // visible total stays correct.
+            if ($compTypeForOt === 'fixed' && !$hasManualOverride && $totalOvertimeHours > 0) {
+                $totalRegularHours += $totalOvertimeHours;
+                $totalOvertimeHours = 0;
             }
 
             $daysWorked = (int) ceil(max($totalRegularHours + $totalOvertimeHours, 0) / max($scheduledHours, 0.01));
@@ -698,9 +719,11 @@ if ($selectedPeriodId) {
                                                     min="0"
                                                     name="manual_incentives[<?= (int)$agent['id'] ?>][manual_regular_hours]"
                                                     value="<?= htmlspecialchars(number_format($regularDisplay, 2, '.', '')) ?>"
-                                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
-                                                    title="Horas reales del ponche: <?= number_format($punchHours['regular_hours'], 2) ?>"
+                                                    placeholder="Ponche: <?= number_format($punchHours['regular_hours'], 2) ?>"
+                                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right placeholder:text-slate-500"
+                                                    title="Horas reales del ponche: <?= number_format($punchHours['regular_hours'], 2) ?>. Marca 'Corregir Base' y escribe un valor para reemplazar."
                                                 >
+                                                <div class="text-xs text-slate-500 mt-1 text-right">Ponche: <?= number_format($punchHours['regular_hours'], 2) ?></div>
                                             </td>
                                             <td class="py-2 px-2">
                                                 <input
@@ -709,9 +732,11 @@ if ($selectedPeriodId) {
                                                     min="0"
                                                     name="manual_incentives[<?= (int)$agent['id'] ?>][manual_overtime_hours]"
                                                     value="<?= htmlspecialchars(number_format($overtimeDisplay, 2, '.', '')) ?>"
-                                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
-                                                    title="Horas extra reales del ponche: <?= number_format($punchHours['overtime_hours'], 2) ?>"
+                                                    placeholder="Ponche: <?= number_format($punchHours['overtime_hours'], 2) ?>"
+                                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right placeholder:text-slate-500"
+                                                    title="Horas extra reales del ponche: <?= number_format($punchHours['overtime_hours'], 2) ?>. Marca 'Corregir Base' y escribe un valor para reemplazar."
                                                 >
+                                                <div class="text-xs text-slate-500 mt-1 text-right">Ponche: <?= number_format($punchHours['overtime_hours'], 2) ?></div>
                                             </td>
                                             <td class="py-2 px-2">
                                                 <input
