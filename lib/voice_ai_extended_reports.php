@@ -11,8 +11,9 @@ if (!function_exists('voiceAiFetchDispositionAnalytics')) {
      */
     function voiceAiFetchDispositionAnalytics(PDO $pdo, array $filters = []): array
     {
-        $config = voiceAiGetConfig($pdo);
-        $configStatus = voiceAiGetConfigStatus($pdo);
+        $integrationId = $filters['integration_id'] ?? null;
+        $config = voiceAiGetConfig($pdo, $integrationId);
+        $configStatus = voiceAiGetConfigStatus($pdo, $integrationId);
 
         if (!$configStatus['is_ready']) {
             return [
@@ -213,8 +214,9 @@ if (!function_exists('voiceAiFetchCallQualityMetrics')) {
      */
     function voiceAiFetchCallQualityMetrics(PDO $pdo, array $filters = []): array
     {
-        $config = voiceAiGetConfig($pdo);
-        $configStatus = voiceAiGetConfigStatus($pdo);
+        $integrationId = $filters['integration_id'] ?? null;
+        $config = voiceAiGetConfig($pdo, $integrationId);
+        $configStatus = voiceAiGetConfigStatus($pdo, $integrationId);
 
         if (!$configStatus['is_ready']) {
             return ['success' => false, 'message' => 'Configuracion incompleta.'];
@@ -457,8 +459,9 @@ if (!function_exists('voiceAiFetchInteractions')) {
      */
     function voiceAiFetchInteractions(PDO $pdo, array $filters = []): array
     {
-        $config = voiceAiGetConfig($pdo);
-        $configStatus = voiceAiGetConfigStatus($pdo);
+        $integrationId = $filters['integration_id'] ?? null;
+        $config = voiceAiGetConfig($pdo, $integrationId);
+        $configStatus = voiceAiGetConfigStatus($pdo, $integrationId);
 
         if (!$configStatus['is_ready']) {
             return [
