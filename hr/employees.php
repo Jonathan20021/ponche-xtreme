@@ -1069,6 +1069,9 @@ $terminatedEmployees = $pdo->query("
                                 document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
                                 document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
                                 document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '';
+                                document.getElementById('new_lunch_minutes_edit').value = template.lunch_minutes ?? 45;
+                                document.getElementById('new_break_minutes_edit').value = template.break_minutes ?? 15;
+                                document.getElementById('new_scheduled_hours_edit').value = template.scheduled_hours ?? '8.00';
 
                                 document.getElementById('newScheduleModalEdit').classList.remove('hidden');
                                 document.getElementById('scheduleFormMessageEdit').classList.add('hidden');
@@ -1188,6 +1191,12 @@ $terminatedEmployees = $pdo->query("
 
                                 const select = document.getElementById('edit_schedule_template_id');
                                 const template = data.template;
+                                const selectedTemplateOption = isEditModeEdit
+                                    ? select.querySelector('option[value="' + template.id + '"]')
+                                    : null;
+                                const previousTemplateName = selectedTemplateOption
+                                    ? (selectedTemplateOption.dataset.name || selectedTemplateOption.textContent.replace(/\s*\([^)]*\)\s*$/, '').trim())
+                                    : '';
                                 const entryTime = new Date('2000-01-01 ' + template.entry_time);
                                 const exitTime = new Date('2000-01-01 ' + template.exit_time);
                                 const timeInfo = entryTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) +
@@ -1204,12 +1213,51 @@ $terminatedEmployees = $pdo->query("
                                     option.dataset.hours = currentTemplate.scheduled_hours || '0';
                                 };
 
+                                const applyTemplateToLoadedAssignments = (currentTemplate, oldName) => {
+                                    if (!Array.isArray(window.scheduleAssignmentsEdit)) {
+                                        return;
+                                    }
+
+                                    const namesToUpdate = [oldName, currentTemplate.name].filter(Boolean);
+                                    let changed = false;
+                                    window.scheduleAssignmentsEdit = window.scheduleAssignmentsEdit.map(assignment => {
+                                        if (!namesToUpdate.includes(assignment.schedule_name)) {
+                                            return assignment;
+                                        }
+
+                                        changed = true;
+                                        const updatedNotes = assignment.notes && assignment.notes.startsWith('Asignado desde template:')
+                                            ? `Asignado desde template: ${currentTemplate.name}`
+                                            : assignment.notes;
+
+                                        return {
+                                            ...assignment,
+                                            schedule_name: currentTemplate.name || assignment.schedule_name,
+                                            entry_time: currentTemplate.entry_time || assignment.entry_time,
+                                            exit_time: currentTemplate.exit_time || assignment.exit_time,
+                                            lunch_time: currentTemplate.lunch_time || null,
+                                            break_time: currentTemplate.break_time || null,
+                                            lunch_minutes: parseInt(currentTemplate.lunch_minutes ?? assignment.lunch_minutes ?? '0', 10) || 0,
+                                            break_minutes: parseInt(currentTemplate.break_minutes ?? assignment.break_minutes ?? '0', 10) || 0,
+                                            scheduled_hours: parseFloat(currentTemplate.scheduled_hours ?? assignment.scheduled_hours ?? '0') || 0,
+                                            notes: updatedNotes,
+                                            entry_time_display: null,
+                                            exit_time_display: null
+                                        };
+                                    });
+
+                                    if (changed && typeof renderScheduleAssignmentsEdit === 'function') {
+                                        renderScheduleAssignmentsEdit();
+                                    }
+                                };
+
                                 if (isEditModeEdit) {
-                                    const option = select.querySelector('option[value="' + template.id + '"]');
+                                    const option = selectedTemplateOption;
                                     if (option) {
                                         option.textContent = template.name + ' (' + timeInfo + ')';
                                         applyTemplateOptionData(option, template);
                                     }
+                                    applyTemplateToLoadedAssignments(template, previousTemplateName);
                                 } else {
                                     const option = document.createElement('option');
                                     option.value = template.id;

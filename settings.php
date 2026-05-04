@@ -1258,6 +1258,33 @@ try {
                 }
                 break;
 
+            case 'update_recruitment_ai_config':
+                $rcEnabled        = isset($_POST['recruitment_ai_enabled']) ? '1' : '0';
+                $rcModel          = trim($_POST['recruitment_ai_model'] ?? 'claude-sonnet-4-6');
+                $rcMinScore       = max(0, min(100, (int) ($_POST['recruitment_ai_min_score_shortlist'] ?? 75)));
+                $rcExtractPrompt  = trim($_POST['recruitment_ai_extract_prompt']  ?? '');
+                $rcScreenPrompt   = trim($_POST['recruitment_ai_screen_prompt']   ?? '');
+                $rcJobDescPrompt  = trim($_POST['recruitment_ai_jobdesc_prompt']  ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'ai')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    $stmt->execute(['recruitment_ai_enabled',              $rcEnabled]);
+                    $stmt->execute(['recruitment_ai_model',                $rcModel]);
+                    $stmt->execute(['recruitment_ai_min_score_shortlist',  (string) $rcMinScore]);
+                    if ($rcExtractPrompt !== '') $stmt->execute(['recruitment_ai_extract_prompt', $rcExtractPrompt]);
+                    if ($rcScreenPrompt  !== '') $stmt->execute(['recruitment_ai_screen_prompt',  $rcScreenPrompt]);
+                    if ($rcJobDescPrompt !== '') $stmt->execute(['recruitment_ai_jobdesc_prompt', $rcJobDescPrompt]);
+
+                    $successMessages[] = 'Configuración de IA de reclutamiento actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de IA de reclutamiento.';
+                }
+                break;
+
             case 'update_quality_alerts_report_config':
                 $qaRecipients      = trim($_POST['quality_alerts_report_recipients'] ?? '');
                 $qaEnabled         = isset($_POST['quality_alerts_report_enabled']) ? 1 : 0;
@@ -1932,6 +1959,24 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading global AI settings: ' . $e->getMessage());
+}
+
+// Recruitment AI configuration
+$recruitmentAi = [
+    'recruitment_ai_enabled'              => '1',
+    'recruitment_ai_model'                => 'claude-sonnet-4-6',
+    'recruitment_ai_min_score_shortlist'  => '75',
+    'recruitment_ai_extract_prompt'       => '',
+    'recruitment_ai_screen_prompt'        => '',
+    'recruitment_ai_jobdesc_prompt'       => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'recruitment_ai_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $recruitmentAi[$row['setting_key']] = (string) ($row['setting_value'] ?? '');
+    }
+} catch (Exception $e) {
+    error_log('Error loading recruitment AI settings: ' . $e->getMessage());
 }
 
 // Get Voice AI + Claude configuration (insights on top of GHL reports)
@@ -2771,6 +2816,77 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <li>Si necesitas usar keys distintas por reporte, cada sección individual tiene su propio campo de override (vacío = usa la global).</li>
                 </ul>
             </div>
+        </section>
+
+        <!-- Recruitment AI Configuration -->
+        <section id="recruitment-ai-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-user-magnifying-glass text-purple-400"></i>
+                        IA de Reclutamiento (Claude)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Activa el parseo automático de CV, scoring de candidatos vs vacantes y generación de descripciones de puestos.
+                        Usa la API key global configurada arriba.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $recruitmentAi['recruitment_ai_enabled'] === '1' ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $recruitmentAi['recruitment_ai_enabled'] === '1' ? 'Activa' : 'Desactivada' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_recruitment_ai_config">
+
+                <div class="space-y-2">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="recruitment_ai_enabled" value="1" class="w-5 h-5 accent-purple-500"
+                            <?= $recruitmentAi['recruitment_ai_enabled'] === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar IA de reclutamiento</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Al recibir una solicitud, la IA extrae datos del CV y la evalúa contra la vacante.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-microchip"></i> Modelo Claude</label>
+                        <input type="text" name="recruitment_ai_model" value="<?= htmlspecialchars($recruitmentAi['recruitment_ai_model']) ?>" class="input-control font-mono text-xs">
+                        <p class="text-xs text-muted mt-1">Sugerido: <code>claude-sonnet-4-6</code> para balance, <code>claude-opus-4-7</code> para análisis más profundos.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-bolt"></i> Score mínimo para auto-shortlist</label>
+                        <input type="number" min="0" max="100" name="recruitment_ai_min_score_shortlist" value="<?= htmlspecialchars($recruitmentAi['recruitment_ai_min_score_shortlist']) ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Si la IA puntúa al candidato ≥ este valor, lo marca como Preseleccionado automáticamente.</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-file-import"></i> Prompt: extracción del CV</label>
+                    <textarea name="recruitment_ai_extract_prompt" rows="3" class="input-control text-sm"><?= htmlspecialchars($recruitmentAi['recruitment_ai_extract_prompt']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Instrucciones que recibe Claude al parsear un CV. La estructura JSON se añade automáticamente.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-magnifying-glass-chart"></i> Prompt: scoring del candidato</label>
+                    <textarea name="recruitment_ai_screen_prompt" rows="4" class="input-control text-sm"><?= htmlspecialchars($recruitmentAi['recruitment_ai_screen_prompt']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Instrucciones para la evaluación candidato vs vacante (score, fortalezas, riesgos, recomendación).</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-wand-magic-sparkles"></i> Prompt: generador de descripciones</label>
+                    <textarea name="recruitment_ai_jobdesc_prompt" rows="3" class="input-control text-sm"><?= htmlspecialchars($recruitmentAi['recruitment_ai_jobdesc_prompt']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Instrucciones para redactar descripción + responsabilidades + requisitos de una nueva vacante.</p>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar IA de reclutamiento
+                    </button>
+                    <a href="hr/recruitment.php" class="btn-secondary"><i class="fas fa-arrow-up-right-from-square"></i> Ir a Reclutamiento</a>
+                </div>
+            </form>
         </section>
 
         <!-- Voice AI · Claude AI Insights Configuration -->

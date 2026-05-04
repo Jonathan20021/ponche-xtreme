@@ -326,3 +326,148 @@
 .sortable-header:hover {
     background-color: rgba(99, 102, 241, 0.1);
 }
+
+/* ========== AI / Score visuals ========== */
+.ai-glow {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(56, 189, 248, 0.15));
+    border: 1px solid rgba(124, 58, 237, 0.35);
+}
+
+.ai-banner-card {
+    background:
+        radial-gradient(120% 100% at 0% 0%, rgba(124, 58, 237, 0.30), transparent 60%),
+        radial-gradient(120% 100% at 100% 100%, rgba(56, 189, 248, 0.25), transparent 60%),
+        linear-gradient(180deg, rgba(30, 27, 75, 0.85), rgba(30, 27, 75, 0.55));
+    border: 1px solid rgba(168, 85, 247, 0.45);
+    border-radius: 18px;
+    padding: 1.25rem 1.5rem;
+    color: #f1f5f9;
+    box-shadow: 0 18px 40px -25px rgba(124, 58, 237, 0.5);
+}
+
+.theme-light .ai-banner-card {
+    background:
+        radial-gradient(120% 100% at 0% 0%, rgba(124, 58, 237, 0.12), transparent 60%),
+        radial-gradient(120% 100% at 100% 100%, rgba(56, 189, 248, 0.12), transparent 60%),
+        linear-gradient(180deg, #ffffff, #f8fafc);
+    color: #1e1b4b;
+    border-color: rgba(124, 58, 237, 0.30);
+}
+
+.theme-light .ai-banner-card .text-purple-200,
+.theme-light .ai-banner-card .text-purple-300 { color: #6d28d9 !important; }
+.theme-light .ai-banner-card .text-slate-100,
+.theme-light .ai-banner-card .text-slate-200 { color: #1e293b !important; }
+.theme-light .ai-banner-card strong.text-white { color: #1e1b4b !important; }
+.theme-light .ai-banner-card .text-emerald-300 { color: #047857 !important; }
+
+.score-donut {
+    --pct: 0;
+    --color: #6366f1;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: conic-gradient(var(--color) calc(var(--pct) * 1%), rgba(148, 163, 184, 0.25) 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.score-donut::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border-radius: 50%;
+    background: #1e293b;
+}
+
+.theme-light .score-donut::after {
+    background: #fff;
+}
+
+.ai-banner-card .score-donut::after {
+    background: #1e1b4b;
+}
+
+.theme-light .ai-banner-card .score-donut::after {
+    background: #ffffff;
+}
+
+.score-donut > span {
+    position: relative;
+    z-index: 1;
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #fff;
+}
+
+.theme-light .score-donut > span {
+    color: #0f172a;
+}
+
+.score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.score-pill.high     { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+.score-pill.medium   { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+.score-pill.low      { background: rgba(239, 68, 68, 0.15);  color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+.score-pill.unknown  { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.4); }
+
+.applicant-card {
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 16px;
+    padding: 1.1rem 1.25rem;
+    transition: transform .2s, box-shadow .2s, border-color .2s;
+    color: #e2e8f0;
+}
+
+.applicant-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 18px 30px -20px rgba(99, 102, 241, 0.5);
+}
+
+.theme-light .applicant-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
+}
+
+.kanban-col {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 18px;
+    padding: 1rem;
+}
+
+.theme-light .kanban-col {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.kanban-col h4 {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.theme-light .kanban-col h4 {
+    color: #475569;
+}

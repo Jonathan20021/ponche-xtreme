@@ -37,6 +37,15 @@ try {
         echo json_encode(['success' => false, 'error' => 'El nombre del turno es obligatorio']);
         exit;
     }
+
+    $templateStmt = $pdo->prepare("SELECT * FROM schedule_templates WHERE id = ? LIMIT 1");
+    $templateStmt->execute([$id]);
+    $oldTemplate = $templateStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$oldTemplate) {
+        echo json_encode(['success' => false, 'error' => 'Turno no encontrado']);
+        exit;
+    }
     
     // Check if template name already exists (excluding current)
     $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM schedule_templates WHERE name = ? AND id != ?");
@@ -45,6 +54,8 @@ try {
         echo json_encode(['success' => false, 'error' => 'Ya existe otro turno con ese nombre']);
         exit;
     }
+
+    $pdo->beginTransaction();
     
     // Update template
     $stmt = $pdo->prepare("
@@ -67,19 +78,53 @@ try {
         $scheduledHours,
         $id
     ]);
+
+    $assignmentStmt = $pdo->prepare("
+        UPDATE employee_schedules SET
+            schedule_name = ?,
+            entry_time = ?,
+            exit_time = ?,
+            lunch_time = ?,
+            break_time = ?,
+            lunch_minutes = ?,
+            break_minutes = ?,
+            scheduled_hours = ?,
+            updated_at = NOW()
+        WHERE schedule_name = ?
+          AND is_active = 1
+          AND (end_date IS NULL OR end_date >= CURDATE())
+    ");
+    $assignmentStmt->execute([
+        $name,
+        $entryTime,
+        $exitTime,
+        $lunchTime,
+        $breakTime,
+        $lunchMinutes,
+        $breakMinutes,
+        $scheduledHours,
+        $oldTemplate['name']
+    ]);
+    $updatedAssignments = $assignmentStmt->rowCount();
     
     // Get the updated template
     $getStmt = $pdo->prepare("SELECT * FROM schedule_templates WHERE id = ?");
     $getStmt->execute([$id]);
     $template = $getStmt->fetch(PDO::FETCH_ASSOC);
+
+    $pdo->commit();
     
     echo json_encode([
         'success' => true,
         'message' => 'Turno actualizado exitosamente',
-        'template' => $template
+        'template' => $template,
+        'updated_assignments' => $updatedAssignments
     ]);
     
-} catch (PDOException $e) {
+} catch (Exception $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     echo json_encode([
         'success' => false,
         'error' => 'Error al actualizar el turno: ' . $e->getMessage()

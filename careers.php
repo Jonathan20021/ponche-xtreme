@@ -1,12 +1,12 @@
 <?php
-// Public careers page - no login required
+// Public careers page — minimalist redesign with AI-assisted CV intake.
 session_start();
 require_once 'db.php';
 
-// Get active job postings
+// Active job postings
 $stmt = $pdo->query("SELECT * FROM job_postings WHERE status = 'active' AND (closing_date IS NULL OR closing_date >= CURDATE()) ORDER BY posted_date DESC");
 $job_postings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-// Get company info
+
 $company_name = "Evallish BPO Control";
 
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -20,7 +20,6 @@ function getJobBannerUrl(int $jobId, string $baseUrl): ?string
     if (!$bannerDir) {
         return null;
     }
-
     $baseBannerUrl = rtrim($baseUrl, '/') . '/uploads/job_banners';
     foreach (['jpg', 'jpeg', 'png', 'webp'] as $ext) {
         $filePath = $bannerDir . DIRECTORY_SEPARATOR . "job_{$jobId}.{$ext}";
@@ -28,7 +27,6 @@ function getJobBannerUrl(int $jobId, string $baseUrl): ?string
             return $baseBannerUrl . "/job_{$jobId}.{$ext}";
         }
     }
-
     return null;
 }
 
@@ -37,23 +35,38 @@ foreach ($job_postings as &$job) {
 }
 unset($job);
 
+// Departments / employment-type filters (UI hints)
+$departments = [];
+foreach ($job_postings as $j) {
+    if (!empty($j['department']) && !in_array($j['department'], $departments, true)) {
+        $departments[] = $j['department'];
+    }
+}
+
 $shareJobId = isset($_GET['job']) ? (int) $_GET['job'] : null;
 $shareJob = null;
 if ($shareJobId) {
-    foreach ($job_postings as $job) {
-        if ((int) $job['id'] === $shareJobId) {
-            $shareJob = $job;
+    foreach ($job_postings as $j) {
+        if ((int) $j['id'] === $shareJobId) {
+            $shareJob = $j;
             break;
         }
     }
 }
 
-$shareTitle = $shareJob ? ($shareJob['title'] . " - " . $company_name) : "Carreras - " . $company_name;
+$shareTitle = $shareJob ? ($shareJob['title'] . " | " . $company_name) : ("Carreras | " . $company_name);
 $shareDescription = $shareJob
     ? substr(strip_tags(preg_replace('/\s+/', ' ', $shareJob['description'] ?? '')), 0, 180)
-    : "Descubre las vacantes disponibles y únete al equipo de {$company_name}.";
+    : "Descubre las vacantes disponibles y unete al equipo de {$company_name}.";
 $shareImage = $shareJob && !empty($shareJob['banner_url']) ? $shareJob['banner_url'] : ($base_url . '/assets/logo.png');
 $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : '');
+
+$employment_types = [
+    'full_time'  => 'Tiempo Completo',
+    'part_time'  => 'Medio Tiempo',
+    'contract'   => 'Contrato',
+    'internship' => 'Pasantia',
+];
 ?>
 <!DOCTYPE html>
 <html lang="es" class="scroll-smooth">
@@ -68,51 +81,29 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
     <meta property="og:url" content="<?php echo htmlspecialchars($shareUrl); ?>">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="<?php echo htmlspecialchars($shareTitle); ?>">
-    <meta name="twitter:description" content="<?php echo htmlspecialchars($shareDescription); ?>">
-    <meta name="twitter:image" content="<?php echo htmlspecialchars($shareImage); ?>">
 
-    <!-- Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Outfit', 'sans-serif'],
-                    },
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
                     colors: {
+                        ink: '#0b1220',
                         brand: {
-                            50: '#f0f9ff',
-                            100: '#e0f2fe',
-                            500: '#0ea5e9',
-                            600: '#0284c7',
-                            700: '#0369a1',
-                            900: '#0c4a6e',
+                            50: '#eef4ff', 100: '#dbe7ff', 200: '#bccfff',
+                            300: '#90aeff', 400: '#5e85ff', 500: '#3a63f5',
+                            600: '#264be3', 700: '#1f3bbe', 800: '#1c3299', 900: '#1a2d7a'
                         }
                     },
-                    animation: {
-                        'fade-in-up': 'fadeInUp 0.8s ease-out forwards',
-                        'blob': 'blob 7s infinite',
-                    },
-                    keyframes: {
-                        fadeInUp: {
-                            '0%': { opacity: '0', transform: 'translateY(20px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        },
-                        blob: {
-                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
-                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
-                        }
+                    boxShadow: {
+                        'soft': '0 10px 30px -12px rgba(15, 23, 42, 0.12)',
+                        'pop':  '0 25px 60px -25px rgba(38, 75, 227, 0.45)'
                     }
                 }
             }
@@ -121,934 +112,435 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
+        body { font-family: 'Outfit', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
+        .glass-nav {
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
         }
+        .grain-bg {
+            background-image:
+                radial-gradient(circle at 0% 0%, rgba(58,99,245,0.10), transparent 45%),
+                radial-gradient(circle at 100% 0%, rgba(124,58,237,0.10), transparent 45%);
+        }
+        .job-card { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+        .job-card:hover { transform: translateY(-4px); border-color: rgba(58,99,245,0.45); box-shadow: 0 20px 40px -20px rgba(58,99,245,0.35); }
+        .chip { padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .form-input {
+            width: 100%; border-radius: 12px;
+            border: 1px solid #e2e8f0; background: #f8fafc;
+            padding: 12px 14px; font-size: 14px; color: #0f172a;
+            transition: all .15s ease;
+        }
+        .form-input:focus { outline: none; border-color: #3a63f5; background: #fff; box-shadow: 0 0 0 4px rgba(58,99,245,0.12); }
+        .form-label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .req::after { content: ' *'; color: #ef4444; }
 
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
+        .dropzone {
+            border: 2px dashed #cbd5e1; border-radius: 14px; background: #f8fafc;
+            transition: background .2s, border-color .2s;
         }
+        .dropzone:hover, .dropzone.drag { background: #eef4ff; border-color: #3a63f5; }
 
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
+        .ai-banner {
+            background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 50%, #6d28d9 100%);
         }
+        .pulse-dot { animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0%,100% { opacity: 1; }
+            50% { opacity: .35; }
+        }
+        .ai-loading {
+            background: linear-gradient(90deg, transparent, rgba(58,99,245,0.18), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite linear;
+        }
+        @keyframes shimmer { 0% {background-position:-200% 0;} 100% {background-position:200% 0;} }
 
-        .glass-header {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
+        .modal-enter { animation: enter .25s ease-out; }
+        @keyframes enter { from {opacity:0; transform: scale(.97) translateY(10px);} to {opacity:1; transform: scale(1) translateY(0);} }
 
-        .job-card-hover:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
+        .scroll-area { scrollbar-width: thin; }
     </style>
 </head>
 
-<body class="bg-slate-50 font-sans text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
 
     <!-- Navbar -->
-    <nav class="fixed w-full z-50 transition-all duration-300 glass-header border-b border-slate-200/60" id="navbar">
+    <nav id="navbar" class="fixed inset-x-0 top-0 z-50 glass-nav border-b border-slate-200/70 transition-all">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-20">
-                <div class="flex items-center gap-3 group">
-                    <div
-                        class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-brand-500/30 group-hover:scale-110 transition-transform duration-300">
-                        <i class="fas fa-rocket text-lg"></i>
+            <div class="flex justify-between items-center h-16">
+                <a href="careers.php" class="flex items-center gap-3 group">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-purple-600 flex items-center justify-center text-white shadow-pop">
+                        <i class="fas fa-rocket"></i>
                     </div>
-                    <div>
-                        <h1 class="font-bold text-xl tracking-tight text-slate-900 leading-none">
-                            <?php echo $company_name; ?>
-                        </h1>
-                        <p class="text-xs text-brand-600 font-medium tracking-wide uppercase">Carreras</p>
+                    <div class="leading-tight">
+                        <h1 class="font-bold text-lg tracking-tight text-slate-900"><?php echo htmlspecialchars($company_name); ?></h1>
+                        <p class="text-[11px] uppercase tracking-widest text-brand-600 font-semibold">Carreras</p>
                     </div>
-                </div>
-                <div class="hidden md:flex items-center gap-6">
-                    <a href="#vacantes"
-                        class="text-sm font-medium text-slate-600 hover:text-brand-600 transition-colors">Vacantes</a>
-                    <a href="track_application.php"
-                        class="inline-flex items-center px-5 py-2.5 rounded-full bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:border-brand-500 hover:text-brand-600 transition-all shadow-sm hover:shadow-md gap-2 group">
-                        <i class="fas fa-search group-hover:rotate-90 transition-transform duration-300"></i>
-                        <span>Rastrear Solicitud</span>
+                </a>
+                <div class="hidden md:flex items-center gap-3">
+                    <a href="#vacantes" class="px-4 py-2 text-sm font-medium text-slate-600 hover:text-brand-700 transition-colors">Vacantes</a>
+                    <a href="track_application.php" class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:border-brand-500 hover:text-brand-700 transition-all shadow-soft">
+                        <i class="fas fa-search"></i><span>Rastrear Solicitud</span>
                     </a>
                 </div>
+                <button class="md:hidden p-2 text-slate-700" id="mobileMenuBtn"><i class="fas fa-bars"></i></button>
             </div>
         </div>
     </nav>
 
-    <!-- Hero Section -->
-    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
-        <div
-            class="absolute top-0 left-0 -ml-20 -mt-20 w-96 h-96 bg-brand-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob">
-        </div>
-        <div
-            class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000">
-        </div>
-        <div
-            class="absolute bottom-0 left-20 -mb-20 w-96 h-96 bg-pink-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000">
-        </div>
-
-        <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center z-10">
-            <span
-                class="inline-block py-1 px-3 rounded-full bg-brand-50 text-brand-700 text-xs font-bold tracking-wider uppercase mb-6 border border-brand-100 animate-fade-in-up">
-                Únete al equipo
-            </span>
-            <h1 class="text-5xl md:text-7xl font-extrabold text-slate-900 tracking-tight mb-8 animate-fade-in-up"
-                style="animation-delay: 0.1s;">
-                Construye Tu <span
-                    class="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-purple-600">Futuro</span>
-                <br class="hidden md:block" /> Con Nosotros
-            </h1>
-            <p class="mt-4 max-w-2xl mx-auto text-xl text-slate-600 mb-12 animate-fade-in-up"
-                style="animation-delay: 0.2s;">
-                Forma parte de una cultura innovadora donde tu crecimiento es nuestra prioridad.
-            </p>
-
-            <div class="flex flex-wrap justify-center gap-4 animate-fade-in-up" style="animation-delay: 0.3s;">
-                <a href="#vacantes"
-                    class="px-8 py-4 rounded-full bg-gradient-to-r from-brand-600 to-indigo-600 text-white font-bold text-lg shadow-xl shadow-brand-500/30 hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center gap-2">
-                    Ver Vacantes <i class="fas fa-arrow-down animate-bounce"></i>
-                </a>
+    <!-- Hero -->
+    <section class="relative pt-28 lg:pt-36 pb-12 lg:pb-20 overflow-hidden grain-bg">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-soft text-xs font-semibold text-slate-700 mb-6">
+                <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+                <?php echo count($job_postings); ?> vacantes activas
+                <span class="text-slate-300">·</span>
+                <span class="inline-flex items-center gap-1 text-purple-600"><i class="fas fa-wand-magic-sparkles"></i> Postula con IA</span>
             </div>
 
-            <div class="max-w-4xl mx-auto mt-20 grid grid-cols-2 md:grid-cols-4 gap-8">
-                <div
-                    class="p-6 rounded-2xl bg-white/50 backdrop-blur-sm border border-white/50 shadow-sm hover:shadow-md transition-all">
-                    <div class="text-4xl font-extrabold text-slate-900"><?php echo count($job_postings); ?></div>
-                    <div class="text-sm font-medium text-slate-500 mt-1">Vacantes Activas</div>
-                </div>
-                <div
-                    class="p-6 rounded-2xl bg-white/50 backdrop-blur-sm border border-white/50 shadow-sm hover:shadow-md transition-all">
-                    <div class="text-4xl font-extrabold text-slate-900">100+</div>
-                    <div class="text-sm font-medium text-slate-500 mt-1">Colaboradores</div>
-                </div>
-                <div
-                    class="p-6 rounded-2xl bg-white/50 backdrop-blur-sm border border-white/50 shadow-sm hover:shadow-md transition-all">
-                    <div class="text-4xl font-extrabold text-slate-900">24/7</div>
-                    <div class="text-sm font-medium text-slate-500 mt-1">Operaciones</div>
-                </div>
-                <div
-                    class="p-6 rounded-2xl bg-white/50 backdrop-blur-sm border border-white/50 shadow-sm hover:shadow-md transition-all">
-                    <div class="text-4xl font-extrabold text-slate-900">Top</div>
-                    <div class="text-sm font-medium text-slate-500 mt-1">Ambiente</div>
-                </div>
+            <h1 class="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight mb-5 leading-[1.05]">
+                Postula en
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-purple-600">menos de 60 segundos</span>
+            </h1>
+            <p class="max-w-xl mx-auto text-base md:text-lg text-slate-600 mb-8">
+                Sube tu CV y nuestra IA pre-llenará tu solicitud. Sólo confirmas tus datos.
+            </p>
+            <div class="flex flex-wrap justify-center gap-3">
+                <a href="#vacantes" class="px-6 py-3 rounded-full bg-slate-900 text-white font-semibold shadow-pop hover:bg-brand-700 transition-colors flex items-center gap-2">
+                    Ver vacantes <i class="fas fa-arrow-down text-xs"></i>
+                </a>
+                <button onclick="openOpenApplication()" class="px-6 py-3 rounded-full bg-white text-slate-900 font-semibold border border-slate-200 hover:border-brand-500 hover:text-brand-700 transition-all flex items-center gap-2 shadow-soft">
+                    <i class="fas fa-file-arrow-up"></i> Postulación abierta
+                </button>
             </div>
         </div>
     </section>
 
-    <!-- Vacantes Section -->
-    <section id="vacantes" class="py-20 bg-white relative">
+    <!-- Filters & Vacantes -->
+    <section id="vacantes" class="py-14 lg:py-20 bg-white border-t border-slate-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-16">
-                <h2 class="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Oportunidades Disponibles</h2>
-                <div class="h-1.5 w-24 bg-gradient-to-r from-brand-500 to-purple-500 mx-auto rounded-full"></div>
+
+            <div class="flex flex-wrap items-end justify-between gap-6 mb-10">
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-bold text-slate-900">Oportunidades disponibles</h2>
+                    <p class="text-slate-500 text-sm mt-1">Encuentra la posición ideal para ti.</p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-center w-full md:w-auto">
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="jobSearch" placeholder="Buscar puesto, departamento..."
+                               class="pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none w-full sm:w-72">
+                    </div>
+                    <?php if (!empty($departments)): ?>
+                        <select id="deptFilter" class="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none">
+                            <option value="">Todos los departamentos</option>
+                            <?php foreach ($departments as $d): ?>
+                                <option value="<?php echo htmlspecialchars($d); ?>"><?php echo htmlspecialchars($d); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php endif; ?>
+                </div>
             </div>
 
-            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div id="jobGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <?php if (empty($job_postings)): ?>
-                    <div
-                        class="col-span-full text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                        <i class="fas fa-search text-3xl text-slate-400 mb-4"></i>
-                        <h3 class="text-xl font-bold text-slate-900">No hay vacantes por el momento</h3>
-                        <p class="text-slate-500 mt-2">Vuelve pronto.</p>
+                    <div class="col-span-full text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                        <i class="fas fa-briefcase text-3xl text-slate-400 mb-3"></i>
+                        <h3 class="text-lg font-semibold text-slate-900">Por ahora no hay vacantes activas</h3>
+                        <p class="text-slate-500 mt-1">Vuelve pronto o envía una postulación abierta.</p>
+                        <button onclick="openOpenApplication()" class="mt-5 px-5 py-2.5 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-brand-700 transition-colors">
+                            <i class="fas fa-file-arrow-up mr-1"></i> Postulación abierta
+                        </button>
                     </div>
                 <?php else: ?>
-                    <?php foreach ($job_postings as $job):
-                        $employment_types = [
-                            'full_time' => 'Tiempo Completo',
-                            'part_time' => 'Medio Tiempo',
-                            'contract' => 'Contrato',
-                            'internship' => 'Pasantía'
-                        ];
-                        ?>
-                        <div
-                            class="group bg-white rounded-3xl p-1 border border-slate-100 shadow-xl shadow-slate-200/50 hover:shadow-2xl hover:shadow-brand-500/10 transition-all duration-300 job-card-hover flex flex-col h-full">
-                            <div class="relative h-48 rounded-t-[1.3rem] overflow-hidden bg-slate-100">
+                    <?php foreach ($job_postings as $job): ?>
+                        <article class="job-card flex flex-col bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-soft"
+                                 data-title="<?php echo htmlspecialchars(strtolower($job['title'])); ?>"
+                                 data-dept="<?php echo htmlspecialchars($job['department'] ?? ''); ?>">
+                            <div class="relative h-32 bg-gradient-to-br from-brand-600 to-purple-600 overflow-hidden">
                                 <?php if (!empty($job['banner_url'])): ?>
-                                    <img src="<?php echo htmlspecialchars($job['banner_url']); ?>" alt="Job Banner"
-                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-                                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                                    <img src="<?php echo htmlspecialchars($job['banner_url']); ?>" alt="" class="w-full h-full object-cover">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent"></div>
                                 <?php else: ?>
-                                    <div
-                                        class="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
-                                        <i class="fas fa-briefcase text-4xl text-slate-400"></i>
+                                    <div class="absolute -right-8 -bottom-8 opacity-25">
+                                        <i class="fas fa-briefcase text-[160px] text-white"></i>
                                     </div>
                                 <?php endif; ?>
-                                <div class="absolute bottom-4 left-4 right-4">
-                                    <div class="flex flex-wrap gap-2">
-                                        <span
-                                            class="px-2.5 py-1 rounded-md bg-white/90 backdrop-blur-sm text-xs font-bold text-brand-700 shadow-sm">
-                                            <?php echo htmlspecialchars($job['department']); ?>
-                                        </span>
-                                        <span
-                                            class="px-2.5 py-1 rounded-md bg-indigo-500/90 backdrop-blur-sm text-xs font-bold text-white shadow-sm">
-                                            <?php echo $employment_types[$job['employment_type']] ?? 'General'; ?>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="p-6 flex flex-col flex-1">
-                                <h3
-                                    class="text-xl font-bold text-slate-900 mb-3 group-hover:text-brand-600 transition-colors line-clamp-2">
-                                    <?php echo htmlspecialchars($job['title']); ?>
-                                </h3>
-
-                                <div class="flex flex-col gap-2 text-sm text-slate-500 mb-6">
-                                    <div class="flex items-start gap-2">
-                                        <i class="fas fa-map-marker-alt text-brand-500 mt-1 flex-shrink-0"></i>
-                                        <span class="break-all" title="<?php echo htmlspecialchars($job['location']); ?>">
-                                            <?php echo htmlspecialchars($job['location']); ?>
-                                        </span>
-                                    </div>
-                                    <?php if ($job['salary_range']): ?>
-                                        <div class="flex items-center gap-2">
-                                            <i class="fas fa-money-bill-wave text-green-500 flex-shrink-0"></i>
-                                            <span class="font-medium text-slate-700">
-                                                <?php echo htmlspecialchars($job['salary_range']); ?>
-                                            </span>
-                                        </div>
+                                <div class="absolute top-3 left-3 flex flex-wrap gap-2">
+                                    <?php if (!empty($job['department'])): ?>
+                                        <span class="chip bg-white/95 text-slate-800"><i class="fas fa-building mr-1 text-brand-600"></i><?php echo htmlspecialchars($job['department']); ?></span>
                                     <?php endif; ?>
                                 </div>
-
-                                <p class="text-slate-600 text-sm leading-relaxed mb-6 line-clamp-3">
-                                    <?php echo nl2br(htmlspecialchars(substr($job['description'], 0, 150))); ?>...
+                                <div class="absolute bottom-3 left-3 right-3">
+                                    <h3 class="text-white text-lg font-bold leading-tight line-clamp-2 drop-shadow"><?php echo htmlspecialchars($job['title']); ?></h3>
+                                </div>
+                            </div>
+                            <div class="p-5 flex flex-col flex-1">
+                                <div class="flex flex-wrap gap-2 text-xs text-slate-600 mb-3">
+                                    <?php if (!empty($job['location'])): ?>
+                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100"><i class="fas fa-map-marker-alt text-brand-500"></i> <?php echo htmlspecialchars($job['location']); ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($job['employment_type'])): ?>
+                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-700"><i class="fas fa-clock"></i> <?php echo $employment_types[$job['employment_type']] ?? $job['employment_type']; ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($job['salary_range'])): ?>
+                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-semibold"><i class="fas fa-money-bill-wave"></i> <?php echo htmlspecialchars($job['salary_range']); ?></span>
+                                    <?php endif; ?>
+                                </div>
+                                <p class="text-slate-600 text-sm leading-relaxed line-clamp-3 mb-5">
+                                    <?php echo htmlspecialchars(substr(trim((string) $job['description']), 0, 180)); ?>...
                                 </p>
-
-                                <div class="mt-auto pt-6 border-t border-slate-100 flex gap-3">
-                                    <button
-                                        onclick="openJobModal(<?php echo htmlspecialchars(json_encode([
-                                            'id' => $job['id'],
-                                            'title' => $job['title'],
-                                            'department' => $job['department'] ?? '',
-                                            'location' => $job['location'] ?? '',
-                                            'employment_type' => $job['employment_type'] ?? '',
-                                            'salary_range' => $job['salary_range'] ?? '',
-                                            'description' => $job['description'] ?? '',
-                                            'requirements' => $job['requirements'] ?? '',
-                                            'responsibilities' => $job['responsibilities'] ?? '',
-                                        ]), ENT_QUOTES); ?>)"
-                                        class="flex-1 py-3 px-4 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-brand-600 transition-colors shadow-lg shadow-slate-900/20 flex items-center justify-center gap-2 group/btn">
-                                        Ver y Aplicar
-                                        <i class="fas fa-arrow-right group-hover/btn:translate-x-1 transition-transform"></i>
+                                <div class="mt-auto flex gap-2">
+                                    <button onclick='openJobModal(<?php echo htmlspecialchars(json_encode([
+                                        "id"               => $job["id"],
+                                        "title"            => $job["title"],
+                                        "department"       => $job["department"]       ?? "",
+                                        "location"         => $job["location"]         ?? "",
+                                        "employment_type"  => $job["employment_type"]  ?? "",
+                                        "salary_range"     => $job["salary_range"]     ?? "",
+                                        "description"      => $job["description"]      ?? "",
+                                        "requirements"     => $job["requirements"]     ?? "",
+                                        "responsibilities" => $job["responsibilities"] ?? "",
+                                    ]), ENT_QUOTES); ?>)'
+                                        class="flex-1 inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-brand-700 transition-colors">
+                                        Ver y postular <i class="fas fa-arrow-right text-xs"></i>
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </article>
                     <?php endforeach; ?>
                 <?php endif; ?>
+            </div>
+
+            <div id="noResults" class="hidden col-span-full text-center py-12 mt-6 bg-slate-50 rounded-2xl border border-slate-200">
+                <i class="fas fa-search text-2xl text-slate-400 mb-2"></i>
+                <p class="text-slate-600 text-sm">No se encontraron vacantes con esos criterios.</p>
             </div>
         </div>
     </section>
 
-    <!-- Enhanced Modal -->
-    <div id="applicationModal" class="fixed inset-0 z-[100] hidden" aria-labelledby="modal-title" role="dialog"
-        aria-modal="true">
-        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity opacity-0" id="modalBackdrop">
+    <!-- Why us -->
+    <section class="py-14 bg-slate-900 text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                    <div class="w-10 h-10 rounded-lg bg-brand-600 flex items-center justify-center mb-3"><i class="fas fa-bolt"></i></div>
+                    <h3 class="font-semibold mb-1">Postulación express</h3>
+                    <p class="text-sm text-slate-400">Sube tu CV y completamos los datos por ti con IA.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                    <div class="w-10 h-10 rounded-lg bg-purple-600 flex items-center justify-center mb-3"><i class="fas fa-shield-halved"></i></div>
+                    <h3 class="font-semibold mb-1">Datos seguros</h3>
+                    <p class="text-sm text-slate-400">Tu información se almacena cifrada y se usa sólo para reclutamiento.</p>
+                </div>
+                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center mb-3"><i class="fas fa-compass"></i></div>
+                    <h3 class="font-semibold mb-1">Seguimiento en línea</h3>
+                    <p class="text-sm text-slate-400">Rastrea el estado de tu solicitud con tu código único.</p>
+                </div>
+            </div>
         </div>
+    </section>
 
+    <footer class="py-8 bg-slate-950 text-slate-500 text-sm text-center">
+        © <?php echo date('Y'); ?> <?php echo htmlspecialchars($company_name); ?>. Todos los derechos reservados.
+    </footer>
+
+    <!-- Application Modal -->
+    <div id="applicationModal" class="fixed inset-0 z-[100] hidden" role="dialog" aria-modal="true">
+        <div id="modalBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity opacity-0"></div>
         <div class="fixed inset-0 z-10 overflow-y-auto">
-            <div class="flex min-h-full items-end justify-center p-0 sm:items-center sm:p-4 text-center sm:text-left">
-                <div class="relative transform overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-4xl opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                    id="modalPanel">
-
-                    <div
-                        class="bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-4 sm:px-6 flex justify-between items-center sticky top-0 z-20 shadow-md">
+            <div class="flex min-h-full items-end sm:items-center justify-center p-0 sm:p-4">
+                <div id="modalPanel" class="relative w-full sm:max-w-3xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden modal-enter">
+                    <!-- Header -->
+                    <div class="bg-gradient-to-r from-slate-900 via-brand-700 to-purple-700 px-6 py-4 flex items-center justify-between">
                         <div>
-                            <h3 class="text-lg font-bold leading-6 text-white flex items-center gap-2" id="modal-title">
-                                <i class="fas fa-rocket"></i> Solicitud de Empleo
-                            </h3>
-                            <p class="text-brand-100 text-xs mt-1" id="modalJobTitle">Cargando...</p>
+                            <h3 class="text-white font-bold text-lg flex items-center gap-2"><i class="fas fa-rocket"></i> <span id="modalJobTitle">Solicitud</span></h3>
+                            <p class="text-brand-100 text-xs mt-0.5" id="modalJobMeta">Postula en menos de 60 segundos</p>
                         </div>
-                        <button type="button" onclick="closeModal()"
-                            class="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg p-2 transition-colors">
-                            <span class="sr-only">Cerrar</span>
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <button onclick="closeModal()" class="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg p-2"><i class="fas fa-xmark text-lg"></i></button>
                     </div>
 
-                    <!-- Step 1: Job Info Panel -->
-                    <div id="jobInfoPanel" class="bg-slate-50 max-h-[85vh] overflow-y-auto hidden">
-                        <div class="p-4 sm:p-8 space-y-6">
-                            <div class="flex flex-wrap gap-3 text-sm" id="jobMetaBadges"></div>
+                    <!-- Step 1: Job Info -->
+                    <div id="jobInfoPanel" class="hidden bg-slate-50 max-h-[78vh] overflow-y-auto scroll-area">
+                        <div class="p-6 space-y-5">
+                            <div id="jobMetaBadges" class="flex flex-wrap gap-2"></div>
 
-                            <div id="jobDescSection" class="hidden">
-                                <h4 class="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
-                                    <i class="fas fa-align-left text-brand-500"></i> Descripción del Puesto
-                                </h4>
-                                <div id="jobDescText" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-slate-100"></div>
-                            </div>
+                            <details class="bg-white rounded-xl border border-slate-200 overflow-hidden" open>
+                                <summary class="px-4 py-3 cursor-pointer font-semibold text-slate-800 flex items-center gap-2"><i class="fas fa-align-left text-brand-600"></i> Descripción</summary>
+                                <div class="px-4 pb-4 text-sm text-slate-600 whitespace-pre-line" id="jobDescText"></div>
+                            </details>
+                            <details class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                <summary class="px-4 py-3 cursor-pointer font-semibold text-slate-800 flex items-center gap-2"><i class="fas fa-tasks text-brand-600"></i> Responsabilidades</summary>
+                                <div class="px-4 pb-4 text-sm text-slate-600 whitespace-pre-line" id="jobResponsibilitiesText"></div>
+                            </details>
+                            <details class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                <summary class="px-4 py-3 cursor-pointer font-semibold text-slate-800 flex items-center gap-2"><i class="fas fa-clipboard-check text-brand-600"></i> Requisitos</summary>
+                                <div class="px-4 pb-4 text-sm text-slate-600 whitespace-pre-line" id="jobRequirementsText"></div>
+                            </details>
 
-                            <div id="jobResponsibilitiesSection" class="hidden">
-                                <h4 class="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
-                                    <i class="fas fa-tasks text-brand-500"></i> Responsabilidades
-                                </h4>
-                                <div id="jobResponsibilitiesText" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-slate-100"></div>
-                            </div>
-
-                            <div id="jobRequirementsSection" class="hidden">
-                                <h4 class="text-base font-bold text-slate-800 mb-2 flex items-center gap-2">
-                                    <i class="fas fa-clipboard-check text-brand-500"></i> Requisitos
-                                </h4>
-                                <div id="jobRequirementsText" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border border-slate-100"></div>
-                            </div>
-                        </div>
-                        <div class="bg-white px-4 py-4 sm:px-8 border-t border-slate-200 flex flex-col sm:flex-row gap-3 sm:justify-between items-center sticky bottom-0">
-                            <p class="text-slate-500 text-sm text-center sm:text-left">¿Cumples con los requisitos? Completa tu solicitud a continuación.</p>
-                            <div class="flex gap-3">
-                                <button type="button" onclick="closeModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm hover:bg-slate-200 transition-colors">Cancelar</button>
-                                <button type="button" onclick="goToApplicationForm()"
-                                    class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 text-white font-bold text-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2">
-                                    <i class="fas fa-pencil-alt"></i> Completar Solicitud
-                                </button>
-                            </div>
+                            <button type="button" onclick="goToApplicationForm()"
+                                class="w-full mt-2 px-6 py-3.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-brand-700 transition-colors flex items-center justify-center gap-2 shadow-pop">
+                                <i class="fas fa-pencil-alt"></i> Comenzar mi postulación
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Step 2: Application Form -->
-                    <div id="applicationFormPanel" class="bg-slate-50 max-h-[85vh] overflow-y-auto hidden">
-                    <form id="applicationForm" class="p-4 sm:p-8 space-y-8" enctype="multipart/form-data">
+                    <!-- Step 2: Form -->
+                    <div id="applicationFormPanel" class="hidden bg-slate-50 max-h-[78vh] overflow-y-auto scroll-area">
+                        <form id="applicationForm" class="p-6 space-y-5" enctype="multipart/form-data">
                             <input type="hidden" name="job_posting_id" id="job_posting_id">
                             <input type="hidden" name="puesto_aplicado" id="puesto_aplicado">
+                            <input type="hidden" name="form_version" value="2026-05-03-compact">
 
-                            <!-- Section 1: Datos Personales -->
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <h4
-                                    class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 pb-2 border-b border-slate-100">
-                                    <span
-                                        class="w-8 h-8 rounded-lg bg-brand-100 text-brand-600 flex items-center justify-center text-sm">1</span>
-                                    Datos Personales
-                                </h4>
-
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label
-                                            class="block text-xs font-semibold text-slate-600 uppercase">Serie</label>
-                                        <input type="text" name="serie"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Cédula <span
-                                                class="text-red-500">*</span></label>
-                                        <input type="text" name="cedula" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-2">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Dirección
-                                            Completa <span class="text-red-500">*</span></label>
-                                        <input type="text" name="direccion" required
-                                            placeholder="Calle, No., Urbanización, Ciudad"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
+                            <!-- AI banner -->
+                            <div class="ai-banner rounded-2xl p-5 text-white relative overflow-hidden">
+                                <div class="absolute -right-8 -top-8 opacity-15">
+                                    <i class="fas fa-wand-magic-sparkles text-[120px]"></i>
                                 </div>
+                                <div class="relative">
+                                    <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-purple-200">
+                                        <span class="pulse-dot inline-flex w-2 h-2 rounded-full bg-emerald-300"></span> Asistido por IA
+                                    </div>
+                                    <h4 class="text-lg font-bold mt-1.5">¿Tienes CV?</h4>
+                                    <p class="text-sm text-purple-100 mt-0.5">Súbelo y rellenamos el resto por ti.</p>
 
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Teléfono
-                                            <span class="text-red-500">*</span></label>
-                                        <input type="text" name="telefono" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Ap. Paterno
-                                            <span class="text-red-500">*</span></label>
-                                        <input type="text" name="apellido_paterno" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Ap. Materno
-                                            <span class="text-red-500">*</span></label>
-                                        <input type="text" name="apellido_materno" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Nombres
-                                            <span class="text-red-500">*</span></label>
-                                        <input type="text" name="nombres" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4">
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label
-                                            class="block text-xs font-semibold text-slate-600 uppercase">Apodo</label>
-                                        <input type="text" name="apodo"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-2">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">F.
-                                            Nacimiento <span class="text-red-500">*</span></label>
-                                        <input type="date" name="fecha_nacimiento" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Edad</label>
-                                        <input type="number" name="edad"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1 md:col-span-2">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Lugar
-                                            Nacimiento</label>
-                                        <input type="text" name="lugar_nacimiento"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">País
-                                            Nacimiento</label>
-                                        <input type="text" name="pais_nacimiento"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label
-                                            class="block text-xs font-semibold text-slate-600 uppercase">Nacionalidad</label>
-                                        <input type="text" name="nacionalidad"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Sexo <span
-                                                class="text-red-500">*</span></label>
-                                        <select name="sexo" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            <option value=""></option>
-                                            <option value="Masculino">Masculino</option>
-                                            <option value="Femenino">Femenino</option>
-                                        </select>
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Estado Civil
-                                            <span class="text-red-500">*</span></label>
-                                        <select name="estado_civil" required
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            <option value=""></option>
-                                            <option value="Soltero">Soltero/a</option>
-                                            <option value="Casado">Casado/a</option>
-                                            <option value="Union libre">Unión Libre</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Tipo
-                                            Sangre</label>
-                                        <input type="text" name="tipo_sangre"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label
-                                            class="block text-xs font-semibold text-slate-600 uppercase">Estatura</label>
-                                        <input type="text" name="estatura"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Peso</label>
-                                        <input type="text" name="peso"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Vive con
-                                            (Parentesco)</label>
-                                        <input type="text" name="vive_con"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Personas
-                                            Dependientes</label>
-                                        <input type="number" name="personas_dependen"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">¿Tiene
-                                            Hijos?</label>
-                                        <div class="flex gap-4 mt-2">
-                                            <label class="inline-flex items-center"><input type="radio"
-                                                    name="tiene_hijos" value="SI" class="text-brand-600 ring-brand-500">
-                                                <span class="ml-2 text-sm text-slate-700">SI</span></label>
-                                            <label class="inline-flex items-center"><input type="radio"
-                                                    name="tiene_hijos" value="NO" class="text-brand-600 ring-brand-500">
-                                                <span class="ml-2 text-sm text-slate-700">NO</span></label>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Edad de sus
-                                            hijos</label>
-                                        <input type="text" name="edad_hijos"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">¿Vive en
-                                            casa propia?</label>
-                                        <div class="flex gap-4 mt-2">
-                                            <label class="inline-flex items-center"><input type="radio"
-                                                    name="casa_propia" value="SI" class="text-brand-600 ring-brand-500">
-                                                <span class="ml-2 text-sm text-slate-700">SI</span></label>
-                                            <label class="inline-flex items-center"><input type="radio"
-                                                    name="casa_propia" value="NO" class="text-brand-600 ring-brand-500">
-                                                <span class="ml-2 text-sm text-slate-700">NO</span></label>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">¿Con cuántas
-                                            personas vive?</label>
-                                        <input type="number" name="personas_vive"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Section 2: Disponibilidad y Modalidad -->
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <h4
-                                    class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 pb-2 border-b border-slate-100">
-                                    <span
-                                        class="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center text-sm">2</span>
-                                    Disponibilidad y Modalidad
-                                </h4>
-
-                                <div class="mb-6">
-                                    <p
-                                        class="text-xs text-slate-500 italic mb-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        Evallish opera en horarios rotativos 7:30 AM - 10:30 PM (L-D, 1 día libre). L-V
-                                        de 8:30 AM - 5:30 PM.
-                                    </p>
-                                    <div class="space-y-2">
-                                        <label class="flex items-start gap-2"><input type="checkbox"
-                                                name="disponibilidad_turno_rotativo" value="SI"
-                                                class="mt-1 rounded text-brand-600"> <span class="text-sm">Disponible
-                                                turno rotativo</span></label>
-                                        <label class="flex items-start gap-2"><input type="checkbox"
-                                                name="disponibilidad_lunes_viernes" value="SI"
-                                                class="mt-1 rounded text-brand-600"> <span class="text-sm">Solo Lunes a
-                                                Viernes (8:30am - 5:30pm)</span></label>
-                                        <label class="flex items-center gap-2">
-                                            <input type="checkbox" name="disponibilidad_otro" value="SI"
-                                                id="toggleOtroHorario" class="rounded text-brand-600">
-                                            <span class="text-sm">Otra disponibilidad:</span>
-                                            <input type="text" name="disponibilidad_otro_texto" id="inputOtroHorario" class="hidden flex-1 rounded-lg border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 transition-all placeholder-slate-400">
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <div class="mb-6">
-                                    <h5 class="text-sm font-bold uppercase text-slate-700 mb-2">Modalidad Solicitada
-                                    </h5>
-                                    <div class="space-y-2">
-                                        <label class="flex items-center gap-2"><input type="checkbox"
-                                                name="modalidad_presencial" value="SI" class="rounded text-brand-600">
-                                            <span class="text-sm">Presencial</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox"
-                                                name="modalidad_hibrida" value="SI" class="rounded text-brand-600">
-                                            <span class="text-sm">Híbrida</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox"
-                                                name="modalidad_remota" value="SI" class="rounded text-brand-600"> <span
-                                                class="text-sm">Remota</span></label>
-                                        <label class="flex items-center gap-2">
-                                            <input type="checkbox" name="modalidad_otro" value="SI"
-                                                id="toggleOtraModalidad" class="rounded text-brand-600">
-                                            <span class="text-sm">Otra:</span>
-                                            <input type="text" name="modalidad_otro_texto" id="inputOtraModalidad" class="hidden flex-1 rounded-lg border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 transition-all placeholder-slate-400">
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <h5 class="text-sm font-bold uppercase text-slate-700 mb-2">Transporte a Evallish
-                                    </h5>
-                                    <div class="flex flex-wrap gap-4 mb-3">
-                                        <label class="flex items-center gap-2"><input type="checkbox"
-                                                name="transporte_carro_publico" value="SI"
-                                                class="rounded text-brand-600"> <span class="text-sm">Carro
-                                                público</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox"
-                                                name="transporte_motoconcho" value="SI" class="rounded text-brand-600">
-                                            <span class="text-sm">Motoconcho</span></label>
-                                        <label class="flex items-center gap-2"><input type="checkbox"
-                                                name="transporte_a_pie" value="SI" class="rounded text-brand-600"> <span
-                                                class="text-sm">A pie</span></label>
-                                        <label class="flex items-center gap-2">
-                                            <input type="checkbox" name="transporte_otro" value="SI"
-                                                id="toggleOtroTransporte" class="rounded text-brand-600">
-                                            <span class="text-sm">Otro:</span>
-                                            <input type="text" name="transporte_otro_texto" id="inputOtroTransporte" class="hidden rounded-lg border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 transition-all placeholder-slate-400 w-40">
-                                        </label>
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">Detalles
-                                            rutas / tiempo estimado</label>
-                                        <textarea name="transporte_detalles" rows="2"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400"></textarea>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Section 3: Educación -->
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <h4
-                                    class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 pb-2 border-b border-slate-100">
-                                    <span
-                                        class="w-8 h-8 rounded-lg bg-green-100 text-green-600 flex items-center justify-center text-sm">3</span>
-                                    Educación
-                                </h4>
-
-                                <div class="flex flex-wrap gap-4 mb-4">
-                                    <label class="flex items-center gap-2"><input type="checkbox" name="nivel_primaria"
-                                            value="SI" class="rounded text-brand-600"> <span
-                                            class="text-sm">Primaria</span></label>
-                                    <label class="flex items-center gap-2"><input type="checkbox"
-                                            name="nivel_bachillerato" value="SI" class="rounded text-brand-600"> <span
-                                            class="text-sm">Bachillerato</span></label>
-                                    <label class="flex items-center gap-2"><input type="checkbox"
-                                            name="nivel_estudiante_universitario" value="SI"
-                                            class="rounded text-brand-600"> <span class="text-sm">Estudiante
-                                            Univ.</span></label>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                    <div>
-                                        <label class="flex items-center gap-2 mb-1"><input type="checkbox"
-                                                name="nivel_tecnico" value="SI" class="rounded text-brand-600"> <span
-                                                class="text-xs font-bold uppercase text-slate-600">Técnico</span></label>
-                                        <input type="text" name="nivel_tecnico_detalle" placeholder="¿Cuál?"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div>
-                                        <label class="flex items-center gap-2 mb-1"><input type="checkbox"
-                                                name="nivel_carrera_completa" value="SI" class="rounded text-brand-600">
-                                            <span
-                                                class="text-xs font-bold uppercase text-slate-600">Carrera</span></label>
-                                        <input type="text" name="nivel_carrera_detalle" placeholder="¿Cuál?"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                    <div>
-                                        <label class="flex items-center gap-2 mb-1"><input type="checkbox"
-                                                name="nivel_postgrado" value="SI" class="rounded text-brand-600"> <span
-                                                class="text-xs font-bold uppercase text-slate-600">Postgrado</span></label>
-                                        <input type="text" name="nivel_postgrado_detalle" placeholder="¿Cuál?"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                    </div>
-                                </div>
-
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4">
-                                    <div class="flex items-center gap-2 mb-3">
-                                        <input type="checkbox" name="estudia_actualmente" value="SI" id="toggleEstudia"
-                                            class="rounded text-brand-600">
-                                        <span class="text-sm font-bold text-slate-700">Si estudia actualmente, favor
-                                            completar:</span>
-                                    </div>
-                                    <div id="estudiaDetails" class="hidden grid-cols-1 md:grid-cols-3 gap-4">
-                                        <input type="text" name="que_estudia" placeholder="¿Qué estudia?"
-                                            class="rounded-lg border-slate-300 text-sm">
-                                        <input type="text" name="donde_estudia" placeholder="¿Dónde?"
-                                            class="rounded-lg border-slate-300 text-sm">
-                                        <input type="text" name="horario_clases" placeholder="Horario"
-                                            class="rounded-lg border-slate-300 text-sm">
-                                    </div>
-                                </div>
-
-                                <div class="mb-4">
-                                    <h5 class="text-sm font-bold uppercase text-slate-600 mb-2">Otros Cursos</h5>
-                                    <div class="overflow-x-auto">
-                                        <table class="w-full text-sm text-left text-slate-500">
-                                            <thead class="text-xs text-slate-700 uppercase bg-slate-100">
-                                                <tr>
-                                                    <th class="px-2 py-2">Curso</th>
-                                                    <th class="px-2 py-2">Institución</th>
-                                                    <th class="px-2 py-2">Fecha</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php for ($i = 1; $i <= 3; $i++): ?>
-                                                    <tr class="border-b">
-                                                        <td class="p-1"><input type="text"
-                                                                name="otros_curso_<?php echo $i; ?>"
-                                                                class="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all">
-                                                        </td>
-                                                        <td class="p-1"><input type="text"
-                                                                name="otros_curso_institucion_<?php echo $i; ?>"
-                                                                class="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all">
-                                                        </td>
-                                                        <td class="p-1"><input type="text"
-                                                                name="otros_curso_fecha_<?php echo $i; ?>"
-                                                                class="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all">
-                                                        </td>
-                                                    </tr>
-                                                <?php endfor; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <h5 class="text-sm font-bold uppercase text-slate-600 mb-2">Idiomas</h5>
-                                    <div class="overflow-x-auto">
-                                        <table class="w-full text-sm text-left text-slate-500">
-                                            <thead class="text-xs text-slate-700 uppercase bg-slate-100">
-                                                <tr>
-                                                    <th class="px-2 py-2">Idioma</th>
-                                                    <th class="px-2 py-2 text-center">Habla</th>
-                                                    <th class="px-2 py-2 text-center">Lee</th>
-                                                    <th class="px-2 py-2 text-center">Escribe</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php for ($i = 1; $i <= 3; $i++): ?>
-                                                    <tr class="border-b">
-                                                        <td class="p-1"><input type="text"
-                                                                name="idioma_<?php echo $i; ?>_nombre"
-                                                                class="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all"
-                                                                placeholder="Ej: Inglés"></td>
-                                                        <td class="p-1 text-center"><select
-                                                                name="idioma_<?php echo $i; ?>_habla"
-                                                                class="rounded border border-slate-200 bg-white px-2 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all w-20">
-                                                                <option value=""></option>
-                                                                <option value="SI">SI</option>
-                                                                <option value="NO">NO</option>
-                                                            </select></td>
-                                                        <td class="p-1 text-center"><select
-                                                                name="idioma_<?php echo $i; ?>_lee"
-                                                                class="rounded border border-slate-200 bg-white px-2 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all w-20">
-                                                                <option value=""></option>
-                                                                <option value="SI">SI</option>
-                                                                <option value="NO">NO</option>
-                                                            </select></td>
-                                                        <td class="p-1 text-center"><select
-                                                                name="idioma_<?php echo $i; ?>_escribe"
-                                                                class="rounded border border-slate-200 bg-white px-2 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all w-20">
-                                                                <option value=""></option>
-                                                                <option value="SI">SI</option>
-                                                                <option value="NO">NO</option>
-                                                            </select></td>
-                                                    </tr>
-                                                <?php endfor; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Section 4: Experiencias Laborales -->
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <h4
-                                    class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 pb-2 border-b border-slate-100">
-                                    <span
-                                        class="w-8 h-8 rounded-lg bg-pink-100 text-pink-600 flex items-center justify-center text-sm">4</span>
-                                    Experiencias Laborales
-                                </h4>
-
-                                <?php for ($e = 1; $e <= 2; $e++): ?>
-                                    <div class="mb-6 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-                                        <h5 class="text-sm font-bold text-brand-600 mb-3">Experiencia <?php echo $e; ?></h5>
-                                        <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mb-3">
-                                            <div class="md:col-span-2"><input type="text"
-                                                    name="exp<?php echo $e; ?>_empresa" placeholder="Empresa"
-                                                    class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            </div>
-                                            <div class="md:col-span-2"><input type="text"
-                                                    name="exp<?php echo $e; ?>_superior" placeholder="Superior Inmediato"
-                                                    class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            </div>
-                                            <div class="md:col-span-2"><input type="text" name="exp<?php echo $e; ?>_tiempo"
-                                                    placeholder="Tiempo Trabajado"
-                                                    class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            </div>
-                                            <div class="md:col-span-2"><input type="text"
-                                                    name="exp<?php echo $e; ?>_telefono" placeholder="Teléfono"
-                                                    class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            </div>
-                                            <div class="md:col-span-2"><input type="text" name="exp<?php echo $e; ?>_cargo"
-                                                    placeholder="Cargo"
-                                                    class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            </div>
-                                            <div class="md:col-span-2"><input type="text" name="exp<?php echo $e; ?>_sueldo"
-                                                    placeholder="Sueldo"
-                                                    class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                            </div>
-                                        </div>
-                                        <div class="space-y-2">
-                                            <textarea name="exp<?php echo $e; ?>_tareas" rows="2"
-                                                placeholder="Tareas Principales"
-                                                class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400"></textarea>
-                                            <textarea name="exp<?php echo $e; ?>_razon_salida" rows="2"
-                                                placeholder="Razón de salida"
-                                                class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400"></textarea>
-                                        </div>
-                                    </div>
-                                <?php endfor; ?>
-                            </div>
-
-                            <!-- Section 5: Información General -->
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <h4
-                                    class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 pb-2 border-b border-slate-100">
-                                    <span
-                                        class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm">5</span>
-                                    Información General
-                                </h4>
-
-                                <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-xs font-semibold text-slate-600 uppercase">¿Cuál ha
-                                            sido su mayor logro?</label>
-                                        <textarea name="mayor_logro" rows="2"
-                                            class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400"></textarea>
-                                    </div>
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label
-                                                class="block text-xs font-semibold text-slate-600 uppercase">Expectativa
-                                                Salarial</label>
-                                            <input type="text" name="expectativas_salariales"
-                                                class="w-full rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                        </div>
-                                        <div>
-                                            <label
-                                                class="block text-xs font-semibold text-slate-600 uppercase">¿Problema
-                                                de incapacidad?</label>
-                                            <div class="flex gap-4 mt-1">
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="incapacidad" value="NO"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">NO</span></label>
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="incapacidad" value="SI" id="toggleIncapacidad"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">SI (Especifique)</span></label>
-                                            </div>
-                                            <input type="text" name="incapacidad_cual" id="inputIncapacidad" class="hidden w-full mt-2 rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                        </div>
-                                    </div>
-
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label
-                                                class="block text-xs font-semibold text-slate-600 uppercase">¿Dispuesto
-                                                a trabajar horas extras?</label>
-                                            <div class="flex gap-4 mt-1">
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="horas_extras" value="SI"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">SI</span></label>
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="horas_extras" value="NO"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">NO</span></label>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label
-                                                class="block text-xs font-semibold text-slate-600 uppercase">¿Dispuesto
-                                                a trabajar días de fiesta?</label>
-                                            <div class="flex gap-4 mt-1">
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="dias_fiestas" value="SI"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">SI</span></label>
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="dias_fiestas" value="NO"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">NO</span></label>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label class="block text-xs font-semibold text-slate-600 uppercase">¿Conoce
-                                                algún empleado?</label>
-                                            <div class="flex gap-4 mt-1">
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="conoce_empleado" value="NO"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">NO</span></label>
-                                                <label class="inline-flex items-center"><input type="radio"
-                                                        name="conoce_empleado" value="SI" id="toggleConoce"
-                                                        class="text-brand-600 ring-brand-500"> <span
-                                                        class="ml-2 text-sm">SI (Nombre)</span></label>
-                                            </div>
-                                            <input type="text" name="conoce_empleado_nombre" id="inputConoce" class="hidden w-full mt-2 rounded-lg border-slate-200 bg-slate-50 px-4 py-2.5 text-slate-700 text-sm focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all duration-200 placeholder-slate-400">
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs font-semibold text-slate-600 uppercase">¿Cómo se
-                                                enteró de la vacante?</label>
-                                            <div class="flex flex-wrap gap-2 mt-1">
-                                                <label><input type="checkbox" name="medio_vacante[]" value="WhatsApp">
-                                                    <span class="text-xs">WhatsApp</span></label>
-                                                <label><input type="checkbox" name="medio_vacante[]" value="Instagram">
-                                                    <span class="text-xs">Instagram</span></label>
-                                                <label><input type="checkbox" name="medio_vacante[]" value="Telegram">
-                                                    <span class="text-xs">Telegram</span></label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Section 6: CV Attachment -->
-                            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                                <h4
-                                    class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 pb-2 border-b border-slate-100">
-                                    <span
-                                        class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm">6</span>
-                                    Curriculum Vitae
-                                </h4>
-
-                                <div class="flex items-center justify-center w-full">
-                                    <label for="cv-file"
-                                        class="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
-                                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                            <i class="fas fa-cloud-upload-alt text-3xl text-slate-400 mb-3"></i>
-                                            <p class="mb-2 text-sm text-slate-500"><span class="font-semibold">Click
-                                                    para subir</span> o arrastra y suelta</p>
-                                            <p class="text-xs text-slate-500">PDF, DOCX (Max. 5MB)</p>
-                                        </div>
-                                        <input id="cv-file" type="file" name="cv_file" class="hidden"
-                                            accept=".pdf,.doc,.docx" />
+                                    <label for="cv-file" id="cvDropzone" class="mt-4 dropzone block w-full p-5 cursor-pointer text-center bg-white/10 hover:bg-white/15 border-white/30">
+                                        <i class="fas fa-file-arrow-up text-3xl mb-2"></i>
+                                        <p class="text-sm font-semibold"><span id="cvFileName">Subir CV (PDF, DOC, DOCX)</span></p>
+                                        <p class="text-xs text-purple-200 mt-0.5" id="cvSubText">Máx. 5MB · Procesamiento automático</p>
+                                        <input id="cv-file" type="file" name="cv_file" class="hidden" accept=".pdf,.doc,.docx">
                                     </label>
-                                </div>
-                                <div id="cv-preview" class="mt-2 text-center text-sm font-semibold text-brand-600">
+                                    <div id="aiStatus" class="hidden mt-3 px-3 py-2 rounded-lg bg-white/15 border border-white/30 text-sm flex items-center gap-2">
+                                        <i class="fas fa-circle-notch fa-spin"></i><span id="aiStatusText">Analizando CV con IA...</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="flex items-start gap-3 mt-6">
-                                <input type="checkbox" name="acepta_datos" value="SI" required
-                                    class="mt-1 rounded text-brand-600 focus:ring-brand-500">
-                                <p class="text-xs text-slate-500">
-                                    Doy fe que todos los datos suministrados en esta solicitud son verdaderos y autorizo
-                                    a cualquier investigación sobre mis declaraciones.
-                                </p>
-                            </div>
+                            <!-- Identidad -->
+                            <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">1. Tus datos</legend>
+                                <div class="grid sm:grid-cols-2 gap-4 mt-3">
+                                    <div>
+                                        <label class="form-label req">Nombres</label>
+                                        <input type="text" name="nombres" class="form-input" required>
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">Apellidos</label>
+                                        <input type="text" name="apellidos" class="form-input" required>
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">Cédula / Documento</label>
+                                        <input type="text" name="cedula" class="form-input" required>
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">Teléfono / WhatsApp</label>
+                                        <input type="tel" name="telefono" class="form-input" required>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="form-label">Correo electrónico</label>
+                                        <input type="email" name="email" class="form-input" placeholder="opcional, recomendado para recibir respuesta">
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="form-label">Dirección / Sector</label>
+                                        <input type="text" name="direccion" class="form-input" placeholder="Ciudad, sector">
+                                    </div>
+                                </div>
+                            </fieldset>
 
+                            <!-- Perfil -->
+                            <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">2. Tu perfil</legend>
+                                <div class="grid sm:grid-cols-2 gap-4 mt-3">
+                                    <div>
+                                        <label class="form-label">Puesto o cargo actual</label>
+                                        <input type="text" name="current_position" class="form-input" placeholder="Ej: Agente de soporte">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Empresa actual</label>
+                                        <input type="text" name="current_company" class="form-input">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Años de experiencia</label>
+                                        <input type="number" min="0" max="60" name="years_of_experience" class="form-input" placeholder="Ej: 3">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Expectativa salarial</label>
+                                        <input type="text" name="expected_salary" class="form-input" placeholder="Ej: RD$25,000">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Nivel educativo</label>
+                                        <select name="education_level" class="form-input">
+                                            <option value="">Selecciona...</option>
+                                            <option>Bachillerato</option>
+                                            <option>Estudiante universitario</option>
+                                            <option>Técnico</option>
+                                            <option>Universitario</option>
+                                            <option>Postgrado / Maestría</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Disponibilidad</label>
+                                        <select name="availability_preference" class="form-input">
+                                            <option value="">Selecciona...</option>
+                                            <option value="rotating">Turno rotativo</option>
+                                            <option value="weekdays">Solo Lunes a Viernes</option>
+                                            <option value="weekends">Fines de semana</option>
+                                            <option value="flexible">Flexible</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </fieldset>
+
+                            <!-- Mensaje + fuente -->
+                            <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">3. Cuéntanos más</legend>
+                                <div class="grid sm:grid-cols-2 gap-4 mt-3">
+                                    <div class="sm:col-span-2">
+                                        <label class="form-label">Mensaje breve / por qué deberíamos contratarte</label>
+                                        <textarea name="cover_letter_short" rows="3" class="form-input" placeholder="Opcional. 1-2 frases con tu valor diferencial."></textarea>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">¿Cómo te enteraste?</label>
+                                        <select name="source" class="form-input">
+                                            <option value="">Selecciona...</option>
+                                            <option>WhatsApp</option>
+                                            <option>Instagram</option>
+                                            <option>Facebook</option>
+                                            <option>Referido</option>
+                                            <option>Página web</option>
+                                            <option>Otro</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">LinkedIn / Portafolio</label>
+                                        <input type="url" name="linkedin_url" class="form-input" placeholder="https://linkedin.com/in/...">
+                                    </div>
+                                </div>
+                            </fieldset>
+
+                            <label class="flex items-start gap-3 px-2 text-sm text-slate-600 cursor-pointer">
+                                <input type="checkbox" name="acepta_datos" value="SI" required class="mt-1 rounded text-brand-600">
+                                <span>Confirmo que la información provista es veraz y autorizo su uso para fines de reclutamiento.</span>
+                            </label>
                         </form>
-                    </div>
-                    </div><!-- end applicationFormPanel -->
 
-                    <div id="applicationFormFooter" class="hidden bg-slate-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-slate-200">
-                        <button type="button" onclick="submitApplication()"
-                            class="inline-flex w-full justify-center rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 sm:ml-3 sm:w-auto"
-                            id="btnSubmit">Enviar Solicitud</button>
-                        <button type="button" onclick="backToJobInfo()"
-                            class="mt-3 inline-flex w-full justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-slate-300 hover:bg-slate-50 sm:mt-0 sm:w-auto">
-                            <i class="fas fa-arrow-left mr-2"></i>Ver Vacante
-                        </button>
+                        <div class="bg-white border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:justify-between gap-3 sticky bottom-0">
+                            <button type="button" onclick="backToJobInfo()" class="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                                <i class="fas fa-arrow-left"></i> Ver vacante
+                            </button>
+                            <button type="button" id="btnSubmit" onclick="submitApplication()" class="px-6 py-2.5 rounded-xl bg-slate-900 text-white font-semibold text-sm hover:bg-brand-700 transition-colors flex items-center justify-center gap-2 shadow-pop">
+                                Enviar postulación <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1056,182 +548,205 @@ $shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : 
     </div>
 
     <script>
+        const employmentTypeLabels = <?php echo json_encode($employment_types, JSON_UNESCAPED_UNICODE); ?>;
         const modal = document.getElementById('applicationModal');
         const modalBackdrop = document.getElementById('modalBackdrop');
         const modalPanel = document.getElementById('modalPanel');
         const form = document.getElementById('applicationForm');
 
-        const employmentTypeLabels = {
-            'full_time': 'Tiempo Completo',
-            'part_time': 'Medio Tiempo',
-            'contract': 'Contrato',
-            'internship': 'Pasantía'
-        };
+        // Job filters
+        const search = document.getElementById('jobSearch');
+        const dept = document.getElementById('deptFilter');
+        const grid = document.getElementById('jobGrid');
+        const noResults = document.getElementById('noResults');
+
+        function applyFilters() {
+            const q = (search?.value || '').toLowerCase().trim();
+            const d = (dept?.value || '').trim();
+            let visible = 0;
+            grid.querySelectorAll('article.job-card').forEach(card => {
+                const t = card.dataset.title || '';
+                const dp = card.dataset.dept || '';
+                const matches = (q === '' || t.includes(q)) && (d === '' || dp === d);
+                card.style.display = matches ? '' : 'none';
+                if (matches) visible++;
+            });
+            noResults.classList.toggle('hidden', visible !== 0);
+        }
+        search?.addEventListener('input', applyFilters);
+        dept?.addEventListener('change', applyFilters);
+
+        // Modal
+        function fillSection(textId, txt) {
+            const el = document.getElementById(textId);
+            if (!el) return;
+            const v = (txt || '').trim();
+            el.textContent = v || 'No especificado.';
+        }
 
         function openJobModal(job) {
             document.getElementById('job_posting_id').value = job.id;
             document.getElementById('puesto_aplicado').value = job.title;
             document.getElementById('modalJobTitle').textContent = job.title;
+            const meta = [];
+            if (job.department) meta.push(job.department);
+            if (job.location) meta.push(job.location);
+            if (job.employment_type) meta.push(employmentTypeLabels[job.employment_type] || job.employment_type);
+            document.getElementById('modalJobMeta').textContent = meta.join(' · ');
 
-            // Populate meta badges
             const badges = document.getElementById('jobMetaBadges');
             badges.innerHTML = '';
-            if (job.department) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-100 font-semibold"><i class="fas fa-building mr-1"></i>${job.department}</span>`;
-            if (job.location) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200"><i class="fas fa-map-marker-alt mr-1 text-brand-500"></i>${job.location}</span>`;
-            if (job.employment_type) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">${employmentTypeLabels[job.employment_type] || job.employment_type}</span>`;
-            if (job.salary_range) badges.innerHTML += `<span class="px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-100 font-semibold"><i class="fas fa-money-bill-wave mr-1"></i>${job.salary_range}</span>`;
+            if (job.salary_range) badges.innerHTML += `<span class="chip bg-emerald-100 text-emerald-700"><i class="fas fa-money-bill-wave mr-1"></i>${job.salary_range}</span>`;
+            if (job.location) badges.innerHTML += `<span class="chip bg-slate-100 text-slate-700"><i class="fas fa-map-marker-alt mr-1 text-brand-600"></i>${job.location}</span>`;
+            if (job.employment_type) badges.innerHTML += `<span class="chip bg-indigo-50 text-indigo-700">${employmentTypeLabels[job.employment_type] || job.employment_type}</span>`;
+            if (job.department) badges.innerHTML += `<span class="chip bg-brand-50 text-brand-700"><i class="fas fa-building mr-1"></i>${job.department}</span>`;
 
-            // Populate sections
-            function fillSection(sectionId, textId, text) {
-                const section = document.getElementById(sectionId);
-                const el = document.getElementById(textId);
-                if (text && text.trim()) {
-                    el.textContent = text.trim();
-                    section.classList.remove('hidden');
-                } else {
-                    section.classList.add('hidden');
-                }
-            }
-            fillSection('jobDescSection', 'jobDescText', job.description);
-            fillSection('jobResponsibilitiesSection', 'jobResponsibilitiesText', job.responsibilities);
-            fillSection('jobRequirementsSection', 'jobRequirementsText', job.requirements);
+            fillSection('jobDescText', job.description);
+            fillSection('jobResponsibilitiesText', job.responsibilities);
+            fillSection('jobRequirementsText', job.requirements);
 
-            // Show job info panel, hide form panel
             document.getElementById('jobInfoPanel').classList.remove('hidden');
             document.getElementById('applicationFormPanel').classList.add('hidden');
-            document.getElementById('applicationFormFooter').classList.add('hidden');
-
             modal.classList.remove('hidden');
-            setTimeout(() => {
-                modalBackdrop.classList.remove('opacity-0');
-                modalPanel.classList.remove('opacity-0', 'translate-y-4', 'sm:translate-y-0', 'sm:scale-95');
-                modalPanel.classList.add('opacity-100', 'translate-y-0', 'sm:scale-100');
-            }, 10);
+            requestAnimationFrame(() => {
+                modalBackdrop.classList.replace('opacity-0', 'opacity-100');
+            });
             document.body.style.overflow = 'hidden';
+        }
+
+        function openOpenApplication() {
+            // Postulación sin vacante específica — toma la primera vacante activa o queda 0
+            <?php if (!empty($job_postings)): ?>
+                openJobModal(<?php echo json_encode([
+                    'id'               => $job_postings[0]['id'],
+                    'title'            => 'Postulación abierta - ' . ($job_postings[0]['title'] ?? ''),
+                    'department'       => $job_postings[0]['department']       ?? '',
+                    'location'         => $job_postings[0]['location']         ?? '',
+                    'employment_type'  => $job_postings[0]['employment_type']  ?? '',
+                    'salary_range'     => $job_postings[0]['salary_range']     ?? '',
+                    'description'      => 'Estamos siempre interesados en conocer a buenos candidatos. Sube tu CV y nos pondremos en contacto cuando exista una vacante adecuada.',
+                    'requirements'     => '',
+                    'responsibilities' => '',
+                ], JSON_UNESCAPED_UNICODE); ?>);
+            <?php else: ?>
+                Swal.fire({ title:'No hay vacantes activas', text:'Por ahora no podemos recibir postulaciones.', icon:'info' });
+            <?php endif; ?>
         }
 
         function goToApplicationForm() {
             document.getElementById('jobInfoPanel').classList.add('hidden');
             document.getElementById('applicationFormPanel').classList.remove('hidden');
-            document.getElementById('applicationFormFooter').classList.remove('hidden');
-            document.getElementById('applicationFormFooter').style.display = 'flex';
-            // Scroll form panel to top
-            document.getElementById('applicationFormPanel').scrollTop = 0;
+            document.querySelector('#applicationFormPanel').scrollTop = 0;
         }
 
         function backToJobInfo() {
             document.getElementById('applicationFormPanel').classList.add('hidden');
-            document.getElementById('applicationFormFooter').classList.add('hidden');
             document.getElementById('jobInfoPanel').classList.remove('hidden');
         }
 
         function closeModal() {
-            modalBackdrop.classList.remove('opacity-100');
-            modalPanel.classList.remove('opacity-100', 'translate-y-0', 'sm:scale-100');
-            modalPanel.classList.add('opacity-0', 'translate-y-4', 'sm:translate-y-0', 'sm:scale-95');
+            modalBackdrop.classList.replace('opacity-100', 'opacity-0');
             setTimeout(() => {
                 modal.classList.add('hidden');
                 document.body.style.overflow = '';
                 form.reset();
-                document.getElementById('cv-preview').textContent = '';
+                document.getElementById('cvFileName').textContent = 'Subir CV (PDF, DOC, DOCX)';
+                document.getElementById('aiStatus').classList.add('hidden');
                 document.getElementById('jobInfoPanel').classList.add('hidden');
                 document.getElementById('applicationFormPanel').classList.add('hidden');
-                document.getElementById('applicationFormFooter').classList.add('hidden');
-
-                // Hide all dynamic fields on close
-                ['inputOtroHorario', 'inputOtraModalidad', 'inputOtroTransporte', 'inputIncapacidad', 'inputConoce'].forEach(id => {
-                    document.getElementById(id)?.classList.add('hidden');
-                });
-                const est = document.getElementById('estudiaDetails');
-                if (est) { est.classList.add('hidden'); est.classList.remove('grid'); }
-            }, 300);
+            }, 250);
         }
 
-        // Toggles for checkboxes
-        function setupToggle(triggerId, targetId, isGrid = false) {
-            const trigger = document.getElementById(triggerId);
-            const target = document.getElementById(targetId);
-            if (trigger && target) {
-                trigger.addEventListener('change', function () {
-                    if (this.checked) {
-                        target.classList.remove('hidden');
-                        if (isGrid) target.classList.add('grid');
-                    } else {
-                        target.classList.add('hidden');
-                        if (isGrid) target.classList.remove('grid');
-                    }
-                });
-            }
-        }
+        modalBackdrop.addEventListener('click', closeModal);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal(); });
 
-        setupToggle('toggleOtroHorario', 'inputOtroHorario');
-        setupToggle('toggleOtraModalidad', 'inputOtraModalidad');
-        setupToggle('toggleOtroTransporte', 'inputOtroTransporte');
-        setupToggle('toggleEstudia', 'estudiaDetails', true);
+        // CV picker UI
+        const cvFile = document.getElementById('cv-file');
+        const cvDropzone = document.getElementById('cvDropzone');
+        const cvFileName = document.getElementById('cvFileName');
+        const cvSubText = document.getElementById('cvSubText');
+        const aiStatus = document.getElementById('aiStatus');
+        const aiStatusText = document.getElementById('aiStatusText');
 
-        // Toggles for Radio Buttons
-        function setupRadioToggle(name, targetId, showValue = 'SI') {
-            const radios = document.querySelectorAll(`input[name="${name}"]`);
-            const target = document.getElementById(targetId);
+        cvFile.addEventListener('change', () => {
+            if (!cvFile.files[0]) return;
+            const f = cvFile.files[0];
+            const sizeMb = (f.size / 1024 / 1024).toFixed(2);
+            cvFileName.textContent = f.name;
+            cvSubText.textContent = `${sizeMb} MB · listo para enviar`;
+            // Optimistic AI hint
+            aiStatus.classList.remove('hidden');
+            aiStatusText.textContent = 'CV cargado. La IA procesará tu información al enviar.';
+        });
 
-            radios.forEach(radio => {
-                radio.addEventListener('change', function () {
-                    if (!target) return;
-                    if (this.value === showValue && this.checked) {
-                        target.classList.remove('hidden');
-                    } else if (this.checked) {
-                        target.classList.add('hidden');
-                    }
-                });
-            });
-        }
-
-        setupRadioToggle('incapacidad', 'inputIncapacidad', 'SI');
-        setupRadioToggle('conoce_empleado', 'inputConoce', 'SI');
-
-        async function submitApplication() {
-            if (!form.checkValidity()) {
-                form.reportValidity();
-                return;
-            }
-            const btn = document.getElementById('btnSubmit');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando...';
-            btn.disabled = true;
-
-            try {
-                const response = await fetch('submit_application.php', { method: 'POST', body: new FormData(form) });
-                const result = await response.json();
-
-                if (result.success) {
-                    closeModal();
-                    Swal.fire({
-                        title: '¡Recibido!',
-                        text: 'Solicitud enviada exitosamente.',
-                        icon: 'success',
-                        confirmButtonColor: '#0ea5e9'
-                    });
-                } else {
-                    Swal.fire({ title: 'Error', text: result.message, icon: 'error', confirmButtonColor: '#ef4444' });
-                }
-            } catch (error) {
-                Swal.fire({ title: 'Error', text: 'Error de conexión', icon: 'error' });
-            } finally {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        }
-
-        window.addEventListener('scroll', () => {
-            const nav = document.getElementById('navbar');
-            if (window.scrollY > 20) {
-                nav.classList.add('shadow-md', 'bg-white/95');
-                nav.classList.remove('py-2');
-            } else {
-                nav.classList.remove('shadow-md', 'bg-white/95');
+        ['dragenter', 'dragover'].forEach(ev => cvDropzone.addEventListener(ev, e => { e.preventDefault(); cvDropzone.classList.add('drag'); }));
+        ['dragleave', 'drop'].forEach(ev => cvDropzone.addEventListener(ev, e => { e.preventDefault(); cvDropzone.classList.remove('drag'); }));
+        cvDropzone.addEventListener('drop', e => {
+            const dt = e.dataTransfer; if (dt && dt.files && dt.files[0]) {
+                cvFile.files = dt.files;
+                cvFile.dispatchEvent(new Event('change'));
             }
         });
+
+        async function submitApplication() {
+            if (!form.checkValidity()) { form.reportValidity(); return; }
+            const btn = document.getElementById('btnSubmit');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando...';
+            btn.disabled = true;
+            aiStatus.classList.remove('hidden');
+            aiStatusText.textContent = 'Enviando solicitud y procesando con IA...';
+
+            try {
+                const fd = new FormData(form);
+                const r = await fetch('submit_application.php', { method: 'POST', body: fd });
+                const text = await r.text();
+                let res;
+                try { res = JSON.parse(text); } catch (_) {
+                    throw new Error('Respuesta inválida del servidor: ' + text.slice(0, 200));
+                }
+                if (res.success) {
+                    closeModal();
+                    Swal.fire({
+                        title: '¡Solicitud recibida!',
+                        html: `Tu código es <code class="bg-slate-100 text-brand-700 px-2 py-0.5 rounded font-mono">${res.application_code || '—'}</code>.<br>Guárdalo para rastrear tu postulación.`,
+                        icon: 'success',
+                        confirmButtonText: 'Listo',
+                        confirmButtonColor: '#3a63f5'
+                    });
+                } else {
+                    Swal.fire({ title: 'Error', text: res.message || 'No se pudo enviar', icon: 'error', confirmButtonColor: '#ef4444' });
+                }
+            } catch (err) {
+                Swal.fire({ title: 'Error', text: err.message || 'Error de conexión', icon: 'error' });
+            } finally {
+                btn.innerHTML = orig;
+                btn.disabled = false;
+                aiStatus.classList.add('hidden');
+            }
+        }
+
+        // Navbar shadow on scroll
+        window.addEventListener('scroll', () => {
+            const n = document.getElementById('navbar');
+            if (window.scrollY > 8) n.classList.add('shadow-soft');
+            else n.classList.remove('shadow-soft');
+        });
+
+        // Auto-open from share link
+        <?php if ($shareJob): ?>
+            window.addEventListener('load', () => openJobModal(<?php echo json_encode([
+                'id'               => $shareJob['id'],
+                'title'            => $shareJob['title'],
+                'department'       => $shareJob['department']       ?? '',
+                'location'         => $shareJob['location']         ?? '',
+                'employment_type'  => $shareJob['employment_type']  ?? '',
+                'salary_range'     => $shareJob['salary_range']     ?? '',
+                'description'      => $shareJob['description']      ?? '',
+                'requirements'     => $shareJob['requirements']     ?? '',
+                'responsibilities' => $shareJob['responsibilities'] ?? '',
+            ], JSON_UNESCAPED_UNICODE); ?>));
+        <?php endif; ?>
     </script>
 </body>
-
 </html>

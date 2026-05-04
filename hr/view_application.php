@@ -105,6 +105,24 @@ $displayYears = !empty($application['years_of_experience']) ? $application['year
     : ($application['recent_years'] ?? '')
 );
 $displayYears = $displayYears !== '' ? $displayYears : 'N/A';
+// AI summary fields (added by recruitment AI migration)
+$aiScore         = isset($application['ai_score']) && $application['ai_score'] !== null ? (int) $application['ai_score'] : null;
+$aiSummary       = $application['ai_summary']        ?? '';
+$aiRecommendation= $application['ai_recommendation'] ?? '';
+$aiStrengthsList = !empty($application['ai_strengths']) ? (array) (json_decode($application['ai_strengths'], true) ?: []) : [];
+$aiConcernsList  = !empty($application['ai_concerns'])  ? (array) (json_decode($application['ai_concerns'],  true) ?: []) : [];
+$aiExtracted     = !empty($application['ai_extracted_data']) ? (array) (json_decode($application['ai_extracted_data'], true) ?: []) : [];
+$aiProcessedAt   = $application['ai_processed_at']   ?? null;
+$aiModelUsed     = $application['ai_model_used']     ?? null;
+
+$aiScoreColor = '#94a3b8';
+$aiScoreLabel = 'Sin evaluar';
+if ($aiScore !== null) {
+    if ($aiScore >= 75)      { $aiScoreColor = '#10b981'; $aiScoreLabel = 'Alto fit'; }
+    elseif ($aiScore >= 50)  { $aiScoreColor = '#f59e0b'; $aiScoreLabel = 'Fit medio'; }
+    else                     { $aiScoreColor = '#ef4444'; $aiScoreLabel = 'Bajo fit'; }
+}
+
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
@@ -177,6 +195,132 @@ require_once '../header.php';
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- AI Insights Panel -->
+    <div class="ai-banner-card mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center gap-5">
+            <div class="flex items-center gap-4">
+                <div class="score-donut" style="--pct: <?php echo $aiScore ?? 0; ?>; --color:<?php echo $aiScoreColor; ?>; width:72px; height:72px;">
+                    <span style="font-size:1rem"><?php echo $aiScore === null ? '—' : $aiScore; ?></span>
+                </div>
+                <div>
+                    <div class="text-xs uppercase font-bold tracking-widest text-purple-200"><i class="fas fa-brain"></i> Análisis con IA</div>
+                    <h3 class="text-lg font-bold mt-1 text-white">
+                        <?php echo htmlspecialchars($aiScoreLabel); ?>
+                        <?php if (!empty($aiRecommendation)): ?>
+                            <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/25 uppercase tracking-wide font-semibold"><?php echo htmlspecialchars($aiRecommendation); ?></span>
+                        <?php endif; ?>
+                    </h3>
+                    <?php if ($aiProcessedAt): ?>
+                        <div class="text-xs text-slate-200 mt-0.5">Procesado <strong class="text-white"><?php echo date('d/m/Y H:i', strtotime($aiProcessedAt)); ?></strong> · <?php echo htmlspecialchars($aiModelUsed ?? '—'); ?></div>
+                    <?php else: ?>
+                        <div class="text-xs text-slate-200 mt-0.5">Aún no procesado por IA</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="flex-1">
+                <?php if ($aiSummary): ?>
+                    <p class="text-sm text-slate-100 italic leading-relaxed">"<?php echo htmlspecialchars($aiSummary); ?>"</p>
+                <?php else: ?>
+                    <p class="text-sm text-slate-200">Genera un resumen y score automático con IA basado en el CV y la vacante.</p>
+                <?php endif; ?>
+            </div>
+            <div class="flex flex-col gap-2 lg:items-end">
+                <button onclick="runAIProcessing(<?php echo (int) $application_id; ?>, this)" class="ai-button">
+                    <i class="fas fa-wand-magic-sparkles"></i> <?php echo $aiSummary ? 'Re-procesar IA' : 'Procesar con IA'; ?>
+                </button>
+                <?php if (!empty($application['cv_path'])): ?>
+                    <a href="../<?php echo htmlspecialchars($application['cv_path']); ?>" target="_blank" class="btn-secondary text-sm"><i class="fas fa-file-pdf"></i> Ver CV</a>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if (!empty($aiStrengthsList) || !empty($aiConcernsList)): ?>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                <?php if (!empty($aiStrengthsList)): ?>
+                    <div class="rounded-xl p-4 bg-emerald-500/15 border border-emerald-500/40">
+                        <div class="text-xs font-bold uppercase tracking-wider text-emerald-300 mb-2"><i class="fas fa-circle-check"></i> Fortalezas</div>
+                        <ul class="text-sm text-slate-100 space-y-1 list-disc pl-5">
+                            <?php foreach ($aiStrengthsList as $s): ?>
+                                <li><?php echo htmlspecialchars((string) $s); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
+                <?php if (!empty($aiConcernsList)): ?>
+                    <div class="rounded-xl p-4 bg-amber-500/15 border border-amber-500/40">
+                        <div class="text-xs font-bold uppercase tracking-wider text-amber-300 mb-2"><i class="fas fa-triangle-exclamation"></i> A considerar</div>
+                        <ul class="text-sm text-slate-100 space-y-1 list-disc pl-5">
+                            <?php foreach ($aiConcernsList as $c): ?>
+                                <li><?php echo htmlspecialchars((string) $c); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($aiExtracted)): ?>
+            <details class="mt-4">
+                <summary class="cursor-pointer text-sm font-semibold text-slate-100 hover:text-white"><i class="fas fa-list-ul mr-1"></i> Datos extraídos del CV por IA</summary>
+                <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <?php if (!empty($aiExtracted['skills']) && is_array($aiExtracted['skills'])): ?>
+                        <div class="rounded-lg bg-slate-800/60 border border-slate-600/50 p-3">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Skills</div>
+                            <div class="flex flex-wrap gap-1.5">
+                                <?php foreach ($aiExtracted['skills'] as $sk): ?>
+                                    <span class="px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-100 text-xs font-medium"><?php echo htmlspecialchars((string) $sk); ?></span>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($aiExtracted['languages']) && is_array($aiExtracted['languages'])): ?>
+                        <div class="rounded-lg bg-slate-800/60 border border-slate-600/50 p-3">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Idiomas</div>
+                            <ul class="space-y-0.5">
+                                <?php foreach ($aiExtracted['languages'] as $lang): ?>
+                                    <li class="text-sm text-slate-100"><strong><?php echo htmlspecialchars((string) ($lang['language'] ?? '')); ?></strong>
+                                        <span class="text-slate-300">— <?php echo htmlspecialchars((string) ($lang['level'] ?? '')); ?></span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($aiExtracted['experience']) && is_array($aiExtracted['experience'])): ?>
+                        <div class="rounded-lg bg-slate-800/60 border border-slate-600/50 p-3 md:col-span-2">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Experiencia laboral</div>
+                            <ul class="space-y-2">
+                                <?php foreach ($aiExtracted['experience'] as $ex): ?>
+                                    <li class="text-sm text-slate-100">
+                                        <strong class="text-white"><?php echo htmlspecialchars((string) ($ex['role'] ?? '')); ?></strong>
+                                        — <?php echo htmlspecialchars((string) ($ex['company'] ?? '')); ?>
+                                        <span class="text-slate-300">(<?php echo htmlspecialchars((string) ($ex['period'] ?? '')); ?>)</span>
+                                        <?php if (!empty($ex['description'])): ?>
+                                            <p class="text-xs text-slate-300 mt-0.5"><?php echo htmlspecialchars((string) $ex['description']); ?></p>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($aiExtracted['education']) && is_array($aiExtracted['education'])): ?>
+                        <div class="rounded-lg bg-slate-800/60 border border-slate-600/50 p-3 md:col-span-2">
+                            <div class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Educación</div>
+                            <ul class="space-y-1">
+                                <?php foreach ($aiExtracted['education'] as $ed): ?>
+                                    <li class="text-sm text-slate-100">
+                                        <strong class="text-white"><?php echo htmlspecialchars((string) ($ed['degree'] ?? '')); ?></strong>
+                                        — <?php echo htmlspecialchars((string) ($ed['institution'] ?? '')); ?>
+                                        <span class="text-slate-300">(<?php echo htmlspecialchars((string) ($ed['year'] ?? '')); ?>)</span>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </details>
+        <?php endif; ?>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1100,6 +1244,33 @@ require_once '../header.php';
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+async function runAIProcessing(applicationId, btn) {
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Analizando...';
+    try {
+        const fd = new FormData();
+        fd.append('action', 'process_application');
+        fd.append('application_id', applicationId);
+        const r = await fetch('recruitment_ai_endpoints.php', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d.success) {
+            btn.innerHTML = '<i class="fas fa-check"></i> Listo';
+            setTimeout(() => location.reload(), 600);
+        } else {
+            alert('IA: ' + (d.error || 'No se pudo procesar.'));
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = orig;
+    }
+}
+</script>
 
 <?php require_once '../footer.php'; ?>
 

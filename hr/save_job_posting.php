@@ -9,17 +9,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header("Location: job_postings.php"
 }
 
 try {
+    $aiGenerated = !empty($_POST['ai_generated']) && $_POST['ai_generated'] !== '0' ? 1 : 0;
+
     if (isset($_POST['id']) && !empty($_POST['id'])) {
         // Update existing job posting
         $jobId = $_POST['id'];
         $stmt = $pdo->prepare("
-            UPDATE job_postings 
-            SET title = ?, department = ?, location = ?, employment_type = ?, 
-                description = ?, requirements = ?, responsibilities = ?, 
-                salary_range = ?, closing_date = ?
+            UPDATE job_postings
+            SET title = ?, department = ?, location = ?, employment_type = ?,
+                description = ?, requirements = ?, responsibilities = ?,
+                salary_range = ?, closing_date = ?, ai_generated = GREATEST(ai_generated, ?)
             WHERE id = ?
         ");
-        
+
         $stmt->execute([
             $_POST['title'],
             $_POST['department'],
@@ -30,19 +32,20 @@ try {
             $_POST['responsibilities'] ?? null,
             $_POST['salary_range'] ?? null,
             !empty($_POST['closing_date']) ? $_POST['closing_date'] : null,
+            $aiGenerated,
             $jobId
         ]);
-        
+
         $_SESSION['success_message'] = "Vacante actualizada exitosamente";
     } else {
         // Insert new job posting
         $stmt = $pdo->prepare("
-            INSERT INTO job_postings 
-            (title, department, location, employment_type, description, requirements, 
-             responsibilities, salary_range, closing_date, posted_date, created_by, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, 'active')
+            INSERT INTO job_postings
+            (title, department, location, employment_type, description, requirements,
+             responsibilities, salary_range, closing_date, posted_date, created_by, status, ai_generated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, 'active', ?)
         ");
-        
+
         $stmt->execute([
             $_POST['title'],
             $_POST['department'],
@@ -53,9 +56,10 @@ try {
             $_POST['responsibilities'] ?? null,
             $_POST['salary_range'] ?? null,
             !empty($_POST['closing_date']) ? $_POST['closing_date'] : null,
-            $_SESSION['user_id']
+            $_SESSION['user_id'],
+            $aiGenerated
         ]);
-    
+
         $jobId = $pdo->lastInsertId();
         $_SESSION['success_message'] = "Vacante publicada exitosamente";
     }
