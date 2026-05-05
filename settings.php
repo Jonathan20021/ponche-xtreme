@@ -994,6 +994,7 @@ try {
                 $waExcludeWeekends    = isset($_POST['wasapi_report_exclude_weekends']) ? 1 : 0;
                 $waApiToken           = trim($_POST['wasapi_api_token'] ?? '');
                 $waBaseUrl            = trim($_POST['wasapi_base_url'] ?? 'https://api.wasapi.io/prod/api/v1/');
+                $waExcludedUsers      = trim($_POST['wasapi_excluded_user_ids'] ?? '');
                 $waClaudeEnabled      = isset($_POST['wasapi_report_claude_enabled']) ? 1 : 0;
                 $waClaudeModel        = trim($_POST['wasapi_report_claude_model'] ?? 'claude-sonnet-4-6');
                 $waClaudeMaxTokens    = max(200, (int) ($_POST['wasapi_report_claude_max_tokens'] ?? 1200));
@@ -1025,6 +1026,7 @@ try {
                     if ($waBaseUrl !== '') {
                         $stmt->execute(['wasapi_base_url', $waBaseUrl]);
                     }
+                    $stmt->execute(['wasapi_excluded_user_ids', $waExcludedUsers]);
 
                     $successMessages[] = 'Configuración del reporte Wasapi actualizada.';
                 } catch (PDOException $e) {
@@ -1738,9 +1740,10 @@ $wasapiReport = [
     'claude_model'             => 'claude-sonnet-4-6',
     'claude_max_tokens'        => 1200,
     'claude_prompt'            => '',
+    'excluded_user_ids'        => '',
 ];
 try {
-    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'wasapi_report_%' OR setting_key IN ('wasapi_api_token','wasapi_base_url')");
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'wasapi_report_%' OR setting_key IN ('wasapi_api_token','wasapi_base_url','wasapi_excluded_user_ids')");
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         $val = $row['setting_value'] ?? '';
         switch ($row['setting_key']) {
@@ -1753,6 +1756,7 @@ try {
             case 'wasapi_report_exclude_weekends':         $wasapiReport['exclude_weekends']         = $val === '1'; break;
             case 'wasapi_api_token':                       $wasapiReport['api_token']                = $val; break;
             case 'wasapi_base_url':                        $wasapiReport['base_url']                 = $val ?: 'https://api.wasapi.io/prod/api/v1/'; break;
+            case 'wasapi_excluded_user_ids':               $wasapiReport['excluded_user_ids']        = $val; break;
             case 'wasapi_report_claude_enabled':           $wasapiReport['claude_enabled']           = $val === '1'; break;
             case 'wasapi_report_claude_model':             $wasapiReport['claude_model']             = $val ?: 'claude-sonnet-4-6'; break;
             case 'wasapi_report_claude_max_tokens':        $wasapiReport['claude_max_tokens']        = (int) ($val ?: 1200); break;
@@ -3875,6 +3879,17 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 value="<?= (int) $wasapiReport['pending_alert_threshold'] ?>" class="input-control" required>
                             <p class="text-xs text-muted mt-1">Si quedan ≥ X conversaciones pendientes/hold al cierre, se dispara alerta.</p>
                         </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-user-shield"></i> Usuarios administrativos a excluir del reporte</label>
+                        <textarea name="wasapi_excluded_user_ids" rows="2" class="input-control font-mono text-sm"
+                            placeholder="Ej: 1234, supervisor@evallishbpo.com, 5678"><?= htmlspecialchars($wasapiReport['excluded_user_ids']) ?></textarea>
+                        <p class="text-xs text-muted mt-1">
+                            IDs de Wasapi y/o correos separados por coma. Estos usuarios se excluyen de las tarjetas de
+                            campaña, totales por campaña, ranking de agentes y conteo de agentes online (no afectan el
+                            total global de conversaciones de Wasapi).
+                        </p>
                     </div>
                 </div>
 

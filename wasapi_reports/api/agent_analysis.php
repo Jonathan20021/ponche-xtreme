@@ -15,8 +15,38 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+require_once __DIR__ . '/../../db.php';
+
 define('WASAPI_TOKEN', '338529|NeQrFHvdJ3lX6O2Hs26QPjc0IyrgzKFxQGwVcvCM0575a229');
 define('WASAPI_BASE_URL', 'https://api.wasapi.io/prod/api/v1/');
+
+/**
+ * Build the exclusion set (Wasapi user IDs and/or emails) configured in settings.
+ */
+function getWasapiExcludedUsers(PDO $pdo): array {
+    $raw = (string) getSystemSetting($pdo, 'wasapi_excluded_user_ids', '');
+    $ids = [];
+    $emails = [];
+    if ($raw === '') return ['ids' => $ids, 'emails' => $emails];
+    foreach (preg_split('/[,;\s]+/', $raw) as $token) {
+        $token = trim($token);
+        if ($token === '') continue;
+        if (filter_var($token, FILTER_VALIDATE_EMAIL)) {
+            $emails[strtolower($token)] = true;
+        } elseif (ctype_digit($token)) {
+            $ids[(int) $token] = true;
+        }
+    }
+    return ['ids' => $ids, 'emails' => $emails];
+}
+
+function isUserExcluded(array $user, array $excluded): bool {
+    $uid = (int) ($user['id'] ?? 0);
+    if ($uid > 0 && !empty($excluded['ids'][$uid])) return true;
+    $email = strtolower((string) ($user['email'] ?? ''));
+    if ($email !== '' && !empty($excluded['emails'][$email])) return true;
+    return false;
+}
 
 try {
     $action = $_GET['action'] ?? 'list';
@@ -66,11 +96,30 @@ try {
     }
     curl_multi_close($multiHandle);
     
-    // Procesar usuarios de Wasapi
-    $users = $results['users']['users'] ?? [];
-    $onlineUsers = $results['online_agents']['users'] ?? [];
-    $agentConversations = $results['agent_conversations']['conversations'] ?? [];
-    $performanceData = $results['performance']['data'] ?? [];
+    // Procesar usuarios de Wasapi (filtrando administrativos configurados en settings)
+    $excluded = getWasapiExcludedUsers($pdo);
+    $excludedUserIds = [];
+    $allUsers = $results['users']['users'] ?? [];
+    $users = [];
+    foreach ($allUsers as $u) {
+        if (isUserExcluded($u, $excluded)) {
+            $excludedUserIds[(int) ($u['id'] ?? 0)] = true;
+            continue;
+        }
+        $users[] = $u;
+    }
+    $onlineUsers = array_values(array_filter(
+        $results['online_agents']['users'] ?? [],
+        fn($u) => !isUserExcluded($u, $excluded)
+    ));
+    $agentConversations = array_values(array_filter(
+        $results['agent_conversations']['conversations'] ?? [],
+        fn($c) => empty($excludedUserIds[(int) ($c['agent_id'] ?? 0)])
+    ));
+    $performanceData = array_values(array_filter(
+        $results['performance']['data'] ?? [],
+        fn($p) => empty($excludedUserIds[(int) ($p['agent_id'] ?? ($p['agent']['id'] ?? 0))])
+    ));
     
     // Crear map de usuarios online
     $onlineMap = [];

@@ -14,8 +14,36 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+require_once __DIR__ . '/../../db.php';
+
 define('WASAPI_TOKEN', '338529|NeQrFHvdJ3lX6O2Hs26QPjc0IyrgzKFxQGwVcvCM0575a229');
 define('WASAPI_BASE_URL', 'https://api.wasapi.io/prod/api/v1/');
+
+/**
+ * Build the exclusion set (Wasapi user IDs / emails) configured in settings.
+ */
+function getWasapiExcludedUsers(PDO $pdo): array {
+    $raw = (string) getSystemSetting($pdo, 'wasapi_excluded_user_ids', '');
+    $ids = []; $emails = [];
+    if ($raw === '') return ['ids' => $ids, 'emails' => $emails];
+    foreach (preg_split('/[,;\s]+/', $raw) as $token) {
+        $token = trim($token);
+        if ($token === '') continue;
+        if (filter_var($token, FILTER_VALIDATE_EMAIL)) {
+            $emails[strtolower($token)] = true;
+        } elseif (ctype_digit($token)) {
+            $ids[(int) $token] = true;
+        }
+    }
+    return ['ids' => $ids, 'emails' => $emails];
+}
+
+function isWasapiUserExcluded(int $id, string $email, array $excluded): bool {
+    if ($id > 0 && !empty($excluded['ids'][$id])) return true;
+    $email = strtolower($email);
+    if ($email !== '' && !empty($excluded['emails'][$email])) return true;
+    return false;
+}
 
 /**
  * Realiza una petición a la API de Wasapi
@@ -111,26 +139,37 @@ try {
     }
     curl_multi_close($multiHandle);
     
+    // Cargar lista de exclusiones (administrativos)
+    $excluded = getWasapiExcludedUsers($pdo);
+    $excludedUserIds = [];
+
     // ============================================================
     // PROCESAR AGENTES ONLINE
     // ============================================================
     $onlineAgents = 0;
     $onlineAgentsList = [];
     $onlineData = $results['online_agents']['data'] ?? [];
-    
+
     // La API de Wasapi devuelve usuarios en "users" o directamente como array
     $users = $onlineData['users'] ?? $onlineData['data'] ?? $onlineData;
     if (is_array($users)) {
         foreach ($users as $user) {
+            $uid = (int) ($user['id'] ?? $user['user_id'] ?? 0);
+            $uemail = (string) ($user['email'] ?? '');
+            if (isWasapiUserExcluded($uid, $uemail, $excluded)) {
+                if ($uid > 0) $excludedUserIds[$uid] = true;
+                continue;
+            }
+
             $isOnline = isset($user['online']) ? ($user['online'] == 1 || $user['online'] === true) : false;
             if (!$isOnline && isset($user['status'])) {
                 $isOnline = $user['status'] === 'online' || $user['status'] === 'available';
             }
-            
+
             if ($isOnline) {
                 $onlineAgents++;
                 $onlineAgentsList[] = [
-                    'id' => $user['id'] ?? $user['user_id'] ?? 0,
+                    'id' => $uid,
                     'name' => $user['name'] ?? $user['full_name'] ?? $user['username'] ?? 'Agente',
                     'avatar' => $user['avatar'] ?? null,
                     'status' => 'online',
@@ -183,6 +222,7 @@ try {
     if (is_array($agentConversations) && !empty($agentConversations)) {
         foreach ($agentConversations as $ac) {
             $agentId = $ac['agent_id'] ?? $ac['id'] ?? 0;
+            if (isset($excludedUserIds[(int) $agentId])) continue;
             if ($agentId > 0) {
                 if (!isset($agentStats[$agentId])) {
                     $agentStats[$agentId] = [
@@ -230,16 +270,19 @@ try {
     
     if (is_array($performanceAgents) && !empty($performanceAgents)) {
         foreach ($performanceAgents as $pa) {
+            $aid = (int) ($pa['agent']['id'] ?? $pa['agent_id'] ?? $pa['id'] ?? 0);
+            if (isset($excludedUserIds[$aid])) continue;
+
             $resolved = $pa['resolved_conversations'] ?? $pa['resolutions'] ?? 0;
             $assignments = $pa['assignments'] ?? 0;
             $totalResolved += $resolved;
             $totalAssignments += $assignments;
-            
+
             // Si no tenemos datos de chatsByAgent, usar performance
             if (empty($chatsByAgent) && (isset($pa['agent']) || isset($pa['agent_name']))) {
                 $agentName = $pa['agent']['name'] ?? $pa['agent_name'] ?? $pa['name'] ?? 'Agente';
                 $chatsByAgent[] = [
-                    'agent_id' => $pa['agent']['id'] ?? $pa['agent_id'] ?? $pa['id'] ?? 0,
+                    'agent_id' => $aid,
                     'agent_name' => $agentName,
                     'active' => $assignments - $resolved,
                     'pending' => 0,
@@ -270,6 +313,9 @@ try {
     
     if (is_array($performanceAgents) && !empty($performanceAgents)) {
         foreach ($performanceAgents as $pa) {
+            $aid2 = (int) ($pa['agent']['id'] ?? $pa['agent_id'] ?? 0);
+            if (isset($excludedUserIds[$aid2])) continue;
+
             $resolutionTime = floatval($pa['avg_resolution_time_per_conversation'] ?? 0);
             $firstResponseTime = floatval($pa['avg_first_response_time'] ?? 0);
             $closeConvs = intval($pa['total_close_conversations'] ?? 0);
