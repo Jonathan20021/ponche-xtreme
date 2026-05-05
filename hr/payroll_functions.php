@@ -231,6 +231,95 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
 }
 
 /**
+ * Garantiza la tabla payroll_holidays para registrar fechas en que las horas
+ * trabajadas se pagan al doble (excluyendo empleados con salario fijo).
+ */
+function ensurePayrollHolidaysTable(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS payroll_holidays (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                holiday_date DATE NOT NULL,
+                name VARCHAR(150) NOT NULL DEFAULT 'Día Festivo',
+                multiplier DECIMAL(4,2) NOT NULL DEFAULT 2.00,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_holiday_date (holiday_date),
+                INDEX idx_holiday_active (is_active, holiday_date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    } catch (PDOException $e) {
+        // Fallar silenciosamente: si no podemos crear la tabla, las funciones
+        // dependientes degradarán (no aplicarán doble pago en feriados) en
+        // lugar de romper el cálculo de nómina.
+    }
+
+    $ensured = true;
+}
+
+/**
+ * Devuelve un mapa de holidays activos dentro del rango [startDate, endDate]
+ * con la forma: ['YYYY-MM-DD' => ['name' => '...', 'multiplier' => 2.0]].
+ * Si la tabla no existe o la consulta falla, devuelve un arreglo vacío.
+ */
+function getPayrollHolidaysMap(PDO $pdo, string $startDate, string $endDate): array
+{
+    ensurePayrollHolidaysTable($pdo);
+
+    try {
+        $stmt = $pdo->prepare("
+            SELECT holiday_date, name, multiplier
+            FROM payroll_holidays
+            WHERE is_active = 1
+              AND holiday_date BETWEEN ? AND ?
+        ");
+        $stmt->execute([$startDate, $endDate]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return [];
+    }
+
+    $map = [];
+    foreach ($rows as $row) {
+        $multiplier = (float) $row['multiplier'];
+        if ($multiplier <= 0) {
+            continue;
+        }
+        $map[$row['holiday_date']] = [
+            'name' => $row['name'],
+            'multiplier' => $multiplier,
+        ];
+    }
+
+    return $map;
+}
+
+/**
+ * Determina si el empleado debe recibir el pago doble por feriado.
+ * Solo aplica a empleados que NO tengan salario fijo (compensación 'fixed').
+ */
+function shouldApplyHolidayDoublePay(?string $compensationType, ?string $role, float $monthlySalary): bool
+{
+    $comp = strtolower(trim((string) $compensationType));
+    $roleUpper = strtoupper(trim((string) $role));
+
+    if ($comp === '' || $comp === 'hourly') {
+        if ($roleUpper !== 'AGENT' && $monthlySalary > 0) {
+            $comp = 'fixed';
+        }
+    }
+
+    return $comp !== 'fixed';
+}
+
+/**
  * Garantiza la columna visible_to_agents en payroll_periods.
  * Permite al admin controlar qué quincenas pueden ver los agentes
  * en su panel de horas acumuladas.

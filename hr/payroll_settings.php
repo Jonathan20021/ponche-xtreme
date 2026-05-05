@@ -1,12 +1,82 @@
 <?php
 session_start();
 require_once '../db.php';
+require_once 'payroll_functions.php';
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
+ensurePayrollHolidaysTable($pdo);
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
+
+// Handle holiday creation
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_holiday'])) {
+    $holidayDate = trim($_POST['holiday_date'] ?? '');
+    $holidayName = trim($_POST['holiday_name'] ?? '');
+    $multiplier = (float) ($_POST['multiplier'] ?? 2.0);
+    $isActive = isset($_POST['is_active']) ? 1 : 0;
+
+    if ($holidayDate === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $holidayDate)) {
+        $errorMsg = 'Debes indicar una fecha válida para el feriado.';
+    } elseif ($holidayName === '') {
+        $errorMsg = 'Debes indicar el nombre del feriado.';
+    } elseif ($multiplier <= 0) {
+        $errorMsg = 'El multiplicador debe ser mayor a 0.';
+    } else {
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO payroll_holidays (holiday_date, name, multiplier, is_active)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE name = VALUES(name), multiplier = VALUES(multiplier), is_active = VALUES(is_active)
+            ");
+            $stmt->execute([$holidayDate, mb_substr($holidayName, 0, 150), $multiplier, $isActive]);
+            $successMsg = 'Feriado guardado correctamente.';
+        } catch (PDOException $e) {
+            $errorMsg = 'Error al guardar el feriado: ' . $e->getMessage();
+        }
+    }
+}
+
+// Handle holiday update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_holiday'])) {
+    $holidayId = (int) ($_POST['holiday_id'] ?? 0);
+    $holidayDate = trim($_POST['holiday_date'] ?? '');
+    $holidayName = trim($_POST['holiday_name'] ?? '');
+    $multiplier = (float) ($_POST['multiplier'] ?? 2.0);
+    $isActive = isset($_POST['is_active']) ? 1 : 0;
+
+    if ($holidayId <= 0) {
+        $errorMsg = 'ID de feriado inválido.';
+    } elseif ($holidayDate === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $holidayDate)) {
+        $errorMsg = 'Debes indicar una fecha válida para el feriado.';
+    } elseif ($holidayName === '') {
+        $errorMsg = 'Debes indicar el nombre del feriado.';
+    } elseif ($multiplier <= 0) {
+        $errorMsg = 'El multiplicador debe ser mayor a 0.';
+    } else {
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE payroll_holidays
+                SET holiday_date = ?, name = ?, multiplier = ?, is_active = ?
+                WHERE id = ?
+            ");
+            $stmt->execute([$holidayDate, mb_substr($holidayName, 0, 150), $multiplier, $isActive, $holidayId]);
+            $successMsg = 'Feriado actualizado correctamente.';
+        } catch (PDOException $e) {
+            $errorMsg = 'Error al actualizar el feriado: ' . $e->getMessage();
+        }
+    }
+}
+
+// Handle holiday deletion
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_holiday'])) {
+    $holidayId = (int) ($_POST['holiday_id'] ?? 0);
+    if ($holidayId > 0) {
+        $pdo->prepare("DELETE FROM payroll_holidays WHERE id = ?")->execute([$holidayId]);
+        $successMsg = 'Feriado eliminado.';
+    }
+}
 
 // Handle deduction update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_deductions'])) {
@@ -40,6 +110,9 @@ $deductions = $pdo->query("SELECT * FROM payroll_deduction_config ORDER BY code"
 
 // Get ISR scales
 $isrScales = $pdo->query("SELECT * FROM payroll_isr_scales WHERE year = 2025 ORDER BY min_amount")->fetchAll(PDO::FETCH_ASSOC);
+
+// Get holidays list
+$holidays = $pdo->query("SELECT id, holiday_date, name, multiplier, is_active FROM payroll_holidays ORDER BY holiday_date DESC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -196,6 +269,176 @@ $isrScales = $pdo->query("SELECT * FROM payroll_isr_scales WHERE year = 2025 ORD
                 </table>
             </div>
         </div>
+
+        <!-- Días Festivos (pago doble) -->
+        <div class="glass-card mt-8">
+            <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
+                <div>
+                    <h2 class="text-xl font-semibold mb-1">
+                        <i class="fas fa-star text-yellow-400 mr-2"></i>
+                        Días Festivos (Pago Doble)
+                    </h2>
+                    <p class="text-sm text-slate-400">Las horas trabajadas en estas fechas se pagan al doble, excepto a empleados con salario fijo.</p>
+                </div>
+                <button type="button" onclick="document.getElementById('createHolidayModal').classList.remove('hidden')" class="btn-primary">
+                    <i class="fas fa-plus"></i>
+                    Nuevo Feriado
+                </button>
+            </div>
+
+            <?php if (empty($holidays)): ?>
+                <p class="text-slate-400 text-center py-6">No hay feriados configurados.</p>
+            <?php else: ?>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-slate-700">
+                                <th class="text-left py-3 px-4">Fecha</th>
+                                <th class="text-left py-3 px-4">Nombre</th>
+                                <th class="text-center py-3 px-4">Multiplicador</th>
+                                <th class="text-center py-3 px-4">Activo</th>
+                                <th class="text-center py-3 px-4">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($holidays as $h): ?>
+                                <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+                                    <td class="py-3 px-4 font-mono text-blue-300">
+                                        <?= date('d/m/Y', strtotime($h['holiday_date'])) ?>
+                                    </td>
+                                    <td class="py-3 px-4 font-medium"><?= htmlspecialchars($h['name']) ?></td>
+                                    <td class="py-3 px-4 text-center">
+                                        <span class="font-bold text-yellow-400"><?= number_format((float)$h['multiplier'], 2) ?>x</span>
+                                    </td>
+                                    <td class="py-3 px-4 text-center">
+                                        <?php if ((int)$h['is_active'] === 1): ?>
+                                            <span class="px-2 py-1 rounded-full text-xs font-semibold text-white bg-green-600">Activo</span>
+                                        <?php else: ?>
+                                            <span class="px-2 py-1 rounded-full text-xs font-semibold text-white bg-gray-500">Inactivo</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="py-3 px-4 text-center">
+                                        <div class="flex justify-center gap-2">
+                                            <button type="button"
+                                                    onclick="editHoliday(<?= (int)$h['id'] ?>, '<?= htmlspecialchars($h['holiday_date'], ENT_QUOTES) ?>', '<?= htmlspecialchars($h['name'], ENT_QUOTES) ?>', <?= (float)$h['multiplier'] ?>, <?= (int)$h['is_active'] ?>)"
+                                                    class="px-2 py-1 rounded bg-yellow-600 hover:bg-yellow-700 text-white text-xs">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <form method="POST" class="inline" onsubmit="return confirm('¿Eliminar este feriado?')">
+                                                <input type="hidden" name="delete_holiday" value="1">
+                                                <input type="hidden" name="holiday_id" value="<?= (int)$h['id'] ?>">
+                                                <button type="submit" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Create Holiday Modal -->
+        <div id="createHolidayModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="glass-card" style="width: min(500px, 90%);">
+                <h3 class="text-xl font-semibold mb-4">Nuevo Feriado</h3>
+                <form method="POST">
+                    <input type="hidden" name="create_holiday" value="1">
+
+                    <div class="form-group mb-4">
+                        <label for="holiday_date">Fecha del feriado *</label>
+                        <input type="date" id="holiday_date" name="holiday_date" required>
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label for="holiday_name">Nombre del feriado *</label>
+                        <input type="text" id="holiday_name" name="holiday_name" required maxlength="150" placeholder="ej. Día de la Independencia">
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label for="multiplier">Multiplicador de horas *</label>
+                        <input type="number" id="multiplier" name="multiplier" required step="0.01" min="0.01" value="2.00">
+                        <p class="text-xs text-slate-400 mt-1">2.00 = pago doble. Se multiplican las horas trabajadas ese día.</p>
+                    </div>
+
+                    <div class="form-group mb-6">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" name="is_active" value="1" checked class="form-checkbox h-5 w-5 text-blue-600">
+                            <span>Activo</span>
+                        </label>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button type="submit" class="btn-primary flex-1">
+                            <i class="fas fa-check"></i>
+                            Guardar
+                        </button>
+                        <button type="button" onclick="document.getElementById('createHolidayModal').classList.add('hidden')" class="btn-secondary flex-1">
+                            <i class="fas fa-times"></i>
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Edit Holiday Modal -->
+        <div id="editHolidayModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="glass-card" style="width: min(500px, 90%);">
+                <h3 class="text-xl font-semibold mb-4">Editar Feriado</h3>
+                <form method="POST">
+                    <input type="hidden" name="update_holiday" value="1">
+                    <input type="hidden" id="edit_holiday_id" name="holiday_id">
+
+                    <div class="form-group mb-4">
+                        <label for="edit_holiday_date">Fecha del feriado *</label>
+                        <input type="date" id="edit_holiday_date" name="holiday_date" required>
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label for="edit_holiday_name">Nombre del feriado *</label>
+                        <input type="text" id="edit_holiday_name" name="holiday_name" required maxlength="150">
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label for="edit_multiplier">Multiplicador de horas *</label>
+                        <input type="number" id="edit_multiplier" name="multiplier" required step="0.01" min="0.01">
+                    </div>
+
+                    <div class="form-group mb-6">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" id="edit_is_active" name="is_active" value="1" class="form-checkbox h-5 w-5 text-blue-600">
+                            <span>Activo</span>
+                        </label>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button type="submit" class="btn-primary flex-1">
+                            <i class="fas fa-save"></i>
+                            Guardar Cambios
+                        </button>
+                        <button type="button" onclick="document.getElementById('editHolidayModal').classList.add('hidden')" class="btn-secondary flex-1">
+                            <i class="fas fa-times"></i>
+                            Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+        function editHoliday(id, date, name, multiplier, isActive) {
+            document.getElementById('edit_holiday_id').value = id;
+            document.getElementById('edit_holiday_date').value = date;
+            document.getElementById('edit_holiday_name').value = name;
+            document.getElementById('edit_multiplier').value = multiplier;
+            document.getElementById('edit_is_active').checked = isActive === 1;
+            document.getElementById('editHolidayModal').classList.remove('hidden');
+        }
+        </script>
 
         <!-- Info Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">

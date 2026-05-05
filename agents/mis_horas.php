@@ -11,6 +11,7 @@ require_once '../lib/work_hours_calculator.php';
 require_once '../hr/payroll_functions.php';
 
 ensurePayrollPeriodsVisibilityColumn($pdo);
+ensurePayrollHolidaysTable($pdo);
 
 $userId = (int)$_SESSION['user_id'];
 $fullName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Agente';
@@ -20,6 +21,23 @@ $scheduledHours = (float)($config['scheduled_hours'] ?? 8.00);
 
 $paidTypeSlugsRaw = getPaidAttendanceTypeSlugs($pdo);
 $paidTypeSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', $paidTypeSlugsRaw)));
+
+// Compensation context for the logged-in user, used to decide whether
+// holiday hours qualify for double pay (fixed-salary employees are excluded).
+$userComp = [];
+try {
+    $userCompStmt = $pdo->prepare("SELECT compensation_type, role, monthly_salary FROM users WHERE id = ?");
+    $userCompStmt->execute([$userId]);
+    $userComp = $userCompStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+} catch (PDOException $e) {
+    // Column may not exist on older schemas — fall back to "qualifies".
+    $userComp = [];
+}
+$userQualifiesForHolidayDouble = shouldApplyHolidayDoublePay(
+    $userComp['compensation_type'] ?? null,
+    $userComp['role'] ?? null,
+    (float)($userComp['monthly_salary'] ?? 0)
+);
 
 $periodsStmt = $pdo->prepare("
     SELECT id, name, period_type, start_date, end_date, payment_date, status
@@ -58,8 +76,12 @@ if (!$selectedPeriod && !empty($periods)) {
 /**
  * Calcula horas trabajadas por día y totales para un rango de fechas.
  * Solo cuenta días hasta HOY (si la quincena incluye fechas futuras).
+ *
+ * Si el usuario califica para pago doble en feriados, las horas de ese día
+ * se multiplican por el multiplicador del feriado (típicamente 2x), igual
+ * que en el cálculo de nómina, para que el agente vea cifras consistentes.
  */
-function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, string $endDate, array $paidTypeSlugs, float $scheduledHours): array
+function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, string $endDate, array $paidTypeSlugs, float $scheduledHours, bool $applyHolidayDouble = false): array
 {
     $today = date('Y-m-d');
     $effectiveEnd = ($endDate > $today) ? $today : $endDate;
@@ -70,6 +92,7 @@ function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, str
         'overtime_seconds' => 0,
         'days_worked' => 0,
         'by_day' => [],
+        'holiday_days' => [],
     ];
 
     if ($startDate > $effectiveEnd) {
@@ -91,6 +114,7 @@ function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, str
         $byDate[$r['work_date']][] = $r;
     }
 
+    $holidaysMap = getPayrollHolidaysMap($pdo, $startDate, $effectiveEnd);
     $scheduledSeconds = (int) round($scheduledHours * 3600);
 
     foreach ($byDate as $date => $punches) {
@@ -100,17 +124,41 @@ function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, str
             continue;
         }
 
-        $result['days_worked']++;
-        $result['total_seconds'] += $workSeconds;
+        $rawSeconds = $workSeconds;
+        $isHoliday = isset($holidaysMap[$date]);
 
+        // 1) Split actual worked hours into regular vs. overtime first.
         if ($workSeconds > $scheduledSeconds) {
-            $result['regular_seconds'] += $scheduledSeconds;
-            $result['overtime_seconds'] += ($workSeconds - $scheduledSeconds);
+            $regSeconds = $scheduledSeconds;
+            $otSeconds = $workSeconds - $scheduledSeconds;
         } else {
-            $result['regular_seconds'] += $workSeconds;
+            $regSeconds = $workSeconds;
+            $otSeconds = 0;
         }
 
-        $result['by_day'][$date] = $workSeconds;
+        // 2) Apply holiday multiplier to BOTH parts after splitting, so the displayed
+        // hours match what payroll will pay (true multiplier × normal pay).
+        if ($isHoliday && $applyHolidayDouble) {
+            $multiplier = (float) $holidaysMap[$date]['multiplier'];
+            $regSeconds = (int) round($regSeconds * $multiplier);
+            $otSeconds = (int) round($otSeconds * $multiplier);
+        }
+
+        $daySeconds = $regSeconds + $otSeconds;
+        $result['days_worked']++;
+        $result['total_seconds'] += $daySeconds;
+        $result['regular_seconds'] += $regSeconds;
+        $result['overtime_seconds'] += $otSeconds;
+        $result['by_day'][$date] = $daySeconds;
+
+        if ($isHoliday) {
+            $result['holiday_days'][$date] = [
+                'name' => $holidaysMap[$date]['name'],
+                'multiplier' => (float) $holidaysMap[$date]['multiplier'],
+                'applied' => $applyHolidayDouble,
+                'raw_seconds' => $rawSeconds,
+            ];
+        }
     }
 
     ksort($result['by_day']);
@@ -144,7 +192,8 @@ foreach ($periods as $p) {
         $p['start_date'],
         $p['end_date'],
         $paidTypeSlugs,
-        $scheduledHours
+        $scheduledHours,
+        $userQualifiesForHolidayDouble
     );
     $periodSummaries[(int)$p['id']] = $summary;
 }
@@ -251,15 +300,48 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                                 </thead>
                                 <tbody>
                                     <?php foreach ($selectedSummary['by_day'] as $date => $secs): ?>
-                                        <tr class="border-b border-slate-800/60 hover:bg-slate-800/40">
-                                            <td class="py-2 px-3"><?= formatDateShort($date) ?></td>
-                                            <td class="py-2 px-3 text-right font-mono text-slate-200"><?= formatDecimalHours($secs) ?></td>
+                                        <?php $holidayInfo = $selectedSummary['holiday_days'][$date] ?? null; ?>
+                                        <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 <?= $holidayInfo ? 'bg-yellow-500/5' : '' ?>">
+                                            <td class="py-2 px-3">
+                                                <?= formatDateShort($date) ?>
+                                                <?php if ($holidayInfo): ?>
+                                                    <?php if (!empty($holidayInfo['applied'])): ?>
+                                                        <span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40" title="<?= htmlspecialchars($holidayInfo['name']) ?>">
+                                                            <i class="fas fa-star mr-1"></i>
+                                                            Pago <?= number_format($holidayInfo['multiplier'], 2) ?>x · <?= htmlspecialchars($holidayInfo['name']) ?>
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/40 text-slate-300 border border-slate-500/40" title="<?= htmlspecialchars($holidayInfo['name']) ?>">
+                                                            <i class="fas fa-star mr-1"></i>
+                                                            Festivo (no aplica a salario fijo)
+                                                        </span>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="py-2 px-3 text-right font-mono text-slate-200">
+                                                <?= formatDecimalHours($secs) ?>
+                                                <?php if ($holidayInfo && !empty($holidayInfo['applied'])): ?>
+                                                    <div class="text-[10px] text-yellow-300/80 font-normal">
+                                                        Real: <?= formatDecimalHours($holidayInfo['raw_seconds']) ?> × <?= number_format($holidayInfo['multiplier'], 2) ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </td>
                                             <td class="py-2 px-3 text-right text-slate-400 text-xs"><?= formatHoursHM($secs) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
+                        <?php if (!empty($selectedSummary['holiday_days'])): ?>
+                            <p class="mt-3 text-xs text-yellow-300/80">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                <?php if ($userQualifiesForHolidayDouble): ?>
+                                    Las horas de los días marcados como festivo se pagan al doble.
+                                <?php else: ?>
+                                    Los días festivos no aplican a empleados con salario fijo.
+                                <?php endif; ?>
+                            </p>
+                        <?php endif; ?>
                     </div>
                 <?php else: ?>
                     <div class="mt-6 text-slate-400 text-sm text-center py-4">

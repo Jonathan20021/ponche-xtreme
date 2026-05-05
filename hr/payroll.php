@@ -9,6 +9,7 @@ require_once '../lib/work_hours_calculator.php';
 ensurePermission('hr_payroll', '../unauthorized.php');
 ensurePayrollManualIncentivesTable($pdo);
 ensurePayrollPeriodsVisibilityColumn($pdo);
+ensurePayrollHolidaysTable($pdo);
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
@@ -94,6 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         }
 
         $manualIncentivesMap = getPayrollManualIncentivesMap($pdo, $periodId);
+        $holidaysMap = getPayrollHolidaysMap($pdo, $period['start_date'], $period['end_date']);
 
         // Rebuild records for this period to ensure recalculation applies new rules
         $pdo->prepare("DELETE FROM payroll_records WHERE payroll_period_id = ?")->execute([$periodId]);
@@ -146,7 +148,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $totalRegularHours = 0;
             $totalOvertimeHours = 0;
             $daysWorked = 0;
-            
+
+            // Determine if this employee qualifies for holiday double pay
+            // (fixed-salary employees are excluded — their salary already covers everything).
+            $applyHolidayDouble = shouldApplyHolidayDoublePay(
+                $emp['compensation_type'] ?? null,
+                $emp['role'] ?? null,
+                (float)($emp['monthly_salary'] ?? 0)
+            );
+
             // Group punches by date and calculate hours
             $punchesByDate = [];
             foreach ($punches as $punch) {
@@ -156,23 +166,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 }
                 $punchesByDate[$date][] = $punch;
             }
-            
+
             // Calculate hours for each day
             foreach ($punchesByDate as $date => $dayPunches) {
                 $calc = calculateWorkSecondsFromPunches($dayPunches, $paidTypeSlugs);
                 $totalSecondsWorked = (int) ($calc['work_seconds'] ?? 0);
-                
+
                 // Convert to hours
                 if ($totalSecondsWorked > 0) {
                     $daysWorked++;
                     $workedHours = $totalSecondsWorked / 3600;
-                    
+
+                    // 1) Split actual worked hours into regular vs. overtime first.
                     if ($workedHours > $scheduledHours) {
-                        $totalRegularHours += $scheduledHours;
-                        $totalOvertimeHours += ($workedHours - $scheduledHours);
+                        $dayRegular = $scheduledHours;
+                        $dayOvertime = $workedHours - $scheduledHours;
                     } else {
-                        $totalRegularHours += $workedHours;
+                        $dayRegular = $workedHours;
+                        $dayOvertime = 0.0;
                     }
+
+                    // 2) For holidays, apply the multiplier to BOTH regular and overtime
+                    // shares of the day, so that the resulting pay equals exactly
+                    // (multiplier × normal pay). Multiplying workedHours BEFORE the split
+                    // would overflow into overtime and overpay (e.g. 8h × 2 = 16h would
+                    // become 8 reg + 8 OT, paying 20H instead of the intended 16H).
+                    // Fixed-salary employees are excluded — their salary is not hour-based.
+                    if ($applyHolidayDouble && isset($holidaysMap[$date])) {
+                        $multiplier = (float) $holidaysMap[$date]['multiplier'];
+                        $dayRegular *= $multiplier;
+                        $dayOvertime *= $multiplier;
+                    }
+
+                    $totalRegularHours += $dayRegular;
+                    $totalOvertimeHours += $dayOvertime;
                 }
             }
 
