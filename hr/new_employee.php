@@ -191,8 +191,9 @@ if (isset($_POST['register'])) {
                             'schedule_name' => $assignment['schedule_name'] ?? null,
                             'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
                             'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
-                            'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
-                            'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, null),
+                            // lunch_time / break_time are no longer set from the UI; only minutes matter.
+                            'lunch_time' => null,
+                            'break_time' => null,
                             'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
                             'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
                             'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
@@ -772,17 +773,6 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div class="form-group">
-                        <label for="new_lunch_time">Hora de Almuerzo</label>
-                        <input type="time" id="new_lunch_time" name="lunch_time" value="14:00">
-                    </div>
-                    <div class="form-group">
-                        <label for="new_break_time">Hora de Descanso (opcional)</label>
-                        <input type="time" id="new_break_time" name="break_time">
-                    </div>
-                </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div class="form-group">
                         <label for="new_lunch_minutes">Minutos Almuerzo</label>
@@ -798,6 +788,10 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             value="8.00">
                     </div>
                 </div>
+                <p class="text-xs text-slate-400 mb-4">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Solo se configura la duración (en minutos) de almuerzo y descanso. El sistema no requiere una hora fija.
+                </p>
 
                 <div id="scheduleFormMessage" class="mb-4 hidden"></div>
 
@@ -962,8 +956,6 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                         document.getElementById('new_schedule_description').value = template.description || '';
                         document.getElementById('new_entry_time').value = template.entry_time.substring(0, 5);
                         document.getElementById('new_exit_time').value = template.exit_time.substring(0, 5);
-                        document.getElementById('new_lunch_time').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
-                        document.getElementById('new_break_time').value = template.break_time ? template.break_time.substring(0, 5) : '';
                         document.getElementById('new_lunch_minutes').value = template.lunch_minutes;
                         document.getElementById('new_break_minutes').value = template.break_minutes;
                         document.getElementById('new_scheduled_hours').value = template.scheduled_hours;

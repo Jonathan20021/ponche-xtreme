@@ -20,8 +20,10 @@ try {
     $description = trim($_POST['description'] ?? '');
     $entryTime = normalizeScheduleTimeValue($_POST['entry_time'] ?? null, '10:00:00');
     $exitTime = normalizeScheduleTimeValue($_POST['exit_time'] ?? null, '19:00:00');
-    $lunchTime = normalizeScheduleTimeValue($_POST['lunch_time'] ?? null, '14:00:00');
-    $breakTime = normalizeScheduleTimeValue($_POST['break_time'] ?? null, null);
+    // lunch_time / break_time are no longer collected from the UI: only the
+    // duration (lunch_minutes / break_minutes) matters for the schedule.
+    $lunchTime = null;
+    $breakTime = null;
     $lunchMinutes = (int)($_POST['lunch_minutes'] ?? 45);
     $breakMinutes = (int)($_POST['break_minutes'] ?? 15);
     $scheduledHours = (float)($_POST['scheduled_hours'] ?? 8.00);

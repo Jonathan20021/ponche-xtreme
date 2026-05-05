@@ -43,8 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) &&
                         'schedule_name' => $assignment['schedule_name'] ?? null,
                         'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
                         'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
-                        'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
-                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, null),
+                        // lunch_time / break_time are no longer set from the UI; only minutes matter.
+                        'lunch_time' => null,
+                        'break_time' => null,
                         'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
                         'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
                         'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
@@ -319,8 +320,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
                         'schedule_name' => $assignment['schedule_name'] ?? null,
                         'entry_time' => normalizeScheduleTimeValue($assignment['entry_time'] ?? null, '10:00:00'),
                         'exit_time' => normalizeScheduleTimeValue($assignment['exit_time'] ?? null, '19:00:00'),
-                        'lunch_time' => normalizeScheduleTimeValue($assignment['lunch_time'] ?? null, '14:00:00'),
-                        'break_time' => normalizeScheduleTimeValue($assignment['break_time'] ?? null, null),
+                        // lunch_time / break_time are no longer set from the UI; only minutes matter.
+                        'lunch_time' => null,
+                        'break_time' => null,
                         'lunch_minutes' => (int) ($assignment['lunch_minutes'] ?? 45),
                         'break_minutes' => (int) ($assignment['break_minutes'] ?? 15),
                         'scheduled_hours' => (float) ($assignment['scheduled_hours'] ?? 8.00),
@@ -1067,8 +1069,6 @@ $terminatedEmployees = $pdo->query("
                                 document.getElementById('new_schedule_description_edit').value = template.description || '';
                                 document.getElementById('new_entry_time_edit').value = template.entry_time.substring(0, 5);
                                 document.getElementById('new_exit_time_edit').value = template.exit_time.substring(0, 5);
-                                document.getElementById('new_lunch_time_edit').value = template.lunch_time ? template.lunch_time.substring(0, 5) : '14:00';
-                                document.getElementById('new_break_time_edit').value = template.break_time ? template.break_time.substring(0, 5) : '';
                                 document.getElementById('new_lunch_minutes_edit').value = template.lunch_minutes ?? 45;
                                 document.getElementById('new_break_minutes_edit').value = template.break_minutes ?? 15;
                                 document.getElementById('new_scheduled_hours_edit').value = template.scheduled_hours ?? '8.00';
@@ -1173,6 +1173,14 @@ $terminatedEmployees = $pdo->query("
                         formData.append('id', editingScheduleIdEdit);
                     }
 
+                    // Pass employee context so backend can force-update this employee's
+                    // schedule directly, regardless of schedule_name mismatches.
+                    const employeeIdInput = document.getElementById('edit_employee_id');
+                    const targetEmployeeId = employeeIdInput ? employeeIdInput.value : '';
+                    if (isEditModeEdit && targetEmployeeId) {
+                        formData.append('target_employee_id', targetEmployeeId);
+                    }
+
                     messageDiv.className = 'status-banner mb-4';
                     messageDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando turno...';
                     messageDiv.classList.remove('hidden');
@@ -1268,6 +1276,12 @@ $terminatedEmployees = $pdo->query("
                                 }
 
                                 updateScheduleButtonsEdit();
+
+                                // Refresh the employee's current schedule info so the user
+                                // sees the updated values without reopening the modal.
+                                if (isEditModeEdit && targetEmployeeId && typeof loadEmployeeSchedule === 'function') {
+                                    loadEmployeeSchedule(targetEmployeeId, null, null);
+                                }
 
                                 setTimeout(() => {
                                     closeNewScheduleModalEdit();
@@ -2316,17 +2330,6 @@ $terminatedEmployees = $pdo->query("
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div class="form-group">
-                        <label for="new_lunch_time_edit">Hora de Almuerzo</label>
-                        <input type="time" id="new_lunch_time_edit" name="lunch_time" value="14:00">
-                    </div>
-                    <div class="form-group">
-                        <label for="new_break_time_edit">Hora de Descanso (opcional)</label>
-                        <input type="time" id="new_break_time_edit" name="break_time">
-                    </div>
-                </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div class="form-group">
                         <label for="new_lunch_minutes_edit">Minutos Almuerzo</label>
@@ -2342,6 +2345,10 @@ $terminatedEmployees = $pdo->query("
                             value="8.00">
                     </div>
                 </div>
+                <p class="text-xs text-slate-400 mb-4">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Solo se configura la duración (en minutos) de almuerzo y descanso. El sistema no requiere una hora fija.
+                </p>
 
                 <div id="scheduleFormMessageEdit" class="mb-4 hidden"></div>
 

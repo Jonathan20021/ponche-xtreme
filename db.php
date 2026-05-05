@@ -741,8 +741,8 @@ if (!function_exists('createEmployeeSchedule')) {
                 $scheduleData['schedule_name'] ?? null,
                 $scheduleData['entry_time'] ?? '10:00:00',
                 $scheduleData['exit_time'] ?? '19:00:00',
-                $scheduleData['lunch_time'] ?? '14:00:00',
-                array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : '17:00:00',
+                array_key_exists('lunch_time', $scheduleData) ? $scheduleData['lunch_time'] : null,
+                array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : null,
                 $scheduleData['lunch_minutes'] ?? 45,
                 $scheduleData['break_minutes'] ?? 15,
                 $scheduleData['scheduled_hours'] ?? 8.00,
@@ -764,8 +764,8 @@ if (!function_exists('createEmployeeSchedule')) {
             try {
                 $stmt = $pdo->prepare("
                     INSERT INTO employee_schedules (
-                        employee_id, user_id, schedule_name, entry_time, exit_time, 
-                        lunch_time, break_time, lunch_minutes, break_minutes, 
+                        employee_id, user_id, schedule_name, entry_time, exit_time,
+                        lunch_time, break_time, lunch_minutes, break_minutes,
                         scheduled_hours, is_active, effective_date, end_date, notes
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
@@ -776,8 +776,8 @@ if (!function_exists('createEmployeeSchedule')) {
                     $scheduleData['schedule_name'] ?? null,
                     $scheduleData['entry_time'] ?? '10:00:00',
                     $scheduleData['exit_time'] ?? '19:00:00',
-                    $scheduleData['lunch_time'] ?? '14:00:00',
-                    array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : '17:00:00',
+                    array_key_exists('lunch_time', $scheduleData) ? $scheduleData['lunch_time'] : null,
+                    array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : null,
                     $scheduleData['lunch_minutes'] ?? 45,
                     $scheduleData['break_minutes'] ?? 15,
                     $scheduleData['scheduled_hours'] ?? 8.00,
@@ -860,8 +860,8 @@ if (!function_exists('updateEmployeeSchedule')) {
                 $scheduleData['schedule_name'] ?? null,
                 $scheduleData['entry_time'] ?? '10:00:00',
                 $scheduleData['exit_time'] ?? '19:00:00',
-                $scheduleData['lunch_time'] ?? '14:00:00',
-                array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : '17:00:00',
+                array_key_exists('lunch_time', $scheduleData) ? $scheduleData['lunch_time'] : null,
+                array_key_exists('break_time', $scheduleData) ? $scheduleData['break_time'] : null,
                 $scheduleData['lunch_minutes'] ?? 45,
                 $scheduleData['break_minutes'] ?? 15,
                 $scheduleData['scheduled_hours'] ?? 8.00,
