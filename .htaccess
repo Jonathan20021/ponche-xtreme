@@ -1,3 +1,25 @@
+# Subida de archivos: límites suficientes para fotos de cámara de teléfono
+# (cPanel suele limitar a 2-8 MB por defecto). Estos valores requieren que
+# el plan de hosting permita override de estas directivas.
+<IfModule mod_php.c>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 30M
+    php_value max_input_time 120
+    php_value memory_limit 256M
+</IfModule>
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 30M
+    php_value max_input_time 120
+    php_value memory_limit 256M
+</IfModule>
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 30M
+    php_value max_input_time 120
+    php_value memory_limit 256M
+</IfModule>
+
 # Habilitar el motor de reescritura
 RewriteEngine On
 

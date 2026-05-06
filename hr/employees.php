@@ -9,6 +9,20 @@ ensurePermission('hr_employees', '../unauthorized.php');
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
+// Detect POST that exceeded post_max_size — when this happens PHP delivers an
+// empty $_POST/$_FILES even though the request method is POST. Without this
+// check the page would silently fall through and show no feedback at all.
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && empty($_POST)
+    && empty($_FILES)
+    && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0
+) {
+    $postMax = ini_get('post_max_size');
+    $errorMsg = "El formulario excede el tamaño máximo permitido por el servidor ({$postMax}). La foto u otro archivo es demasiado grande. Reduce el tamaño e intenta de nuevo.";
+    error_log("POST exceeded post_max_size: content_length={$_SERVER['CONTENT_LENGTH']}, limit={$postMax}");
+}
+
 
 // Handle employee schedule update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule']) && !isset($_POST['update_employee'])) {
@@ -140,27 +154,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
 
         // Handle photo upload
         $photoPath = null;
-        if (isset($_FILES['employee_photo']) && $_FILES['employee_photo']['error'] === UPLOAD_ERR_OK) {
-            $uploadDir = '../uploads/employee_photos/';
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
+        $photoErrorMsg = null;
+        $uploadErr = $_FILES['employee_photo']['error'] ?? UPLOAD_ERR_NO_FILE;
+        $photoUploadAttempted = isset($_FILES['employee_photo']) && $uploadErr !== UPLOAD_ERR_NO_FILE;
 
-            // Get current employee code
-            $empStmt = $pdo->prepare("SELECT employee_code FROM employees WHERE id = ?");
-            $empStmt->execute([$employeeId]);
-            $empCode = $empStmt->fetchColumn();
+        if ($photoUploadAttempted) {
+            if ($uploadErr !== UPLOAD_ERR_OK) {
+                $iniLimit = ini_get('upload_max_filesize');
+                $photoErrorMsg = match ($uploadErr) {
+                    UPLOAD_ERR_INI_SIZE   => "La foto excede el tamaño máximo permitido por el servidor ({$iniLimit}). Reduce el tamaño de la imagen e intenta de nuevo.",
+                    UPLOAD_ERR_FORM_SIZE  => 'La foto excede el tamaño máximo permitido por el formulario.',
+                    UPLOAD_ERR_PARTIAL    => 'La foto no se subió completamente. Verifica tu conexión e intenta de nuevo.',
+                    UPLOAD_ERR_NO_TMP_DIR => 'Error del servidor: no hay directorio temporal para subir archivos. Contacta al administrador.',
+                    UPLOAD_ERR_CANT_WRITE => 'Error del servidor: no se pudo escribir la foto en disco. Contacta al administrador.',
+                    UPLOAD_ERR_EXTENSION  => 'Una extensión de PHP detuvo la subida de la foto.',
+                    default               => "Error desconocido al subir la foto (código {$uploadErr}).",
+                };
+                error_log("Photo upload failed (employee_id={$employeeId}, error={$uploadErr}): {$photoErrorMsg}");
+            } else {
+                $uploadDir = '../uploads/employee_photos/';
+                if (!is_dir($uploadDir)) {
+                    @mkdir($uploadDir, 0755, true);
+                }
+                if (!is_dir($uploadDir) || !is_writable($uploadDir)) {
+                    $photoErrorMsg = 'El servidor no puede escribir en el directorio de fotos. Contacta al administrador.';
+                    error_log("Photo upload failed: directory not writable: {$uploadDir}");
+                } else {
+                    $empStmt = $pdo->prepare("SELECT employee_code FROM employees WHERE id = ?");
+                    $empStmt->execute([$employeeId]);
+                    $empCode = $empStmt->fetchColumn();
 
-            $fileExtension = strtolower(pathinfo($_FILES['employee_photo']['name'], PATHINFO_EXTENSION));
-            $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+                    $fileExtension = strtolower(pathinfo($_FILES['employee_photo']['name'], PATHINFO_EXTENSION));
+                    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
 
-            if (in_array($fileExtension, $allowedExtensions)) {
-                $fileName = $empCode . '_' . time() . '.' . $fileExtension;
-                $targetPath = $uploadDir . $fileName;
+                    if (!in_array($fileExtension, $allowedExtensions, true)) {
+                        $photoErrorMsg = "Formato de foto no permitido (." . htmlspecialchars($fileExtension, ENT_QUOTES) . "). Usa JPG, PNG o GIF.";
+                    } else {
+                        $fileName = $empCode . '_' . time() . '.' . $fileExtension;
+                        $targetPath = $uploadDir . $fileName;
 
-                if (move_uploaded_file($_FILES['employee_photo']['tmp_name'], $targetPath)) {
-                    $photoPath = 'uploads/employee_photos/' . $fileName;
-                    $data['photo_path'] = $photoPath;
+                        if (move_uploaded_file($_FILES['employee_photo']['tmp_name'], $targetPath)) {
+                            $photoPath = 'uploads/employee_photos/' . $fileName;
+                            $data['photo_path'] = $photoPath;
+                        } else {
+                            $photoErrorMsg = 'No se pudo guardar la foto en el servidor. Verifica permisos del directorio.';
+                            error_log("move_uploaded_file failed: tmp={$_FILES['employee_photo']['tmp_name']} target={$targetPath}");
+                        }
+                    }
                 }
             }
         }
@@ -355,7 +395,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
         log_employee_updated($pdo, $_SESSION['user_id'], $_SESSION['full_name'], $_SESSION['role'], $employeeId, $oldData, $data);
 
         $pdo->commit();
-        $successMsg = "Empleado actualizado correctamente. Los cambios se sincronizaron con el usuario.";
+        if (!empty($photoErrorMsg)) {
+            $successMsg = "Datos del empleado actualizados, PERO la foto NO se pudo guardar: {$photoErrorMsg}";
+            $warningMsg = $photoErrorMsg;
+        } else {
+            $successMsg = "Empleado actualizado correctamente. Los cambios se sincronizaron con el usuario.";
+        }
     } catch (Exception $e) {
         $pdo->rollBack();
         $errorMsg = "Error al actualizar empleado: " . $e->getMessage();
@@ -540,6 +585,16 @@ $terminatedEmployees = $pdo->query("
             </div>
         </div>
 
+        <?php if (isset($errorMsg)): ?>
+            <div class="status-banner error mb-6" style="background: rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); color:#fecaca; padding:0.75rem 1rem; border-radius:0.5rem;">
+                <i class="fas fa-circle-exclamation mr-2"></i><?= htmlspecialchars($errorMsg) ?>
+            </div>
+        <?php endif; ?>
+        <?php if (isset($warningMsg)): ?>
+            <div class="status-banner warning mb-6" style="background: rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.4); color:#fde68a; padding:0.75rem 1rem; border-radius:0.5rem;">
+                <i class="fas fa-triangle-exclamation mr-2"></i><?= htmlspecialchars($warningMsg) ?>
+            </div>
+        <?php endif; ?>
         <?php if (isset($successMsg)): ?>
             <div class="status-banner success mb-6"><?= htmlspecialchars($successMsg) ?></div>
         <?php endif; ?>
@@ -2154,14 +2209,16 @@ $terminatedEmployees = $pdo->query("
                     <label for="edit_employee_photo">Foto del Empleado</label>
                     <div id="current_photo_preview" class="mb-2"></div>
                     <input type="file" id="edit_employee_photo" name="employee_photo"
-                        accept="image/jpeg,image/png,image/gif,image/jpg" class="block w-full text-sm text-slate-400
+                        accept="image/jpeg,image/png,image/gif,image/jpg,image/webp"
+                        data-auto-compress="1" data-max-dim="1200" data-quality="0.85"
+                        class="block w-full text-sm text-slate-400
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-lg file:border-0
                         file:text-sm file:font-semibold
                         file:bg-blue-500 file:text-white
                         hover:file:bg-blue-600
                         file:cursor-pointer">
-                    <p class="text-xs text-slate-400 mt-1">Formatos permitidos: JPG, PNG, GIF (Máx. 5MB)</p>
+                    <p class="text-xs text-slate-400 mt-1">JPG, PNG, GIF o WebP. Las fotos grandes se comprimen automáticamente.</p>
                 </div>
 
                 <h4 class="text-lg font-semibold text-white mb-3 mt-6">
@@ -2414,5 +2471,6 @@ $terminatedEmployees = $pdo->query("
         </div>
     </div>
 
+    <script src="../assets/js/image-compressor.js"></script>
     <?php include '../footer.php'; ?>
 </body>
