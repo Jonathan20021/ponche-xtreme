@@ -204,8 +204,22 @@ $categories = $pdo->query("SELECT * FROM inventory_categories ORDER BY name")->f
 $stats = [
     'assigned' => $pdo->query("SELECT COUNT(*) FROM employee_inventory WHERE status = 'ASSIGNED'")->fetchColumn(),
     'returned' => $pdo->query("SELECT COUNT(*) FROM employee_inventory WHERE status = 'RETURNED'")->fetchColumn(),
-    'total' => $pdo->query("SELECT COUNT(*) FROM employee_inventory")->fetchColumn(),
+    'lost'     => $pdo->query("SELECT COUNT(*) FROM employee_inventory WHERE status = 'LOST'")->fetchColumn(),
+    'damaged'  => $pdo->query("SELECT COUNT(*) FROM employee_inventory WHERE status = 'DAMAGED'")->fetchColumn(),
+    'total'    => $pdo->query("SELECT COUNT(*) FROM employee_inventory")->fetchColumn(),
 ];
+
+// Category icon map (Font Awesome) for visual hint per category
+function inv_category_icon(string $name): string {
+    $n = mb_strtolower($name);
+    if (str_contains($n, 'tecn') || str_contains($n, 'tech') || str_contains($n, 'computo')) return 'fa-laptop';
+    if (str_contains($n, 'unif') || str_contains($n, 'ropa') || str_contains($n, 'cami'))    return 'fa-shirt';
+    if (str_contains($n, 'adm') || str_contains($n, 'oficin') || str_contains($n, 'office')) return 'fa-id-badge';
+    if (str_contains($n, 'herr') || str_contains($n, 'tool'))                                return 'fa-screwdriver-wrench';
+    if (str_contains($n, 'veh') || str_contains($n, 'auto'))                                 return 'fa-car';
+    if (str_contains($n, 'segur') || str_contains($n, 'safe'))                               return 'fa-shield-halved';
+    return 'fa-box';
+}
 
 ?>
 <!DOCTYPE html>
@@ -279,46 +293,67 @@ $stats = [
         <?php endif; ?>
 
         <!-- Stats -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="glass-card">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            <a href="?status=ASSIGNED<?= $employeeIdFilter > 0 ? '&employee_id=' . $employeeIdFilter : '' ?>"
+               class="glass-card hover:ring-2 hover:ring-blue-500/40 transition-all">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-slate-400 text-sm mb-1">Total Asignados</p>
-                        <h3 class="text-3xl font-bold text-white">
-                            <?= $stats['assigned'] ?>
-                        </h3>
+                        <p class="text-slate-400 text-xs mb-1 uppercase tracking-wide">Asignados</p>
+                        <h3 class="text-2xl font-bold text-white"><?= $stats['assigned'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center bg-blue-500/20 text-blue-400">
-                        <i class="fas fa-box-open text-xl"></i>
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-500/20 text-blue-400">
+                        <i class="fas fa-box-open"></i>
                     </div>
                 </div>
-            </div>
-            <div class="glass-card">
+            </a>
+            <a href="?status=RETURNED<?= $employeeIdFilter > 0 ? '&employee_id=' . $employeeIdFilter : '' ?>"
+               class="glass-card hover:ring-2 hover:ring-green-500/40 transition-all">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-slate-400 text-sm mb-1">Devueltos</p>
-                        <h3 class="text-3xl font-bold text-white">
-                            <?= $stats['returned'] ?>
-                        </h3>
+                        <p class="text-slate-400 text-xs mb-1 uppercase tracking-wide">Devueltos</p>
+                        <h3 class="text-2xl font-bold text-white"><?= $stats['returned'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center bg-green-500/20 text-green-400">
-                        <i class="fas fa-check-circle text-xl"></i>
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-green-500/20 text-green-400">
+                        <i class="fas fa-check-circle"></i>
                     </div>
                 </div>
-            </div>
-            <div class="glass-card">
+            </a>
+            <a href="?status=LOST<?= $employeeIdFilter > 0 ? '&employee_id=' . $employeeIdFilter : '' ?>"
+               class="glass-card hover:ring-2 hover:ring-red-500/40 transition-all">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-slate-400 text-sm mb-1">Total Registros</p>
-                        <h3 class="text-3xl font-bold text-white">
-                            <?= $stats['total'] ?>
-                        </h3>
+                        <p class="text-slate-400 text-xs mb-1 uppercase tracking-wide">Perdidos</p>
+                        <h3 class="text-2xl font-bold text-white"><?= $stats['lost'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center bg-purple-500/20 text-purple-400">
-                        <i class="fas fa-list text-xl"></i>
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-red-500/20 text-red-400">
+                        <i class="fas fa-triangle-exclamation"></i>
                     </div>
                 </div>
-            </div>
+            </a>
+            <a href="?status=DAMAGED<?= $employeeIdFilter > 0 ? '&employee_id=' . $employeeIdFilter : '' ?>"
+               class="glass-card hover:ring-2 hover:ring-yellow-500/40 transition-all">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-slate-400 text-xs mb-1 uppercase tracking-wide">Dañados</p>
+                        <h3 class="text-2xl font-bold text-white"><?= $stats['damaged'] ?></h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-yellow-500/20 text-yellow-400">
+                        <i class="fas fa-wrench"></i>
+                    </div>
+                </div>
+            </a>
+            <a href="?status=all<?= $employeeIdFilter > 0 ? '&employee_id=' . $employeeIdFilter : '' ?>"
+               class="glass-card hover:ring-2 hover:ring-purple-500/40 transition-all">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-slate-400 text-xs mb-1 uppercase tracking-wide">Total</p>
+                        <h3 class="text-2xl font-bold text-white"><?= $stats['total'] ?></h3>
+                    </div>
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-500/20 text-purple-400">
+                        <i class="fas fa-list"></i>
+                    </div>
+                </div>
+            </a>
         </div>
 
         <!-- Filters -->
@@ -384,7 +419,23 @@ $stats = [
                             </tr>
                         <?php else: ?>
                             <?php foreach ($inventoryItems as $item): ?>
-                                <tr class="hover:bg-slate-800/30 transition-colors">
+                                <?php
+                                    $catIcon = inv_category_icon($item['category_name']);
+                                    $statusColors = [
+                                        'ASSIGNED' => 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+                                        'RETURNED' => 'bg-green-500/20 text-green-400 border border-green-500/30',
+                                        'LOST'     => 'bg-red-500/20 text-red-400 border border-red-500/30',
+                                        'DAMAGED'  => 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
+                                    ];
+                                    $statusClass = $statusColors[$item['status']] ?? 'bg-slate-500/20 text-slate-400';
+                                    $statusLabel = [
+                                        'ASSIGNED' => 'Asignado',
+                                        'RETURNED' => 'Devuelto',
+                                        'LOST'     => 'Perdido',
+                                        'DAMAGED'  => 'Dañado',
+                                    ][$item['status']] ?? $item['status'];
+                                ?>
+                                <tr class="hover:bg-slate-800/40 transition-colors">
                                     <td class="p-4">
                                         <div class="font-medium text-white">
                                             <?= htmlspecialchars($item['employee_name']) ?>
@@ -398,19 +449,20 @@ $stats = [
                                             <?= htmlspecialchars($item['item_name']) ?>
                                         </div>
                                         <div class="text-xs text-slate-500">
-                                            <?= htmlspecialchars($item['item_description']) ?>
+                                            <?= htmlspecialchars($item['item_description'] ?? '') ?>
                                         </div>
                                     </td>
                                     <td class="p-4">
-                                        <span class="px-2 py-1 text-xs rounded-full bg-slate-700 text-slate-300">
+                                        <span class="inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-slate-700 text-slate-300">
+                                            <i class="fas <?= $catIcon ?> text-slate-400"></i>
                                             <?= htmlspecialchars($item['category_name']) ?>
                                         </span>
                                     </td>
                                     <td class="p-4">
                                         <div class="text-sm text-slate-300">
-                                            <?= htmlspecialchars($item['details']) ?>
+                                            <?= htmlspecialchars($item['details'] ?? '—') ?>
                                         </div>
-                                        <?php if ($item['uuid']): ?>
+                                        <?php if (!empty($item['uuid'])): ?>
                                             <div class="text-xs text-slate-500 font-mono mt-1">
                                                 <i class="fas fa-barcode mr-1"></i>
                                                 <?= htmlspecialchars($item['uuid']) ?>
@@ -420,48 +472,48 @@ $stats = [
                                     <td class="p-4 text-slate-300">
                                         <div><?= date('d/m/Y', strtotime($item['assigned_date'])) ?></div>
                                         <?php if (!empty($item['returned_date'])): ?>
-                                            <div class="text-xs text-slate-500">Devuelto: <?= date('d/m/Y', strtotime($item['returned_date'])) ?></div>
+                                            <div class="text-xs text-green-400">
+                                                <i class="fas fa-undo-alt mr-1"></i>
+                                                <?= date('d/m/Y', strtotime($item['returned_date'])) ?>
+                                            </div>
                                         <?php endif; ?>
                                     </td>
                                     <td class="p-4">
-                                        <?php
-                                        $statusColors = [
-                                            'ASSIGNED' => 'bg-blue-500/20 text-blue-400',
-                                            'RETURNED' => 'bg-green-500/20 text-green-400',
-                                            'LOST' => 'bg-red-500/20 text-red-400',
-                                            'DAMAGED' => 'bg-yellow-500/20 text-yellow-400',
-                                        ];
-                                        $statusClass = $statusColors[$item['status']] ?? 'bg-slate-500/20 text-slate-400';
-                                        $statusLabel = [
-                                            'ASSIGNED' => 'Asignado',
-                                            'RETURNED' => 'Devuelto',
-                                            'LOST' => 'Perdido',
-                                            'DAMAGED' => 'Dañado',
-                                        ][$item['status']] ?? $item['status'];
-                                        ?>
                                         <span class="px-2 py-1 text-xs rounded-full <?= $statusClass ?>">
                                             <?= $statusLabel ?>
                                         </span>
                                     </td>
                                     <td class="p-4 text-right">
                                         <div class="flex gap-2 justify-end">
-                                            <button
-                                                onclick="openEditModal(<?= htmlspecialchars(json_encode($item), ENT_QUOTES, 'UTF-8') ?>)"
-                                                class="text-blue-400 hover:text-blue-300 transition-colors"
+                                            <button type="button"
+                                                data-action="edit"
+                                                data-id="<?= (int) $item['id'] ?>"
+                                                data-employee="<?= htmlspecialchars($item['employee_name'], ENT_QUOTES) ?>"
+                                                data-employee-code="<?= htmlspecialchars($item['employee_code'], ENT_QUOTES) ?>"
+                                                data-item-name="<?= htmlspecialchars($item['item_name'], ENT_QUOTES) ?>"
+                                                data-details="<?= htmlspecialchars($item['details'] ?? '', ENT_QUOTES) ?>"
+                                                data-uuid="<?= htmlspecialchars($item['uuid'] ?? '', ENT_QUOTES) ?>"
+                                                data-status="<?= htmlspecialchars($item['status'], ENT_QUOTES) ?>"
+                                                class="action-btn text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-md p-2 transition-colors"
                                                 title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </button>
                                             <?php if ($item['status'] === 'ASSIGNED'): ?>
-                                                <button
-                                                    onclick="openReturnModal(<?= (int) $item['id'] ?>, <?= json_encode($item['item_name']) ?>)"
-                                                    class="text-green-400 hover:text-green-300 transition-colors"
+                                                <button type="button"
+                                                    data-action="return"
+                                                    data-id="<?= (int) $item['id'] ?>"
+                                                    data-item-name="<?= htmlspecialchars($item['item_name'], ENT_QUOTES) ?>"
+                                                    class="action-btn text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded-md p-2 transition-colors"
                                                     title="Marcar Devuelto">
                                                     <i class="fas fa-undo"></i>
                                                 </button>
                                             <?php endif; ?>
-                                            <button
-                                                onclick="openDeleteModal(<?= (int) $item['id'] ?>, <?= json_encode($item['item_name']) ?>, <?= json_encode($item['employee_name']) ?>)"
-                                                class="text-red-400 hover:text-red-300 transition-colors"
+                                            <button type="button"
+                                                data-action="delete"
+                                                data-id="<?= (int) $item['id'] ?>"
+                                                data-item-name="<?= htmlspecialchars($item['item_name'], ENT_QUOTES) ?>"
+                                                data-employee="<?= htmlspecialchars($item['employee_name'], ENT_QUOTES) ?>"
+                                                class="action-btn text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md p-2 transition-colors"
                                                 title="Eliminar registro">
                                                 <i class="fas fa-trash"></i>
                                             </button>
@@ -530,10 +582,11 @@ $stats = [
 
     <!-- Edit Modal -->
     <div id="editModal"
-        class="modal-backdrop hidden flex items-center justify-center"
+        class="modal-backdrop hidden items-center justify-center"
         style="display: none;">
         <div class="modal-content rounded-xl p-6 w-full max-w-2xl relative max-h-[90vh] overflow-y-auto">
-            <button onclick="closeEditModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+            <button type="button" data-action="close-modal" data-target="edit"
+                class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
                 <i class="fas fa-times text-xl"></i>
             </button>
 
@@ -587,7 +640,7 @@ $stats = [
                 </div>
 
                 <div class="flex justify-end gap-3">
-                    <button type="button" onclick="closeEditModal()" class="btn-secondary">Cancelar</button>
+                    <button type="button" data-action="close-modal" data-target="edit" class="btn-secondary">Cancelar</button>
                     <button type="submit" class="btn-primary"><i class="fas fa-save mr-2"></i>Guardar Cambios</button>
                 </div>
             </form>
@@ -596,14 +649,17 @@ $stats = [
 
     <!-- Return Modal -->
     <div id="returnModal"
-        class="modal-backdrop hidden flex items-center justify-center"
+        class="modal-backdrop hidden items-center justify-center"
         style="display: none;">
         <div class="modal-content rounded-xl p-6 w-full max-w-md relative">
-            <button onclick="closeReturnModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+            <button type="button" data-action="close-modal" data-target="return"
+                class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
                 <i class="fas fa-times text-xl"></i>
             </button>
 
-            <h3 class="text-xl font-bold text-white mb-4">Confirmar Devolución</h3>
+            <h3 class="text-xl font-bold text-white mb-4">
+                <i class="fas fa-undo text-green-400 mr-2"></i>Confirmar Devolución
+            </h3>
 
             <form method="POST">
                 <input type="hidden" name="return_item" value="1">
@@ -621,9 +677,10 @@ $stats = [
                 </div>
 
                 <div class="flex justify-end gap-3">
-                    <button type="button" onclick="closeReturnModal()" class="btn-secondary">Cancelar</button>
-                    <button type="submit" class="btn-primary bg-green-600 hover:bg-green-700">Confirmar
-                        Devolución</button>
+                    <button type="button" data-action="close-modal" data-target="return" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary bg-green-600 hover:bg-green-700">
+                        <i class="fas fa-check mr-2"></i>Confirmar Devolución
+                    </button>
                 </div>
             </form>
         </div>
@@ -631,10 +688,11 @@ $stats = [
 
     <!-- Delete Modal -->
     <div id="deleteModal"
-        class="modal-backdrop hidden flex items-center justify-center"
+        class="modal-backdrop hidden items-center justify-center"
         style="display: none;">
         <div class="modal-content rounded-xl p-6 w-full max-w-md relative">
-            <button onclick="closeDeleteModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+            <button type="button" data-action="close-modal" data-target="delete"
+                class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
                 <i class="fas fa-times text-xl"></i>
             </button>
 
@@ -659,7 +717,7 @@ $stats = [
                 </div>
 
                 <div class="flex justify-end gap-3">
-                    <button type="button" onclick="closeDeleteModal()" class="btn-secondary">Cancelar</button>
+                    <button type="button" data-action="close-modal" data-target="delete" class="btn-secondary">Cancelar</button>
                     <button type="submit" class="btn-primary" style="background-color: #dc2626;">
                         <i class="fas fa-trash mr-2"></i>Eliminar Permanentemente
                     </button>
@@ -669,76 +727,91 @@ $stats = [
     </div>
 
     <script>
-        function openEditModal(item) {
-            document.getElementById('edit_inventory_id').value = item.id;
-            document.getElementById('edit_employee_name').value = item.employee_name + ' (' + item.employee_code + ')';
-            document.getElementById('edit_item_name').value = item.item_name;
-            document.getElementById('edit_details').value = item.details || '';
-            document.getElementById('edit_uuid').value = item.uuid || '';
-            document.getElementById('edit_status').value = item.status;
-            
-            const modal = document.getElementById('editModal');
-            modal.classList.remove('hidden');
-            modal.style.display = 'flex';
-        }
+        (function () {
+            'use strict';
 
-        function closeEditModal() {
-            const modal = document.getElementById('editModal');
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
+            const modals = {
+                edit:   document.getElementById('editModal'),
+                return: document.getElementById('returnModal'),
+                delete: document.getElementById('deleteModal'),
+            };
 
-        function openReturnModal(id, name) {
-            document.getElementById('return_inventory_id').value = id;
-            document.getElementById('return_item_name').textContent = name;
-            
-            const modal = document.getElementById('returnModal');
-            modal.classList.remove('hidden');
-            modal.style.display = 'flex';
-        }
+            function openModal(name) {
+                const modal = modals[name];
+                if (!modal) return;
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+                const firstInput = modal.querySelector('input:not([type=hidden]), textarea, select');
+                if (firstInput) setTimeout(() => firstInput.focus(), 50);
+            }
 
-        function closeReturnModal() {
-            const modal = document.getElementById('returnModal');
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
+            function closeModal(name) {
+                const modal = modals[name];
+                if (!modal) return;
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+                document.body.style.overflow = '';
+            }
 
-        function openDeleteModal(id, itemName, employeeName) {
-            document.getElementById('delete_inventory_id').value = id;
-            document.getElementById('delete_item_name').textContent = itemName;
-            document.getElementById('delete_employee_name').textContent = employeeName;
+            function closeAllModals() {
+                Object.keys(modals).forEach(closeModal);
+            }
 
-            const modal = document.getElementById('deleteModal');
-            modal.classList.remove('hidden');
-            modal.style.display = 'flex';
-        }
+            // Open via data-action
+            document.addEventListener('click', function (e) {
+                const trigger = e.target.closest('[data-action]');
+                if (!trigger) return;
+                const action = trigger.dataset.action;
+                const id = trigger.dataset.id;
 
-        function closeDeleteModal() {
-            const modal = document.getElementById('deleteModal');
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
-
-        // Close modals when clicking outside
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('editModal').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeEditModal();
+                if (action === 'edit') {
+                    document.getElementById('edit_inventory_id').value = id;
+                    document.getElementById('edit_employee_name').value =
+                        trigger.dataset.employee + ' (' + trigger.dataset.employeeCode + ')';
+                    document.getElementById('edit_item_name').value = trigger.dataset.itemName;
+                    document.getElementById('edit_details').value = trigger.dataset.details || '';
+                    document.getElementById('edit_uuid').value = trigger.dataset.uuid || '';
+                    document.getElementById('edit_status').value = trigger.dataset.status;
+                    openModal('edit');
+                } else if (action === 'return') {
+                    document.getElementById('return_inventory_id').value = id;
+                    document.getElementById('return_item_name').textContent = trigger.dataset.itemName;
+                    openModal('return');
+                } else if (action === 'delete') {
+                    document.getElementById('delete_inventory_id').value = id;
+                    document.getElementById('delete_item_name').textContent = trigger.dataset.itemName;
+                    document.getElementById('delete_employee_name').textContent = trigger.dataset.employee;
+                    openModal('delete');
+                } else if (action === 'close-modal') {
+                    const target = trigger.dataset.target;
+                    if (target) closeModal(target);
                 }
             });
 
-            document.getElementById('returnModal').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeReturnModal();
-                }
+            // Click-outside to close
+            Object.entries(modals).forEach(([name, modal]) => {
+                if (!modal) return;
+                modal.addEventListener('click', function (e) {
+                    if (e.target === this) closeModal(name);
+                });
             });
 
-            document.getElementById('deleteModal').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeDeleteModal();
-                }
+            // ESC to close
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closeAllModals();
             });
-        });
+
+            // Auto-dismiss success banner after 5s
+            const successBanner = document.querySelector('.status-banner.success');
+            if (successBanner) {
+                setTimeout(() => {
+                    successBanner.style.transition = 'opacity .4s ease';
+                    successBanner.style.opacity = '0';
+                    setTimeout(() => successBanner.remove(), 400);
+                }, 5000);
+            }
+        })();
     </script>
 </body>
 
