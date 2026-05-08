@@ -478,6 +478,13 @@ $dateRange = count($dateValues) === 1 ? $dateValues[0] : $dateValues[0] . ' - ' 
 $sheet->setCellValue('B1', 'REPORTE DE ASISTENCIA DIARIA');
 $sheet->setCellValue('A2', 'Periodo: ' . $dateRange);
 $sheet->setCellValue('A3', 'Generado: ' . date('Y-m-d H:i:s'));
+
+$subtitleStyle = [
+    'font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
+    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '6366F1']],
+    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+];
+
 if ($user_filter !== '') {
     $sheet->setCellValue('A4', 'Usuario filtrado: ' . $user_filter);
     $sheet->mergeCells('A4:' . $lastCol . '4');
@@ -499,11 +506,6 @@ $sheet->getStyle('A1')->applyFromArray([
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5']],
 ]);
 
-$subtitleStyle = [
-    'font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
-    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '6366F1']],
-    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-];
 $sheet->getStyle('A2:A3')->applyFromArray($subtitleStyle);
 
 // Encabezados de columnas
