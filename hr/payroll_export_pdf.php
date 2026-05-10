@@ -57,6 +57,17 @@ $recordsStmt = $pdo->prepare("
 $recordsStmt->execute([$periodId]);
 $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Cargar cuotas de préstamo por empleado para el período (batched, 1 query)
+$loanDeductionsByEmployee = [];
+if (!empty($records)) {
+    $loanDeductionsByEmployee = getLoanDeductionsForEmployees(
+        $pdo,
+        array_map(static fn($r) => (int) $r['employee_id'], $records),
+        $period['start_date'],
+        $period['end_date']
+    );
+}
+
 // Resolve effective compensation type and base rate (in DOP) for an employee row.
 $resolveBaseRate = function (array $r) use ($pdo) {
     $hourlyRateUsd = (float)($r['hourly_rate'] ?? 0);
@@ -103,6 +114,7 @@ $totals = [
     'isr' => 0,
     'cooperative' => 0,
     'additional' => 0,
+    'loans' => 0,
     'others_only' => 0,
     'total_deductions' => 0,
     'afp_employer' => 0,
@@ -114,10 +126,11 @@ $totals = [
 ];
 
 foreach ($records as $record) {
-    // other_deductions includes cooperativa + descuento + custom; split for the report.
+    // other_deductions includes cooperativa + descuento + préstamos + custom; split for the report.
     $coopAmt = (float)$record['cooperative_deduction'];
     $addAmt = (float)$record['additional_deduction'];
-    $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt);
+    $loanAmt = (float)($loanDeductionsByEmployee[(int)$record['employee_id']] ?? 0);
+    $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
 
     $totals['sales_incentive'] += $record['sales_incentive'];
     $totals['night_incentive'] += $record['night_incentive'];
@@ -127,6 +140,7 @@ foreach ($records as $record) {
     $totals['isr'] += $record['isr'];
     $totals['cooperative'] += $coopAmt;
     $totals['additional'] += $addAmt;
+    $totals['loans'] += $loanAmt;
     $totals['others_only'] += $othersOnly;
     $totals['total_deductions'] += $record['total_deductions'];
     $totals['afp_employer'] += $record['afp_employer'];
@@ -278,6 +292,7 @@ ob_start();
                 <th class="text-right">ISR</th>
                 <th class="text-right">Cooperativa</th>
                 <th class="text-right">Descuento</th>
+                <th class="text-right">Préstamos</th>
                 <th class="text-right">Otros</th>
                 <th class="text-right">Total Desc.</th>
                 <th class="text-right">Salario Neto</th>
@@ -288,7 +303,8 @@ ob_start();
                 $base = $resolveBaseRate($record);
                 $coopAmt = (float)$record['cooperative_deduction'];
                 $addAmt = (float)$record['additional_deduction'];
-                $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt);
+                $loanAmt = (float)($loanDeductionsByEmployee[(int)$record['employee_id']] ?? 0);
+                $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
             ?>
             <tr>
                 <td><?= htmlspecialchars($record['employee_code']) ?></td>
@@ -304,6 +320,7 @@ ob_start();
                 <td class="text-right"><?= formatDOP($record['isr']) ?></td>
                 <td class="text-right"><?= formatDOP($coopAmt) ?></td>
                 <td class="text-right"><?= formatDOP($addAmt) ?></td>
+                <td class="text-right"><?= formatDOP($loanAmt) ?></td>
                 <td class="text-right"><?= formatDOP($othersOnly) ?></td>
                 <td class="text-right"><?= formatDOP($record['total_deductions']) ?></td>
                 <td class="text-right"><strong><?= formatDOP($record['net_salary']) ?></strong></td>
@@ -319,6 +336,7 @@ ob_start();
                 <td class="text-right"><strong><?= formatDOP($totals['isr']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['cooperative']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['additional']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['loans']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['others_only']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['total_deductions']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['net']) ?></strong></td>

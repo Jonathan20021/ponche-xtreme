@@ -208,13 +208,21 @@ function getEmployeePayrollData(PDO $pdo, int $periodId, int $employeeId): ?arra
     
     $stmt->execute([$periodId, $employeeId]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
-    
+
     if ($data) {
         $data['employee_name'] = $data['first_name'] . ' ' . $data['last_name'];
         $data['period_formatted'] = date('d/m/Y', strtotime($data['start_date'])) . ' - ' . date('d/m/Y', strtotime($data['end_date']));
         $data['payment_date_formatted'] = date('d/m/Y', strtotime($data['payment_date']));
+
+        // Desglose de cuotas de préstamo del período (sincronizadas desde app Finanzas)
+        $data['loan_deduction'] = getEmployeeLoanDeductionsForPeriod(
+            $pdo, $employeeId, $data['start_date'], $data['end_date']
+        );
+        $data['loan_details'] = getEmployeeLoanDeductionDetails(
+            $pdo, $employeeId, $data['start_date'], $data['end_date']
+        );
     }
-    
+
     return $data ?: null;
 }
 
@@ -486,11 +494,13 @@ function generatePayrollSlipHTML(array $data): string {
                     </tr>
                     <?php endif; ?>
                     <?php
-                    // other_deductions incluye cooperativa + descuento adicional + custom.
-                    // Separamos los que se capturan manualmente para no contarlos dos veces.
+                    // other_deductions incluye cooperativa + descuento adicional + préstamos + custom.
+                    // Separamos los que se capturan manualmente y los préstamos para no contarlos dos veces.
                     $coopAmt = (float)($data['cooperative_deduction'] ?? 0);
                     $addAmt = (float)($data['additional_deduction'] ?? 0);
-                    $othersOnly = max(0, (float)$data['other_deductions'] - $coopAmt - $addAmt);
+                    $loanAmt = (float)($data['loan_deduction'] ?? 0);
+                    $loanDetails = $data['loan_details'] ?? [];
+                    $othersOnly = max(0, (float)$data['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
                     ?>
                     <?php if ($coopAmt > 0): ?>
                     <tr>
@@ -502,6 +512,19 @@ function generatePayrollSlipHTML(array $data): string {
                     <tr>
                         <td>Descuento</td>
                         <td class="amount negative">-<?= formatDOP($addAmt) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <?php if (!empty($loanDetails)): ?>
+                        <?php foreach ($loanDetails as $ld): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($ld['name']) ?></td>
+                            <td class="amount negative">-<?= formatDOP((float)$ld['amount']) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php elseif ($loanAmt > 0): ?>
+                    <tr>
+                        <td>Préstamos a Empleado</td>
+                        <td class="amount negative">-<?= formatDOP($loanAmt) ?></td>
                     </tr>
                     <?php endif; ?>
                     <?php if ($othersOnly > 0): ?>
@@ -619,12 +642,21 @@ function generatePayrollSlipPlainText(array $data): string {
     }
     $coopAmt = (float)($data['cooperative_deduction'] ?? 0);
     $addAmt = (float)($data['additional_deduction'] ?? 0);
-    $othersOnly = max(0, (float)$data['other_deductions'] - $coopAmt - $addAmt);
+    $loanAmt = (float)($data['loan_deduction'] ?? 0);
+    $loanDetails = $data['loan_details'] ?? [];
+    $othersOnly = max(0, (float)$data['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
     if ($coopAmt > 0) {
         $text .= "Cooperativa: -" . formatDOP($coopAmt) . "\n";
     }
     if ($addAmt > 0) {
         $text .= "Descuento: -" . formatDOP($addAmt) . "\n";
+    }
+    if (!empty($loanDetails)) {
+        foreach ($loanDetails as $ld) {
+            $text .= $ld['name'] . ": -" . formatDOP((float)$ld['amount']) . "\n";
+        }
+    } elseif ($loanAmt > 0) {
+        $text .= "Préstamos a Empleado: -" . formatDOP($loanAmt) . "\n";
     }
     if ($othersOnly > 0) {
         $text .= "Otras Deducciones: -" . formatDOP($othersOnly) . "\n";

@@ -78,6 +78,20 @@ $late_entries = $metrics['late_entries'] ?? 0;
                         <p class="text-xs text-slate-400">Historial de asistencia</p>
                     </div>
                 </a>
+                <a href="request_loan.php" class="flex items-center gap-3 p-4 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-colors">
+                    <i class="fas fa-hand-holding-usd text-emerald-400"></i>
+                    <div>
+                        <p class="font-medium text-white">Solicitar Préstamo</p>
+                        <p class="text-xs text-slate-400">Préstamos a empleados con descuento por nómina</p>
+                    </div>
+                </a>
+                <a href="my_loans.php" class="flex items-center gap-3 p-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors">
+                    <i class="fas fa-money-check-alt text-amber-400"></i>
+                    <div>
+                        <p class="font-medium text-white">Mis Préstamos</p>
+                        <p class="text-xs text-slate-400">Estado, cuotas y saldo pendiente</p>
+                    </div>
+                </a>
             </div>
         </div>
     </div>

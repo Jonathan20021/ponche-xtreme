@@ -491,6 +491,19 @@ if ($selectedPeriodId) {
         $payrollRecords = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
+
+// Cargar cuotas de préstamo por empleado para el período actual.
+// Se obtienen en una sola query batched (evita N+1 en la tabla de nómina).
+$loanDeductionsByEmployee = [];
+if ($selectedPeriod && !empty($payrollRecords)) {
+    $employeeIdsForLoans = array_map(static fn($r) => (int) $r['employee_id'], $payrollRecords);
+    $loanDeductionsByEmployee = getLoanDeductionsForEmployees(
+        $pdo,
+        $employeeIdsForLoans,
+        $selectedPeriod['start_date'],
+        $selectedPeriod['end_date']
+    );
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -882,6 +895,9 @@ if ($selectedPeriodId) {
                                 <th class="text-right py-2 px-2">ISR</th>
                                 <th class="text-right py-2 px-2">Cooperativa</th>
                                 <th class="text-right py-2 px-2">Descuento</th>
+                                <th class="text-right py-2 px-2" title="Cuotas de préstamos descontadas por nómina (Finanzas)">
+                                    <i class="fas fa-hand-holding-usd text-emerald-400 mr-1"></i>Préstamos
+                                </th>
                                 <th class="text-right py-2 px-2">Otros Desc.</th>
                                 <th class="text-right py-2 px-2">Total Desc.</th>
                                 <th class="text-right py-2 px-2">Salario Neto</th>
@@ -889,13 +905,15 @@ if ($selectedPeriodId) {
                         </thead>
                         <tbody>
                             <?php
-                            $totals = ['hours' => 0, 'overtime_hours' => 0, 'sales' => 0, 'night' => 0, 'gross' => 0, 'afp' => 0, 'sfs' => 0, 'isr' => 0, 'cooperative' => 0, 'additional' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0];
+                            $totals = ['hours' => 0, 'overtime_hours' => 0, 'sales' => 0, 'night' => 0, 'gross' => 0, 'afp' => 0, 'sfs' => 0, 'isr' => 0, 'cooperative' => 0, 'additional' => 0, 'loans' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0];
                             foreach ($payrollRecords as $record):
                                 // pr.other_deductions includes per-employee custom deductions + cooperativa + descuento.
-                                // Subtract the manually-entered ones so "Otros Desc." reflects only the rest.
+                                // Extraer cuotas de préstamo (descuentos cuyo name comienza con "Préstamo") y
+                                // restar manualmente cooperativa y descuento adicional.
                                 $coopAmt = (float)$record['cooperative_deduction'];
                                 $addAmt = (float)$record['additional_deduction'];
-                                $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt);
+                                $loanAmt = (float)($loanDeductionsByEmployee[(int)$record['employee_id']] ?? 0);
+                                $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
 
                                 $totals['hours'] += $record['total_hours'];
                                 $totals['overtime_hours'] += $record['overtime_hours'];
@@ -907,6 +925,7 @@ if ($selectedPeriodId) {
                                 $totals['isr'] += $record['isr'];
                                 $totals['cooperative'] += $coopAmt;
                                 $totals['additional'] += $addAmt;
+                                $totals['loans'] += $loanAmt;
                                 $totals['other'] += $othersOnly;
                                 $totals['deductions'] += $record['total_deductions'];
                                 $totals['net'] += $record['net_salary'];
@@ -943,6 +962,9 @@ if ($selectedPeriodId) {
                                     <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($record['isr']) ?></td>
                                     <td class="py-2 px-2 text-right text-red-400"><?= $coopAmt > 0 ? formatDOP($coopAmt) : '-' ?></td>
                                     <td class="py-2 px-2 text-right text-red-400"><?= $addAmt > 0 ? formatDOP($addAmt) : '-' ?></td>
+                                    <td class="py-2 px-2 text-right text-amber-400 font-semibold" title="Cuotas de préstamos a empleados — sincronizadas desde app Finanzas">
+                                        <?= $loanAmt > 0 ? formatDOP($loanAmt) : '-' ?>
+                                    </td>
                                     <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($othersOnly) ?></td>
                                     <td class="py-2 px-2 text-right text-red-500 font-semibold"><?= formatDOP($record['total_deductions']) ?></td>
                                     <td class="py-2 px-2 text-right text-green-400 font-bold"><?= formatDOP($record['net_salary']) ?></td>
@@ -961,6 +983,7 @@ if ($selectedPeriodId) {
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['isr']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['cooperative']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['additional']) ?></td>
+                                <td class="py-3 px-2 text-right text-amber-300"><?= formatDOP($totals['loans']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['other']) ?></td>
                                 <td class="py-3 px-2 text-right text-red-500"><?= formatDOP($totals['deductions']) ?></td>
                                 <td class="py-3 px-2 text-right text-green-400"><?= formatDOP($totals['net']) ?></td>

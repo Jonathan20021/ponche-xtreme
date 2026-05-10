@@ -133,7 +133,18 @@ $sheet->mergeCells('A2:F2');
 $sheet->setCellValue('G2', 'Fechas: ' . date('d/m/Y', strtotime($period['start_date'])) . ' - ' . date('d/m/Y', strtotime($period['end_date'])));
 $sheet->mergeCells('G2:L2');
 $sheet->setCellValue('M2', 'Pago: ' . date('d/m/Y', strtotime($period['payment_date'])));
-$sheet->mergeCells('M2:T2');
+$sheet->mergeCells('M2:U2');
+
+// Cargar cuotas de préstamo por empleado en una sola query batched
+$loanDeductionsByEmployee = [];
+if (!empty($records)) {
+    $loanDeductionsByEmployee = getLoanDeductionsForEmployees(
+        $pdo,
+        array_map(static fn($r) => (int) $r['employee_id'], $records),
+        $period['start_date'],
+        $period['end_date']
+    );
+}
 
 // Column headers
 $row = 4;
@@ -153,11 +164,12 @@ $headers = [
     'M' => 'ISR',
     'N' => 'Cooperativa',
     'O' => 'Descuento',
-    'P' => 'Otros Desc.',
-    'Q' => 'Total Desc.',
-    'R' => 'Salario Neto',
-    'S' => 'AFP Patronal (' . number_format($deductionRates['AFP']['employer_percentage'], 2) . '%)',
-    'T' => 'SFS Patronal (' . number_format($deductionRates['SFS']['employer_percentage'], 2) . '%)'
+    'P' => 'Préstamos',
+    'Q' => 'Otros Desc.',
+    'R' => 'Total Desc.',
+    'S' => 'Salario Neto',
+    'T' => 'AFP Patronal (' . number_format($deductionRates['AFP']['employer_percentage'], 2) . '%)',
+    'U' => 'SFS Patronal (' . number_format($deductionRates['SFS']['employer_percentage'], 2) . '%)'
 ];
 
 foreach ($headers as $col => $header) {
@@ -170,19 +182,20 @@ $headerStyle = [
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
 ];
-$sheet->getStyle('A' . $row . ':T' . $row)->applyFromArray($headerStyle);
+$sheet->getStyle('A' . $row . ':U' . $row)->applyFromArray($headerStyle);
 
 // Data rows
 $row++;
-$totals = ['sales' => 0, 'night' => 0, 'gross' => 0, 'afp_emp' => 0, 'sfs_emp' => 0, 'isr' => 0, 'coop' => 0, 'add' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0, 'afp_pat' => 0, 'sfs_pat' => 0];
+$totals = ['sales' => 0, 'night' => 0, 'gross' => 0, 'afp_emp' => 0, 'sfs_emp' => 0, 'isr' => 0, 'coop' => 0, 'add' => 0, 'loans' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0, 'afp_pat' => 0, 'sfs_pat' => 0];
 
 foreach ($records as $record) {
     $base = $resolveBaseRate($record);
 
-    // other_deductions includes cooperativa + descuento + custom; split for the report.
+    // other_deductions includes cooperativa + descuento + préstamos + custom; split for the report.
     $coopAmt = (float)$record['cooperative_deduction'];
     $addAmt = (float)$record['additional_deduction'];
-    $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt);
+    $loanAmt = (float)($loanDeductionsByEmployee[(int)$record['employee_id']] ?? 0);
+    $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
 
     $sheet->setCellValue('A' . $row, $record['employee_code']);
     $sheet->setCellValue('B' . $row, $record['first_name'] . ' ' . $record['last_name']);
@@ -199,14 +212,15 @@ foreach ($records as $record) {
     $sheet->setCellValue('M' . $row, $record['isr']);
     $sheet->setCellValue('N' . $row, $coopAmt);
     $sheet->setCellValue('O' . $row, $addAmt);
-    $sheet->setCellValue('P' . $row, $othersOnly);
-    $sheet->setCellValue('Q' . $row, $record['total_deductions']);
-    $sheet->setCellValue('R' . $row, $record['net_salary']);
-    $sheet->setCellValue('S' . $row, $record['afp_employer']);
-    $sheet->setCellValue('T' . $row, $record['sfs_employer']);
+    $sheet->setCellValue('P' . $row, $loanAmt);
+    $sheet->setCellValue('Q' . $row, $othersOnly);
+    $sheet->setCellValue('R' . $row, $record['total_deductions']);
+    $sheet->setCellValue('S' . $row, $record['net_salary']);
+    $sheet->setCellValue('T' . $row, $record['afp_employer']);
+    $sheet->setCellValue('U' . $row, $record['sfs_employer']);
 
     // Format currency
-    foreach (['F', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'] as $col) {
+    foreach (['F', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'] as $col) {
         $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
     }
 
@@ -218,6 +232,7 @@ foreach ($records as $record) {
     $totals['isr'] += $record['isr'];
     $totals['coop'] += $coopAmt;
     $totals['add'] += $addAmt;
+    $totals['loans'] += $loanAmt;
     $totals['other'] += $othersOnly;
     $totals['deductions'] += $record['total_deductions'];
     $totals['net'] += $record['net_salary'];
@@ -238,13 +253,14 @@ $sheet->setCellValue('L' . $row, $totals['sfs_emp']);
 $sheet->setCellValue('M' . $row, $totals['isr']);
 $sheet->setCellValue('N' . $row, $totals['coop']);
 $sheet->setCellValue('O' . $row, $totals['add']);
-$sheet->setCellValue('P' . $row, $totals['other']);
-$sheet->setCellValue('Q' . $row, $totals['deductions']);
-$sheet->setCellValue('R' . $row, $totals['net']);
-$sheet->setCellValue('S' . $row, $totals['afp_pat']);
-$sheet->setCellValue('T' . $row, $totals['sfs_pat']);
+$sheet->setCellValue('P' . $row, $totals['loans']);
+$sheet->setCellValue('Q' . $row, $totals['other']);
+$sheet->setCellValue('R' . $row, $totals['deductions']);
+$sheet->setCellValue('S' . $row, $totals['net']);
+$sheet->setCellValue('T' . $row, $totals['afp_pat']);
+$sheet->setCellValue('U' . $row, $totals['sfs_pat']);
 
-foreach (['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'] as $col) {
+foreach (['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'] as $col) {
     $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
 }
 
@@ -253,10 +269,10 @@ $totalsStyle = [
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
 ];
-$sheet->getStyle('A' . $row . ':T' . $row)->applyFromArray($totalsStyle);
+$sheet->getStyle('A' . $row . ':U' . $row)->applyFromArray($totalsStyle);
 
 // Auto-size columns
-foreach (range('A', 'T') as $col) {
+foreach (range('A', 'U') as $col) {
     $sheet->getColumnDimension($col)->setAutoSize(true);
 }
 

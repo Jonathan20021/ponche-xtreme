@@ -164,10 +164,39 @@ function calculateNetSalary($grossSalary, $deductions)
 }
 
 /**
- * Obtiene descuentos personalizados de un empleado
+ * Obtiene descuentos personalizados de un empleado.
+ *
+ * Si se proveen las fechas de un período de nómina, la deducción se aplica
+ * cuando su rango de vigencia [start_date, end_date] se intersecta con el
+ * período. Esto garantiza que las cuotas de préstamo programadas desde la
+ * app de Finanzas (que registra fechas exactas del período) se apliquen en
+ * el cálculo aún cuando la nómina se procese días después del cierre.
+ *
+ * Si no se proveen fechas, se mantiene el comportamiento legacy basado en
+ * CURDATE() para descuentos recurrentes (TSS adicionales, cooperativa, etc.).
+ *
+ * @param PDO         $pdo
+ * @param int         $employeeId
+ * @param string|null $periodStart Fecha YYYY-MM-DD inicio del período
+ * @param string|null $periodEnd   Fecha YYYY-MM-DD fin del período
  */
-function getEmployeeCustomDeductions($pdo, $employeeId)
+function getEmployeeCustomDeductions($pdo, $employeeId, ?string $periodStart = null, ?string $periodEnd = null)
 {
+    if ($periodStart && $periodEnd) {
+        // Intersección entre [start_date, end_date] del descuento y [periodStart, periodEnd]
+        $stmt = $pdo->prepare("
+            SELECT ed.*, pdc.name as config_name, pdc.type as config_type
+            FROM employee_deductions ed
+            LEFT JOIN payroll_deduction_config pdc ON pdc.id = ed.deduction_config_id
+            WHERE ed.employee_id = ?
+              AND ed.is_active = 1
+              AND (ed.start_date IS NULL OR ed.start_date <= ?)
+              AND (ed.end_date   IS NULL OR ed.end_date   >= ?)
+        ");
+        $stmt->execute([$employeeId, $periodEnd, $periodStart]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     $stmt = $pdo->prepare("
         SELECT ed.*, pdc.name as config_name, pdc.type as config_type
         FROM employee_deductions ed
@@ -179,6 +208,97 @@ function getEmployeeCustomDeductions($pdo, $employeeId)
     ");
     $stmt->execute([$employeeId]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Obtiene el total de cuotas de préstamo programadas para un empleado
+ * dentro de un período de nómina específico.
+ *
+ * Detecta las cuotas por su nombre con prefijo "Préstamo " (insertadas
+ * por la app de Finanzas vía POST /api/loans/payroll-sync).
+ *
+ * @return float Monto total de cuotas de préstamo en el período
+ */
+function getEmployeeLoanDeductionsForPeriod(PDO $pdo, int $employeeId, string $periodStart, string $periodEnd): float
+{
+    try {
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM employee_deductions
+            WHERE employee_id = ?
+              AND is_active = 1
+              AND type = 'FIXED'
+              AND (name LIKE 'Préstamo%' OR name LIKE 'Prestamo%')
+              AND (start_date IS NULL OR start_date <= ?)
+              AND (end_date   IS NULL OR end_date   >= ?)
+        ");
+        $stmt->execute([$employeeId, $periodEnd, $periodStart]);
+        return (float) $stmt->fetchColumn();
+    } catch (PDOException $e) {
+        return 0.0;
+    }
+}
+
+/**
+ * Versión batched: retorna [employee_id => total_loan_amount] para un grupo
+ * de empleados durante un período. Una sola query, para evitar N+1 en el
+ * listado de nómina.
+ */
+function getLoanDeductionsForEmployees(PDO $pdo, array $employeeIds, string $periodStart, string $periodEnd): array
+{
+    if (empty($employeeIds)) {
+        return [];
+    }
+    try {
+        $placeholders = implode(',', array_fill(0, count($employeeIds), '?'));
+        $params = array_merge(array_map('intval', $employeeIds), [$periodEnd, $periodStart]);
+        $stmt = $pdo->prepare("
+            SELECT employee_id, COALESCE(SUM(amount), 0) AS total
+            FROM employee_deductions
+            WHERE employee_id IN ($placeholders)
+              AND is_active = 1
+              AND type = 'FIXED'
+              AND (name LIKE 'Préstamo%' OR name LIKE 'Prestamo%')
+              AND (start_date IS NULL OR start_date <= ?)
+              AND (end_date   IS NULL OR end_date   >= ?)
+            GROUP BY employee_id
+        ");
+        $stmt->execute($params);
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[(int) $row['employee_id']] = (float) $row['total'];
+        }
+        return $out;
+    } catch (PDOException $e) {
+        return [];
+    }
+}
+
+/**
+ * Obtiene el detalle de cuotas de préstamo (nombre, monto) para un empleado
+ * en un período, útil para mostrar en el slip individual.
+ *
+ * @return array<array{name:string, amount:float, description:?string}>
+ */
+function getEmployeeLoanDeductionDetails(PDO $pdo, int $employeeId, string $periodStart, string $periodEnd): array
+{
+    try {
+        $stmt = $pdo->prepare("
+            SELECT name, amount, description
+            FROM employee_deductions
+            WHERE employee_id = ?
+              AND is_active = 1
+              AND type = 'FIXED'
+              AND (name LIKE 'Préstamo%' OR name LIKE 'Prestamo%')
+              AND (start_date IS NULL OR start_date <= ?)
+              AND (end_date   IS NULL OR end_date   >= ?)
+            ORDER BY name
+        ");
+        $stmt->execute([$employeeId, $periodEnd, $periodStart]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (PDOException $e) {
+        return [];
+    }
 }
 
 /**
@@ -510,8 +630,12 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
 
     $grossSalary = $regularPay + $overtimePay + $bonuses + $commissions + $otherIncome;
 
-    // Obtener descuentos personalizados
-    $customDeductions = getEmployeeCustomDeductions($pdo, $employeeId);
+    // Obtener descuentos personalizados — pasar fechas del período para que las
+    // cuotas de préstamo programadas en el rango exacto se apliquen aún si la
+    // nómina se procesa días después del cierre del período.
+    $deductionsStart = $period['start_date'] ?? null;
+    $deductionsEnd   = $period['end_date']   ?? null;
+    $customDeductions = getEmployeeCustomDeductions($pdo, $employeeId, $deductionsStart, $deductionsEnd);
 
     // Calcular descuentos
     $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions);

@@ -271,7 +271,9 @@ function generatePayrollSlipPreview($data) {
             <?php
             $coopAmt = (float)($data['cooperative_deduction'] ?? 0);
             $addAmt = (float)($data['additional_deduction'] ?? 0);
-            $othersOnly = max(0, (float)($data['other_deductions'] ?? 0) - $coopAmt - $addAmt);
+            $loanAmt = (float)($data['loan_deduction'] ?? 0);
+            $loanDetails = $data['loan_details'] ?? [];
+            $othersOnly = max(0, (float)($data['other_deductions'] ?? 0) - $coopAmt - $addAmt - $loanAmt);
             ?>
             <?php if ($coopAmt > 0): ?>
             <tr>
@@ -286,6 +288,26 @@ function generatePayrollSlipPreview($data) {
                 <td style="padding: 6px; border-bottom: 1px solid #e5e7eb;">Descuento</td>
                 <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #dc2626;">
                     -<?= formatDOP($addAmt) ?>
+                </td>
+            </tr>
+            <?php endif; ?>
+            <?php if (!empty($loanDetails)): ?>
+                <?php foreach ($loanDetails as $ld): ?>
+                <tr>
+                    <td style="padding: 6px; border-bottom: 1px solid #e5e7eb;">
+                        <span style="color: #b45309;">⚡</span>
+                        <?= htmlspecialchars($ld['name']) ?>
+                    </td>
+                    <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #dc2626;">
+                        -<?= formatDOP((float)$ld['amount']) ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            <?php elseif ($loanAmt > 0): ?>
+            <tr>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb;">Préstamos a Empleado</td>
+                <td style="padding: 6px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #dc2626;">
+                    -<?= formatDOP($loanAmt) ?>
                 </td>
             </tr>
             <?php endif; ?>

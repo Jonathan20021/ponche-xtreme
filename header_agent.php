@@ -31,6 +31,8 @@ $agentNavItems = [
     'agent_hours' => ['label' => 'Mis Horas', 'href' => $basePath . 'agents/mis_horas.php', 'icon' => 'fa-business-time'],
     'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => $basePath . 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
     'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => $basePath . 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
+    'agent_loans' => ['label' => 'Mis Préstamos', 'href' => $basePath . 'agents/my_loans.php', 'icon' => 'fa-money-check-alt'],
+    'agent_request_loan' => ['label' => 'Solicitar Préstamo', 'href' => $basePath . 'agents/request_loan.php', 'icon' => 'fa-hand-holding-usd'],
     'helpdesk_tickets' => ['label' => 'Mis Tickets', 'href' => $basePath . 'agents/helpdesk_tickets.php', 'icon' => 'fa-ticket-alt'],
     'helpdesk_suggestions' => ['label' => 'Buzón de Sugerencias', 'href' => $basePath . 'agents/suggestions.php', 'icon' => 'fa-lightbulb'],
 ];
@@ -124,7 +126,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                 <?php foreach ($agentNavItems as $sectionKey => $item): ?>
                     <?php
                         // Show HR request links to all agents without permission check
-                        $showLink = in_array($sectionKey, ['agent_permissions', 'agent_vacations', 'agent_quality', 'agent_hours']) || userHasPermission($sectionKey);
+                        $showLink = in_array($sectionKey, ['agent_permissions', 'agent_vacations', 'agent_quality', 'agent_hours', 'agent_loans', 'agent_request_loan']) || userHasPermission($sectionKey);
                         if ($showLink):
                             $isActive = $currentPath === basename($item['href']);
                             $classes = $isActive
