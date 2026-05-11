@@ -736,6 +736,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                 if (min) html += '<div class="type-info-cell"><div class="lbl">Minimo</div><div class="val">RD$ ' + fmtInt.format(min) + '</div></div>';
                 if (max) html += '<div class="type-info-cell"><div class="lbl">Maximo</div><div class="val">RD$ ' + fmtInt.format(max) + '</div></div>';
                 html += '</div>';
+                html += '<p class="mt-3 text-xs text-emerald-300"><i class="fas fa-circle-check mr-1"></i>Beneficio laboral: 0% de interes y sin mora.</p>';
                 info.innerHTML = html;
                 info.classList.remove('hidden');
             }

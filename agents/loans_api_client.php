@@ -36,7 +36,15 @@ function getLoanTypesFromFinance(): array {
             WHERE is_active = 1 AND borrower_type = 'employee'
             ORDER BY name
         ");
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // Préstamos a empleados: exentos de interés por política.
+        // Forzamos 0 aquí para que UI y cálculo siempre lo reflejen,
+        // independientemente del valor histórico en loan_types.
+        foreach ($rows as &$row) {
+            $row['default_interest_rate'] = '0.0000';
+        }
+        unset($row);
+        return $rows;
     } catch (Throwable $e) {
         error_log('getLoanTypesFromFinance failed: ' . $e->getMessage());
         return [];
