@@ -1545,8 +1545,27 @@ $(document).ready(function() {
         const userFilter = $('#user-filter').val();
         if (userFilter) {
             params.append('user', userFilter);
+        } else {
+            // Si el usuario filtra usando el buscador interno de la tabla "Resumen de tiempo trabajado",
+            // tomamos los usuarios visibles (filtrados client-side) y los pasamos al exporte.
+            const summaryTable = tableInstances['#summaryTable'];
+            if (summaryTable) {
+                const totalRows = summaryTable.rows().count();
+                const filteredRows = summaryTable.rows({ search: 'applied' }).count();
+                if (filteredRows > 0 && filteredRows < totalRows) {
+                    const visibleUsernames = new Set();
+                    summaryTable.rows({ search: 'applied' }).every(function () {
+                        const data = this.data();
+                        // Columna 1 = USUARIO. Puede venir como HTML o texto puro.
+                        const raw = data && data[1] !== undefined ? data[1] : '';
+                        const text = $('<div>').html(raw).text().trim();
+                        if (text) visibleUsernames.add(text);
+                    });
+                    visibleUsernames.forEach(u => params.append('users[]', u));
+                }
+            }
         }
-        
+
         // Redirigir para descargar
         window.location.href = 'download_daily_attendance_report.php?' + params.toString();
         

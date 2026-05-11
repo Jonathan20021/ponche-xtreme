@@ -115,6 +115,19 @@ function getSupervisorAccessClause(PDO $pdo): array
 $date_filter = $_GET['dates'] ?? date('Y-m-d');
 $user_filter = trim($_GET['user'] ?? '');
 
+// Lista opcional de usuarios visibles en el buscador client-side del Resumen de tiempo trabajado.
+// Solo se usa cuando no hay un filtro individual ($user_filter vacio).
+$users_filter = [];
+if ($user_filter === '' && !empty($_GET['users']) && is_array($_GET['users'])) {
+    foreach ($_GET['users'] as $u) {
+        $u = trim((string) $u);
+        if ($u !== '') {
+            $users_filter[] = $u;
+        }
+    }
+    $users_filter = array_values(array_unique($users_filter));
+}
+
 // Procesar fechas - el daterangepicker envía formato "YYYY-MM-DD - YYYY-MM-DD" o "YYYY-MM-DD"
 $dateValues = [];
 if ($date_filter) {
@@ -194,6 +207,10 @@ $summary_params = $dateValues;
 if ($user_filter !== '') {
     $summary_query .= " AND users.username = ?";
     $summary_params[] = $user_filter;
+} elseif (!empty($users_filter)) {
+    $userPlaceholders = implode(',', array_fill(0, count($users_filter), '?'));
+    $summary_query .= " AND users.username IN ($userPlaceholders)";
+    $summary_params = array_merge($summary_params, $users_filter);
 }
 
 [$supervisorClause, $supervisorParams] = getSupervisorAccessClause($pdo);
@@ -545,8 +562,18 @@ $subtitleStyle = [
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
 ];
 
+$filterLabel = '';
 if ($user_filter !== '') {
-    $sheet->setCellValue('A4', 'Usuario filtrado: ' . $user_filter);
+    $filterLabel = 'Usuario filtrado: ' . $user_filter;
+} elseif (!empty($users_filter)) {
+    $previewCount = 5;
+    $preview = array_slice($users_filter, 0, $previewCount);
+    $more = count($users_filter) > $previewCount ? ' (+' . (count($users_filter) - $previewCount) . ' mas)' : '';
+    $filterLabel = 'Usuarios filtrados: ' . implode(', ', $preview) . $more;
+}
+$hasFilterLabel = $filterLabel !== '';
+if ($hasFilterLabel) {
+    $sheet->setCellValue('A4', $filterLabel);
     $sheet->mergeCells('A4:' . $lastCol . '4');
     $sheet->getStyle('A4')->applyFromArray($subtitleStyle);
 }
@@ -569,7 +596,7 @@ $sheet->getStyle('A1')->applyFromArray([
 $sheet->getStyle('A2:A3')->applyFromArray($subtitleStyle);
 
 // Encabezados de columnas
-$row = $user_filter !== '' ? 6 : 5;
+$row = $hasFilterLabel ? 6 : 5;
 $col = 'A';
 
 $headers = [
@@ -761,7 +788,7 @@ for ($colIdx = 1; $colIdx <= $lastHeaderColIndex; $colIdx++) {
 }
 
 // Aplicar alineación central a todas las celdas de datos
-$dataStartRow = $user_filter !== '' ? 6 : 5;
+$dataStartRow = $hasFilterLabel ? 6 : 5;
 $sheet->getStyle('A' . $dataStartRow . ':' . $lastHeaderCol . $row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 $sheet->getStyle('A' . $dataStartRow . ':' . $lastHeaderCol . $row)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
