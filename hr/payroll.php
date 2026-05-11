@@ -99,16 +99,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
 
         // Rebuild records for this period to ensure recalculation applies new rules
         $pdo->prepare("DELETE FROM payroll_records WHERE payroll_period_id = ?")->execute([$periodId]);
-        
-        // Get all active employees
-        $employees = $pdo->query("
+
+        // Get employees eligible for this period: active/trial, plus terminated
+        // whose termination date falls within or after the period start (so their
+        // worked hours in the period can still be paid).
+        $empStmt = $pdo->prepare("
             SELECT e.id, e.employment_status,
                    u.id as user_id, u.hourly_rate, u.monthly_salary, u.overtime_multiplier,
                    u.compensation_type, u.role
             FROM employees e
             JOIN users u ON u.id = e.user_id
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
-        ")->fetchAll(PDO::FETCH_ASSOC);
+               OR (
+                    e.employment_status = 'TERMINATED'
+                    AND (e.termination_date IS NULL OR e.termination_date >= ?)
+                  )
+        ");
+        $empStmt->execute([$period['start_date']]);
+        $employees = $empStmt->fetchAll(PDO::FETCH_ASSOC);
         
         $config = getScheduleConfig($pdo);
         $scheduledHours = (float)$config['scheduled_hours'];
@@ -444,13 +452,18 @@ if ($selectedPeriodId) {
         $manualIncentives = getPayrollManualIncentivesMap($pdo, $selectedPeriodId);
 
         $agentsStmt = $pdo->prepare("
-            SELECT e.id, e.employee_code, e.first_name, e.last_name, e.position, u.role
+            SELECT e.id, e.employee_code, e.first_name, e.last_name, e.position, u.role,
+                   e.employment_status, e.termination_date
             FROM employees e
             JOIN users u ON u.id = e.user_id
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
-            ORDER BY e.last_name, e.first_name
+               OR (
+                    e.employment_status = 'TERMINATED'
+                    AND (e.termination_date IS NULL OR e.termination_date >= ?)
+                  )
+            ORDER BY (e.employment_status = 'TERMINATED') ASC, e.last_name, e.first_name
         ");
-        $agentsStmt->execute();
+        $agentsStmt->execute([$selectedPeriod['start_date']]);
         $editableEmployees = $agentsStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Hours actually computed for this period, used as defaults in the manual-hours
@@ -737,9 +750,18 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                         $regularDisplay = (float)$agentIncentive['manual_regular_hours'];
                                         $overtimeDisplay = (float)$agentIncentive['manual_overtime_hours'];
                                     ?>
-                                        <tr class="border-b border-slate-800 hover:bg-slate-800/40">
+                                        <?php $isTerminated = ($agent['employment_status'] ?? '') === 'TERMINATED'; ?>
+                                        <tr class="border-b border-slate-800 hover:bg-slate-800/40<?= $isTerminated ? ' bg-amber-900/10' : '' ?>">
                                             <td class="py-2 px-2">
-                                                <div class="font-medium"><?= htmlspecialchars($agent['first_name'] . ' ' . $agent['last_name']) ?></div>
+                                                <div class="font-medium flex items-center gap-2">
+                                                    <?= htmlspecialchars($agent['first_name'] . ' ' . $agent['last_name']) ?>
+                                                    <?php if ($isTerminated): ?>
+                                                        <span class="text-[10px] font-semibold uppercase tracking-wide text-amber-300 bg-amber-900/40 border border-amber-700/60 rounded px-1.5 py-0.5"
+                                                              title="Empleado terminado<?= !empty($agent['termination_date']) ? ' el ' . htmlspecialchars(date('d/m/Y', strtotime($agent['termination_date']))) : '' ?>. Se mantiene en nómina para pago de horas pendientes.">
+                                                            Terminado
+                                                        </span>
+                                                    <?php endif; ?>
+                                                </div>
                                                 <div class="text-xs text-slate-400"><?= htmlspecialchars($agent['position'] ?: ($agent['role'] ?: 'Empleado')) ?></div>
                                             </td>
                                             <td class="py-2 px-2 text-slate-300"><?= htmlspecialchars($agent['employee_code']) ?></td>
