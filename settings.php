@@ -1158,6 +1158,48 @@ try {
                 }
                 break;
 
+            case 'update_inventory_report_config':
+                $invRecipients       = trim($_POST['inventory_report_recipients'] ?? '');
+                $invEnabled          = isset($_POST['inventory_report_enabled']) ? 1 : 0;
+                $invTime             = trim($_POST['inventory_report_time'] ?? '08:00');
+                $invExcludeWeekends  = isset($_POST['inventory_report_exclude_weekends']) ? 1 : 0;
+                $invOnlyWithAlerts   = isset($_POST['inventory_report_only_with_alerts']) ? 1 : 0;
+                $invExpiringDays     = max(1, (int) ($_POST['inventory_report_expiring_days']    ?? 30));
+                $invConsumptionDays  = max(1, (int) ($_POST['inventory_report_consumption_days'] ?? 30));
+                $invMovementsLimit   = max(1, (int) ($_POST['inventory_report_movements_limit']  ?? 20));
+                $invClaudeEnabled    = isset($_POST['inventory_report_claude_enabled']) ? 1 : 0;
+                $invClaudeModel      = trim($_POST['inventory_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $invClaudeMaxTokens  = max(100, (int) ($_POST['inventory_report_claude_max_tokens'] ?? 900));
+                $invClaudePrompt     = trim($_POST['inventory_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['inventory_report_recipients',         $invRecipients]);
+                    $stmt->execute(['inventory_report_enabled',            (string) $invEnabled]);
+                    $stmt->execute(['inventory_report_time',               $invTime]);
+                    $stmt->execute(['inventory_report_exclude_weekends',   (string) $invExcludeWeekends]);
+                    $stmt->execute(['inventory_report_only_with_alerts',   (string) $invOnlyWithAlerts]);
+                    $stmt->execute(['inventory_report_expiring_days',      (string) $invExpiringDays]);
+                    $stmt->execute(['inventory_report_consumption_days',   (string) $invConsumptionDays]);
+                    $stmt->execute(['inventory_report_movements_limit',    (string) $invMovementsLimit]);
+                    $stmt->execute(['inventory_report_claude_enabled',     (string) $invClaudeEnabled]);
+                    $stmt->execute(['inventory_report_claude_model',       $invClaudeModel]);
+                    $stmt->execute(['inventory_report_claude_max_tokens',  (string) $invClaudeMaxTokens]);
+                    if ($invClaudePrompt !== '') {
+                        $stmt->execute(['inventory_report_claude_prompt', $invClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte de inventario actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del reporte de inventario.';
+                }
+                break;
+
             case 'update_tardiness_report_config':
                 $tdRecipients      = trim($_POST['tardiness_report_recipients'] ?? '');
                 $tdEnabled         = isset($_POST['tardiness_report_enabled']) ? 1 : 0;
@@ -1912,6 +1954,44 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading workforce report settings: ' . $e->getMessage());
+}
+
+// Get inventory report settings
+$inventoryReport = [
+    'enabled'            => false,
+    'time'               => '08:00',
+    'recipients'         => '',
+    'exclude_weekends'   => true,
+    'only_with_alerts'   => false,
+    'expiring_days'      => 30,
+    'consumption_days'   => 30,
+    'movements_limit'    => 20,
+    'claude_enabled'     => false,
+    'claude_model'       => 'claude-sonnet-4-6',
+    'claude_max_tokens'  => 900,
+    'claude_prompt'      => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'inventory_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'inventory_report_enabled':            $inventoryReport['enabled']            = $val === '1'; break;
+            case 'inventory_report_time':               $inventoryReport['time']               = $val ?: '08:00'; break;
+            case 'inventory_report_recipients':         $inventoryReport['recipients']         = $val; break;
+            case 'inventory_report_exclude_weekends':   $inventoryReport['exclude_weekends']   = $val === '1'; break;
+            case 'inventory_report_only_with_alerts':   $inventoryReport['only_with_alerts']   = $val === '1'; break;
+            case 'inventory_report_expiring_days':      $inventoryReport['expiring_days']      = (int) ($val ?: 30); break;
+            case 'inventory_report_consumption_days':   $inventoryReport['consumption_days']   = (int) ($val ?: 30); break;
+            case 'inventory_report_movements_limit':    $inventoryReport['movements_limit']    = (int) ($val ?: 20); break;
+            case 'inventory_report_claude_enabled':     $inventoryReport['claude_enabled']     = $val === '1'; break;
+            case 'inventory_report_claude_model':       $inventoryReport['claude_model']       = $val ?: 'claude-sonnet-4-6'; break;
+            case 'inventory_report_claude_max_tokens':  $inventoryReport['claude_max_tokens']  = (int) ($val ?: 900); break;
+            case 'inventory_report_claude_prompt':      $inventoryReport['claude_prompt']      = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading inventory report settings: ' . $e->getMessage());
 }
 
 // Get tardiness report settings
@@ -4647,6 +4727,168 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Daily Inventory Report Configuration -->
+        <section id="inventory-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-boxes-stacked text-sky-400"></i>
+                        Reporte Diario de Inventario
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Foto diaria del inventario: totales globales (items, unidades, valor), desglose por categoría,
+                        alertas de stock bajo y agotado, lotes próximos a vencer, top de items consumidos, movimientos
+                        del día y asignaciones activas a empleados. Resumen ejecutivo opcional con Claude AI.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $inventoryReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $inventoryReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_inventory_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="inventory_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $inventoryReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada día a la hora configurada.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="inventory_report_exclude_weekends" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $inventoryReport['exclude_weekends'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Excluir fines de semana</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">No enviar sábados ni domingos.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="inventory_report_only_with_alerts" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $inventoryReport['only_with_alerts'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Solo enviar si hay alertas</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Omitir el envío cuando no hay stock bajo, agotado ni lotes por vencer.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                    <input type="time" name="inventory_report_time"
+                        value="<?= htmlspecialchars($inventoryReport['time']) ?>" class="input-control" required>
+                    <p class="text-xs text-muted mt-1">08:00 es recomendado — al inicio del día laboral.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (gerencia + supply chain + RH)</label>
+                    <textarea name="inventory_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="gerencia@evallishbpo.com, compras@evallishbpo.com"><?= htmlspecialchars($inventoryReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-hourglass-half"></i> Ventana de vencimiento (días)</label>
+                        <input type="number" min="1" max="365" name="inventory_report_expiring_days"
+                            value="<?= (int) $inventoryReport['expiring_days'] ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Mostrar lotes que vencen dentro de este rango.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-chart-line"></i> Ventana de consumo (días)</label>
+                        <input type="number" min="1" max="365" name="inventory_report_consumption_days"
+                            value="<?= (int) $inventoryReport['consumption_days'] ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Rango usado para el top de items consumidos.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-list-ol"></i> Movimientos recientes</label>
+                        <input type="number" min="1" max="100" name="inventory_report_movements_limit"
+                            value="<?= (int) $inventoryReport['movements_limit'] ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Cantidad de movimientos a incluir en el listado.</p>
+                    </div>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="inventory_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $inventoryReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza la foto del inventario y produce un resumen accionable: salud general, items críticos a reordenar,
+                        lotes en riesgo de vencimiento, tendencias de consumo y acciones recomendadas.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="inventory_report_claude_model"
+                                value="<?= htmlspecialchars($inventoryReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="inventory_report_claude_max_tokens"
+                                value="<?= (int) $inventoryReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="inventory_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($inventoryReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendInventoryReportPreview()" class="btn-secondary" id="sendInventoryPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendInventoryReportManually()" class="btn-secondary" id="sendInventoryReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío al inicio del día laboral, configura este cron:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    0 8 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_inventory_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    El reporte captura el estado del inventario del día — totales, alertas, lotes por vencer, consumo reciente y movimientos.
+                </p>
+            </div>
+        </section>
+
         <!-- Daily Tardiness Alert Report Configuration -->
         <section id="tardiness-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -5937,6 +6179,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Fuerza Laboral',
                 icon: 'fas fa-users',
                 selectors: ['#workforce-report-config']
+            },
+            {
+                key: 'inventory_report',
+                label: 'Inventario Diario',
+                icon: 'fas fa-boxes-stacked',
+                selectors: ['#inventory-report-config']
             },
             {
                 key: 'tardiness_report',
@@ -7542,6 +7790,82 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderWorkforceResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderWorkforceResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Inventory Report handlers ----------
+
+    function renderInventoryResult(success, message, data) {
+        const host = document.getElementById('inventory-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            const t = data.totals;
+            extra = `<p class="${subColor} text-sm mt-1">
+                Items: ${t.total_items} · Unidades: ${Number(t.total_units || 0).toFixed(0)} ·
+                Stock bajo: ${t.low_stock} · Sin stock: ${t.out_of_stock} ·
+                Por vencer: ${t.expiring_soon} · Alertas: ${t.alerts_count}
+                ${data.ai_generated ? '<span class="ml-2 text-amber-300">· IA: sí</span>' : ''}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendInventoryReportManually() {
+        const btn = document.getElementById('sendInventoryReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_inventory_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderInventoryResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderInventoryResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendInventoryReportPreview() {
+        const btn = document.getElementById('sendInventoryPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_inventory_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderInventoryResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderInventoryResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;

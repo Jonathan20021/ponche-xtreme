@@ -1369,6 +1369,105 @@ function sendDailyWorkforceReport($htmlContent, $recipients, $reportData) {
 }
 
 /**
+ * Send daily inventory report via email.
+ *
+ * @param string $htmlContent Rendered HTML body.
+ * @param array  $recipients  List of email addresses.
+ * @param array  $reportData  Report data from generateDailyInventoryReport().
+ * @return array{success: bool, message: string}
+ */
+function sendDailyInventoryReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $dateFormatted = $reportData['date_formatted'] ?? ($reportData['date'] ?? date('Y-m-d'));
+        $totals = $reportData['totals'] ?? [];
+
+        $mail->isHTML(true);
+        $mail->Subject = "Inventario - $dateFormatted ({$totals['low_stock']} bajos · {$totals['out_of_stock']} sin stock · {$totals['expiring_soon']} por vencer)";
+        $mail->Body    = $htmlContent;
+
+        // Plain-text alternative
+        $plain  = "REPORTE DIARIO DE INVENTARIO\n";
+        $plain .= "============================\n\n";
+        $plain .= "Fecha: $dateFormatted\n\n";
+        $plain .= "TOTALES\n";
+        $plain .= "  Items activos:        " . ($totals['total_items'] ?? 0) . "\n";
+        $plain .= "  Unidades totales:     " . (isset($totals['total_units']) ? number_format((float) $totals['total_units'], 2) : '0') . "\n";
+        $plain .= "  Valor estimado:       $" . number_format((float) ($totals['total_value'] ?? 0), 2) . "\n";
+        $plain .= "  Stock bajo:           " . ($totals['low_stock'] ?? 0) . "\n";
+        $plain .= "  Sin stock:            " . ($totals['out_of_stock'] ?? 0) . "\n";
+        $plain .= "  Lotes por vencer:     " . ($totals['expiring_soon'] ?? 0) . "\n";
+        $plain .= "  Asignaciones activas: " . ($totals['active_assignments'] ?? 0) . "\n\n";
+
+        if (!empty($reportData['low_stock'])) {
+            $plain .= "ITEMS CRÍTICOS:\n";
+            foreach (array_slice($reportData['low_stock'], 0, 15) as $i) {
+                $plain .= sprintf("  - %-35s stock: %s / min: %s\n",
+                    $i['name'],
+                    rtrim(rtrim(number_format((float)$i['current_stock'], 2), '0'), '.'),
+                    rtrim(rtrim(number_format((float)$i['min_stock'], 2), '0'), '.')
+                );
+            }
+            $plain .= "\n";
+        }
+
+        if (!empty($reportData['expiring_lots'])) {
+            $plain .= "LOTES POR VENCER:\n";
+            foreach (array_slice($reportData['expiring_lots'], 0, 15) as $l) {
+                $plain .= sprintf("  - %-35s vence: %s (%d días)\n",
+                    $l['item_name'], $l['expiration_date'], (int) $l['days_to_expire']);
+            }
+            $plain .= "\n";
+        }
+
+        $plain .= "\n---\nMódulo de Inventario - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Reporte enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}
+
+/**
  * Send daily tardiness alert report via email.
  *
  * @param string $htmlContent Rendered HTML body.
