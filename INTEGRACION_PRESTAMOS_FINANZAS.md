@@ -1,194 +1,202 @@
 # Integración Préstamos Finanzas ↔ Ponche-Xtreme
 
-Documentación de la integración entre la app de Finanzas (Next.js, en
-`hugo-finanzas`) y ponche-xtreme (PHP). Permite que los agentes soliciten
-préstamos desde el portal del agente, sean aprobados desde Finanzas, y las
-cuotas se descuenten automáticamente en la nómina del punch.
+Documentación de la integración entre la app de Finanzas (Next.js) y
+ponche-xtreme (PHP). Permite que los agentes soliciten préstamos desde el
+portal del agente, sean aprobados desde Finanzas, y las cuotas se
+descuenten automáticamente en la nómina del punch.
 
-## Arquitectura
+## Arquitectura (REVISADA — versión final)
+
+> **Cambio crítico:** se eliminó la dependencia HTTP entre ponche y la app de
+> Finanzas. Ahora la comunicación es **DB-direct**, así el portal de
+> agentes funciona aún cuando la app local de Finanzas esté apagada.
 
 ```
-┌─────────────────────────────┐     HTTPS + X-API-Key    ┌─────────────────────────────┐
-│  ponche-xtreme (PHP)         │ ───────────────────────▶ │  app de Finanzas (Next.js)   │
-│                              │                          │                              │
-│  • agents/request_loan.php   │ ◀───────────────────────│  • /api/loans/external-types │
-│  • agents/my_loans.php       │                          │  • /api/loans/external-      │
-│  • agents/loans_api_client   │                          │      request                 │
-│                              │                          │                              │
-│  BD: hhempeos_ponche         │                          │  BD: hhempeos_financial      │
-│   - employees                │                          │   - loans                    │
-│   - employee_deductions ◀────┼──── INSERT cuotas ───────│   - loan_installments        │
-│   - payroll_periods          │                          │   - loan_payroll_deductions  │
-└─────────────────────────────┘                          └─────────────────────────────┘
+┌─────────────────────────────────┐                         ┌──────────────────────────────┐
+│  ponche-xtreme (PHP, cPanel)     │                         │  app de Finanzas (Next.js)   │
+│  ─ online 24/7                   │                         │  ─ corre en local (dev)      │
+│                                  │                         │                              │
+│  • agents/request_loan.php       │                         │  • UI módulo préstamos       │
+│  • agents/my_loans.php           │                         │  • aprueba / desembolsa      │
+│  • agents/loans_helpers.php      │                         │  • programa deducciones      │
+│  • agents/loans_api_client.php   │                         │                              │
+│  • db_finanzas.php               │                         │                              │
+│                                  │                         │                              │
+│   ▼ PDO (puerto 3306)            │                         │   ▼ mysql2 pool              │
+└──────────────────┬───────────────┘                         └─────────────────┬────────────┘
+                   │                                                           │
+                   │      ┌──────────────────────────────────────────┐         │
+                   └────▶│  MySQL cPanel (192.185.46.27)              │◀────────┘
+                          │                                            │
+                          │  • hhempeos_ponche                         │
+                          │    - employees, employee_deductions,       │
+                          │      payroll_periods, etc.                 │
+                          │                                            │
+                          │  • hhempeos_financial_system               │
+                          │    - loans, loan_installments,             │
+                          │      loan_types, loan_audit_log,           │
+                          │      loan_settings, automation_config      │
+                          └────────────────────────────────────────────┘
 ```
+
+### ¿Por qué DB-direct y no HTTP?
+
+| Aspecto | HTTP (descartado) | DB-direct (actual) |
+|---|---|---|
+| Disponibilidad | requiere app local viva | independiente |
+| Latencia | red + parsing JSON | una transacción SQL |
+| Auth | API key + bearer | credenciales DB |
+| Email notification | desde Next.js | desde PHP + Resend API |
+| Punto único de falla | sí (Next.js local) | no |
+
+Ambos esquemas (`hhempeos_ponche` y `hhempeos_financial_system`) viven en el
+**mismo servidor MySQL de cPanel**, así que ponche puede conectarse a la BD
+de finanzas exactamente como se conecta a la suya propia. La app de Finanzas
+verá los nuevos préstamos en estado `pending` cuando se levante.
 
 ## Configuración
 
-### 1. API key compartida
+### Variables de entorno (cPanel, opcional)
 
-Ya instalada en `hhempeos_financial_system.loan_settings.external_api_key`.
+```ini
+FINANZAS_DB_HOST=192.185.46.27
+FINANZAS_DB_NAME=hhempeos_financial_system
+FINANZAS_DB_USER=hhempeos_finanzas
+FINANZAS_DB_PASSWORD=Hacker#2002
+FINANZAS_DB_PORT=3306
 
-Si cambias el valor en producción, actualiza también:
-- `LOANS_API_KEY` en `agents/loans_api_client.php` (o env var)
-- Setting `external_api_key` en la BD de finanzas
+RESEND_API_KEY=re_xxxxxxxxxxxx
+RESEND_FROM_EMAIL=notificaciones@send.evallishbpo.com
+```
 
-### 2. URL base de la app de Finanzas
+Si no se definen, ponche usa los valores por defecto codificados en
+`db_finanzas.php`. **Recomendado** mover el password a env var en producción.
 
-Por defecto `http://localhost:3000`. Modificable vía:
-- Env var `LOANS_API_BASE_URL`
-- Constante `LOANS_API_BASE_URL` en `agents/loans_api_client.php`
+### Configuración de notificaciones
 
-## Flujo: Solicitud de préstamo desde el portal del agente
+Desde la app de Finanzas → **Automatizaciones** → sección **"Configuración del Sistema"**:
+
+| Key | Descripción |
+|---|---|
+| `LOAN_NOTIFICATION_CEO_EMAIL` | Destinatario principal de notificaciones |
+| `LOAN_NOTIFICATION_EXTRA_EMAIL` | Segundo destinatario (opcional) |
+| `AUTOMATIC_EMAILS_PAUSED` | Si está en `1`, omite envíos (kill-switch) |
+
+PHP lee estos valores de `automation_config` directamente al momento del envío.
+
+## Flujo: Solicitud desde el portal del agente
 
 1. Agente entra a `agents/request_loan.php`
-2. El sistema localiza al empleado en `employees` por `user_id`
-3. Carga los tipos de préstamo disponibles desde finanzas vía
-   `GET /api/loans/external-types` (header `X-API-Key`)
+2. PHP busca al empleado en `employees` por `user_id`
+3. Carga los tipos vía `getLoanTypesFromFinance()` → `SELECT * FROM loan_types WHERE is_active=1 AND borrower_type='employee'` (BD finanzas)
 4. Agente llena el formulario (monto, plazo, frecuencia, propósito, aval, consentimiento Art. 200)
-5. POST a `/api/loans/external-request` con:
-   - `employee_external_id` (= `employees.id`)
-   - `loan_type_code`, `principal_amount`, `installment_count`,
-     `installment_frequency`, `purpose`, `has_guarantor`, `employee_consent`
-6. Finanzas:
-   - Resuelve datos del empleado consultando directamente la BD de nómina
-     (`employees + employment_contracts`) para calcular `monthly_salary` y
-     validar Art. 201 CT (33.33%)
-   - Valida límites del tipo, máximo de préstamos activos
-   - Calcula amortización
-   - Inserta préstamo en estado `pending`
-   - Inserta la tabla de cuotas (`loan_installments`)
-   - Registra en `loan_audit_log`
-7. Agente recibe `loan_number`, monto de cuota, total a pagar y
-   eventual `affordability_warning`
-8. Finanzas (administrador) aprueba el préstamo desde su UI normal
+5. `createLoanRequestInFinance()`:
+   - Resuelve datos del empleado (nombre, cédula, departamento, salario mensual desde `employment_contracts`)
+   - Carga el tipo de préstamo
+   - Valida máximo de préstamos activos (`loan_settings.max_active_loans_per_employee`)
+   - Calcula amortización en PHP (`calculateAmortizationPHP`, porte fiel de `lib/loan-utils.ts`)
+   - Valida Art. 201 CT (`validateAffordabilityPHP`)
+   - Genera número correlativo (`generateLoanNumberPHP` → `PRES-YYYY-NNNN`)
+   - **Transacción**:
+     - `INSERT INTO hhempeos_financial_system.loans` (status='pending')
+     - `INSERT INTO loan_installments` (cuadro completo)
+     - `INSERT INTO loan_audit_log` (registro de auditoría)
+   - Envía notificación al CEO + extra vía Resend (`sendLoanCreatedNotificationPHP`)
+6. Agente ve confirmación con `loan_number`, cuota, total a pagar
+7. Cuando se levante la app de Finanzas, verá la solicitud en `pending` y puede aprobar
 
 ## Flujo: Descuento automático en nómina
 
-Cuando finanzas programa una cuota para un período de nómina (vía el
-diálogo "Nómina" del módulo de préstamos):
+(Sin cambios respecto al diseño original)
 
-1. `POST /api/loans/payroll-sync` en finanzas:
-   - Inserta en `hhempeos_financial_system.loan_payroll_deductions` (estado `scheduled`)
-   - **Inserta en `hhempeos_ponche.employee_deductions`** con:
-     - `employee_id` = ID del empleado
-     - `name` = "Préstamo PRES-2026-XXXX - Cuota N"
-     - `type` = "FIXED"
-     - `amount` = monto de la cuota
-     - `is_active` = 1
-     - `start_date` = inicio del período
-     - `end_date` = fin del período
+1. Finanzas programa cuotas vía POST `/api/loans/payroll-sync`
+   → `INSERT INTO hhempeos_ponche.employee_deductions` con `name='Préstamo PRES-XXXX - Cuota N'`, `type='FIXED'`, `amount`, `start_date`, `end_date`
+2. HR genera la nómina del período → `calculateEmployeePayroll()` llama
+   `getEmployeeCustomDeductions($pdo, $employeeId, $periodStart, $periodEnd)`
+   → la cuota cae en `[start_date, end_date]` y se suma
+3. La columna **"Préstamos"** del listado muestra el monto por empleado
+4. En el slip individual aparece una fila por cada cuota con su número
 
-2. Cuando el motor de nómina del punch calcula el período
-   (`calculateEmployeePayroll` en `hr/payroll_functions.php`):
-   - Llama `getEmployeeCustomDeductions($pdo, $employeeId, $periodStart, $periodEnd)`
-   - La función intersecta `[start_date, end_date]` del descuento con
-     `[periodStart, periodEnd]` del período → la cuota cae dentro y se
-     suma a `custom_deductions`
-   - Se incluye en `total_deductions` y reduce `net_salary`
+## Archivos del lado de ponche-xtreme
 
-3. La cuota descontada aparece en `payroll_records.other_deductions` para
-   ese empleado y período.
+### Nuevos
 
-### Patch importante en `hr/payroll_functions.php`
+| Archivo | Función |
+|---|---|
+| `db_finanzas.php` | `getFinanzasPdo()` y `finanzasDbAvailable()` |
+| `agents/loans_helpers.php` | `calculateAmortizationPHP`, `validateAffordabilityPHP`, `generateLoanNumberPHP`, `sendLoanCreatedNotificationPHP`, `getFinanzasConfig` |
+| `agents/loans_integration_test.php` | Test rápido CLI: `php agents/loans_integration_test.php` |
 
-`getEmployeeCustomDeductions` ahora acepta dos parámetros adicionales
-(`$periodStart`, `$periodEnd`). El cambio es **backwards-compatible**: si
-no se proveen, mantiene el filtro legacy basado en `CURDATE()`.
+### Modificados
 
-`calculateEmployeePayroll` ahora pasa las fechas del período actual a
-`getEmployeeCustomDeductions`. Esto garantiza que las cuotas se apliquen
-en el período correcto **aún si la nómina se procesa días después del
-cierre del período**.
+| Archivo | Cambio |
+|---|---|
+| `agents/loans_api_client.php` | Reescrito: ya **no** usa HTTP. Las 3 funciones públicas (`getLoanTypesFromFinance`, `createLoanRequestInFinance`, `getEmployeeLoansFromFinance`) ahora consultan / escriben directamente a la BD de finanzas |
+| `agents/request_loan.php` | Sin cambios funcionales — usa el mismo nombre de las funciones del client |
+| `agents/my_loans.php` | Sin cambios — usa `getEmployeeLoansFromFinance` |
+| `header_agent.php` | Items "Mis Préstamos" y "Solicitar Préstamo" en el menú |
+| `hr/payroll_functions.php` | `getEmployeeCustomDeductions` acepta período, helpers `getLoanDeductionsForEmployees`, `getEmployeeLoanDeductionDetails` |
+| `hr/payroll.php` | Columna "Préstamos" en listado |
+| `hr/payroll_export_pdf.php` | Columna "Préstamos" en PDF |
+| `hr/payroll_export_excel.php` | Columna "Préstamos" en Excel |
+| `hr/payroll_slips_preview.php` | Fila por préstamo en slip |
+| `lib/payroll_email_functions.php` | Mismo en email del slip |
 
-## Endpoints REST
+## Archivos del lado de la app de Finanzas
 
-### `GET /api/loans/external-types`
-Headers: `X-API-Key`
-Respuesta: `{ loan_types: [{ code, name, default_interest_rate, ... }] }`
+### Endpoints REST (siguen activos como interfaz alternativa / testing)
 
-### `POST /api/loans/external-request`
-Headers: `X-API-Key`, `Content-Type: application/json`
-Body:
-```json
-{
-  "employee_external_id": 31,
-  "loan_type_code": "EMP_PERSONAL",
-  "principal_amount": 50000,
-  "installment_count": 12,
-  "installment_frequency": "biweekly",
-  "currency": "DOP",
-  "purpose": "Reparación de vivienda",
-  "has_guarantor": false,
-  "employee_consent": true,
-  "source": "agent_portal"
-}
+| Endpoint | Uso |
+|---|---|
+| `POST /api/loans/external-request` | Mismo flujo de creación cuando se llama por HTTP. Sirve para integraciones futuras con apps que no compartan BD. |
+| `GET /api/loans/external-request?employee_external_id=N` | Lista préstamos del empleado vía HTTP |
+| `GET /api/loans/external-types` | Tipos disponibles vía HTTP |
+
+> Estos endpoints **no son usados por el portal de agentes actualmente**.
+> Quedan disponibles si en el futuro se decide separar las apps en hosts
+> distintos con BDs independientes.
+
+### Notificación
+
+- `lib/loan-notifications.ts` → `sendLoanCreatedNotification()` para préstamos
+  creados desde la propia UI de Finanzas (Next.js)
+- `lib/loans_helpers.php` → `sendLoanCreatedNotificationPHP()` para préstamos
+  creados desde ponche
+
+Ambos envían el mismo HTML al CEO + email extra configurados.
+
+## Cumplimiento Art. 200 / 201
+
+- **Art. 200 CT** (autorización escrita): el form de solicitud incluye un
+  checkbox obligatorio que registra `employee_consent_at` (timestamp) y
+  `employee_consent_ip` (IP) en `loans`
+- **Art. 201 CT** (33.33% del salario): `validateAffordabilityPHP` se ejecuta
+  antes de insertar y, si excede, genera `affordability_warning` que viaja al
+  préstamo y al correo de notificación
+- **Auditoría completa**: cada acción en `loan_audit_log` con IP
+
+## Test rápido
+
+```bash
+# En el servidor de ponche
+php agents/loans_integration_test.php
 ```
-Respuesta `201`:
-```json
-{
-  "success": true,
-  "id": 7,
-  "loan_number": "PRES-2026-0007",
-  "status": "pending",
-  "installment_amount": 4416.67,
-  "total_payable": 53000,
-  "first_due_date": "2026-05-30",
-  "last_due_date": "2026-11-15",
-  "affordability_warning": null
-}
-```
 
-### `GET /api/loans/external-request?employee_external_id=N`
-Headers: `X-API-Key`
-Respuesta: `{ loans: [{ loan_number, status, outstanding_balance, next_due_date, ... }] }`
+Debe imprimir:
+- ✅ Conexión a hhempeos_financial_system
+- ✅ N tipos disponibles
+- ✅ Empleado de prueba resuelto
+- ✅ Simulación de amortización
+- Configuración de notificaciones (CEO email)
 
-## Archivos modificados / creados
+## Notas de mantenimiento
 
-### Finanzas (Next.js)
-- `app/api/loans/external-request/route.ts` (nuevo)
-- `app/api/loans/external-types/route.ts` (nuevo)
-- `loan_settings.external_api_key` (insertado en BD)
-
-### Ponche-xtreme (PHP)
-- `agents/loans_api_client.php` (nuevo) — cliente HTTP a finanzas
-- `agents/request_loan.php` (nuevo) — formulario de solicitud
-- `agents/my_loans.php` (nuevo) — tracking de préstamos del agente
-- `agents/index.php` (modificado) — agrega tarjetas de acceso rápido
-- `header_agent.php` (modificado) — agrega items al menú
-- `hr/payroll_functions.php` (modificado):
-  - `getEmployeeCustomDeductions` ahora acepta `$periodStart, $periodEnd`
-  - `calculateEmployeePayroll` pasa las fechas del período
-
-## Permisos requeridos
-
-El agente NO necesita permisos en la app de finanzas. Toda autorización
-ocurre vía la API key compartida.
-
-Para que un agente pueda solicitar préstamos, basta con que:
-- Tenga `role IN ('AGENT', 'IT', 'Supervisor')` en sesión del punch
-- Esté vinculado a un registro en `employees` (`employees.user_id = users.id`)
-
-## Seguridad
-
-- **API key obligatoria** en todas las requests externas
-- **Sin autenticación de empleado** — la app del agente confía en la sesión
-  del punch; la API key le da derecho a actuar a nombre de cualquier
-  `employee_external_id`. Esto es razonable porque ambos sistemas son
-  internos y la solicitud queda en `pending` hasta aprobación manual.
-- **HTTPS recomendado** en producción (la API key viaja en clear text si no)
-- **Auditoría completa**: cada solicitud queda en `loan_audit_log` con IP
-
-## Pruebas manuales
-
-1. Asegurarse de que la app de Finanzas está corriendo en `localhost:3000`
-2. Login como agente en ponche-xtreme
-3. Ir a `agents/request_loan.php`
-4. Verificar que aparecen los tipos de préstamo (selector poblado)
-5. Crear una solicitud de prueba
-6. Ir a `agents/my_loans.php` y verificar que aparece como "Pendiente"
-7. En la app de Finanzas, ver el préstamo en la lista de préstamos pendientes
-8. Aprobar y desembolsar
-9. Programar las cuotas para el siguiente período de nómina (botón "Nómina")
-10. Verificar que aparecen en `hhempeos_ponche.employee_deductions`
-11. Calcular la nómina del período y verificar que `other_deductions` del
-    empleado incluye el monto de la cuota
+- **Sincronización de lógica**: el cálculo de amortización vive duplicado en
+  TypeScript (`lib/loan-utils.ts`) y PHP (`agents/loans_helpers.php`). Si se
+  cambia uno, **debe replicarse al otro** para mantener consistencia. Tests
+  cruzados son recomendables.
+- **Resend en cPanel**: asegurarse de que `RESEND_API_KEY` esté disponible
+  como env var del PHP (via `.htaccess SetEnv` o phprc). Si no, el correo
+  se omitirá pero el préstamo se guardará igual.
+- **Pool de conexiones**: PHP usa conexiones nuevas por request a la BD de
+  finanzas. No hace pool — apropiado para tráfico bajo del portal de agentes.

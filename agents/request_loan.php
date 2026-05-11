@@ -159,10 +159,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
         <?php if (empty($loanTypes)): ?>
             <div class="glass-card border-l-4 border-amber-500">
                 <p class="text-amber-300">
-                    <i class="fas fa-plug mr-2"></i>
-                    No fue posible cargar los tipos de préstamo desde la app de Finanzas. Verifica que esté corriendo en
-                    <code class="text-amber-200 bg-amber-900/30 px-1"><?= htmlspecialchars(LOANS_API_BASE_URL) ?></code>
-                    y que la API key esté configurada.
+                    <i class="fas fa-database mr-2"></i>
+                    No fue posible cargar los tipos de préstamo. Verifica que el esquema
+                    <code class="text-amber-200 bg-amber-900/30 px-1">hhempeos_financial_system</code>
+                    esté disponible y que la tabla <code class="text-amber-200 bg-amber-900/30 px-1">loan_types</code>
+                    tenga registros con <code class="text-amber-200 bg-amber-900/30 px-1">is_active=1</code> y
+                    <code class="text-amber-200 bg-amber-900/30 px-1">borrower_type='employee'</code>.
                 </p>
             </div>
         <?php else: ?>
