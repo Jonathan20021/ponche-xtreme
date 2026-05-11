@@ -1287,6 +1287,41 @@ try {
                 }
                 break;
 
+            case 'update_inventory_ai_config':
+                $invEnabled        = isset($_POST['inventory_ai_enabled']) ? '1' : '0';
+                $invModel          = trim($_POST['inventory_ai_model'] ?? '');
+                $invAutoCat        = isset($_POST['inventory_ai_auto_categorize_on_create']) ? '1' : '0';
+                $invLowPct         = max(0, min(100, (int) ($_POST['inventory_ai_low_stock_threshold_pct'] ?? 20)));
+                $invMaxHist        = max(2, min(100, (int) ($_POST['inventory_ai_max_chat_history'] ?? 20)));
+                $invPredictDays    = max(7, min(365, (int) ($_POST['inventory_ai_predict_days'] ?? 90)));
+                $invChatPrompt     = trim($_POST['inventory_ai_chat_system_prompt'] ?? '');
+                $invCategorizePrompt = trim($_POST['inventory_ai_categorize_prompt'] ?? '');
+                $invPredictPrompt  = trim($_POST['inventory_ai_predict_prompt'] ?? '');
+                $invAnomalyPrompt  = trim($_POST['inventory_ai_anomaly_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'inventory_ai')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    $stmt->execute(['inventory_ai_enabled',                  $invEnabled]);
+                    $stmt->execute(['inventory_ai_model',                    $invModel]);
+                    $stmt->execute(['inventory_ai_auto_categorize_on_create', $invAutoCat]);
+                    $stmt->execute(['inventory_ai_low_stock_threshold_pct',  (string) $invLowPct]);
+                    $stmt->execute(['inventory_ai_max_chat_history',         (string) $invMaxHist]);
+                    $stmt->execute(['inventory_ai_predict_days',             (string) $invPredictDays]);
+                    if ($invChatPrompt       !== '') $stmt->execute(['inventory_ai_chat_system_prompt', $invChatPrompt]);
+                    if ($invCategorizePrompt !== '') $stmt->execute(['inventory_ai_categorize_prompt',  $invCategorizePrompt]);
+                    if ($invPredictPrompt    !== '') $stmt->execute(['inventory_ai_predict_prompt',     $invPredictPrompt]);
+                    if ($invAnomalyPrompt    !== '') $stmt->execute(['inventory_ai_anomaly_prompt',     $invAnomalyPrompt]);
+
+                    $successMessages[] = 'Configuración de IA de inventario actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de IA de inventario.';
+                }
+                break;
+
             case 'update_quality_alerts_report_config':
                 $qaRecipients      = trim($_POST['quality_alerts_report_recipients'] ?? '');
                 $qaEnabled         = isset($_POST['quality_alerts_report_enabled']) ? 1 : 0;
@@ -1981,6 +2016,28 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading recruitment AI settings: ' . $e->getMessage());
+}
+
+// Inventory AI configuration
+$inventoryAi = [
+    'inventory_ai_enabled'                   => '1',
+    'inventory_ai_model'                     => '',
+    'inventory_ai_auto_categorize_on_create' => '1',
+    'inventory_ai_low_stock_threshold_pct'   => '20',
+    'inventory_ai_max_chat_history'          => '20',
+    'inventory_ai_predict_days'              => '90',
+    'inventory_ai_chat_system_prompt'        => '',
+    'inventory_ai_categorize_prompt'         => '',
+    'inventory_ai_predict_prompt'            => '',
+    'inventory_ai_anomaly_prompt'            => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'inventory_ai_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $inventoryAi[$row['setting_key']] = (string) ($row['setting_value'] ?? '');
+    }
+} catch (Exception $e) {
+    error_log('Error loading inventory AI settings: ' . $e->getMessage());
 }
 
 // Get Voice AI + Claude configuration (insights on top of GHL reports)
@@ -2889,6 +2946,103 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         <i class="fas fa-save"></i> Guardar IA de reclutamiento
                     </button>
                     <a href="hr/recruitment.php" class="btn-secondary"><i class="fas fa-arrow-up-right-from-square"></i> Ir a Reclutamiento</a>
+                </div>
+            </form>
+        </section>
+
+        <!-- Inventory AI Configuration -->
+        <section id="inventory-ai-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-warehouse text-cyan-400"></i>
+                        IA de Inventario (Claude)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Controla el chat asistente, la categorización automática de nuevos items, la predicción de consumo
+                        y la detección de anomalías en el modulo de inventario. Reutiliza la API key global configurada arriba.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $inventoryAi['inventory_ai_enabled'] === '1' ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $inventoryAi['inventory_ai_enabled'] === '1' ? 'Activa' : 'Desactivada' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_inventory_ai_config">
+
+                <div class="space-y-2">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="inventory_ai_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $inventoryAi['inventory_ai_enabled'] === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar IA de inventario</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Apaga el chat, la categorización IA y las predicciones sin tocar el resto del modulo.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-microchip"></i> Modelo Claude</label>
+                        <input type="text" name="inventory_ai_model" value="<?= htmlspecialchars($inventoryAi['inventory_ai_model']) ?>" placeholder="(usar modelo global)" class="input-control font-mono text-xs">
+                        <p class="text-xs text-muted mt-1">Si lo dejas vacío usa el modelo global. Sugerido: <code>claude-sonnet-4-6</code>.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-days"></i> Días para predicción</label>
+                        <input type="number" min="7" max="365" name="inventory_ai_predict_days" value="<?= htmlspecialchars($inventoryAi['inventory_ai_predict_days']) ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Historial usado al predecir consumo (default 90).</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-comments"></i> Turnos de chat en contexto</label>
+                        <input type="number" min="2" max="100" name="inventory_ai_max_chat_history" value="<?= htmlspecialchars($inventoryAi['inventory_ai_max_chat_history']) ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Mensajes previos enviados a Claude (default 20).</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-bell"></i> Umbral de stock bajo (%)</label>
+                        <input type="number" min="0" max="100" name="inventory_ai_low_stock_threshold_pct" value="<?= htmlspecialchars($inventoryAi['inventory_ai_low_stock_threshold_pct']) ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">% sobre el mínimo a partir del cual la IA marca un item como bajo.</p>
+                    </div>
+                    <div class="flex items-end">
+                        <label class="inline-flex items-center gap-3 text-sm cursor-pointer">
+                            <input type="checkbox" name="inventory_ai_auto_categorize_on_create" value="1" class="w-5 h-5 accent-cyan-500"
+                                <?= $inventoryAi['inventory_ai_auto_categorize_on_create'] === '1' ? 'checked' : '' ?>>
+                            <span>Mostrar botón "Sugerir con IA" al crear items nuevos</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-robot"></i> Prompt: chat asistente</label>
+                    <textarea name="inventory_ai_chat_system_prompt" rows="4" class="input-control text-sm"><?= htmlspecialchars($inventoryAi['inventory_ai_chat_system_prompt']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Instrucciones del system prompt para el chat. El estado del inventario se inyecta automáticamente.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-wand-magic-sparkles"></i> Prompt: categorización automática</label>
+                    <textarea name="inventory_ai_categorize_prompt" rows="3" class="input-control text-sm"><?= htmlspecialchars($inventoryAi['inventory_ai_categorize_prompt']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Debe pedir respuesta JSON con category_id, description, unit, is_consumable, track_lots, min_stock.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-chart-line"></i> Prompt: predicción de consumo</label>
+                    <textarea name="inventory_ai_predict_prompt" rows="3" class="input-control text-sm"><?= htmlspecialchars($inventoryAi['inventory_ai_predict_prompt']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Debe pedir JSON con days_until_stockout, monthly_consumption_avg, recommended_reorder_qty, confidence, reasoning.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-triangle-exclamation"></i> Prompt: detección de anomalías</label>
+                    <textarea name="inventory_ai_anomaly_prompt" rows="3" class="input-control text-sm"><?= htmlspecialchars($inventoryAi['inventory_ai_anomaly_prompt']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Debe pedir JSON con anomaly_detected, severity, explanation, suggested_action.</p>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar IA de inventario
+                    </button>
+                    <a href="hr/inventory_ai_chat.php" class="btn-secondary"><i class="fas fa-arrow-up-right-from-square"></i> Probar chat</a>
                 </div>
             </form>
         </section>

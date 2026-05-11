@@ -33,29 +33,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         switch ($action) {
             case 'add_item': {
-                $name        = trim($_POST['name'] ?? '');
-                $categoryId  = (int) ($_POST['category_id'] ?? 0);
-                $description = trim($_POST['description'] ?? '');
+                $name         = trim($_POST['name'] ?? '');
+                $categoryId   = (int) ($_POST['category_id'] ?? 0);
+                $description  = trim($_POST['description'] ?? '');
+                $unit         = trim($_POST['unit'] ?? 'unidad') ?: 'unidad';
+                $isConsumable = isset($_POST['is_consumable']) ? 1 : 0;
+                $trackLots    = isset($_POST['track_lots']) ? 1 : 0;
+                $minStock     = (float) ($_POST['min_stock'] ?? 0);
+                $maxStock     = $_POST['max_stock']    !== '' ? (float) $_POST['max_stock']    : null;
+                $reorderQty   = $_POST['reorder_qty']  !== '' ? (float) $_POST['reorder_qty']  : null;
+                $unitCost     = $_POST['unit_cost']    !== '' ? (float) $_POST['unit_cost']    : null;
+                $sku          = trim($_POST['sku'] ?? '') ?: null;
                 if ($name === '' || $categoryId <= 0) {
                     throw new RuntimeException('Nombre y categoría son obligatorios.');
                 }
-                $stmt = $pdo->prepare("INSERT INTO inventory_item_types (name, category_id, description) VALUES (?, ?, ?)");
-                $stmt->execute([$name, $categoryId, $description]);
-                $successMsg = "Tipo de artículo agregado exitosamente.";
+                $stmt = $pdo->prepare("INSERT INTO inventory_item_types
+                    (name, category_id, description, sku, unit, is_consumable, track_lots,
+                     min_stock, max_stock, reorder_qty, unit_cost)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$name, $categoryId, $description, $sku, $unit,
+                                $isConsumable, $trackLots, $minStock, $maxStock, $reorderQty, $unitCost]);
+                $successMsg = "Tipo de articulo agregado exitosamente.";
                 inv_log($pdo, 'create', "Item creado: $name", (int)$pdo->lastInsertId(), compact('name', 'categoryId'));
                 break;
             }
 
             case 'edit_item': {
-                $id          = (int) ($_POST['item_id'] ?? 0);
-                $name        = trim($_POST['name'] ?? '');
-                $categoryId  = (int) ($_POST['category_id'] ?? 0);
-                $description = trim($_POST['description'] ?? '');
+                $id           = (int) ($_POST['item_id'] ?? 0);
+                $name         = trim($_POST['name'] ?? '');
+                $categoryId   = (int) ($_POST['category_id'] ?? 0);
+                $description  = trim($_POST['description'] ?? '');
+                $unit         = trim($_POST['unit'] ?? 'unidad') ?: 'unidad';
+                $isConsumable = isset($_POST['is_consumable']) ? 1 : 0;
+                $trackLots    = isset($_POST['track_lots']) ? 1 : 0;
+                $minStock     = (float) ($_POST['min_stock'] ?? 0);
+                $maxStock     = ($_POST['max_stock'] ?? '')    !== '' ? (float) $_POST['max_stock']    : null;
+                $reorderQty   = ($_POST['reorder_qty'] ?? '')  !== '' ? (float) $_POST['reorder_qty']  : null;
+                $unitCost     = ($_POST['unit_cost'] ?? '')    !== '' ? (float) $_POST['unit_cost']    : null;
+                $sku          = trim($_POST['sku'] ?? '') ?: null;
                 if ($id <= 0 || $name === '' || $categoryId <= 0) {
                     throw new RuntimeException('Datos incompletos para editar el item.');
                 }
-                $stmt = $pdo->prepare("UPDATE inventory_item_types SET name = ?, category_id = ?, description = ? WHERE id = ?");
-                $stmt->execute([$name, $categoryId, $description, $id]);
+                $stmt = $pdo->prepare("UPDATE inventory_item_types
+                    SET name = ?, category_id = ?, description = ?, sku = ?, unit = ?,
+                        is_consumable = ?, track_lots = ?, min_stock = ?, max_stock = ?,
+                        reorder_qty = ?, unit_cost = ?
+                    WHERE id = ?");
+                $stmt->execute([$name, $categoryId, $description, $sku, $unit,
+                                $isConsumable, $trackLots, $minStock, $maxStock,
+                                $reorderQty, $unitCost, $id]);
                 $successMsg = "Item actualizado correctamente.";
                 inv_log($pdo, 'update', "Item editado: $name", $id, compact('name', 'categoryId'));
                 break;
@@ -195,33 +221,115 @@ $items = $pdo->query("
                             Crea una categoría primero antes de agregar items.
                         </p>
                     <?php else: ?>
-                        <form method="POST">
+                        <form method="POST" id="addItemForm">
                             <input type="hidden" name="action" value="add_item">
-                            <div class="form-group mb-4">
-                                <label class="text-slate-300">Nombre del Item *</label>
-                                <input type="text" name="name" required
-                                    placeholder="Ej: Laptop Dell Latitude"
+                            <div class="form-group mb-3">
+                                <label class="text-slate-300 flex items-center justify-between">
+                                    <span>Nombre del Item *</span>
+                                    <button type="button" id="aiSuggestBtn" class="text-xs px-2 py-1 rounded-full" style="background:linear-gradient(135deg,#7c3aed,#0891b2);color:white;">
+                                        <i class="fas fa-magic-wand-sparkles mr-1"></i> Sugerir con IA
+                                    </button>
+                                </label>
+                                <input type="text" name="name" id="addItemName" required
+                                    placeholder="Ej: Acetaminofen 500mg" autocomplete="off"
                                     class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                <p id="aiHint" class="text-xs text-purple-300 hidden mt-1"><i class="fas fa-sparkles mr-1"></i>Claude completara categoria, unidad y stock minimo basandose en el nombre.</p>
                             </div>
-                            <div class="form-group mb-4">
-                                <label class="text-slate-300">Categoría *</label>
-                                <select name="category_id" required
-                                    class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
-                                    <?php foreach ($categories as $cat): ?>
-                                        <option value="<?= $cat['id'] ?>"><?= htmlspecialchars($cat['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div class="form-group">
+                                    <label class="text-slate-300">Categoria *</label>
+                                    <select name="category_id" id="addItemCategory" required class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                        <?php foreach ($categories as $cat): ?>
+                                            <option value="<?= $cat['id'] ?>"><?= htmlspecialchars($cat['name']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="text-slate-300">Unidad</label>
+                                    <input type="text" name="unit" id="addItemUnit" value="unidad" placeholder="unidad, caja, litro..." class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                </div>
                             </div>
-                            <div class="form-group mb-4">
-                                <label class="text-slate-300">Descripción</label>
-                                <input type="text" name="description"
-                                    placeholder="Descripción opcional"
-                                    class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                            <div class="form-group mb-3">
+                                <label class="text-slate-300">Descripcion</label>
+                                <input type="text" name="description" id="addItemDesc" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
                             </div>
-                            <button type="submit" class="btn-primary w-full">
-                                <i class="fas fa-plus mr-2"></i>Agregar Item
-                            </button>
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div class="form-group">
+                                    <label class="text-slate-300">SKU</label>
+                                    <input type="text" name="sku" placeholder="Opcional" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                </div>
+                                <div class="form-group">
+                                    <label class="text-slate-300">Costo unitario ($)</label>
+                                    <input type="number" step="0.01" min="0" name="unit_cost" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3 mb-3">
+                                <div class="form-group">
+                                    <label class="text-slate-300">Min</label>
+                                    <input type="number" step="0.01" min="0" name="min_stock" id="addItemMin" value="0" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                </div>
+                                <div class="form-group">
+                                    <label class="text-slate-300">Max</label>
+                                    <input type="number" step="0.01" min="0" name="max_stock" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                </div>
+                                <div class="form-group">
+                                    <label class="text-slate-300">Reorden</label>
+                                    <input type="number" step="0.01" min="0" name="reorder_qty" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-3 mb-4 text-sm text-slate-300">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" name="is_consumable" id="addItemConsum" value="1" checked class="rounded">
+                                    <span>Consumible (papel, medicina, alimento)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" name="track_lots" id="addItemLots" value="1" class="rounded">
+                                    <span>Rastrear lotes / vencimiento</span>
+                                </label>
+                            </div>
+                            <button type="submit" class="btn-primary w-full"><i class="fas fa-plus mr-2"></i>Agregar Item</button>
                         </form>
+
+                        <script>
+                        document.getElementById('aiSuggestBtn').addEventListener('click', async () => {
+                            const name = document.getElementById('addItemName').value.trim();
+                            if (!name) { alert('Escribe primero el nombre del item.'); return; }
+                            const btn = document.getElementById('aiSuggestBtn');
+                            const hint = document.getElementById('aiHint');
+                            const orig = btn.innerHTML;
+                            btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1"></i> Pensando...';
+                            try {
+                                const fd = new FormData();
+                                fd.append('action', 'categorize');
+                                fd.append('name', name);
+                                const r = await fetch('../api/inventory_ai.php', { method: 'POST', body: fd });
+                                const j = await r.json();
+                                if (!j.success || !j.suggestion) {
+                                    hint.textContent = '⚠ ' + (j.error || 'No se pudo obtener sugerencia');
+                                    hint.classList.remove('hidden');
+                                    hint.classList.remove('text-purple-300');
+                                    hint.classList.add('text-yellow-300');
+                                    return;
+                                }
+                                const s = j.suggestion;
+                                document.getElementById('addItemCategory').value = s.category_id;
+                                if (s.unit)        document.getElementById('addItemUnit').value = s.unit;
+                                if (s.description) document.getElementById('addItemDesc').value = s.description;
+                                if (s.min_stock)   document.getElementById('addItemMin').value = s.min_stock;
+                                document.getElementById('addItemConsum').checked = !!s.is_consumable;
+                                document.getElementById('addItemLots').checked   = !!s.track_lots;
+                                hint.innerHTML = '<i class="fas fa-check mr-1"></i> Sugerencia aplicada. Revisa antes de guardar.';
+                                hint.classList.remove('hidden');
+                                hint.classList.remove('text-yellow-300');
+                                hint.classList.add('text-purple-300');
+                            } catch (e) {
+                                hint.textContent = 'Error: ' + e.message;
+                                hint.classList.remove('hidden');
+                            } finally {
+                                btn.disabled = false; btn.innerHTML = orig;
+                            }
+                        });
+                        </script>
                     <?php endif; ?>
                 </div>
 
@@ -275,6 +383,14 @@ $items = $pdo->query("
                                                 data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>"
                                                 data-description="<?= htmlspecialchars($item['description'] ?? '', ENT_QUOTES) ?>"
                                                 data-category-id="<?= (int) $item['category_id'] ?>"
+                                                data-sku="<?= htmlspecialchars($item['sku'] ?? '', ENT_QUOTES) ?>"
+                                                data-unit="<?= htmlspecialchars($item['unit'] ?? 'unidad', ENT_QUOTES) ?>"
+                                                data-is-consumable="<?= (int) ($item['is_consumable'] ?? 1) ?>"
+                                                data-track-lots="<?= (int) ($item['track_lots'] ?? 0) ?>"
+                                                data-min-stock="<?= htmlspecialchars((string) ($item['min_stock'] ?? 0), ENT_QUOTES) ?>"
+                                                data-max-stock="<?= htmlspecialchars((string) ($item['max_stock'] ?? ''), ENT_QUOTES) ?>"
+                                                data-reorder-qty="<?= htmlspecialchars((string) ($item['reorder_qty'] ?? ''), ENT_QUOTES) ?>"
+                                                data-unit-cost="<?= htmlspecialchars((string) ($item['unit_cost'] ?? ''), ENT_QUOTES) ?>"
                                                 class="action-btn text-blue-400 hover:bg-blue-500/10"
                                                 title="Editar">
                                                 <i class="fas fa-edit"></i>
@@ -369,7 +485,7 @@ $items = $pdo->query("
 
     <!-- Edit Item Modal -->
     <div id="editItemModal" class="modal-backdrop hidden items-center justify-center" style="display:none;">
-        <div class="modal-content rounded-xl p-6 w-full max-w-md relative">
+        <div class="modal-content rounded-xl p-6 w-full max-w-xl relative max-h-[90vh] overflow-y-auto">
             <button type="button" data-action="close-modal" data-target="editItemModal"
                 class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
                 <i class="fas fa-times text-xl"></i>
@@ -378,24 +494,61 @@ $items = $pdo->query("
             <form method="POST">
                 <input type="hidden" name="action" value="edit_item">
                 <input type="hidden" name="item_id" id="edit_item_id">
-                <div class="form-group mb-4">
+                <div class="form-group mb-3">
                     <label class="text-slate-300">Nombre *</label>
-                    <input type="text" name="name" id="edit_item_name_input" required
-                        class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                    <input type="text" name="name" id="edit_item_name_input" required class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
                 </div>
-                <div class="form-group mb-4">
-                    <label class="text-slate-300">Categoría *</label>
-                    <select name="category_id" id="edit_item_category" required
-                        class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
-                        <?php foreach ($categories as $cat): ?>
-                            <option value="<?= $cat['id'] ?>"><?= htmlspecialchars($cat['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div class="form-group">
+                        <label class="text-slate-300">Categoria *</label>
+                        <select name="category_id" id="edit_item_category" required class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                            <?php foreach ($categories as $cat): ?>
+                                <option value="<?= $cat['id'] ?>"><?= htmlspecialchars($cat['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="text-slate-300">Unidad</label>
+                        <input type="text" name="unit" id="edit_item_unit" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                    </div>
                 </div>
-                <div class="form-group mb-6">
-                    <label class="text-slate-300">Descripción</label>
-                    <input type="text" name="description" id="edit_item_description"
-                        class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                <div class="form-group mb-3">
+                    <label class="text-slate-300">Descripcion</label>
+                    <input type="text" name="description" id="edit_item_description" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div class="form-group">
+                        <label class="text-slate-300">SKU</label>
+                        <input type="text" name="sku" id="edit_item_sku" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                    </div>
+                    <div class="form-group">
+                        <label class="text-slate-300">Costo unitario ($)</label>
+                        <input type="number" step="0.01" min="0" name="unit_cost" id="edit_item_cost" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3 mb-3">
+                    <div class="form-group">
+                        <label class="text-slate-300">Min</label>
+                        <input type="number" step="0.01" min="0" name="min_stock" id="edit_item_min" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                    </div>
+                    <div class="form-group">
+                        <label class="text-slate-300">Max</label>
+                        <input type="number" step="0.01" min="0" name="max_stock" id="edit_item_max" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                    </div>
+                    <div class="form-group">
+                        <label class="text-slate-300">Reorden</label>
+                        <input type="number" step="0.01" min="0" name="reorder_qty" id="edit_item_reorder" class="w-full bg-slate-800 border border-slate-700 rounded text-white p-2">
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-3 mb-5 text-sm text-slate-300">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="is_consumable" id="edit_item_consum" value="1" class="rounded">
+                        <span>Consumible</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="track_lots" id="edit_item_lots" value="1" class="rounded">
+                        <span>Rastrear lotes / vencimiento</span>
+                    </label>
                 </div>
                 <div class="flex justify-end gap-3">
                     <button type="button" data-action="close-modal" data-target="editItemModal" class="btn-secondary">Cancelar</button>
@@ -523,10 +676,19 @@ $items = $pdo->query("
                 const action = trigger.dataset.action;
 
                 if (action === 'edit-item') {
-                    document.getElementById('edit_item_id').value = trigger.dataset.id;
-                    document.getElementById('edit_item_name_input').value = trigger.dataset.name || '';
-                    document.getElementById('edit_item_description').value = trigger.dataset.description || '';
-                    document.getElementById('edit_item_category').value = trigger.dataset.categoryId || '';
+                    const d = trigger.dataset;
+                    document.getElementById('edit_item_id').value = d.id;
+                    document.getElementById('edit_item_name_input').value = d.name || '';
+                    document.getElementById('edit_item_description').value = d.description || '';
+                    document.getElementById('edit_item_category').value = d.categoryId || '';
+                    document.getElementById('edit_item_sku').value = d.sku || '';
+                    document.getElementById('edit_item_unit').value = d.unit || 'unidad';
+                    document.getElementById('edit_item_min').value = d.minStock || 0;
+                    document.getElementById('edit_item_max').value = d.maxStock || '';
+                    document.getElementById('edit_item_reorder').value = d.reorderQty || '';
+                    document.getElementById('edit_item_cost').value = d.unitCost || '';
+                    document.getElementById('edit_item_consum').checked = d.isConsumable === '1';
+                    document.getElementById('edit_item_lots').checked   = d.trackLots === '1';
                     openModal('editItemModal');
                 } else if (action === 'delete-item') {
                     document.getElementById('delete_item_id').value = trigger.dataset.id;

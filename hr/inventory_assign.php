@@ -7,6 +7,7 @@ error_reporting(E_ALL);
 session_start();
 require_once '../db.php';
 require_once '../lib/logging_functions.php';
+require_once '../lib/inventory_functions.php';
 
 ensurePermission('hr_employees', '../unauthorized.php');
 
@@ -19,33 +20,57 @@ if (!empty($employeeId)) {
     $returnUrl .= '?employee_id=' . (int) $employeeId;
 }
 
-// Handle Assignment
+// Handle Assignment — also decrements stock (records an ASSIGN movement)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        $employeeId = (int) $_POST['employee_id'];
-        $itemTypeId = (int) $_POST['item_type_id'];
-        $details = trim($_POST['details']);
-        $uuid = trim($_POST['uuid']) ?: null;
-        $notes = trim($_POST['notes']);
+        $employeeId   = (int) $_POST['employee_id'];
+        $itemTypeId   = (int) $_POST['item_type_id'];
+        $details      = trim($_POST['details']);
+        $uuid         = trim($_POST['uuid']) ?: null;
+        $notes        = trim($_POST['notes']);
         $assignedDate = $_POST['assigned_date'];
+        $quantity     = (float) ($_POST['quantity'] ?? 1);
+        if ($quantity <= 0) $quantity = 1;
 
-        $stmt = $pdo->prepare("
-            INSERT INTO employee_inventory 
-            (employee_id, item_type_id, details, uuid, status, assigned_date, assigned_by, notes)
-            VALUES (?, ?, ?, ?, 'ASSIGNED', ?, ?, ?)
-        ");
-        $stmt->execute([
-            $employeeId,
-            $itemTypeId,
-            $details,
-            $uuid,
-            $assignedDate,
-            $_SESSION['user_id'],
-            $notes
-        ]);
+        // Single transaction: insert assignment row, then record stock movement
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO employee_inventory
+                (employee_id, item_type_id, details, uuid, quantity, status, assigned_date, assigned_by, notes)
+                VALUES (?, ?, ?, ?, ?, 'ASSIGNED', ?, ?, ?)
+            ");
+            $stmt->execute([
+                $employeeId,
+                $itemTypeId,
+                $details,
+                $uuid,
+                $quantity,
+                $assignedDate,
+                $_SESSION['user_id'],
+                $notes,
+            ]);
+            $assignmentId = (int) $pdo->lastInsertId();
 
-        $successMsg = "Artículo asignado correctamente.";
+            // Decrement stock with an ASSIGN movement (negative)
+            inv_record_movement($pdo, [
+                'item_type_id'  => $itemTypeId,
+                'movement_type' => 'ASSIGN',
+                'quantity'      => $quantity,
+                'reason'        => 'Asignacion a empleado',
+                'employee_id'   => $employeeId,
+                'assignment_id' => $assignmentId,
+                'notes'         => $notes,
+            ]);
 
+            $pdo->commit();
+            $successMsg = "Articulo asignado y stock descontado correctamente.";
+        } catch (Throwable $txErr) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $txErr;
+        }
+
+        // Audit log
         $metaStmt = $pdo->prepare("
             SELECT CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
                    e.employee_code,
@@ -60,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $meta = $metaStmt->fetch(PDO::FETCH_ASSOC);
 
         if ($meta && function_exists('log_custom_action')) {
-            $description = "Inventario asignado: {$meta['item_name']} a {$meta['employee_name']}";
+            $description = "Inventario asignado: {$meta['item_name']} a {$meta['employee_name']} (qty: $quantity)";
             log_custom_action(
                 $pdo,
                 $_SESSION['user_id'] ?? null,
@@ -70,20 +95,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'assign',
                 $description,
                 'employee_inventory',
-                (int) $pdo->lastInsertId(),
+                $assignmentId,
                 [
                     'employee_code' => $meta['employee_code'],
-                    'category' => $meta['category_name'],
-                    'uuid' => $uuid,
-                    'details' => $details,
+                    'category'      => $meta['category_name'],
+                    'uuid'          => $uuid,
+                    'details'       => $details,
+                    'quantity'      => $quantity,
                     'assigned_date' => $assignedDate,
                 ]
             );
-        }
-
-        // Redirect if it came from employee profile
-        if (isset($_GET['redirect_employee'])) {
-            // We can redirect back or just show success
         }
 
     } catch (Exception $e) {
@@ -112,11 +133,12 @@ try {
     ")->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// Get Item Types grouped by category
+// Get Item Types grouped by category — include stock and consumable flag
 $itemsQuery = $pdo->query("
-    SELECT it.*, c.name as category_name 
-    FROM inventory_item_types it 
-    JOIN inventory_categories c ON c.id = it.category_id 
+    SELECT it.*, c.name as category_name
+    FROM inventory_item_types it
+    JOIN inventory_categories c ON c.id = it.category_id
+    WHERE it.is_active = 1
     ORDER BY c.name, it.name
 ");
 $itemTypes = [];
@@ -215,23 +237,40 @@ while ($row = $itemsQuery->fetch(PDO::FETCH_ASSOC)) {
 
                     <div class="form-group mb-4">
                         <label class="block text-slate-300 mb-2">Artículo / Equipo</label>
-                        <select name="item_type_id"
+                        <select name="item_type_id" id="item_type_id"
                             class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-500"
                             required>
                             <option value="">Seleccionar Tipo de Artículo...</option>
                             <?php foreach ($itemTypes as $category => $items): ?>
                                 <optgroup label="<?= htmlspecialchars($category) ?>">
                                     <?php foreach ($items as $item): ?>
-                                        <option value="<?= $item['id'] ?>">
-                                            <?= htmlspecialchars($item['name']) ?>
+                                        <?php
+                                            $stockTxt = inv_format_qty((float) $item['current_stock'], $item['unit']);
+                                            $consumLabel = (int) $item['is_consumable'] === 1 ? '· consumible' : '· asignable';
+                                        ?>
+                                        <option value="<?= $item['id'] ?>"
+                                            data-stock="<?= htmlspecialchars($item['current_stock']) ?>"
+                                            data-unit="<?= htmlspecialchars($item['unit']) ?>"
+                                            data-consumable="<?= (int) $item['is_consumable'] ?>"
+                                            <?= ($item['current_stock'] <= 0) ? 'disabled' : '' ?>>
+                                            <?= htmlspecialchars($item['name']) ?> — stock: <?= $stockTxt ?> <?= $consumLabel ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </optgroup>
                             <?php endforeach; ?>
                         </select>
+                        <small id="stockHint" class="text-slate-500 text-xs mt-1 block hidden">
+                            <i class="fas fa-info-circle"></i> <span></span>
+                        </small>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div class="form-group">
+                            <label class="block text-slate-300 mb-2">Cantidad <span class="text-cyan-400 text-xs" id="qtyUnit"></span></label>
+                            <input type="number" step="0.01" min="0.01" name="quantity" id="quantity" value="1"
+                                class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-500"
+                                required>
+                        </div>
                         <div class="form-group">
                             <label class="block text-slate-300 mb-2">Fecha Asignación</label>
                             <input type="date" name="assigned_date" value="<?= date('Y-m-d') ?>"
@@ -239,8 +278,8 @@ while ($row = $itemsQuery->fetch(PDO::FETCH_ASSOC)) {
                                 required>
                         </div>
                         <div class="form-group">
-                            <label class="block text-slate-300 mb-2">Código / Serial / Tag (Opcional)</label>
-                            <input type="text" name="uuid" placeholder="Ej: LT-001, KEY-123"
+                            <label class="block text-slate-300 mb-2">Código / Serial / Tag</label>
+                            <input type="text" name="uuid" placeholder="Ej: LT-001 (solo asignables)"
                                 class="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-500">
                         </div>
                     </div>
@@ -277,13 +316,28 @@ while ($row = $itemsQuery->fetch(PDO::FETCH_ASSOC)) {
                 allowClear: true,
                 width: '100%',
                 language: {
-                    noResults: function() {
-                        return "No se encontraron empleados";
-                    },
-                    searching: function() {
-                        return "Buscando...";
-                    }
+                    noResults: function() { return "No se encontraron empleados"; },
+                    searching: function() { return "Buscando..."; }
                 }
+            });
+
+            // Live stock hint + cantidad por defecto cuando se selecciona un item
+            $('#item_type_id').on('change', function () {
+                const opt = this.options[this.selectedIndex];
+                const stock = parseFloat(opt.getAttribute('data-stock') || '0');
+                const unit  = opt.getAttribute('data-unit') || 'unidad';
+                const isConsumable = opt.getAttribute('data-consumable') === '1';
+                const hint = document.getElementById('stockHint');
+                const span = hint.querySelector('span');
+                if (!opt.value) { hint.classList.add('hidden'); return; }
+                let color = 'text-emerald-300', icon = 'fa-check-circle';
+                if (stock <= 0)      { color = 'text-red-300';    icon = 'fa-circle-xmark'; }
+                else if (stock < 5)  { color = 'text-yellow-300'; icon = 'fa-triangle-exclamation'; }
+                hint.className = 'text-xs mt-1 block ' + color;
+                hint.innerHTML = '<i class="fas ' + icon + '"></i> Stock disponible: <strong>' + stock + '</strong> ' + unit + (isConsumable ? ' · este es un item consumible (descuenta del stock)' : ' · cada unidad asigna una pieza fisica');
+                document.getElementById('qtyUnit').textContent = '(en ' + unit + ')';
+                if (!isConsumable) document.getElementById('quantity').value = 1;
+                document.getElementById('quantity').setAttribute('max', stock);
             });
         });
     </script>
