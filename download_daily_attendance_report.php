@@ -1,10 +1,80 @@
 <?php
+require_once __DIR__ . '/vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+
 session_start();
+// Buffer any accidental output (BOM, whitespace, warnings) so it cannot corrupt the XLSX stream
+ob_start();
 include 'db.php';
 date_default_timezone_set('America/Santo_Domingo');
 
 // Verificar permisos usando el mismo control que records.php
 ensurePermission('records');
+
+if (!function_exists('renderDailyAttendanceErrorPage')) {
+    function renderDailyAttendanceErrorPage(string $title, string $detail = '', ?Throwable $exception = null): void
+    {
+        if (function_exists('ob_get_level')) {
+            while (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
+        }
+
+        if (!headers_sent()) {
+            header_remove('Content-Disposition');
+            header('Content-Type: text/html; charset=utf-8');
+            http_response_code(500);
+        }
+
+        if ($exception instanceof Throwable) {
+            error_log('[download_daily_attendance_report] ' . $exception->getMessage() . ' @ ' . $exception->getFile() . ':' . $exception->getLine());
+        }
+
+        $titleEsc = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
+        $detailEsc = $detail !== '' ? htmlspecialchars($detail, ENT_QUOTES, 'UTF-8') : '';
+
+        echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Error - Reporte de Asistencia</title>';
+        echo '<style>body{font-family:Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:40px;display:flex;justify-content:center;align-items:center;min-height:100vh}';
+        echo '.card{background:#1e293b;padding:36px;border-radius:16px;max-width:520px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.3);border-left:4px solid #ef4444}';
+        echo 'h2{margin:0 0 12px;color:#fca5a5;font-size:20px}p{margin:8px 0;line-height:1.5}.muted{color:#94a3b8;font-size:13px}';
+        echo '.btn{display:inline-block;margin-top:18px;padding:10px 18px;background:#6366f1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600}</style></head><body>';
+        echo '<div class="card"><h2>No se pudo generar el reporte</h2>';
+        echo '<p>' . $titleEsc . '</p>';
+        if ($detailEsc !== '') {
+            echo '<p class="muted">' . $detailEsc . '</p>';
+        }
+        echo '<a class="btn" href="records.php">&larr; Volver a Registros</a>';
+        echo '</div></body></html>';
+        exit;
+    }
+}
+
+set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
+    if (!(error_reporting() & $severity)) {
+        return false;
+    }
+    throw new ErrorException($message, 0, $severity, $file, $line);
+});
+
+register_shutdown_function(function (): void {
+    $err = error_get_last();
+    if ($err !== null && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+        renderDailyAttendanceErrorPage(
+            'Se produjo un error inesperado mientras se generaba el archivo.',
+            'Intenta nuevamente o contacta al administrador si el problema persiste.'
+        );
+    }
+});
+
+try {
 
 function getSupervisorAccessClause(PDO $pdo): array
 {
@@ -440,23 +510,13 @@ if (empty($work_summary)) {
 }
 
 // Preparar archivo Excel
-require_once 'vendor/autoload.php';
-
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
-use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
-
 $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Asistencia Diaria');
 
-// Calcular el número total de columnas
+// Calcular el número total de columnas (resilient to >26 columns)
 $totalColumns = 10 + count($durationTypes); // 3 básicas + duración types + 7 adicionales
-$lastCol = chr(65 + $totalColumns - 1);
+$lastCol = Coordinate::stringFromColumnIndex($totalColumns);
 
 // Agregar logo
 $logoPath = __DIR__ . '/assets/logo.png';
@@ -545,7 +605,7 @@ $headerStyle = [
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]],
 ];
-$lastHeaderCol = chr(65 + count($headers) - 1);
+$lastHeaderCol = Coordinate::stringFromColumnIndex(count($headers));
 $sheet->getStyle('A' . $row . ':' . $lastHeaderCol . $row)->applyFromArray($headerStyle);
 $sheet->getRowDimension($row)->setRowHeight(25);
 
@@ -694,9 +754,10 @@ $totalsStyle = [
 $sheet->getStyle('A' . $row . ':' . $lastHeaderCol . $row)->applyFromArray($totalsStyle);
 $sheet->getRowDimension($row)->setRowHeight(30);
 
-// Ajustar anchos de columna
-foreach (range('A', $lastHeaderCol) as $columnID) {
-    $sheet->getColumnDimension($columnID)->setAutoSize(true);
+// Ajustar anchos de columna (compatible con > 26 columnas)
+$lastHeaderColIndex = Coordinate::columnIndexFromString($lastHeaderCol);
+for ($colIdx = 1; $colIdx <= $lastHeaderColIndex; $colIdx++) {
+    $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIdx))->setAutoSize(true);
 }
 
 // Aplicar alineación central a todas las celdas de datos
@@ -786,8 +847,14 @@ foreach ($notes as $note) {
 
 $summarySheet->mergeCells('A' . ($summaryRow - count($notes)) . ':D' . ($summaryRow - 1));
 
-// Generar el archivo
-$filename = 'Reporte_Asistencia_Diaria_' . str_replace(',', '_', $date_filter) . '_' . date('YmdHis') . '.xlsx';
+// Generar el archivo (sanitiza el nombre para evitar caracteres invalidos en HTTP headers)
+$safeDate = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string) $date_filter);
+$filename = 'Reporte_Asistencia_Diaria_' . $safeDate . '_' . date('YmdHis') . '.xlsx';
+
+// Descartar cualquier salida bufferizada antes de emitir el XLSX
+while (ob_get_level() > 0) {
+    ob_end_clean();
+}
 
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header('Content-Disposition: attachment;filename="' . $filename . '"');
@@ -796,3 +863,11 @@ header('Cache-Control: max-age=0');
 $writer = new Xlsx($spreadsheet);
 $writer->save('php://output');
 exit;
+
+} catch (Throwable $e) {
+    renderDailyAttendanceErrorPage(
+        'Ocurrio un error al generar el reporte de asistencia diaria.',
+        'Detalle: ' . $e->getMessage(),
+        $e
+    );
+}
