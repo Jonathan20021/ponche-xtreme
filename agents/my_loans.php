@@ -1,12 +1,17 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT', 'IT', 'Supervisor'], true)) {
-    header('Location: ../login_agent.php');
-    exit;
-}
 
 include '../db.php';
 require_once __DIR__ . '/loans_api_client.php';
+
+$isAgentContext = strtoupper((string) ($_SESSION['role'] ?? '')) === 'AGENT';
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ' . ($isAgentContext ? '../login_agent.php' : '../index.php'));
+    exit;
+}
+
+$headerFile = $isAgentContext ? '../header_agent.php' : '../header.php';
+$footerFile = '../footer.php';
 
 $user_id = (int) $_SESSION['user_id'];
 $full_name = $_SESSION['full_name'] ?? 'Agente';
@@ -46,7 +51,7 @@ foreach ($loans as $l) {
     }
 }
 ?>
-<?php include '../header_agent.php'; ?>
+<?php include $headerFile; ?>
 
 <div class="max-w-5xl mx-auto px-4 py-8">
 
@@ -179,4 +184,4 @@ foreach ($loans as $l) {
     <?php endif; ?>
 </div>
 
-<?php include '../footer.php'; ?>
+<?php include $footerFile; ?>

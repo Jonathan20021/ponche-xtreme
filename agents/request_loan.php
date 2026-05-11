@@ -1,12 +1,18 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT', 'IT', 'Supervisor'], true)) {
-    header('Location: ../login_agent.php');
-    exit;
-}
 
 include '../db.php';
 require_once __DIR__ . '/loans_api_client.php';
+
+$isAgentContext = strtoupper((string) ($_SESSION['role'] ?? '')) === 'AGENT';
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ' . ($isAgentContext ? '../login_agent.php' : '../index.php'));
+    exit;
+}
+
+$headerFile = $isAgentContext ? '../header_agent.php' : '../header.php';
+$footerFile = $isAgentContext ? '../footer.php' : '../footer.php';
+$backHref   = $isAgentContext ? '../agent_dashboard.php' : '../dashboard.php';
 
 $user_id = (int) $_SESSION['user_id'];
 $username = $_SESSION['username'] ?? '';
@@ -78,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     }
 }
 ?>
-<?php include '../header_agent.php'; ?>
+<?php include $headerFile; ?>
 
 <div class="max-w-4xl mx-auto px-4 py-8">
 
@@ -263,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">
-                    <a href="agent_dashboard.php" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">Cancelar</a>
+                    <a href="<?= htmlspecialchars($backHref) ?>" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">Cancelar</a>
                     <button type="submit" class="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium">
                         <i class="fas fa-paper-plane mr-1"></i> Enviar Solicitud
                     </button>
@@ -295,4 +301,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     <?php endif; ?>
 </div>
 
-<?php include '../footer.php'; ?>
+<?php include $footerFile; ?>

@@ -213,6 +213,25 @@ $navItems = [
             ],
         ],
     ],
+    'my_loans_personal' => [
+        'label' => 'Mis Préstamos',
+        'icon' => 'fa-hand-holding-usd',
+        'always_show' => true,
+        'children' => [
+            [
+                'label' => 'Mis Préstamos',
+                'href' => $baseHref . 'agents/my_loans.php',
+                'icon' => 'fa-money-check-alt',
+                'always_show' => true,
+            ],
+            [
+                'label' => 'Solicitar Préstamo',
+                'href' => $baseHref . 'agents/request_loan.php',
+                'icon' => 'fa-hand-holding-usd',
+                'always_show' => true,
+            ],
+        ],
+    ],
     'activity_logs' => ['label' => 'Logs de Actividad', 'href' => $baseHref . 'hr/activity_logs.php', 'icon' => 'fa-history'],
     'login_logs' => ['label' => 'Registros de Acceso', 'href' => $baseHref . 'login_logs.php', 'icon' => 'fa-shield-alt'],
     'settings' => ['label' => 'Configuración', 'href' => $baseHref . 'settings.php', 'icon' => 'fa-sliders-h'],
@@ -312,8 +331,9 @@ if ($isAuthenticated) {
                             <?php
                             $childLinks = [];
                             foreach ($item['children'] as $child) {
+                                $childAlways = !empty($child['always_show']);
                                 $childSection = $child['section'] ?? null;
-                                if ($childSection && !userHasPermission($childSection)) {
+                                if (!$childAlways && $childSection && !userHasPermission($childSection)) {
                                     continue;
                                 }
                                 $childLinks[] = $child;
@@ -357,7 +377,7 @@ if ($isAuthenticated) {
                                     <?php endforeach; ?>
                                 </div>
                             </div>
-                        <?php elseif (userHasPermission($sectionKey)): ?>
+                        <?php elseif (!empty($item['always_show']) || userHasPermission($sectionKey)): ?>
                             <?php
                             $isActive = $currentPath === basename($item['href']);
                             $classes = $isActive
