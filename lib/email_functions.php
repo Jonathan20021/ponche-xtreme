@@ -1468,6 +1468,112 @@ function sendDailyInventoryReport($htmlContent, $recipients, $reportData) {
 }
 
 /**
+ * Send daily recruitment report via email.
+ *
+ * @param string $htmlContent Rendered HTML body.
+ * @param array  $recipients  List of email addresses.
+ * @param array  $reportData  Report data from generateDailyRecruitmentReport().
+ * @return array{success: bool, message: string}
+ */
+function sendDailyRecruitmentReport($htmlContent, $recipients, $reportData) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($htmlContent)) {
+            return ['success' => false, 'message' => 'El contenido del reporte está vacío'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $dateFormatted = $reportData['date_formatted'] ?? ($reportData['date'] ?? date('Y-m-d'));
+        $totals = $reportData['totals'] ?? [];
+
+        $mail->isHTML(true);
+        $mail->Subject = "Reclutamiento - $dateFormatted ({$totals['pipeline_active']} en pipeline · {$totals['period_hired']} contratados · {$totals['bottlenecks_count']} cuellos)";
+        $mail->Body    = $htmlContent;
+
+        // Plain-text alternative
+        $plain  = "REPORTE DIARIO DE RECLUTAMIENTO\n";
+        $plain .= "================================\n\n";
+        $plain .= "Fecha: $dateFormatted\n\n";
+        $plain .= "TOTALES\n";
+        $plain .= "  Posiciones activas:     " . ($totals['active_postings'] ?? 0) . "\n";
+        $plain .= "  En pipeline:            " . ($totals['pipeline_active'] ?? 0) . "\n";
+        $plain .= "  Nuevas aplicaciones hoy: " . ($totals['today_new_apps'] ?? 0) . "\n";
+        $plain .= "  Entrevistas hoy:        " . ($totals['today_interviews'] ?? 0) . "\n";
+        $plain .= "  Próximas entrevistas:   " . ($totals['upcoming_interviews'] ?? 0) . "\n";
+        $plain .= "  Contratados (período):  " . ($totals['period_hired'] ?? 0) . "\n";
+        $plain .= "  Rechazados (período):   " . ($totals['period_rejected'] ?? 0) . "\n";
+        $plain .= "  Cuellos de botella:     " . ($totals['bottlenecks_count'] ?? 0) . "\n";
+        $plain .= "  Conversión:             " . ($totals['period_conversion_pct'] ?? 0) . "%\n";
+        $plain .= "  Tiempo prom. contratar: " . ($totals['avg_days_to_hire'] ?? 0) . " días\n\n";
+
+        if (!empty($reportData['top_ai_candidates'])) {
+            $plain .= "TOP CANDIDATOS IA:\n";
+            foreach (array_slice($reportData['top_ai_candidates'], 0, 10) as $c) {
+                $plain .= sprintf("  - %-35s score:%d  [%s] -> %s\n",
+                    trim(($c['first_name'] ?? '') . ' ' . ($c['last_name'] ?? '')),
+                    (int) $c['ai_score'],
+                    $c['status'],
+                    $c['job_title'] ?? '—'
+                );
+            }
+            $plain .= "\n";
+        }
+
+        if (!empty($reportData['bottlenecks'])) {
+            $plain .= "CUELLOS DE BOTELLA:\n";
+            foreach (array_slice($reportData['bottlenecks'], 0, 10) as $b) {
+                $plain .= sprintf("  - %-35s %d días en %s\n",
+                    trim(($b['first_name'] ?? '') . ' ' . ($b['last_name'] ?? '')),
+                    (int) $b['days_in_stage'],
+                    $b['status']
+                );
+            }
+            $plain .= "\n";
+        }
+
+        $plain .= "\n---\nMódulo de Reclutamiento - " . ($config['app_name'] ?? '') . "\n";
+        $plain .= "Generado: " . ($reportData['generated_at'] ?? date('Y-m-d H:i:s')) . "\n";
+
+        $mail->AltBody = $plain;
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Reporte enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}
+
+/**
  * Send daily tardiness alert report via email.
  *
  * @param string $htmlContent Rendered HTML body.

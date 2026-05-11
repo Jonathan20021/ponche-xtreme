@@ -1200,6 +1200,50 @@ try {
                 }
                 break;
 
+            case 'update_recruitment_report_config':
+                $rcRecipients        = trim($_POST['recruitment_report_recipients'] ?? '');
+                $rcEnabled           = isset($_POST['recruitment_report_enabled']) ? 1 : 0;
+                $rcTime              = trim($_POST['recruitment_report_time'] ?? '08:30');
+                $rcExcludeWeekends   = isset($_POST['recruitment_report_exclude_weekends']) ? 1 : 0;
+                $rcOnlyWithActivity  = isset($_POST['recruitment_report_only_with_activity']) ? 1 : 0;
+                $rcPeriodDays        = max(1, (int) ($_POST['recruitment_report_period_days']     ?? 7));
+                $rcUpcomingDays      = max(0, (int) ($_POST['recruitment_report_upcoming_days']   ?? 3));
+                $rcBottleneckDays    = max(1, (int) ($_POST['recruitment_report_bottleneck_days'] ?? 7));
+                $rcMinAiScore        = max(0, min(100, (int) ($_POST['recruitment_report_min_ai_score'] ?? 70)));
+                $rcClaudeEnabled     = isset($_POST['recruitment_report_claude_enabled']) ? 1 : 0;
+                $rcClaudeModel       = trim($_POST['recruitment_report_claude_model'] ?? 'claude-sonnet-4-6');
+                $rcClaudeMaxTokens   = max(100, (int) ($_POST['recruitment_report_claude_max_tokens'] ?? 900));
+                $rcClaudePrompt      = trim($_POST['recruitment_report_claude_prompt'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'reports')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['recruitment_report_recipients',          $rcRecipients]);
+                    $stmt->execute(['recruitment_report_enabled',             (string) $rcEnabled]);
+                    $stmt->execute(['recruitment_report_time',                $rcTime]);
+                    $stmt->execute(['recruitment_report_exclude_weekends',    (string) $rcExcludeWeekends]);
+                    $stmt->execute(['recruitment_report_only_with_activity',  (string) $rcOnlyWithActivity]);
+                    $stmt->execute(['recruitment_report_period_days',         (string) $rcPeriodDays]);
+                    $stmt->execute(['recruitment_report_upcoming_days',       (string) $rcUpcomingDays]);
+                    $stmt->execute(['recruitment_report_bottleneck_days',     (string) $rcBottleneckDays]);
+                    $stmt->execute(['recruitment_report_min_ai_score',        (string) $rcMinAiScore]);
+                    $stmt->execute(['recruitment_report_claude_enabled',      (string) $rcClaudeEnabled]);
+                    $stmt->execute(['recruitment_report_claude_model',        $rcClaudeModel]);
+                    $stmt->execute(['recruitment_report_claude_max_tokens',   (string) $rcClaudeMaxTokens]);
+                    if ($rcClaudePrompt !== '') {
+                        $stmt->execute(['recruitment_report_claude_prompt', $rcClaudePrompt]);
+                    }
+
+                    $successMessages[] = 'Configuración del reporte de reclutamiento actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del reporte de reclutamiento.';
+                }
+                break;
+
             case 'update_tardiness_report_config':
                 $tdRecipients      = trim($_POST['tardiness_report_recipients'] ?? '');
                 $tdEnabled         = isset($_POST['tardiness_report_enabled']) ? 1 : 0;
@@ -1992,6 +2036,46 @@ try {
     }
 } catch (Exception $e) {
     error_log('Error loading inventory report settings: ' . $e->getMessage());
+}
+
+// Get recruitment report settings
+$recruitmentReport = [
+    'enabled'            => false,
+    'time'               => '08:30',
+    'recipients'         => '',
+    'exclude_weekends'   => true,
+    'only_with_activity' => false,
+    'period_days'        => 7,
+    'upcoming_days'      => 3,
+    'bottleneck_days'    => 7,
+    'min_ai_score'       => 70,
+    'claude_enabled'     => false,
+    'claude_model'       => 'claude-sonnet-4-6',
+    'claude_max_tokens'  => 900,
+    'claude_prompt'      => '',
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'recruitment_report_%'");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = $row['setting_value'] ?? '';
+        switch ($row['setting_key']) {
+            case 'recruitment_report_enabled':             $recruitmentReport['enabled']            = $val === '1'; break;
+            case 'recruitment_report_time':                $recruitmentReport['time']               = $val ?: '08:30'; break;
+            case 'recruitment_report_recipients':          $recruitmentReport['recipients']         = $val; break;
+            case 'recruitment_report_exclude_weekends':    $recruitmentReport['exclude_weekends']   = $val === '1'; break;
+            case 'recruitment_report_only_with_activity':  $recruitmentReport['only_with_activity'] = $val === '1'; break;
+            case 'recruitment_report_period_days':         $recruitmentReport['period_days']        = (int) ($val ?: 7); break;
+            case 'recruitment_report_upcoming_days':       $recruitmentReport['upcoming_days']      = (int) ($val ?: 3); break;
+            case 'recruitment_report_bottleneck_days':     $recruitmentReport['bottleneck_days']    = (int) ($val ?: 7); break;
+            case 'recruitment_report_min_ai_score':        $recruitmentReport['min_ai_score']       = (int) ($val ?: 70); break;
+            case 'recruitment_report_claude_enabled':      $recruitmentReport['claude_enabled']     = $val === '1'; break;
+            case 'recruitment_report_claude_model':        $recruitmentReport['claude_model']       = $val ?: 'claude-sonnet-4-6'; break;
+            case 'recruitment_report_claude_max_tokens':   $recruitmentReport['claude_max_tokens']  = (int) ($val ?: 900); break;
+            case 'recruitment_report_claude_prompt':       $recruitmentReport['claude_prompt']      = $val; break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading recruitment report settings: ' . $e->getMessage());
 }
 
 // Get tardiness report settings
@@ -4889,6 +4973,174 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Daily Recruitment Report Configuration -->
+        <section id="recruitment-report-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-user-tie text-purple-400"></i>
+                        Reporte Diario de Reclutamiento
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Foto diaria del módulo: posiciones activas, embudo por estado, top candidatos calificados por IA,
+                        cuellos de botella (candidatos estancados), próximas entrevistas, contrataciones recientes, fuentes de
+                        aplicaciones y métricas de conversión. Resumen ejecutivo opcional con Claude AI.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $recruitmentReport['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $recruitmentReport['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_recruitment_report_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="recruitment_report_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $recruitmentReport['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar envío automático</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se envía cada día a la hora configurada.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="recruitment_report_exclude_weekends" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $recruitmentReport['exclude_weekends'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Excluir fines de semana</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">No enviar sábados ni domingos.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="recruitment_report_only_with_activity" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $recruitmentReport['only_with_activity'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Solo enviar si hubo actividad</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Omitir el envío cuando no hay aplicaciones, cambios de estado ni entrevistas.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-clock"></i> Hora de envío (GMT-4)</label>
+                    <input type="time" name="recruitment_report_time"
+                        value="<?= htmlspecialchars($recruitmentReport['time']) ?>" class="input-control" required>
+                    <p class="text-xs text-muted mt-1">08:30 es recomendado — antes del inicio del día de RH.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-envelope"></i> Destinatarios (RH + supervisores + gerencia)</label>
+                    <textarea name="recruitment_report_recipients" rows="3" class="input-control font-mono text-sm"
+                        placeholder="rh@evallishbpo.com, reclutamiento@evallishbpo.com"><?= htmlspecialchars($recruitmentReport['recipients']) ?></textarea>
+                    <p class="text-xs text-muted mt-1">Correos separados por coma.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-week"></i> Ventana del período (días)</label>
+                        <input type="number" min="1" max="365" name="recruitment_report_period_days"
+                            value="<?= (int) $recruitmentReport['period_days'] ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Días hacia atrás para totales (recibidas, contratados, rechazados).</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-day"></i> Entrevistas próximas (días)</label>
+                        <input type="number" min="0" max="30" name="recruitment_report_upcoming_days"
+                            value="<?= (int) $recruitmentReport['upcoming_days'] ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Días hacia adelante para incluir entrevistas agendadas.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-hourglass-half"></i> Cuello de botella (días)</label>
+                        <input type="number" min="1" max="90" name="recruitment_report_bottleneck_days"
+                            value="<?= (int) $recruitmentReport['bottleneck_days'] ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Días sin movimiento para considerar a un candidato estancado.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-star"></i> Score mínimo IA destacado</label>
+                        <input type="number" min="0" max="100" name="recruitment_report_min_ai_score"
+                            value="<?= (int) $recruitmentReport['min_ai_score'] ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Solo se incluyen candidatos con score IA ≥ este valor (0–100).</p>
+                    </div>
+                </div>
+
+                <!-- Claude AI configuration -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-amber-300 font-semibold flex items-center gap-2">
+                            <i class="fas fa-robot"></i>
+                            Resumen ejecutivo con Claude AI (opcional)
+                        </h3>
+                        <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" name="recruitment_report_claude_enabled" value="1" class="w-4 h-4 accent-amber-500"
+                                <?= $recruitmentReport['claude_enabled'] ? 'checked' : '' ?>>
+                            <span>Habilitar</span>
+                        </label>
+                    </div>
+                    <p class="text-xs text-amber-200">
+                        Claude analiza la foto del pipeline y produce un resumen accionable: salud del pipeline, top candidatos a
+                        priorizar, cuellos de botella críticos, entrevistas a destacar y acciones recomendadas.
+                    </p>
+
+                    <div class="text-xs text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2">
+                        <i class="fas fa-info-circle"></i>
+                        Usa la <strong>API Key global de Claude</strong> configurada en
+                        <a href="#claude-global-config" class="underline">Integración con Claude AI</a>.
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-microchip"></i> Modelo (override)</label>
+                            <input type="text" name="recruitment_report_claude_model"
+                                value="<?= htmlspecialchars($recruitmentReport['claude_model']) ?>"
+                                class="input-control font-mono text-xs">
+                            <p class="text-xs text-muted mt-1">Deja igual al global para heredarlo</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-ruler"></i> Max tokens de salida</label>
+                            <input type="number" min="100" max="4096" name="recruitment_report_claude_max_tokens"
+                                value="<?= (int) $recruitmentReport['claude_max_tokens'] ?>" class="input-control">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> System prompt</label>
+                        <textarea name="recruitment_report_claude_prompt" rows="8" class="input-control font-mono text-xs"
+                            placeholder="Instrucciones para Claude…"><?= htmlspecialchars($recruitmentReport['claude_prompt']) ?></textarea>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200 gap-2 flex-wrap">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button" onclick="sendRecruitmentReportPreview()" class="btn-secondary" id="sendRecruitmentPreviewBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar prueba a mi correo
+                        </button>
+                        <button type="button" onclick="sendRecruitmentReportManually()" class="btn-secondary" id="sendRecruitmentReportBtn">
+                            <i class="fas fa-paper-plane"></i> Enviar ahora a destinatarios
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Cron Setup Instructions -->
+            <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <h3 class="text-purple-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-terminal"></i>
+                    Configuración del Cron Job
+                </h3>
+                <p class="text-sm text-purple-200 mb-3">
+                    Para automatizar el envío al inicio del día de RH, configura este cron:
+                </p>
+                <code class="block bg-slate-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
+                    30 8 * * * /usr/local/bin/php <?= __DIR__ ?>/cron_daily_recruitment_report.php
+                </code>
+                <p class="text-xs text-purple-200 mt-2">
+                    <i class="fas fa-lightbulb"></i>
+                    El reporte captura el estado del pipeline al inicio del día — posiciones, candidatos calificados, cuellos de botella y entrevistas próximas.
+                </p>
+            </div>
+        </section>
+
         <!-- Daily Tardiness Alert Report Configuration -->
         <section id="tardiness-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -6185,6 +6437,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Inventario Diario',
                 icon: 'fas fa-boxes-stacked',
                 selectors: ['#inventory-report-config']
+            },
+            {
+                key: 'recruitment_report',
+                label: 'Reclutamiento',
+                icon: 'fas fa-user-tie',
+                selectors: ['#recruitment-report-config']
             },
             {
                 key: 'tardiness_report',
@@ -7866,6 +8124,82 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             renderInventoryResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
         } catch (e) {
             renderInventoryResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Recruitment Report handlers ----------
+
+    function renderRecruitmentResult(success, message, data) {
+        const host = document.getElementById('recruitment-report-config');
+        if (!host) return;
+        const div = document.createElement('div');
+        div.className = (success
+            ? 'bg-green-500/10 border border-green-500/30'
+            : 'bg-red-500/10 border border-red-500/30') + ' rounded-lg p-4 mb-4 animate-fade-in';
+        const icon = success ? 'check-circle text-green-400' : 'exclamation-circle text-red-400';
+        const textColor = success ? 'text-green-300' : 'text-red-300';
+        const subColor  = success ? 'text-green-200' : 'text-red-200';
+        let extra = '';
+        if (success && data && data.totals) {
+            const t = data.totals;
+            extra = `<p class="${subColor} text-sm mt-1">
+                Posiciones: ${t.active_postings} · En pipeline: ${t.pipeline_active} ·
+                Nuevas hoy: ${t.today_new_apps} · Contratados (período): ${t.period_hired} ·
+                Cuellos: ${t.bottlenecks_count} · Conversión: ${t.period_conversion_pct}%
+                ${data.ai_generated ? '<span class="ml-2 text-amber-300">· IA: sí</span>' : ''}
+            </p>`;
+        }
+        div.innerHTML = `
+            <div class="flex items-start gap-2">
+                <i class="fas fa-${icon}"></i>
+                <div class="flex-1">
+                    <p class="${textColor} font-semibold">${message}</p>
+                    ${extra}
+                </div>
+            </div>`;
+        const form = host.querySelector('form');
+        if (form) form.parentElement.insertBefore(div, form);
+        setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.5s'; setTimeout(() => div.remove(), 500); }, 10000);
+    }
+
+    async function sendRecruitmentReportManually() {
+        const btn = document.getElementById('sendRecruitmentReportBtn');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send');
+            const res = await fetch('send_recruitment_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderRecruitmentResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderRecruitmentResult(false, 'Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function sendRecruitmentReportPreview() {
+        const btn = document.getElementById('sendRecruitmentPreviewBtn');
+        const email = prompt('Correo destino para la prueba:');
+        if (!email) return;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('mode', 'send_preview');
+            fd.append('preview_email', email);
+            const res = await fetch('send_recruitment_report.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            renderRecruitmentResult(!!json.success, json.message || json.error || 'Sin respuesta', json.data);
+        } catch (e) {
+            renderRecruitmentResult(false, 'Error de red: ' + e.message);
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
