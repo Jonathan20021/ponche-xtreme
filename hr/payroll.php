@@ -103,6 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         // Get employees eligible for this period: active/trial, plus terminated
         // whose termination date falls within or after the period start (so their
         // worked hours in the period can still be paid).
+        // NOTA: empleados TERMINATED sin termination_date se excluyen — sin fecha
+        // no podemos verificar que trabajaron en el período y se han dado casos
+        // de doble pago (ej. registros duplicados marcados terminados sin fecha).
         $empStmt = $pdo->prepare("
             SELECT e.id, e.employment_status,
                    u.id as user_id, u.hourly_rate, u.monthly_salary, u.overtime_multiplier,
@@ -112,7 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
                OR (
                     e.employment_status = 'TERMINATED'
-                    AND (e.termination_date IS NULL OR e.termination_date >= ?)
+                    AND e.termination_date IS NOT NULL
+                    AND e.termination_date >= ?
                   )
         ");
         $empStmt->execute([$period['start_date']]);
@@ -459,7 +463,8 @@ if ($selectedPeriodId) {
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
                OR (
                     e.employment_status = 'TERMINATED'
-                    AND (e.termination_date IS NULL OR e.termination_date >= ?)
+                    AND e.termination_date IS NOT NULL
+                    AND e.termination_date >= ?
                   )
             ORDER BY (e.employment_status = 'TERMINATED') ASC, e.last_name, e.first_name
         ");
