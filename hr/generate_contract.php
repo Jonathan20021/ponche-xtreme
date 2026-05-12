@@ -31,6 +31,7 @@ foreach ($requiredFields as $field) {
 // Get manual input data from form
 $employeeName = trim($_POST['employee_name']);
 $idCard = trim($_POST['id_card']);
+$idType = isset($_POST['id_type']) && strtoupper(trim($_POST['id_type'])) === 'PASAPORTE' ? 'PASAPORTE' : 'CEDULA';
 $province = trim($_POST['province']);
 $position = trim($_POST['position']);
 $salary = (float) $_POST['salary'];
@@ -39,6 +40,14 @@ $workSchedule = trim($_POST['work_schedule']);
 $contractDate = $_POST['contract_date'];
 $city = trim($_POST['city']);
 $action = $_POST['action'] ?? 'employment';
+
+// Text fragments based on document type
+$isPassport = $idType === 'PASAPORTE';
+$nationalityText = $isPassport ? 'extranjero(a)' : 'dominicano(a)';
+$documentText = $isPassport
+    ? "provisto(a) del pasaporte <strong>No. $idCard</strong>"
+    : "provisto de la cédula de identidad y electoral <strong>No. $idCard</strong>";
+$documentShortLabel = $isPassport ? 'Pasaporte' : 'Cédula';
 
 error_log("Processing contract: Action=$action, Employee=$employeeName");
 
@@ -53,14 +62,22 @@ try {
         // Column might already exist, ignore error
     }
 
+    // Check if id_type column exists, if not add it
+    try {
+        $pdo->exec("ALTER TABLE employment_contracts ADD COLUMN id_type VARCHAR(20) DEFAULT 'CEDULA' AFTER id_card");
+    } catch (PDOException $e) {
+        // Column might already exist, ignore error
+    }
+
     $insertStmt = $pdo->prepare("
-        INSERT INTO employment_contracts 
-        (employee_id, employee_name, id_card, province, position, contract_date, salary, payment_type, work_schedule, city, contract_type, created_by, created_at)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        INSERT INTO employment_contracts
+        (employee_id, employee_name, id_card, id_type, province, position, contract_date, salary, payment_type, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ");
     $insertStmt->execute([
         $employeeName,
         $idCard,
+        $idType,
         $province,
         $position,
         $contractDate,
@@ -200,7 +217,7 @@ HTML;
 $html .= <<<HTML
     <h1>CONTRATO DE TRABAJO</h1>
     
-    <p><strong>ENTRE: EVALLISH SRL</strong>, empresa constituida y existente de conformidad con las leyes dominicanas, identificada con el RNC No. 1-32637453, con su domicilio principal y asiento social en la Calle 6 No. 6, Reparto Conet de esta ciudad de Santiago, debidamente representada por el señor <strong>Hugo Antonio Hidalgo Núñez</strong>, dominicano, mayor de edad, casado, empresario, portador de la cédula de identidad No.031-0411132-7, domiciliado y residente en esta ciudad la cual sociedad en lo adelante del presente contrato, se denominará <strong>EL EMPLEADOR</strong>; y de la otra parte <strong>$employeeName</strong>, dominicano(a), mayor de edad, (a), residente de la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>, provisto de la cédula de identidad y electoral <strong>No. $idCard</strong> domiciliado(a) y residente en la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>.</p>
+    <p><strong>ENTRE: EVALLISH SRL</strong>, empresa constituida y existente de conformidad con las leyes dominicanas, identificada con el RNC No. 1-32637453, con su domicilio principal y asiento social en la Calle 6 No. 6, Reparto Conet de esta ciudad de Santiago, debidamente representada por el señor <strong>Hugo Antonio Hidalgo Núñez</strong>, dominicano, mayor de edad, casado, empresario, portador de la cédula de identidad No.031-0411132-7, domiciliado y residente en esta ciudad la cual sociedad en lo adelante del presente contrato, se denominará <strong>EL EMPLEADOR</strong>; y de la otra parte <strong>$employeeName</strong>, $nationalityText, mayor de edad, residente de la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>, $documentText, domiciliado(a) y residente en la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>.</p>
 
     <p class="section-title">SE HA PACTADO LO SIGUIENTE:</p>
 
@@ -322,13 +339,14 @@ HTML;
 if ($action === 'confidentiality') {
     // Save confidentiality contract to database
     $confInsertStmt = $pdo->prepare("
-        INSERT INTO employment_contracts 
-        (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
-        VALUES (NULL, ?, ?, ?, ?, 0, '', '', 'CONFIDENCIALIDAD', ?, NOW())
+        INSERT INTO employment_contracts
+        (employee_id, employee_name, id_card, id_type, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, ?, 0, '', '', 'CONFIDENCIALIDAD', ?, NOW())
     ");
     $confInsertStmt->execute([
         $employeeName,
         $idCard,
+        $idType,
         $province,
         $contractDate,
         $_SESSION['user_id']
@@ -338,6 +356,7 @@ if ($action === 'confidentiality') {
     $_SESSION['contract_data'] = [
         'employee_name' => $employeeName,
         'id_card' => $idCard,
+        'id_type' => $idType,
         'contract_date' => $contractDate
     ];
     header('Location: generate_confidentiality_contract.php');
@@ -345,13 +364,14 @@ if ($action === 'confidentiality') {
 } elseif ($action === 'both') {
     // Save both contract types
     $bothInsertStmt = $pdo->prepare("
-        INSERT INTO employment_contracts 
-        (employee_id, employee_name, id_card, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
-        VALUES (NULL, ?, ?, ?, ?, 0, '', '', 'CONFIDENCIALIDAD', ?, NOW())
+        INSERT INTO employment_contracts
+        (employee_id, employee_name, id_card, id_type, province, contract_date, salary, work_schedule, city, contract_type, created_by, created_at)
+        VALUES (NULL, ?, ?, ?, ?, ?, 0, '', '', 'CONFIDENCIALIDAD', ?, NOW())
     ");
     $bothInsertStmt->execute([
         $employeeName,
         $idCard,
+        $idType,
         $province,
         $contractDate,
         $_SESSION['user_id']
@@ -360,9 +380,11 @@ if ($action === 'confidentiality') {
     $_SESSION['contract_data'] = [
         'employee_name' => $employeeName,
         'id_card' => $idCard,
+        'id_type' => $idType,
         'province' => $province,
         'position' => $position,
         'salary' => $salary,
+        'payment_type' => $paymentType,
         'work_schedule' => $workSchedule,
         'contract_date' => $contractDate,
         'city' => $city

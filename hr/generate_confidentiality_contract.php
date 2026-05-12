@@ -18,7 +18,14 @@ if (!$contractData) {
 
 $employeeName = $contractData['employee_name'];
 $idCard = $contractData['id_card'];
+$idType = isset($contractData['id_type']) && strtoupper($contractData['id_type']) === 'PASAPORTE' ? 'PASAPORTE' : 'CEDULA';
 $contractDate = $contractData['contract_date'];
+
+$isPassport = $idType === 'PASAPORTE';
+$documentIntroText = $isPassport
+    ? "provisto(a) del pasaporte No. <strong>$idCard</strong>"
+    : "provisto de la cédula de identidad No. <strong>$idCard</strong>";
+$documentShortLabel = $isPassport ? 'Pasaporte' : 'Cédula';
 
 // Format date for contract
 $dateObj = new DateTime($contractDate);
@@ -132,7 +139,7 @@ $html .= <<<HTML
     <h1>CONTRATO DE CONFIDENCIALIDAD</h1>
     <h2>EVALLISH SRL. RNC 1-3263745-3</h2>
     
-    <p><strong>ENTRE: EVALLISH SRL.</strong>, empresa constituida y existente de conformidad con las leyes dominicanas y debidamente representada por el Sr. Hugo Hidalgo cédula 031-0411132-7 identificado con el RNC No. 1-3263745-3, con su domicilio y asiento social en la Calle Proyecto 4 No. 6, Reparto Oquet, de esta ciudad de Santiago de los Caballeros, en lo adelante llamada <strong>EL EMPLEADOR</strong> y <strong>$employeeName</strong>, mayor de edad, domiciliado y residente en la ciudad de Santiago de los Caballeros, provisto de la cédula de identidad No. <strong>$idCard</strong>, en lo adelante llamado <strong>EL EMPLEADO</strong>.</p>
+    <p><strong>ENTRE: EVALLISH SRL.</strong>, empresa constituida y existente de conformidad con las leyes dominicanas y debidamente representada por el Sr. Hugo Hidalgo cédula 031-0411132-7 identificado con el RNC No. 1-3263745-3, con su domicilio y asiento social en la Calle Proyecto 4 No. 6, Reparto Oquet, de esta ciudad de Santiago de los Caballeros, en lo adelante llamada <strong>EL EMPLEADOR</strong> y <strong>$employeeName</strong>, mayor de edad, domiciliado y residente en la ciudad de Santiago de los Caballeros, $documentIntroText, en lo adelante llamado <strong>EL EMPLEADO</strong>.</p>
 
     <p class="section-title">SE HA PACTADO LO SIGUIENTE:</p>
 
@@ -178,7 +185,7 @@ $html .= <<<HTML
         <p><strong>Leído y aceptado por:</strong></p>
         
         <p style="margin-top: 30px;">Colaborador: <strong>$employeeName</strong></p>
-        <p>Cédula: <strong>$idCard</strong></p>
+        <p>$documentShortLabel: <strong>$idCard</strong></p>
         <p>Fecha: <strong>$day de $month de $year</strong></p>
 
         <div style="margin-top: 35px;">

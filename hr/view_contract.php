@@ -45,11 +45,18 @@ $year = $dateObj->format('Y');
 
 $employeeName = $contract['employee_name'];
 $idCard = $contract['id_card'];
+$idType = isset($contract['id_type']) && strtoupper($contract['id_type']) === 'PASAPORTE' ? 'PASAPORTE' : 'CEDULA';
 $province = $contract['province'];
 $position = $contract['position'] ?? 'Representante de Servicios';
 $salary = $contract['salary'];
 $paymentType = $contract['payment_type'] ?? 'mensual';
 $workSchedule = $contract['work_schedule'];
+
+$isPassport = $idType === 'PASAPORTE';
+$nationalityText = $isPassport ? 'extranjero(a)' : 'dominicano(a)';
+$documentText = $isPassport
+    ? "provisto(a) del pasaporte <strong>No. $idCard</strong>"
+    : "provisto de la cédula de identidad y electoral <strong>No. $idCard</strong>";
 
 // Prepare logo for embedding in PDF (only if GD is enabled)
 $logoData = '';
@@ -152,7 +159,7 @@ HTML;
 $html .= <<<HTML
     <h1>CONTRATO DE TRABAJO</h1>
     
-    <p><strong>ENTRE: EVALLISH SRL</strong>, empresa constituida y existente de conformidad con las leyes dominicanas, identificada con el RNC No. 1-32637453, con su domicilio principal y asiento social en la Calle 6 No. 6, Reparto Conet de esta ciudad de Santiago, debidamente representada por el señor <strong>Hugo Antonio Hidalgo Núñez</strong>, dominicano, mayor de edad, casado, empresario, portador de la cédula de identidad No.031-0411132-7, domiciliado y residente en esta ciudad la cual sociedad en lo adelante del presente contrato, se denominará <strong>EL EMPLEADOR</strong>; y de la otra parte <strong>$employeeName</strong>, dominicano(a), mayor de edad, (a), residente de la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>, provisto de la cédula de identidad y electoral <strong>No. $idCard</strong> domiciliado(a) y residente en la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>.</p>
+    <p><strong>ENTRE: EVALLISH SRL</strong>, empresa constituida y existente de conformidad con las leyes dominicanas, identificada con el RNC No. 1-32637453, con su domicilio principal y asiento social en la Calle 6 No. 6, Reparto Conet de esta ciudad de Santiago, debidamente representada por el señor <strong>Hugo Antonio Hidalgo Núñez</strong>, dominicano, mayor de edad, casado, empresario, portador de la cédula de identidad No.031-0411132-7, domiciliado y residente en esta ciudad la cual sociedad en lo adelante del presente contrato, se denominará <strong>EL EMPLEADOR</strong>; y de la otra parte <strong>$employeeName</strong>, $nationalityText, mayor de edad, residente de la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>, $documentText, domiciliado(a) y residente en la Provincia <strong>$province</strong>, República Dominicana, quien en lo sucesivo se denominará <strong>EL EMPLEADO</strong>.</p>
 
     <p class="section-title">SE HA PACTADO LO SIGUIENTE:</p>
 

@@ -117,9 +117,20 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
 
                     <div>
                         <label class="block text-slate-300 font-semibold mb-2">
-                            <i class="fas fa-id-card mr-2"></i>Número de Cédula
+                            <i class="fas fa-passport mr-2"></i>Tipo de Documento
                         </label>
-                        <input type="text" name="id_card" required
+                        <select name="id_type" id="idTypeSelect" required
+                            class="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500">
+                            <option value="CEDULA">Cédula</option>
+                            <option value="PASAPORTE">Pasaporte</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-300 font-semibold mb-2" id="idCardLabel">
+                            <i class="fas fa-id-card mr-2"></i><span id="idCardLabelText">Número de Cédula</span>
+                        </label>
+                        <input type="text" name="id_card" id="idCardInput" required
                             class="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
                             placeholder="Ej: 001-1234567-8">
                     </div>
@@ -227,11 +238,11 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
 
                 <div>
                     <label class="block text-slate-300 font-semibold mb-2">
-                        <i class="fas fa-id-card mr-2"></i>Cédula
+                        <i class="fas fa-id-card mr-2"></i>Cédula / Pasaporte
                     </label>
                     <input type="text" name="search_id_card" value="<?= htmlspecialchars($searchIdCard) ?>"
                         class="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-500"
-                        placeholder="Buscar por cédula...">
+                        placeholder="Buscar por cédula o pasaporte...">
                 </div>
 
                 <div>
@@ -273,7 +284,7 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                         <thead>
                             <tr class="border-b border-slate-700">
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Empleado</th>
-                                <th class="text-left py-3 px-4 text-slate-300 font-semibold">Cédula</th>
+                                <th class="text-left py-3 px-4 text-slate-300 font-semibold">Documento</th>
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Tipo</th>
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Fecha Contrato</th>
                                 <th class="text-left py-3 px-4 text-slate-300 font-semibold">Salario</th>
@@ -295,6 +306,16 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
                                         <?= htmlspecialchars($contract['employee_name']) ?>
                                     </td>
                                     <td class="py-3 px-4 text-slate-300">
+                                        <?php
+                                        $idType = $contract['id_type'] ?? 'CEDULA';
+                                        $idTypeLabel = $idType === 'PASAPORTE' ? 'Pasaporte' : 'Cédula';
+                                        $idTypeBadge = $idType === 'PASAPORTE'
+                                            ? 'bg-amber-500/20 text-amber-300'
+                                            : 'bg-cyan-500/20 text-cyan-300';
+                                        ?>
+                                        <span class="px-2 py-1 rounded text-xs font-semibold <?= $idTypeBadge ?> mr-2">
+                                            <?= $idTypeLabel ?>
+                                        </span>
                                         <?= htmlspecialchars($contract['id_card']) ?>
                                     </td>
                                     <td class="py-3 px-4">
@@ -389,6 +410,27 @@ $contracts = $contractsStmt->fetchAll(PDO::FETCH_ASSOC);
     <?php include '../footer.php'; ?>
 
     <script>
+        // Toggle Cédula / Pasaporte placeholder and label
+        (function () {
+            const select = document.getElementById('idTypeSelect');
+            const labelText = document.getElementById('idCardLabelText');
+            const input = document.getElementById('idCardInput');
+            if (!select || !labelText || !input) return;
+
+            function applyType() {
+                if (select.value === 'PASAPORTE') {
+                    labelText.textContent = 'Número de Pasaporte';
+                    input.placeholder = 'Ej: A1234567';
+                } else {
+                    labelText.textContent = 'Número de Cédula';
+                    input.placeholder = 'Ej: 001-1234567-8';
+                }
+            }
+
+            select.addEventListener('change', applyType);
+            applyType();
+        })();
+
         function deleteContract(contractId, employeeName) {
             if (confirm(`¿Está seguro que desea eliminar el contrato de ${employeeName}?\n\nEsta acción no se puede deshacer.`)) {
                 // Show loading state

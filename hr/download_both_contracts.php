@@ -47,9 +47,11 @@ if (!$contractData) {
                     <form action="generate_contract.php" method="POST" target="_blank">
                         <input type="hidden" name="employee_name" value="<?= htmlspecialchars($contractData['employee_name']) ?>">
                         <input type="hidden" name="id_card" value="<?= htmlspecialchars($contractData['id_card']) ?>">
+                        <input type="hidden" name="id_type" value="<?= htmlspecialchars($contractData['id_type'] ?? 'CEDULA') ?>">
                         <input type="hidden" name="province" value="<?= htmlspecialchars($contractData['province']) ?>">
                         <input type="hidden" name="position" value="<?= htmlspecialchars($contractData['position']) ?>">
                         <input type="hidden" name="salary" value="<?= htmlspecialchars($contractData['salary']) ?>">
+                        <input type="hidden" name="payment_type" value="<?= htmlspecialchars($contractData['payment_type'] ?? 'mensual') ?>">
                         <input type="hidden" name="work_schedule" value="<?= htmlspecialchars($contractData['work_schedule']) ?>">
                         <input type="hidden" name="contract_date" value="<?= htmlspecialchars($contractData['contract_date']) ?>">
                         <input type="hidden" name="city" value="<?= htmlspecialchars($contractData['city']) ?>">
