@@ -549,7 +549,11 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                 </h1>
                 <p class="text-slate-400">Sistema completo con AFP, SFS, ISR, TSS y DGII</p>
             </div>
-            <div class="flex gap-3">
+            <div class="flex gap-3 flex-wrap">
+                <a href="employee_deductions.php" class="btn-secondary">
+                    <i class="fas fa-hand-holding-usd"></i>
+                    Descuentos por Empleado
+                </a>
                 <a href="payroll_settings.php" class="btn-secondary">
                     <i class="fas fa-cog"></i>
                     Configuración
