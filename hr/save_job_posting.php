@@ -9,11 +9,46 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header("Location: job_postings.php"
 }
 
 try {
-    $aiGenerated = !empty($_POST['ai_generated']) && $_POST['ai_generated'] !== '0' ? 1 : 0;
+    $allowedEmploymentTypes = ['full_time', 'part_time', 'contract', 'internship'];
 
-    if (isset($_POST['id']) && !empty($_POST['id'])) {
+    $jobId = !empty($_POST['id']) ? (int) $_POST['id'] : 0;
+    $title = trim((string) ($_POST['title'] ?? ''));
+    $department = trim((string) ($_POST['department'] ?? ''));
+    $location = trim((string) ($_POST['location'] ?? ''));
+    $employmentType = trim((string) ($_POST['employment_type'] ?? ''));
+    $description = trim((string) ($_POST['description'] ?? ''));
+    $requirements = trim((string) ($_POST['requirements'] ?? ''));
+    $responsibilities = trim((string) ($_POST['responsibilities'] ?? ''));
+    $salaryRange = trim((string) ($_POST['salary_range'] ?? ''));
+    $closingDateRaw = trim((string) ($_POST['closing_date'] ?? ''));
+    $aiGenerated = !empty($_POST['ai_generated']) && $_POST['ai_generated'] !== '0' ? 1 : 0;
+    $persisted = false;
+
+    if ($title === '' || $department === '' || $location === '' || $employmentType === '' || $description === '') {
+        throw new InvalidArgumentException('Completa los campos obligatorios de la vacante.');
+    }
+
+    if (!in_array($employmentType, $allowedEmploymentTypes, true)) {
+        throw new InvalidArgumentException('Tipo de empleo invalido.');
+    }
+
+    $closingDate = null;
+    if ($closingDateRaw !== '') {
+        $date = DateTime::createFromFormat('Y-m-d', $closingDateRaw);
+        if (!$date || $date->format('Y-m-d') !== $closingDateRaw) {
+            throw new InvalidArgumentException('Fecha de cierre invalida.');
+        }
+        $closingDate = $closingDateRaw;
+    }
+
+    if ($jobId > 0) {
+        $exists = $pdo->prepare("SELECT id FROM job_postings WHERE id = ?");
+        $exists->execute([$jobId]);
+        if (!$exists->fetchColumn()) {
+            throw new InvalidArgumentException('Vacante no encontrada.');
+        }
+
         // Update existing job posting
-        $jobId = $_POST['id'];
         $stmt = $pdo->prepare("
             UPDATE job_postings
             SET title = ?, department = ?, location = ?, employment_type = ?,
@@ -23,19 +58,20 @@ try {
         ");
 
         $stmt->execute([
-            $_POST['title'],
-            $_POST['department'],
-            $_POST['location'],
-            $_POST['employment_type'],
-            $_POST['description'],
-            $_POST['requirements'] ?? null,
-            $_POST['responsibilities'] ?? null,
-            $_POST['salary_range'] ?? null,
-            !empty($_POST['closing_date']) ? $_POST['closing_date'] : null,
+            $title,
+            $department,
+            $location,
+            $employmentType,
+            $description,
+            $requirements !== '' ? $requirements : null,
+            $responsibilities !== '' ? $responsibilities : null,
+            $salaryRange !== '' ? $salaryRange : null,
+            $closingDate,
             $aiGenerated,
             $jobId
         ]);
 
+        $persisted = true;
         $_SESSION['success_message'] = "Vacante actualizada exitosamente";
     } else {
         // Insert new job posting
@@ -47,20 +83,21 @@ try {
         ");
 
         $stmt->execute([
-            $_POST['title'],
-            $_POST['department'],
-            $_POST['location'],
-            $_POST['employment_type'],
-            $_POST['description'],
-            $_POST['requirements'] ?? null,
-            $_POST['responsibilities'] ?? null,
-            $_POST['salary_range'] ?? null,
-            !empty($_POST['closing_date']) ? $_POST['closing_date'] : null,
-            $_SESSION['user_id'],
+            $title,
+            $department,
+            $location,
+            $employmentType,
+            $description,
+            $requirements !== '' ? $requirements : null,
+            $responsibilities !== '' ? $responsibilities : null,
+            $salaryRange !== '' ? $salaryRange : null,
+            $closingDate,
+            !empty($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null,
             $aiGenerated
         ]);
 
         $jobId = $pdo->lastInsertId();
+        $persisted = true;
         $_SESSION['success_message'] = "Vacante publicada exitosamente";
     }
 
@@ -94,7 +131,9 @@ try {
         }
         $uploadDir = $baseUploadPath . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'job_banners';
         if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
+            if (!mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+                throw new RuntimeException('No se pudo crear la carpeta de banners.');
+            }
         }
 
         $extension = $allowed[$mime];
@@ -110,11 +149,17 @@ try {
             throw new RuntimeException('No se pudo guardar el banner en el servidor.');
         }
     }
+} catch (InvalidArgumentException $e) {
+    $_SESSION['error_message'] = $e->getMessage();
 } catch (PDOException $e) {
     $_SESSION['error_message'] = "Error al guardar la vacante";
     error_log($e->getMessage());
-} catch (RuntimeException $e) { $_SESSION['error_message'] = "Vacante publicada, pero el banner no se pudo guardar : " . $e->getMessage();
+} catch (RuntimeException $e) {
+    unset($_SESSION['success_message']);
+    $_SESSION['error_message'] = !empty($persisted)
+        ? "Vacante guardada, pero el banner no se pudo guardar: " . $e->getMessage()
+        : "Error al guardar la vacante: " . $e->getMessage();
     error_log($e->getMessage());
 }
-header("Location : job_postings.php");
+header("Location: job_postings.php");
 exit;

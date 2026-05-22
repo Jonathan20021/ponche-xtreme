@@ -15,6 +15,23 @@ $order         = strtoupper($_GET['order'] ?? 'DESC');
 $view          = $_GET['view']   ?? 'table'; // table|cards|kanban
 $page          = max(1, (int) ($_GET['page'] ?? 1));
 $per_page      = (int) ($_GET['per_page'] ?? 20);
+
+$valid_statuses = ['new', 'reviewing', 'shortlisted', 'interview_scheduled', 'interviewed', 'offer_extended', 'hired', 'rejected', 'withdrawn'];
+if ($status_filter !== 'all' && !in_array($status_filter, $valid_statuses, true)) {
+    $status_filter = 'all';
+}
+if ($job_filter !== 'all') {
+    $job_filter = (int) $job_filter;
+    if ($job_filter <= 0) {
+        $job_filter = 'all';
+    }
+}
+if (!in_array($ai_filter, ['all', 'high', 'medium', 'low', 'unknown'], true)) {
+    $ai_filter = 'all';
+}
+if (!in_array($view, ['table', 'cards'], true)) {
+    $view = 'table';
+}
 if ($per_page < 10) {
     $per_page = 10;
 } elseif ($per_page > 100) {
@@ -288,8 +305,8 @@ function scoreColor(?int $score): string
             <strong class="text-white text-lg"><?php echo $total_filtered; ?></strong> <span class="text-slate-300">solicitud(es) encontradas</span>
         </div>
         <div class="flex items-center gap-2 view-toggle">
-            <a href="<?php echo '?' . http_build_query(array_merge($_GET, ['view'=>'table'])); ?>"><button class="<?php echo $view==='table'?'active':'idle'; ?>"><i class="fas fa-table-list"></i> Tabla</button></a>
-            <a href="<?php echo '?' . http_build_query(array_merge($_GET, ['view'=>'cards'])); ?>"><button class="<?php echo $view==='cards'?'active':'idle'; ?>"><i class="fas fa-grip"></i> Tarjetas</button></a>
+            <a href="<?php echo htmlspecialchars('?' . http_build_query(array_merge($_GET, ['view'=>'table']))); ?>"><button class="<?php echo $view==='table'?'active':'idle'; ?>"><i class="fas fa-table-list"></i> Tabla</button></a>
+            <a href="<?php echo htmlspecialchars('?' . http_build_query(array_merge($_GET, ['view'=>'cards']))); ?>"><button class="<?php echo $view==='cards'?'active':'idle'; ?>"><i class="fas fa-grip"></i> Tarjetas</button></a>
         </div>
     </div>
 
@@ -336,7 +353,7 @@ function scoreColor(?int $score): string
                         <?php endif; ?>
 
                         <div class="flex items-center justify-between">
-                            <span class="status-badge-recruitment status-<?php echo $app['status']; ?>"><?php echo $status_labels[$app['status']] ?? $app['status']; ?></span>
+                            <span class="status-badge-recruitment status-<?php echo htmlspecialchars($app['status']); ?>"><?php echo $status_labels[$app['status']] ?? htmlspecialchars($app['status']); ?></span>
                             <span class="score-pill <?php echo $sc; ?>"><i class="fas fa-brain"></i> <?php echo scoreLabel($score); ?></span>
                         </div>
 
@@ -396,7 +413,7 @@ function scoreColor(?int $score): string
                                     </div>
                                 </td>
                                 <td class="py-3 px-4">
-                                    <span class="status-badge-recruitment status-<?php echo $app['status']; ?>"><?php echo $status_labels[$app['status']] ?? $app['status']; ?></span>
+                                    <span class="status-badge-recruitment status-<?php echo htmlspecialchars($app['status']); ?>"><?php echo $status_labels[$app['status']] ?? htmlspecialchars($app['status']); ?></span>
                                 </td>
                                 <td class="py-3 px-4 text-slate-200 text-sm whitespace-nowrap">
                                     <i class="far fa-calendar text-slate-400 mr-1"></i>
@@ -430,7 +447,7 @@ function scoreColor(?int $score): string
                                             'comments' => $app['evaluation_comments'] ?? '',
                                             'interviewer' => $app['evaluation_interviewer'] ?? '',
                                             'interview_date' => $app['evaluation_interview_date'] ?? ''
-                                        ], JSON_UNESCAPED_UNICODE); ?>)'>
+                                        ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>)'>
                                             <i class="fas fa-clipboard-check"></i>
                                         </button>
                                     </div>
@@ -460,7 +477,7 @@ function scoreColor(?int $score): string
                     $paginationParams['page'] = $nextPage;
                     $nextUrl = '?' . http_build_query($paginationParams);
                     ?>
-                    <a class="btn-secondary <?php echo $page <= 1 ? 'opacity-50 pointer-events-none' : ''; ?>" href="<?php echo $prevUrl; ?>"><i class="fas fa-chevron-left"></i></a>
+                    <a class="btn-secondary <?php echo $page <= 1 ? 'opacity-50 pointer-events-none' : ''; ?>" href="<?php echo htmlspecialchars($prevUrl); ?>"><i class="fas fa-chevron-left"></i></a>
                     <?php
                     $maxButtons = 5;
                     $startPage = max(1, $page - (int) floor($maxButtons / 2));
@@ -472,9 +489,9 @@ function scoreColor(?int $score): string
                         $paginationParams['page'] = $p;
                         $pageUrl = '?' . http_build_query($paginationParams);
                     ?>
-                        <a class="<?php echo $p === $page ? 'btn-primary' : 'btn-secondary'; ?>" href="<?php echo $pageUrl; ?>"><?php echo $p; ?></a>
+                        <a class="<?php echo $p === $page ? 'btn-primary' : 'btn-secondary'; ?>" href="<?php echo htmlspecialchars($pageUrl); ?>"><?php echo $p; ?></a>
                     <?php endfor; ?>
-                    <a class="btn-secondary <?php echo $page >= $total_pages ? 'opacity-50 pointer-events-none' : ''; ?>" href="<?php echo $nextUrl; ?>"><i class="fas fa-chevron-right"></i></a>
+                    <a class="btn-secondary <?php echo $page >= $total_pages ? 'opacity-50 pointer-events-none' : ''; ?>" href="<?php echo htmlspecialchars($nextUrl); ?>"><i class="fas fa-chevron-right"></i></a>
                 </div>
             </div>
         <?php endif; ?>

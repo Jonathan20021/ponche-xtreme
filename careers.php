@@ -59,7 +59,7 @@ $shareDescription = $shareJob
     ? substr(strip_tags(preg_replace('/\s+/', ' ', $shareJob['description'] ?? '')), 0, 180)
     : "Descubre las vacantes disponibles y unete al equipo de {$company_name}.";
 $shareImage = $shareJob && !empty($shareJob['banner_url']) ? $shareJob['banner_url'] : ($base_url . '/assets/logo.png');
-$shareUrl = $base_url . '/careers.php' . ($shareJobId ? '?job=' . $shareJobId : '');
+$shareUrl = $base_url . '/careers.php' . ($shareJob ? '?job=' . $shareJobId : '');
 
 $employment_types = [
     'full_time'  => 'Tiempo Completo',
@@ -289,7 +289,7 @@ $employment_types = [
                                         <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100"><i class="fas fa-map-marker-alt text-brand-500"></i> <?php echo htmlspecialchars($job['location']); ?></span>
                                     <?php endif; ?>
                                     <?php if (!empty($job['employment_type'])): ?>
-                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-700"><i class="fas fa-clock"></i> <?php echo $employment_types[$job['employment_type']] ?? $job['employment_type']; ?></span>
+                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-700"><i class="fas fa-clock"></i> <?php echo htmlspecialchars($employment_types[$job['employment_type']] ?? $job['employment_type']); ?></span>
                                     <?php endif; ?>
                                     <?php if (!empty($job['salary_range'])): ?>
                                         <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-semibold"><i class="fas fa-money-bill-wave"></i> <?php echo htmlspecialchars($job['salary_range']); ?></span>
@@ -548,7 +548,7 @@ $employment_types = [
     </div>
 
     <script>
-        const employmentTypeLabels = <?php echo json_encode($employment_types, JSON_UNESCAPED_UNICODE); ?>;
+        const employmentTypeLabels = <?php echo json_encode($employment_types, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
         const modal = document.getElementById('applicationModal');
         const modalBackdrop = document.getElementById('modalBackdrop');
         const modalPanel = document.getElementById('modalPanel');
@@ -584,6 +584,16 @@ $employment_types = [
             el.textContent = v || 'No especificado.';
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[ch]));
+        }
+
         function openJobModal(job) {
             document.getElementById('job_posting_id').value = job.id;
             document.getElementById('puesto_aplicado').value = job.title;
@@ -596,10 +606,10 @@ $employment_types = [
 
             const badges = document.getElementById('jobMetaBadges');
             badges.innerHTML = '';
-            if (job.salary_range) badges.innerHTML += `<span class="chip bg-emerald-100 text-emerald-700"><i class="fas fa-money-bill-wave mr-1"></i>${job.salary_range}</span>`;
-            if (job.location) badges.innerHTML += `<span class="chip bg-slate-100 text-slate-700"><i class="fas fa-map-marker-alt mr-1 text-brand-600"></i>${job.location}</span>`;
-            if (job.employment_type) badges.innerHTML += `<span class="chip bg-indigo-50 text-indigo-700">${employmentTypeLabels[job.employment_type] || job.employment_type}</span>`;
-            if (job.department) badges.innerHTML += `<span class="chip bg-brand-50 text-brand-700"><i class="fas fa-building mr-1"></i>${job.department}</span>`;
+            if (job.salary_range) badges.innerHTML += `<span class="chip bg-emerald-100 text-emerald-700"><i class="fas fa-money-bill-wave mr-1"></i>${escapeHtml(job.salary_range)}</span>`;
+            if (job.location) badges.innerHTML += `<span class="chip bg-slate-100 text-slate-700"><i class="fas fa-map-marker-alt mr-1 text-brand-600"></i>${escapeHtml(job.location)}</span>`;
+            if (job.employment_type) badges.innerHTML += `<span class="chip bg-indigo-50 text-indigo-700">${escapeHtml(employmentTypeLabels[job.employment_type] || job.employment_type)}</span>`;
+            if (job.department) badges.innerHTML += `<span class="chip bg-brand-50 text-brand-700"><i class="fas fa-building mr-1"></i>${escapeHtml(job.department)}</span>`;
 
             fillSection('jobDescText', job.description);
             fillSection('jobResponsibilitiesText', job.responsibilities);
@@ -627,7 +637,7 @@ $employment_types = [
                     'description'      => 'Estamos siempre interesados en conocer a buenos candidatos. Sube tu CV y nos pondremos en contacto cuando exista una vacante adecuada.',
                     'requirements'     => '',
                     'responsibilities' => '',
-                ], JSON_UNESCAPED_UNICODE); ?>);
+                ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>);
             <?php else: ?>
                 Swal.fire({ title:'No hay vacantes activas', text:'Por ahora no podemos recibir postulaciones.', icon:'info' });
             <?php endif; ?>
@@ -745,7 +755,7 @@ $employment_types = [
                 'description'      => $shareJob['description']      ?? '',
                 'requirements'     => $shareJob['requirements']     ?? '',
                 'responsibilities' => $shareJob['responsibilities'] ?? '',
-            ], JSON_UNESCAPED_UNICODE); ?>));
+            ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>));
         <?php endif; ?>
     </script>
 </body>

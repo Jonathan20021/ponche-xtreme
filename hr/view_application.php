@@ -5,7 +5,7 @@ require_once '../db.php';
 // Check permissions
 ensurePermission('hr_recruitment', '../unauthorized.php');
 
-$application_id = $_GET['id'] ?? 0;
+$application_id = (int) ($_GET['id'] ?? 0);
 
 $stmt = $pdo->prepare("
     SELECT a.*, j.title as job_title, j.department, j.location, u.full_name as assigned_to_name
@@ -93,7 +93,7 @@ if ($displayName === '') {
     $displayName = $application['candidate_name'] ?? 'N/A';
 }
 $displayPhone = !empty($application['phone']) ? $application['phone'] : ($formPayload['telefono'] ?? 'N/A');
-$displayEmail = !empty($application['email']) && $application['email'] !== 'sin-correo@evallish.local' ? $application['email'] : 'sin-correo@evallish.local';
+$displayEmail = !empty($application['email']) && $application['email'] !== 'sin-correo@evallish.local' ? $application['email'] : 'N/A';
 $displayEducation = !empty($application['education_level']) ? $application['education_level'] : (
     $formPayload && !empty($formPayload['educacion']['nivel'])
     ? (is_array($formPayload['educacion']['nivel']) ? implode(', ', $formPayload['educacion']['nivel']) : $formPayload['educacion']['nivel'])
@@ -189,8 +189,8 @@ require_once '../header.php';
                     </div>
                 </div>
                 <div>
-                    <span class="status-badge-recruitment status-<?php echo $application['status']; ?> text-lg">
-                        <?php echo $status_labels[$application['status']]; ?>
+                    <span class="status-badge-recruitment status-<?php echo htmlspecialchars($application['status']); ?> text-lg">
+                        <?php echo htmlspecialchars($status_labels[$application['status']] ?? $application['status']); ?>
                     </span>
                 </div>
             </div>
@@ -374,10 +374,10 @@ require_once '../header.php';
                                                 </div>
                                             </div>
                                             <div class="flex flex-col items-end gap-2">
-                                                <span class="status-badge-recruitment status-<?php echo $other_app['status']; ?>">
-                                                    <?php echo $status_labels[$other_app['status']]; ?>
+                                                <span class="status-badge-recruitment status-<?php echo htmlspecialchars($other_app['status']); ?>">
+                                                    <?php echo htmlspecialchars($status_labels[$other_app['status']] ?? $other_app['status']); ?>
                                                 </span>
-                                                <a href="view_application.php?id=<?php echo $other_app['id']; ?>"
+                                                <a href="view_application.php?id=<?php echo (int) $other_app['id']; ?>"
                                                     class="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1">
                                                     <span>Ver detalles</span>
                                                     <i class="fas fa-arrow-right text-xs"></i>
@@ -1149,8 +1149,8 @@ require_once '../header.php';
                                                         </p>
                                                 <?php endif; ?>
                                             </div>
-                                            <span class="status-badge-recruitment status-<?php echo $interview['status']; ?>">
-                                                <?php echo ucfirst($interview['status']); ?>
+                                            <span class="status-badge-recruitment status-<?php echo htmlspecialchars($interview['status']); ?>">
+                                                <?php echo htmlspecialchars(ucfirst($interview['status'])); ?>
                                             </span>
                                         </div>
                                     </div>
@@ -1272,8 +1272,6 @@ async function runAIProcessing(applicationId, btn) {
 }
 </script>
 
-<?php require_once '../footer.php'; ?>
-
 <!-- Modals -->
 <div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel"
     aria-hidden="true">
@@ -1376,3 +1374,5 @@ async function runAIProcessing(applicationId, btn) {
         </div>
     </div>
 </div>
+
+<?php require_once '../footer.php'; ?>

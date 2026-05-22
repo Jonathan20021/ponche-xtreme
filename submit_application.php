@@ -61,7 +61,7 @@ try {
         $linkedin_url = $linkedin_url;
     }
 
-    // Resolve job_posting_id
+    // Resolve and validate job_posting_id
     $job_posting_id = $_POST['job_posting_id'] ?? null;
     if (empty($job_posting_id) && !empty($_SERVER['HTTP_REFERER'])) {
         $ref = parse_url($_SERVER['HTTP_REFERER']);
@@ -73,13 +73,31 @@ try {
         }
     }
     if (empty($job_posting_id)) {
-        $job_posting_id = $pdo->query("SELECT id FROM job_postings WHERE status = 'active' ORDER BY posted_date DESC LIMIT 1")->fetchColumn();
+        $job_posting_id = $pdo->query("
+            SELECT id
+            FROM job_postings
+            WHERE status = 'active' AND (closing_date IS NULL OR closing_date >= CURDATE())
+            ORDER BY posted_date DESC
+            LIMIT 1
+        ")->fetchColumn();
     }
     if (empty($job_posting_id)) {
         echo json_encode(['success' => false, 'message' => 'No hay vacantes activas para asociar tu solicitud.']);
         exit;
     }
     $job_posting_id = (int) $job_posting_id;
+
+    $jobCheck = $pdo->prepare("
+        SELECT id, title
+        FROM job_postings
+        WHERE id = ? AND status = 'active' AND (closing_date IS NULL OR closing_date >= CURDATE())
+    ");
+    $jobCheck->execute([$job_posting_id]);
+    $selectedJob = $jobCheck->fetch(PDO::FETCH_ASSOC);
+    if (!$selectedJob) {
+        echo json_encode(['success' => false, 'message' => 'La vacante seleccionada ya no esta disponible.']);
+        exit;
+    }
 
     // CV upload (optional)
     $cv_filename = null;
@@ -99,13 +117,15 @@ try {
             echo json_encode(['success' => false, 'message' => 'CV demasiado grande (máx. 5MB).']);
             exit;
         }
-        $upload_dir = 'uploads/cvs/';
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0755, true);
+        $upload_dir = __DIR__ . '/uploads/cvs/';
+        if (!is_dir($upload_dir) && !mkdir($upload_dir, 0755, true) && !is_dir($upload_dir)) {
+            echo json_encode(['success' => false, 'message' => 'No se pudo preparar la carpeta de CVs.']);
+            exit;
         }
         $cv_filename = uniqid('cv_') . '_' . time() . '.' . $ext;
-        $cv_path = $upload_dir . $cv_filename;
-        if (!move_uploaded_file($_FILES['cv_file']['tmp_name'], $cv_path)) {
+        $cv_path = 'uploads/cvs/' . $cv_filename;
+        $cv_absolute_path = $upload_dir . $cv_filename;
+        if (!move_uploaded_file($_FILES['cv_file']['tmp_name'], $cv_absolute_path)) {
             echo json_encode(['success' => false, 'message' => 'No se pudo guardar el CV.']);
             exit;
         }
@@ -200,9 +220,7 @@ try {
     // Confirmation email
     try {
         require_once 'lib/email_functions.php';
-        $jt = $pdo->prepare("SELECT title FROM job_postings WHERE id = ?");
-        $jt->execute([$job_posting_id]);
-        $job_title = $jt->fetchColumn();
+        $job_title = $selectedJob['title'] ?? '';
         if ($email !== '' && function_exists('sendApplicationConfirmationEmail')) {
             sendApplicationConfirmationEmail([
                 'email'            => $email,
@@ -251,8 +269,8 @@ try {
 
 } catch (PDOException $e) {
     error_log('submit_application PDO error: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Error de base de datos: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'No se pudo registrar la solicitud en este momento.']);
 } catch (Throwable $e) {
     error_log('submit_application error: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Error inesperado: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'Error inesperado al enviar la solicitud.']);
 }

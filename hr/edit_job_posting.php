@@ -13,7 +13,7 @@ if (!isset($_GET['id'])) {
     exit;
 }
 
-$jobId = $_GET['id'];
+$jobId = (int) $_GET['id'];
 
 // Fetch job details
 $stmt = $pdo->prepare("SELECT * FROM job_postings WHERE id = ?");

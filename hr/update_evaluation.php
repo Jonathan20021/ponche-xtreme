@@ -4,10 +4,7 @@ require_once '../db.php';
 
 header('Content-Type: application/json');
 
-// Permissions
-try {
-    ensurePermission('hr_recruitment', '../unauthorized.php');
-} catch (Exception $e) {
+if (!isset($_SESSION['user_id']) || !userHasPermission('hr_recruitment')) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'No autorizado']);
     exit;
@@ -42,27 +39,53 @@ if ($datetime === '') {
 }
 
 // Normalize datetime
-$dt = date('Y-m-d H:i:s', strtotime($datetime));
-$interview_date_clean = $interview_date ? date('Y-m-d', strtotime($interview_date)) : null;
+$datetimeTs = strtotime($datetime);
+if ($datetimeTs === false) {
+    echo json_encode(['success' => false, 'message' => 'Fecha/hora de evaluacion invalida']);
+    exit;
+}
+$dt = date('Y-m-d H:i:s', $datetimeTs);
 
-$stmt = $pdo->prepare("
-    UPDATE job_applications
-    SET evaluation_result = :result,
-        evaluation_datetime = :eval_dt,
-        evaluation_comments = :comments,
-        evaluation_interviewer = :interviewer,
-        evaluation_interview_date = :interview_date,
-        last_updated = NOW()
-    WHERE id = :id
-");
+$interview_date_clean = null;
+if ($interview_date !== '') {
+    $interviewTs = strtotime($interview_date);
+    if ($interviewTs === false) {
+        echo json_encode(['success' => false, 'message' => 'Fecha de entrevista invalida']);
+        exit;
+    }
+    $interview_date_clean = date('Y-m-d', $interviewTs);
+}
 
-$stmt->execute([
-    'result' => $result,
-    'eval_dt' => $dt,
-    'comments' => $comments !== '' ? $comments : null,
-    'interviewer' => $interviewer !== '' ? $interviewer : null,
-    'interview_date' => $interview_date_clean,
-    'id' => $application_id
-]);
+try {
+    $exists = $pdo->prepare("SELECT id FROM job_applications WHERE id = ?");
+    $exists->execute([$application_id]);
+    if (!$exists->fetchColumn()) {
+        echo json_encode(['success' => false, 'message' => 'Solicitud no encontrada']);
+        exit;
+    }
 
-echo json_encode(['success' => true, 'message' => 'Evaluacion guardada']);
+    $stmt = $pdo->prepare("
+        UPDATE job_applications
+        SET evaluation_result = :result,
+            evaluation_datetime = :eval_dt,
+            evaluation_comments = :comments,
+            evaluation_interviewer = :interviewer,
+            evaluation_interview_date = :interview_date,
+            last_updated = NOW()
+        WHERE id = :id
+    ");
+
+    $stmt->execute([
+        'result' => $result,
+        'eval_dt' => $dt,
+        'comments' => $comments !== '' ? $comments : null,
+        'interviewer' => $interviewer !== '' ? $interviewer : null,
+        'interview_date' => $interview_date_clean,
+        'id' => $application_id
+    ]);
+
+    echo json_encode(['success' => true, 'message' => 'Evaluacion guardada']);
+} catch (PDOException $e) {
+    error_log('update_evaluation error: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'No se pudo guardar la evaluacion']);
+}

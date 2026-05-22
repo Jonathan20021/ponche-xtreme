@@ -2,15 +2,15 @@
 session_start();
 require_once '../db.php';
 
+// Set JSON header
+header('Content-Type: application/json');
+
 // Check permissions
 if (!isset($_SESSION['user_id']) || !userHasPermission('hr_recruitment_ai')) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Acceso denegado']);
     exit;
 }
-
-// Set JSON header
-header('Content-Type: application/json');
 
 // Gemini AI Configuration
 define('GEMINI_API_KEY', 'AIzaSyDJMoBOmGPa5wQUck3OKiUMlenHP5oyJ5o');
@@ -19,6 +19,11 @@ define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/model
 
 // Get request data
 $input = json_decode(file_get_contents('php://input'), true);
+if (!is_array($input)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'JSON invalido']);
+    exit;
+}
 $action = $input['action'] ?? '';
 
 if ($action !== 'analyze') {
@@ -277,7 +282,7 @@ function callGeminiAPI($payload) {
         'Content-Type: application/json'
     ]);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -526,13 +531,22 @@ function validateSQL($sql, $userQuery = '') {
     
     // Check for dangerous operations
     $dangerousPatterns = [
-        'DROP', 'DELETE', 'INSERT', 'UPDATE', 'TRUNCATE', 
-        'ALTER', 'CREATE', 'REPLACE', 'EXEC', 'EXECUTE',
-        'SHOW TABLES', 'SHOW DATABASES', '--', '/*', '*/'
+        'DROP', 'DELETE', 'INSERT', 'UPDATE', 'TRUNCATE',
+        'ALTER', 'CREATE', 'EXEC', 'EXECUTE', 'UNION'
     ];
     
     foreach ($dangerousPatterns as $pattern) {
-        if (strpos($sqlUpper, $pattern) !== false) {
+        if (preg_match('/\b' . preg_quote($pattern, '/') . '\b/i', $sql)) {
+            throw new Exception("Consulta SQL no permitida por motivos de seguridad");
+        }
+    }
+
+    $dangerousFragments = [
+        '--', '/*', '*/', 'INTO OUTFILE', 'INTO DUMPFILE',
+        'LOAD_FILE', 'INFORMATION_SCHEMA', 'PERFORMANCE_SCHEMA', 'MYSQL.'
+    ];
+    foreach ($dangerousFragments as $fragment) {
+        if (strpos($sqlUpper, $fragment) !== false) {
             throw new Exception("Consulta SQL no permitida por motivos de seguridad");
         }
     }
@@ -540,6 +554,30 @@ function validateSQL($sql, $userQuery = '') {
     // Must start with SELECT
     if (stripos(trim($sql), 'SELECT') !== 0) {
         throw new Exception("Solo se permiten consultas SELECT");
+    }
+
+    if (preg_match('/\b(?:FROM|JOIN)\s*\(/i', $sql)) {
+        throw new Exception("No se permiten subconsultas generadas por IA");
+    }
+
+    preg_match_all('/\b(?:FROM|JOIN)\s+`?([a-zA-Z0-9_]+)`?/i', $sql, $tableMatches);
+    $allowedTables = [
+        'job_applications',
+        'job_postings',
+        'application_comments',
+        'application_status_history',
+        'applicant_skills',
+        'applicant_references',
+        'recruitment_interviews',
+    ];
+    $referencedTables = array_map('strtolower', $tableMatches[1] ?? []);
+    if (empty($referencedTables)) {
+        throw new Exception("La consulta debe leer tablas de reclutamiento");
+    }
+    foreach ($referencedTables as $tableName) {
+        if (!in_array($tableName, $allowedTables, true)) {
+            throw new Exception("Tabla no permitida en consultas de reclutamiento");
+        }
     }
     
     // Check if user requested a filter but SQL has no WHERE clause

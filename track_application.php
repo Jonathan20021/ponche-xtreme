@@ -5,11 +5,11 @@ require_once 'db.php';
 
 $application = null;
 $error = null;
-$application_code = $_GET['code'] ?? '';
+$application_code = trim((string) ($_GET['code'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
-    $code = $_POST['application_code'] ?? $application_code;
-    $email = $_POST['email'] ?? '';
+    $code = trim((string) ($_POST['application_code'] ?? $application_code));
+    $email = trim((string) ($_POST['email'] ?? ''));
     
     try {
         // If email is provided, search with both code and email for security
@@ -422,7 +422,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
                         <h3 class="mb-1"><?php echo htmlspecialchars($application['first_name'] . ' ' . $application['last_name']); ?></h3>
                         <p class="text-muted mb-0">Código: <strong><?php echo htmlspecialchars($application['application_code']); ?></strong></p>
                     </div>
-                    <span class="status-badge status-<?php echo $application['status']; ?>">
+                    <span class="status-badge status-<?php echo htmlspecialchars($application['status']); ?>">
                         <i class="bi bi-circle-fill"></i>
                         <?php 
                             $statuses = [
@@ -436,7 +436,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
                                 'rejected' => 'Rechazado',
                                 'withdrawn' => 'Retirado'
                             ];
-                            echo $statuses[$application['status']];
+                            echo htmlspecialchars($statuses[$application['status']] ?? $application['status']);
                         ?>
                     </span>
                 </div>
@@ -494,7 +494,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
                         'rejected' => 100,
                         'withdrawn' => 100
                     ];
-                    $progress = $progress_map[$application['status']];
+                    $progress = $progress_map[$application['status']] ?? 0;
                 ?>
                 <div class="progress-bar-custom">
                     <div class="progress-fill" style="width: <?php echo $progress; ?>%"></div>

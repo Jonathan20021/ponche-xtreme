@@ -2,15 +2,24 @@
 session_start();
 require_once '../db.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
-    exit;
-}
+ensurePermission('hr_recruitment', '../unauthorized.php');
 
 // Get filter parameters
 $status_filter = $_GET['status'] ?? 'all';
 $job_filter = $_GET['job'] ?? 'all';
-$search = $_GET['search'] ?? '';
+$search = trim((string) ($_GET['search'] ?? ''));
+
+$allowed_statuses = ['new', 'reviewing', 'shortlisted', 'interview_scheduled', 'interviewed', 'offer_extended', 'hired', 'rejected', 'withdrawn'];
+if ($status_filter !== 'all' && !in_array($status_filter, $allowed_statuses, true)) {
+    $status_filter = 'all';
+}
+
+if ($job_filter !== 'all') {
+    $job_filter = (int) $job_filter;
+    if ($job_filter <= 0) {
+        $job_filter = 'all';
+    }
+}
 
 $query = "
     SELECT a.*, j.title as job_title, j.department, u.full_name as assigned_to_name
@@ -29,7 +38,7 @@ if ($status_filter !== 'all') {
 
 if ($job_filter !== 'all') {
     $query .= " AND a.job_posting_id = :job_id";
-    $params['job_id'] = $job_filter;
+    $params['job_id'] = (int) $job_filter;
 }
 
 if (!empty($search)) {
@@ -44,11 +53,21 @@ $stmt->execute($params);
 $applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Set headers for Excel download
-header('Content-Type: application/vnd.ms-excel');
+header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
 header('Content-Disposition: attachment;filename="solicitudes_empleo_' . date('Y-m-d') . '.xls"');
 header('Cache-Control: max-age=0');
 
+function excelCell($value): string
+{
+    $value = (string) ($value ?? '');
+    if ($value !== '' && preg_match('/^[=+\-@]/', $value)) {
+        $value = "'" . $value;
+    }
+    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
 // Output Excel content
+echo "\xEF\xBB\xBF";
 echo '<html xmlns:x="urn:schemas-microsoft-com:office:excel">';
 echo '<head><meta charset="UTF-8"></head>';
 echo '<body>';
@@ -74,22 +93,22 @@ echo '</tr>';
 
 foreach ($applications as $app) {
     echo '<tr>';
-    echo '<td>' . htmlspecialchars($app['application_code']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['first_name']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['last_name']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['email']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['phone']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['job_title']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['department']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['status']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['education_level']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['years_of_experience']) . '</td>';
-    echo '<td>' . htmlspecialchars($app['current_position'] ?? '') . '</td>';
-    echo '<td>' . htmlspecialchars($app['current_company'] ?? '') . '</td>';
-    echo '<td>' . htmlspecialchars($app['expected_salary'] ?? '') . '</td>';
-    echo '<td>' . date('d/m/Y H:i', strtotime($app['applied_date'])) . '</td>';
-    echo '<td>' . htmlspecialchars($app['assigned_to_name'] ?? '') . '</td>';
-    echo '<td>' . ($app['overall_rating'] ?? '') . '</td>';
+    echo '<td>' . excelCell($app['application_code']) . '</td>';
+    echo '<td>' . excelCell($app['first_name']) . '</td>';
+    echo '<td>' . excelCell($app['last_name']) . '</td>';
+    echo '<td>' . excelCell($app['email']) . '</td>';
+    echo '<td>' . excelCell($app['phone']) . '</td>';
+    echo '<td>' . excelCell($app['job_title']) . '</td>';
+    echo '<td>' . excelCell($app['department']) . '</td>';
+    echo '<td>' . excelCell($app['status']) . '</td>';
+    echo '<td>' . excelCell($app['education_level']) . '</td>';
+    echo '<td>' . excelCell($app['years_of_experience']) . '</td>';
+    echo '<td>' . excelCell($app['current_position'] ?? '') . '</td>';
+    echo '<td>' . excelCell($app['current_company'] ?? '') . '</td>';
+    echo '<td>' . excelCell($app['expected_salary'] ?? '') . '</td>';
+    echo '<td>' . excelCell(!empty($app['applied_date']) ? date('d/m/Y H:i', strtotime($app['applied_date'])) : '') . '</td>';
+    echo '<td>' . excelCell($app['assigned_to_name'] ?? '') . '</td>';
+    echo '<td>' . excelCell($app['overall_rating'] ?? '') . '</td>';
     echo '</tr>';
 }
 
