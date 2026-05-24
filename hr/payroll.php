@@ -550,6 +550,10 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                 <p class="text-slate-400">Sistema completo con AFP, SFS, ISR, TSS y DGII</p>
             </div>
             <div class="flex gap-3 flex-wrap">
+                <a href="payroll_by_campaign.php<?= $selectedPeriodId ? ('?period_id=' . (int)$selectedPeriodId) : '' ?>" class="btn-secondary">
+                    <i class="fas fa-bullhorn"></i>
+                    Por Campaña
+                </a>
                 <a href="employee_deductions.php" class="btn-secondary">
                     <i class="fas fa-hand-holding-usd"></i>
                     Descuentos por Empleado

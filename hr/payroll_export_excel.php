@@ -21,6 +21,25 @@ if (!$periodId) {
     die('Período no especificado');
 }
 
+// Filtro opcional por campaña: si está presente filtra los records por
+// employees.campaign_id (0 = "Sin Campaña"). Sin parámetro, comportamiento
+// idéntico al original.
+$campaignFilter = null;
+if (isset($_GET['campaign_id']) && $_GET['campaign_id'] !== '') {
+    $campaignFilter = (int)$_GET['campaign_id'];
+}
+$campaignLabel = null;
+if ($campaignFilter !== null) {
+    if ($campaignFilter > 0) {
+        $cStmt = $pdo->prepare("SELECT name FROM campaigns WHERE id = ?");
+        $cStmt->execute([$campaignFilter]);
+        $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+        $campaignLabel = $cRow ? $cRow['name'] : 'Campaña #' . $campaignFilter;
+    } else {
+        $campaignLabel = 'Sin Campaña';
+    }
+}
+
 // Get period data
 $periodStmt = $pdo->prepare("SELECT * FROM payroll_periods WHERE id = ?");
 $periodStmt->execute([$periodId]);
@@ -37,7 +56,15 @@ while ($row = $ratesStmt->fetch(PDO::FETCH_ASSOC)) {
     $deductionRates[$row['code']] = $row;
 }
 
-// Get payroll records (include user salary fields so we can show base hourly/fixed rates)
+// Get payroll records (include user salary fields so we can show base hourly/fixed rates).
+// Filtro opcional por campaña — solo añade un WHERE extra, no toca cálculos.
+$campaignWhere = '';
+if ($campaignFilter !== null) {
+    $campaignWhere = $campaignFilter > 0
+        ? ' AND e.campaign_id = ?'
+        : ' AND e.campaign_id IS NULL';
+}
+
 $recordsStmt = $pdo->prepare("
     SELECT pr.*,
            e.first_name, e.last_name, e.employee_code, e.identification_number, e.position,
@@ -56,9 +83,14 @@ $recordsStmt = $pdo->prepare("
         ON pmi.payroll_period_id = pr.payroll_period_id
        AND pmi.employee_id = pr.employee_id
     WHERE pr.payroll_period_id = ?
+    $campaignWhere
     ORDER BY e.last_name, e.first_name
 ");
-$recordsStmt->execute([$periodId]);
+$bindings = [$periodId];
+if ($campaignFilter !== null && $campaignFilter > 0) {
+    $bindings[] = $campaignFilter;
+}
+$recordsStmt->execute($bindings);
 $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Resolve effective compensation type and base rate (in DOP) for an employee row.
@@ -120,7 +152,11 @@ if (file_exists($logoPath)) {
 }
 
 // Header
-$sheet->setCellValue('B1', 'REPORTE DE NÓMINA - REPÚBLICA DOMINICANA');
+$headerTitle = 'REPORTE DE NÓMINA - REPÚBLICA DOMINICANA';
+if ($campaignLabel !== null) {
+    $headerTitle .= ' — Campaña: ' . $campaignLabel;
+}
+$sheet->setCellValue('B1', $headerTitle);
 $sheet->mergeCells('B1:T1');
 $sheet->getStyle('B1:T1')->getFont()->setBold(true)->setSize(16);
 $sheet->getStyle('B1:T1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -128,7 +164,11 @@ $sheet->getStyle('A1:T1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartCol
 $sheet->getStyle('B1:T1')->getFont()->getColor()->setRGB('FFFFFF');
 
 // Period info
-$sheet->setCellValue('A2', 'Período: ' . $period['name']);
+$periodLabel = 'Período: ' . $period['name'];
+if ($campaignLabel !== null) {
+    $periodLabel .= ' · Campaña: ' . $campaignLabel;
+}
+$sheet->setCellValue('A2', $periodLabel);
 $sheet->mergeCells('A2:F2');
 $sheet->setCellValue('G2', 'Fechas: ' . date('d/m/Y', strtotime($period['start_date'])) . ' - ' . date('d/m/Y', strtotime($period['end_date'])));
 $sheet->mergeCells('G2:L2');
@@ -277,7 +317,10 @@ foreach (range('A', 'U') as $col) {
 }
 
 // Output
-$filename = 'Nomina_' . str_replace(' ', '_', $period['name']) . '_' . date('Ymd') . '.xlsx';
+$campaignSlug = $campaignLabel !== null
+    ? '_' . preg_replace('/[^A-Za-z0-9]+/', '-', $campaignLabel)
+    : '';
+$filename = 'Nomina_' . str_replace(' ', '_', $period['name']) . $campaignSlug . '_' . date('Ymd') . '.xlsx';
 
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header('Content-Disposition: attachment;filename="' . $filename . '"');

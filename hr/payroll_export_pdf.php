@@ -17,6 +17,25 @@ if (!$periodId) {
     die('Período no especificado');
 }
 
+// Filtro opcional por campaña: si está presente filtra los records por
+// employees.campaign_id (0 = "Sin Campaña"). Si no está presente, se exporta
+// el período completo como antes — el flujo original no se altera.
+$campaignFilter = null;
+if (isset($_GET['campaign_id']) && $_GET['campaign_id'] !== '') {
+    $campaignFilter = (int)$_GET['campaign_id'];
+}
+$campaignLabel = null;
+if ($campaignFilter !== null) {
+    if ($campaignFilter > 0) {
+        $cStmt = $pdo->prepare("SELECT name FROM campaigns WHERE id = ?");
+        $cStmt->execute([$campaignFilter]);
+        $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+        $campaignLabel = $cRow ? $cRow['name'] : 'Campaña #' . $campaignFilter;
+    } else {
+        $campaignLabel = 'Sin Campaña';
+    }
+}
+
 // Get period data
 $periodStmt = $pdo->prepare("SELECT * FROM payroll_periods WHERE id = ?");
 $periodStmt->execute([$periodId]);
@@ -33,7 +52,15 @@ while ($row = $ratesStmt->fetch(PDO::FETCH_ASSOC)) {
     $deductionRates[$row['code']] = $row;
 }
 
-// Get payroll records (include user salary fields so we can show base hourly/fixed rates)
+// Get payroll records (include user salary fields so we can show base hourly/fixed rates).
+// Si hay $campaignFilter, se añade el filtro por employees.campaign_id sin tocar nada más.
+$campaignWhere = '';
+if ($campaignFilter !== null) {
+    $campaignWhere = $campaignFilter > 0
+        ? ' AND e.campaign_id = ?'
+        : ' AND e.campaign_id IS NULL';
+}
+
 $recordsStmt = $pdo->prepare("
     SELECT pr.*,
            e.first_name, e.last_name, e.employee_code, e.identification_number, e.position,
@@ -52,9 +79,14 @@ $recordsStmt = $pdo->prepare("
         ON pmi.payroll_period_id = pr.payroll_period_id
        AND pmi.employee_id = pr.employee_id
     WHERE pr.payroll_period_id = ?
+    $campaignWhere
     ORDER BY e.last_name, e.first_name
 ");
-$recordsStmt->execute([$periodId]);
+$bindings = [$periodId];
+if ($campaignFilter !== null && $campaignFilter > 0) {
+    $bindings[] = $campaignFilter;
+}
+$recordsStmt->execute($bindings);
 $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Cargar cuotas de préstamo por empleado para el período (batched, 1 query)
@@ -257,8 +289,11 @@ ob_start();
 </head>
 <body>
     <div class="header">
-        <h1>REPORTE DE NÓMINA</h1>
+        <h1>REPORTE DE NÓMINA<?= $campaignLabel !== null ? ' — CAMPAÑA' : '' ?></h1>
         <p><strong><?= htmlspecialchars($period['name']) ?></strong></p>
+        <?php if ($campaignLabel !== null): ?>
+            <p><strong>Campaña:</strong> <?= htmlspecialchars($campaignLabel) ?></p>
+        <?php endif; ?>
         <p>Período: <?= date('d/m/Y', strtotime($period['start_date'])) ?> - <?= date('d/m/Y', strtotime($period['end_date'])) ?></p>
         <p>Fecha de Pago: <?= date('d/m/Y', strtotime($period['payment_date'])) ?></p>
     </div>
@@ -416,6 +451,9 @@ $dompdf->setPaper('Letter', 'landscape');
 $dompdf->render();
 
 // Output PDF
-$filename = 'Nomina_' . str_replace(' ', '_', $period['name']) . '_' . date('Ymd') . '.pdf';
+$campaignSlug = $campaignLabel !== null
+    ? '_' . preg_replace('/[^A-Za-z0-9]+/', '-', $campaignLabel)
+    : '';
+$filename = 'Nomina_' . str_replace(' ', '_', $period['name']) . $campaignSlug . '_' . date('Ymd') . '.pdf';
 $dompdf->stream($filename, ['Attachment' => true]);
 ?>
