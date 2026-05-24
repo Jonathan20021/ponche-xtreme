@@ -3,24 +3,51 @@ session_start();
 require_once '../db.php';
 require_once 'payroll_functions.php';
 
-// READ-ONLY view: agrupa los payroll_records ya calculados por la campaña
-// actual del empleado (employees.campaign_id). No ejecuta ningún cálculo,
-// no escribe a payroll_records ni a payroll_periods.
-//
-// Nota: como employees.campaign_id no tiene historial, la agrupación usa
-// la campaña ACTUAL del empleado. Si un empleado cambió de campaña después
-// del período, aparecerá bajo su campaña actual, no la que tuvo entonces.
+// READ-ONLY view: agrupa los payroll_records ya calculados por
+// (a) la campaña ACTUAL del empleado (employees.campaign_id) o
+// (b) el departamento ACTUAL del empleado (employees.department_id).
+// No ejecuta ningún cálculo, no escribe a payroll_records ni a payroll_periods.
 
 ensurePermission('hr_payroll', '../unauthorized.php');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
+// Modo de agrupación: campaign (default) o department.
+$groupBy = (isset($_GET['group_by']) && $_GET['group_by'] === 'department') ? 'department' : 'campaign';
+
 $selectedPeriodId = isset($_GET['period_id']) ? (int)$_GET['period_id'] : 0;
-$selectedCampaignFilter = null;
-if (isset($_GET['campaign_id']) && $_GET['campaign_id'] !== '') {
-    // 0 representa "Sin Campaña"; cualquier id > 0 es campaña específica
-    $selectedCampaignFilter = (int)$_GET['campaign_id'];
+
+// Filtro de drill-down: campaign_id ó department_id según modo.
+$drilldownKey = $groupBy === 'department' ? 'department_id' : 'campaign_id';
+$selectedGroupFilter = null;
+if (isset($_GET[$drilldownKey]) && $_GET[$drilldownKey] !== '') {
+    $selectedGroupFilter = (int)$_GET[$drilldownKey];
+}
+
+// Etiquetas según modo.
+if ($groupBy === 'department') {
+    $modeLabels = [
+        'singular'    => 'Departamento',
+        'plural'      => 'Departamentos',
+        'titleHeader' => 'Nómina por Departamento',
+        'subtitle'    => 'Agrupación de la nómina ya calculada por departamento actual del empleado',
+        'icon'        => 'fa-building',
+        'iconColor'   => 'text-purple-400',
+        'sinGroup'    => 'Sin Departamento',
+        'noteHistory' => 'Si un empleado cambió de departamento después del período, se mostrará bajo su departamento actual.',
+    ];
+} else {
+    $modeLabels = [
+        'singular'    => 'Campaña',
+        'plural'      => 'Campañas',
+        'titleHeader' => 'Nómina por Campaña',
+        'subtitle'    => 'Agrupación de la nómina ya calculada por campaña actual del empleado',
+        'icon'        => 'fa-bullhorn',
+        'iconColor'   => 'text-blue-400',
+        'sinGroup'    => 'Sin Campaña',
+        'noteHistory' => 'Si un empleado cambió de campaña después del período, se mostrará bajo su campaña actual.',
+    ];
 }
 
 // Períodos con records (los DRAFT sin calcular se omiten porque no tienen datos)
@@ -34,9 +61,9 @@ $periods = $pdo->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $selectedPeriod = null;
-$campaignSummary = [];      // resumen agrupado por campaña
-$drilldownRecords = [];     // detalle de empleados de la campaña seleccionada
-$drilldownCampaign = null;  // info de la campaña en drill-down
+$groupSummary = [];          // resumen agrupado
+$drilldownRecords = [];       // detalle de empleados del grupo seleccionado
+$drilldownGroup = null;       // info del grupo en drill-down
 $drilldownTotals = [
     'hours' => 0, 'overtime_hours' => 0, 'gross' => 0,
     'afp' => 0, 'sfs' => 0, 'isr' => 0,
@@ -52,45 +79,78 @@ if ($selectedPeriodId) {
 }
 
 if ($selectedPeriod) {
-    // Resumen por campaña: una sola query con GROUP BY.
-    // COALESCE(c.id, 0) → empleados sin campaña caen al grupo 0 ("Sin Campaña").
-    $summaryStmt = $pdo->prepare("
-        SELECT
-            COALESCE(c.id, 0) AS campaign_id,
-            COALESCE(c.name, 'Sin Campaña') AS campaign_name,
-            COALESCE(c.color, '#64748b') AS campaign_color,
-            COUNT(DISTINCT pr.employee_id) AS employee_count,
-            SUM(pr.total_hours) AS total_hours,
-            SUM(pr.overtime_hours) AS overtime_hours,
-            SUM(pr.gross_salary) AS total_gross,
-            SUM(pr.total_deductions) AS total_deductions,
-            SUM(pr.net_salary) AS total_net
-        FROM payroll_records pr
-        JOIN employees e ON e.id = pr.employee_id
-        LEFT JOIN campaigns c ON c.id = e.campaign_id
-        WHERE pr.payroll_period_id = ?
-        GROUP BY COALESCE(c.id, 0), COALESCE(c.name, 'Sin Campaña'), COALESCE(c.color, '#64748b')
-        ORDER BY total_gross DESC
-    ");
+    // Configuración SQL según el modo de agrupación.
+    if ($groupBy === 'department') {
+        // departments no tiene columna color; usamos un slate por defecto.
+        $summarySql = "
+            SELECT
+                COALESCE(d.id, 0) AS group_id,
+                COALESCE(d.name, 'Sin Departamento') AS group_name,
+                '#7c3aed' AS group_color,
+                COUNT(DISTINCT pr.employee_id) AS employee_count,
+                SUM(pr.total_hours) AS total_hours,
+                SUM(pr.overtime_hours) AS overtime_hours,
+                SUM(pr.gross_salary) AS total_gross,
+                SUM(pr.total_deductions) AS total_deductions,
+                SUM(pr.net_salary) AS total_net
+            FROM payroll_records pr
+            JOIN employees e ON e.id = pr.employee_id
+            LEFT JOIN departments d ON d.id = e.department_id
+            WHERE pr.payroll_period_id = ?
+            GROUP BY COALESCE(d.id, 0), COALESCE(d.name, 'Sin Departamento')
+            ORDER BY total_gross DESC
+        ";
+        $foreignKey = 'department_id';
+    } else {
+        $summarySql = "
+            SELECT
+                COALESCE(c.id, 0) AS group_id,
+                COALESCE(c.name, 'Sin Campaña') AS group_name,
+                COALESCE(c.color, '#64748b') AS group_color,
+                COUNT(DISTINCT pr.employee_id) AS employee_count,
+                SUM(pr.total_hours) AS total_hours,
+                SUM(pr.overtime_hours) AS overtime_hours,
+                SUM(pr.gross_salary) AS total_gross,
+                SUM(pr.total_deductions) AS total_deductions,
+                SUM(pr.net_salary) AS total_net
+            FROM payroll_records pr
+            JOIN employees e ON e.id = pr.employee_id
+            LEFT JOIN campaigns c ON c.id = e.campaign_id
+            WHERE pr.payroll_period_id = ?
+            GROUP BY COALESCE(c.id, 0), COALESCE(c.name, 'Sin Campaña'), COALESCE(c.color, '#64748b')
+            ORDER BY total_gross DESC
+        ";
+        $foreignKey = 'campaign_id';
+    }
+
+    $summaryStmt = $pdo->prepare($summarySql);
     $summaryStmt->execute([$selectedPeriodId]);
-    $campaignSummary = $summaryStmt->fetchAll(PDO::FETCH_ASSOC);
+    $groupSummary = $summaryStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Si hay drill-down, levantar el detalle de empleados de esa campaña.
-    if ($selectedCampaignFilter !== null) {
-        if ($selectedCampaignFilter > 0) {
-            $campStmt = $pdo->prepare("SELECT id, name, color, description FROM campaigns WHERE id = ?");
-            $campStmt->execute([$selectedCampaignFilter]);
-            $drilldownCampaign = $campStmt->fetch(PDO::FETCH_ASSOC);
+    // Drill-down: detalle del grupo seleccionado.
+    if ($selectedGroupFilter !== null) {
+        if ($selectedGroupFilter > 0) {
+            if ($groupBy === 'department') {
+                $infoStmt = $pdo->prepare("SELECT id, name, description, '#7c3aed' AS color FROM departments WHERE id = ?");
+            } else {
+                $infoStmt = $pdo->prepare("SELECT id, name, color, description FROM campaigns WHERE id = ?");
+            }
+            $infoStmt->execute([$selectedGroupFilter]);
+            $drilldownGroup = $infoStmt->fetch(PDO::FETCH_ASSOC);
         }
-        if ($selectedCampaignFilter === 0) {
-            $drilldownCampaign = ['id' => 0, 'name' => 'Sin Campaña', 'color' => '#64748b', 'description' => 'Empleados sin campaña asignada'];
+        if ($selectedGroupFilter === 0) {
+            $drilldownGroup = [
+                'id' => 0,
+                'name' => $modeLabels['sinGroup'],
+                'color' => '#64748b',
+                'description' => 'Empleados sin ' . strtolower($modeLabels['singular']) . ' asignada',
+            ];
         }
 
-        if ($drilldownCampaign) {
-            // Misma query que /hr/payroll.php para los records, filtrada por campaña.
-            $filter = $selectedCampaignFilter > 0
-                ? "AND e.campaign_id = ?"
-                : "AND e.campaign_id IS NULL";
+        if ($drilldownGroup) {
+            $filter = $selectedGroupFilter > 0
+                ? "AND e.$foreignKey = ?"
+                : "AND e.$foreignKey IS NULL";
 
             $sql = "
                 SELECT pr.*, e.first_name, e.last_name, e.employee_code, e.identification_number,
@@ -111,14 +171,13 @@ if ($selectedPeriod) {
             ";
 
             $recStmt = $pdo->prepare($sql);
-            if ($selectedCampaignFilter > 0) {
-                $recStmt->execute([$selectedPeriodId, $selectedCampaignFilter]);
+            if ($selectedGroupFilter > 0) {
+                $recStmt->execute([$selectedPeriodId, $selectedGroupFilter]);
             } else {
                 $recStmt->execute([$selectedPeriodId]);
             }
             $drilldownRecords = $recStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Cuotas de préstamos para los empleados visibles (batched).
             if (!empty($drilldownRecords)) {
                 $empIds = array_map(static fn($r) => (int)$r['employee_id'], $drilldownRecords);
                 $loanDeductionsByEmployee = getLoanDeductionsForEmployees(
@@ -152,20 +211,27 @@ if ($selectedPeriod) {
     }
 }
 
-// Total global del período (para mostrar % de cada campaña sobre el total)
+// Total global del período (para mostrar % de cada grupo sobre el total)
 $periodGrandTotalGross = 0.0;
 $periodGrandTotalNet = 0.0;
-foreach ($campaignSummary as $row) {
+foreach ($groupSummary as $row) {
     $periodGrandTotalGross += (float)$row['total_gross'];
     $periodGrandTotalNet += (float)$row['total_net'];
 }
+
+// Helper para construir URLs preservando period_id y modo.
+$buildUrl = function (array $params) use ($selectedPeriodId, $groupBy) {
+    $base = ['group_by' => $groupBy];
+    if ($selectedPeriodId) $base['period_id'] = $selectedPeriodId;
+    return '?' . http_build_query(array_merge($base, $params));
+};
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nómina por Campaña - HR</title>
+    <title><?= htmlspecialchars($modeLabels['titleHeader']) ?> - HR</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -173,22 +239,22 @@ foreach ($campaignSummary as $row) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
-        .campaign-card {
+        .group-card {
             background: rgba(30, 41, 59, 0.5);
             border: 1px solid rgba(148, 163, 184, 0.15);
             border-radius: 14px;
             padding: 1.25rem;
             transition: transform .12s ease, border-color .12s ease;
         }
-        .campaign-card:hover {
+        .group-card:hover {
             transform: translateY(-2px);
             border-color: rgba(99, 102, 241, 0.5);
         }
-        .theme-light .campaign-card {
+        .theme-light .group-card {
             background: #ffffff;
             border-color: rgba(148, 163, 184, 0.25);
         }
-        .campaign-dot {
+        .group-dot {
             width: 14px; height: 14px; border-radius: 4px; display: inline-block;
         }
         .progress-bar {
@@ -197,6 +263,21 @@ foreach ($campaignSummary as $row) {
         .progress-bar > span {
             display: block; height: 100%; border-radius: 999px;
         }
+        .mode-pill {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 1rem; border-radius: 999px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: #cbd5e1;
+            font-weight: 500;
+            transition: all .15s ease;
+        }
+        .mode-pill:hover { border-color: rgba(99, 102, 241, 0.5); color: #fff; }
+        .mode-pill.active {
+            background: linear-gradient(135deg, #4338ca, #6366f1);
+            border-color: #6366f1;
+            color: #fff;
+        }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -204,13 +285,13 @@ foreach ($campaignSummary as $row) {
 
     <div class="container mx-auto px-4 py-8">
         <!-- Header -->
-        <div class="flex justify-between items-center mb-8 flex-wrap gap-3">
+        <div class="flex justify-between items-center mb-6 flex-wrap gap-3">
             <div>
                 <h1 class="text-3xl font-bold mb-2">
-                    <i class="fas fa-bullhorn text-blue-400 mr-3"></i>
-                    Nómina por Campaña
+                    <i class="fas <?= htmlspecialchars($modeLabels['icon']) ?> <?= htmlspecialchars($modeLabels['iconColor']) ?> mr-3"></i>
+                    <?= htmlspecialchars($modeLabels['titleHeader']) ?>
                 </h1>
-                <p class="text-slate-400">Agrupación de la nómina ya calculada por campaña actual del empleado</p>
+                <p class="text-slate-400"><?= htmlspecialchars($modeLabels['subtitle']) ?></p>
             </div>
             <div class="flex gap-3 flex-wrap">
                 <a href="payroll.php" class="btn-secondary">
@@ -220,10 +301,25 @@ foreach ($campaignSummary as $row) {
             </div>
         </div>
 
+        <!-- Toggle de modo -->
+        <div class="flex flex-wrap gap-3 mb-6">
+            <?php
+            $campaignUrl = '?group_by=campaign' . ($selectedPeriodId ? '&period_id=' . $selectedPeriodId : '');
+            $deptUrl = '?group_by=department' . ($selectedPeriodId ? '&period_id=' . $selectedPeriodId : '');
+            ?>
+            <a href="<?= $campaignUrl ?>" class="mode-pill <?= $groupBy === 'campaign' ? 'active' : '' ?>">
+                <i class="fas fa-bullhorn"></i> Por Campaña
+            </a>
+            <a href="<?= $deptUrl ?>" class="mode-pill <?= $groupBy === 'department' ? 'active' : '' ?>">
+                <i class="fas fa-building"></i> Por Departamento
+            </a>
+        </div>
+
         <!-- Aviso de limitación histórica -->
         <div class="status-banner mb-6" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); color: #93c5fd; padding: 0.75rem 1rem; border-radius: 10px;">
             <i class="fas fa-info-circle mr-2"></i>
-            La agrupación usa la campaña <strong>actual</strong> del empleado. Si un empleado cambió de campaña después del período, se mostrará bajo su campaña actual.
+            La agrupación usa <strong><?= strtolower($modeLabels['singular']) === 'campaña' ? 'la campaña' : 'el departamento' ?> actual</strong> del empleado.
+            <?= htmlspecialchars($modeLabels['noteHistory']) ?>
         </div>
 
         <!-- Selector de período -->
@@ -236,6 +332,7 @@ foreach ($campaignSummary as $row) {
                 <p class="text-slate-400 text-center py-6">No hay períodos disponibles.</p>
             <?php else: ?>
                 <form method="GET" class="flex flex-wrap items-center gap-3">
+                    <input type="hidden" name="group_by" value="<?= htmlspecialchars($groupBy) ?>">
                     <select name="period_id" class="rounded border border-slate-700 bg-slate-900 text-slate-100 px-3 py-2 min-w-[280px]" onchange="this.form.submit()">
                         <option value="">— Selecciona un período —</option>
                         <?php foreach ($periods as $p): ?>
@@ -252,7 +349,7 @@ foreach ($campaignSummary as $row) {
             <?php endif; ?>
         </div>
 
-        <?php if ($selectedPeriod && empty($campaignSummary)): ?>
+        <?php if ($selectedPeriod && empty($groupSummary)): ?>
             <div class="glass-card text-center py-10">
                 <i class="fas fa-inbox text-slate-500 text-4xl mb-3"></i>
                 <p class="text-slate-300 font-medium">Este período no tiene nómina calculada todavía.</p>
@@ -260,7 +357,7 @@ foreach ($campaignSummary as $row) {
             </div>
         <?php endif; ?>
 
-        <?php if ($selectedPeriod && !empty($campaignSummary)): ?>
+        <?php if ($selectedPeriod && !empty($groupSummary)): ?>
             <!-- Métricas globales del período -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="glass-card">
@@ -272,8 +369,8 @@ foreach ($campaignSummary as $row) {
                     </p>
                 </div>
                 <div class="glass-card">
-                    <p class="text-slate-400 text-sm">Campañas con nómina</p>
-                    <p class="text-3xl font-bold text-blue-400"><?= count($campaignSummary) ?></p>
+                    <p class="text-slate-400 text-sm"><?= htmlspecialchars($modeLabels['plural']) ?> con nómina</p>
+                    <p class="text-3xl font-bold text-blue-400"><?= count($groupSummary) ?></p>
                 </div>
                 <div class="glass-card">
                     <p class="text-slate-400 text-sm">Total Bruto</p>
@@ -285,19 +382,20 @@ foreach ($campaignSummary as $row) {
                 </div>
             </div>
 
-            <!-- Tarjetas por campaña -->
+            <!-- Tarjetas por grupo -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                <?php foreach ($campaignSummary as $row):
-                    $cid = (int)$row['campaign_id'];
+                <?php foreach ($groupSummary as $row):
+                    $gid = (int)$row['group_id'];
                     $pct = $periodGrandTotalGross > 0 ? ((float)$row['total_gross'] / $periodGrandTotalGross) * 100 : 0;
-                    $isActive = ($selectedCampaignFilter !== null && (int)$selectedCampaignFilter === $cid);
+                    $isActive = ($selectedGroupFilter !== null && (int)$selectedGroupFilter === $gid);
+                    $cardUrl = $buildUrl([$drilldownKey => $gid]) . '#drilldown';
                 ?>
-                    <a href="?period_id=<?= $selectedPeriodId ?>&campaign_id=<?= $cid ?>#drilldown"
-                       class="campaign-card block <?= $isActive ? 'ring-2 ring-indigo-400' : '' ?>">
+                    <a href="<?= htmlspecialchars($cardUrl) ?>"
+                       class="group-card block <?= $isActive ? 'ring-2 ring-indigo-400' : '' ?>">
                         <div class="flex items-center justify-between mb-3">
                             <div class="flex items-center gap-2">
-                                <span class="campaign-dot" style="background: <?= htmlspecialchars($row['campaign_color']) ?>;"></span>
-                                <h3 class="font-semibold text-slate-100"><?= htmlspecialchars($row['campaign_name']) ?></h3>
+                                <span class="group-dot" style="background: <?= htmlspecialchars($row['group_color']) ?>;"></span>
+                                <h3 class="font-semibold text-slate-100"><?= htmlspecialchars($row['group_name']) ?></h3>
                             </div>
                             <span class="text-xs bg-slate-700 text-slate-200 rounded-full px-2 py-0.5">
                                 <i class="fas fa-users mr-1"></i><?= (int)$row['employee_count'] ?>
@@ -329,7 +427,7 @@ foreach ($campaignSummary as $row) {
                                 <span><?= number_format($pct, 1) ?>%</span>
                             </div>
                             <div class="progress-bar">
-                                <span style="width: <?= min(100, $pct) ?>%; background: <?= htmlspecialchars($row['campaign_color']) ?>;"></span>
+                                <span style="width: <?= min(100, $pct) ?>%; background: <?= htmlspecialchars($row['group_color']) ?>;"></span>
                             </div>
                         </div>
 
@@ -340,17 +438,17 @@ foreach ($campaignSummary as $row) {
                 <?php endforeach; ?>
             </div>
 
-            <!-- Tabla resumen (alternativa compacta) -->
+            <!-- Tabla resumen -->
             <div class="glass-card mb-6">
                 <h2 class="text-lg font-semibold mb-4">
                     <i class="fas fa-table text-orange-400 mr-2"></i>
-                    Resumen por Campaña
+                    Resumen por <?= htmlspecialchars($modeLabels['singular']) ?>
                 </h2>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b border-slate-700">
-                                <th class="text-left py-2 px-2">Campaña</th>
+                                <th class="text-left py-2 px-2"><?= htmlspecialchars($modeLabels['singular']) ?></th>
                                 <th class="text-center py-2 px-2">Empleados</th>
                                 <th class="text-right py-2 px-2">Horas</th>
                                 <th class="text-right py-2 px-2">Horas Extra</th>
@@ -361,14 +459,17 @@ foreach ($campaignSummary as $row) {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($campaignSummary as $row):
-                                $cid = (int)$row['campaign_id'];
+                            <?php foreach ($groupSummary as $row):
+                                $gid = (int)$row['group_id'];
+                                $viewUrl = $buildUrl([$drilldownKey => $gid]) . '#drilldown';
+                                $pdfUrl = 'payroll_export_pdf.php?period_id=' . $selectedPeriodId . '&' . $drilldownKey . '=' . $gid;
+                                $xlsUrl = 'payroll_export_excel.php?period_id=' . $selectedPeriodId . '&' . $drilldownKey . '=' . $gid;
                             ?>
                                 <tr class="border-b border-slate-800 hover:bg-slate-800/40">
                                     <td class="py-2 px-2">
                                         <div class="flex items-center gap-2">
-                                            <span class="campaign-dot" style="background: <?= htmlspecialchars($row['campaign_color']) ?>;"></span>
-                                            <span class="font-medium"><?= htmlspecialchars($row['campaign_name']) ?></span>
+                                            <span class="group-dot" style="background: <?= htmlspecialchars($row['group_color']) ?>;"></span>
+                                            <span class="font-medium"><?= htmlspecialchars($row['group_name']) ?></span>
                                         </div>
                                     </td>
                                     <td class="py-2 px-2 text-center"><?= (int)$row['employee_count'] ?></td>
@@ -379,17 +480,18 @@ foreach ($campaignSummary as $row) {
                                     <td class="py-2 px-2 text-right text-green-400 font-semibold"><?= formatDOP($row['total_net']) ?></td>
                                     <td class="py-2 px-2 text-center">
                                         <div class="flex justify-center gap-1">
-                                            <a href="?period_id=<?= $selectedPeriodId ?>&campaign_id=<?= $cid ?>#drilldown"
+                                            <a href="<?= htmlspecialchars($viewUrl) ?>"
                                                class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs" title="Ver empleados">
                                                 <i class="fas fa-eye"></i>
                                             </a>
-                                            <a href="payroll_export_pdf.php?period_id=<?= $selectedPeriodId ?>&campaign_id=<?= $cid ?>"
-                                               target="_blank"
-                                               class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs" title="PDF de esta campaña">
+                                            <a href="<?= htmlspecialchars($pdfUrl) ?>" target="_blank"
+                                               class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-xs"
+                                               title="PDF de <?= htmlspecialchars(strtolower($modeLabels['singular'])) ?>">
                                                 <i class="fas fa-file-pdf"></i>
                                             </a>
-                                            <a href="payroll_export_excel.php?period_id=<?= $selectedPeriodId ?>&campaign_id=<?= $cid ?>"
-                                               class="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs" title="Excel de esta campaña">
+                                            <a href="<?= htmlspecialchars($xlsUrl) ?>"
+                                               class="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs"
+                                               title="Excel de <?= htmlspecialchars(strtolower($modeLabels['singular'])) ?>">
                                                 <i class="fas fa-file-excel"></i>
                                             </a>
                                         </div>
@@ -399,17 +501,17 @@ foreach ($campaignSummary as $row) {
                             <tr class="bg-slate-800/70 font-bold">
                                 <td class="py-2 px-2">TOTAL</td>
                                 <td class="py-2 px-2 text-center">
-                                    <?= array_sum(array_map(static fn($r) => (int)$r['employee_count'], $campaignSummary)) ?>
+                                    <?= array_sum(array_map(static fn($r) => (int)$r['employee_count'], $groupSummary)) ?>
                                 </td>
                                 <td class="py-2 px-2 text-right">
-                                    <?= number_format(array_sum(array_map(static fn($r) => (float)$r['total_hours'], $campaignSummary)), 1) ?>
+                                    <?= number_format(array_sum(array_map(static fn($r) => (float)$r['total_hours'], $groupSummary)), 1) ?>
                                 </td>
                                 <td class="py-2 px-2 text-right">
-                                    <?= number_format(array_sum(array_map(static fn($r) => (float)$r['overtime_hours'], $campaignSummary)), 1) ?>
+                                    <?= number_format(array_sum(array_map(static fn($r) => (float)$r['overtime_hours'], $groupSummary)), 1) ?>
                                 </td>
                                 <td class="py-2 px-2 text-right"><?= formatDOP($periodGrandTotalGross) ?></td>
                                 <td class="py-2 px-2 text-right text-red-400">
-                                    <?= formatDOP(array_sum(array_map(static fn($r) => (float)$r['total_deductions'], $campaignSummary))) ?>
+                                    <?= formatDOP(array_sum(array_map(static fn($r) => (float)$r['total_deductions'], $groupSummary))) ?>
                                 </td>
                                 <td class="py-2 px-2 text-right text-green-400"><?= formatDOP($periodGrandTotalNet) ?></td>
                                 <td class="py-2 px-2"></td>
@@ -420,36 +522,39 @@ foreach ($campaignSummary as $row) {
             </div>
         <?php endif; ?>
 
-        <?php if ($selectedPeriod && $drilldownCampaign): ?>
-            <!-- DRILL-DOWN: empleados de una campaña -->
+        <?php if ($selectedPeriod && $drilldownGroup): ?>
+            <!-- DRILL-DOWN: empleados de un grupo -->
+            <?php
+                $pdfUrlD = 'payroll_export_pdf.php?period_id=' . $selectedPeriodId . '&' . $drilldownKey . '=' . (int)$drilldownGroup['id'];
+                $xlsUrlD = 'payroll_export_excel.php?period_id=' . $selectedPeriodId . '&' . $drilldownKey . '=' . (int)$drilldownGroup['id'];
+                $closeUrl = $buildUrl([]);
+            ?>
             <div id="drilldown" class="glass-card mb-6">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
                     <div>
                         <h2 class="text-xl font-semibold">
-                            <span class="campaign-dot align-middle mr-2" style="background: <?= htmlspecialchars($drilldownCampaign['color']) ?>;"></span>
-                            Empleados de <?= htmlspecialchars($drilldownCampaign['name']) ?>
+                            <span class="group-dot align-middle mr-2" style="background: <?= htmlspecialchars($drilldownGroup['color']) ?>;"></span>
+                            Empleados de <?= htmlspecialchars($drilldownGroup['name']) ?>
                         </h2>
-                        <?php if (!empty($drilldownCampaign['description'])): ?>
-                            <p class="text-sm text-slate-400 mt-1"><?= htmlspecialchars($drilldownCampaign['description']) ?></p>
+                        <?php if (!empty($drilldownGroup['description'])): ?>
+                            <p class="text-sm text-slate-400 mt-1"><?= htmlspecialchars($drilldownGroup['description']) ?></p>
                         <?php endif; ?>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <a href="payroll_export_pdf.php?period_id=<?= $selectedPeriodId ?>&campaign_id=<?= (int)$drilldownCampaign['id'] ?>"
-                           target="_blank" class="btn-danger text-sm">
+                        <a href="<?= htmlspecialchars($pdfUrlD) ?>" target="_blank" class="btn-danger text-sm">
                             <i class="fas fa-file-pdf"></i> PDF
                         </a>
-                        <a href="payroll_export_excel.php?period_id=<?= $selectedPeriodId ?>&campaign_id=<?= (int)$drilldownCampaign['id'] ?>"
-                           class="btn-secondary text-sm">
+                        <a href="<?= htmlspecialchars($xlsUrlD) ?>" class="btn-secondary text-sm">
                             <i class="fas fa-file-excel"></i> Excel
                         </a>
-                        <a href="?period_id=<?= $selectedPeriodId ?>" class="btn-secondary text-sm">
+                        <a href="<?= htmlspecialchars($closeUrl) ?>" class="btn-secondary text-sm">
                             <i class="fas fa-times"></i> Cerrar
                         </a>
                     </div>
                 </div>
 
                 <?php if (empty($drilldownRecords)): ?>
-                    <p class="text-slate-400 text-center py-6">No hay empleados con nómina en esta campaña para el período.</p>
+                    <p class="text-slate-400 text-center py-6">No hay empleados con nómina en <?= htmlspecialchars(strtolower($modeLabels['singular'])) ?> para el período.</p>
                 <?php else: ?>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -503,7 +608,7 @@ foreach ($campaignSummary as $row) {
                                     </tr>
                                 <?php endforeach; ?>
                                 <tr class="bg-slate-800/70 font-bold">
-                                    <td class="py-3 px-2" colspan="2">TOTAL CAMPAÑA</td>
+                                    <td class="py-3 px-2" colspan="2">TOTAL <?= htmlspecialchars(strtoupper($modeLabels['singular'])) ?></td>
                                     <td class="py-3 px-2 text-center"><?= number_format($drilldownTotals['hours'], 1) ?></td>
                                     <td class="py-3 px-2 text-center"><?= number_format($drilldownTotals['overtime_hours'], 1) ?></td>
                                     <td class="py-3 px-2" colspan="2"></td>

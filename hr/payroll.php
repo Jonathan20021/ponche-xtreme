@@ -550,9 +550,17 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                 <p class="text-slate-400">Sistema completo con AFP, SFS, ISR, TSS y DGII</p>
             </div>
             <div class="flex gap-3 flex-wrap">
-                <a href="payroll_by_campaign.php<?= $selectedPeriodId ? ('?period_id=' . (int)$selectedPeriodId) : '' ?>" class="btn-secondary">
+                <a href="reports/campaign_profitability.php" class="btn-primary" title="Reporte gerencial: ingreso vs costo por campaña">
+                    <i class="fas fa-chart-line"></i>
+                    Rentabilidad
+                </a>
+                <a href="payroll_by_campaign.php?group_by=campaign<?= $selectedPeriodId ? ('&period_id=' . (int)$selectedPeriodId) : '' ?>" class="btn-secondary">
                     <i class="fas fa-bullhorn"></i>
                     Por Campaña
+                </a>
+                <a href="payroll_by_campaign.php?group_by=department<?= $selectedPeriodId ? ('&period_id=' . (int)$selectedPeriodId) : '' ?>" class="btn-secondary">
+                    <i class="fas fa-building"></i>
+                    Por Departamento
                 </a>
                 <a href="employee_deductions.php" class="btn-secondary">
                     <i class="fas fa-hand-holding-usd"></i>

@@ -17,13 +17,18 @@ if (!$periodId) {
     die('Período no especificado');
 }
 
-// Filtro opcional por campaña: si está presente filtra los records por
-// employees.campaign_id (0 = "Sin Campaña"). Si no está presente, se exporta
-// el período completo como antes — el flujo original no se altera.
+// Filtros opcionales por campaña y/o departamento: si están presentes filtran
+// los records por employees.campaign_id / employees.department_id (0 = "Sin ...").
+// Sin parámetros, comportamiento idéntico al original — el flujo no se altera.
 $campaignFilter = null;
 if (isset($_GET['campaign_id']) && $_GET['campaign_id'] !== '') {
     $campaignFilter = (int)$_GET['campaign_id'];
 }
+$departmentFilter = null;
+if (isset($_GET['department_id']) && $_GET['department_id'] !== '') {
+    $departmentFilter = (int)$_GET['department_id'];
+}
+
 $campaignLabel = null;
 if ($campaignFilter !== null) {
     if ($campaignFilter > 0) {
@@ -34,6 +39,27 @@ if ($campaignFilter !== null) {
     } else {
         $campaignLabel = 'Sin Campaña';
     }
+}
+$departmentLabel = null;
+if ($departmentFilter !== null) {
+    if ($departmentFilter > 0) {
+        $dStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
+        $dStmt->execute([$departmentFilter]);
+        $dRow = $dStmt->fetch(PDO::FETCH_ASSOC);
+        $departmentLabel = $dRow ? $dRow['name'] : 'Departamento #' . $departmentFilter;
+    } else {
+        $departmentLabel = 'Sin Departamento';
+    }
+}
+
+// Etiqueta combinada para header/filename
+$groupHeaderLabel = null;
+if ($campaignLabel && $departmentLabel) {
+    $groupHeaderLabel = 'Campaña: ' . $campaignLabel . ' · Depto: ' . $departmentLabel;
+} elseif ($campaignLabel) {
+    $groupHeaderLabel = 'Campaña: ' . $campaignLabel;
+} elseif ($departmentLabel) {
+    $groupHeaderLabel = 'Departamento: ' . $departmentLabel;
 }
 
 // Get period data
@@ -53,12 +79,19 @@ while ($row = $ratesStmt->fetch(PDO::FETCH_ASSOC)) {
 }
 
 // Get payroll records (include user salary fields so we can show base hourly/fixed rates).
-// Si hay $campaignFilter, se añade el filtro por employees.campaign_id sin tocar nada más.
+// Si hay $campaignFilter y/o $departmentFilter, se añaden filtros por
+// employees.campaign_id / employees.department_id sin tocar nada más.
 $campaignWhere = '';
 if ($campaignFilter !== null) {
     $campaignWhere = $campaignFilter > 0
         ? ' AND e.campaign_id = ?'
         : ' AND e.campaign_id IS NULL';
+}
+$departmentWhere = '';
+if ($departmentFilter !== null) {
+    $departmentWhere = $departmentFilter > 0
+        ? ' AND e.department_id = ?'
+        : ' AND e.department_id IS NULL';
 }
 
 $recordsStmt = $pdo->prepare("
@@ -80,11 +113,15 @@ $recordsStmt = $pdo->prepare("
        AND pmi.employee_id = pr.employee_id
     WHERE pr.payroll_period_id = ?
     $campaignWhere
+    $departmentWhere
     ORDER BY e.last_name, e.first_name
 ");
 $bindings = [$periodId];
 if ($campaignFilter !== null && $campaignFilter > 0) {
     $bindings[] = $campaignFilter;
+}
+if ($departmentFilter !== null && $departmentFilter > 0) {
+    $bindings[] = $departmentFilter;
 }
 $recordsStmt->execute($bindings);
 $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -289,10 +326,10 @@ ob_start();
 </head>
 <body>
     <div class="header">
-        <h1>REPORTE DE NÓMINA<?= $campaignLabel !== null ? ' — CAMPAÑA' : '' ?></h1>
+        <h1>REPORTE DE NÓMINA<?= $groupHeaderLabel !== null ? ' — ' . ($departmentLabel !== null && $campaignLabel === null ? 'DEPARTAMENTO' : 'CAMPAÑA') : '' ?></h1>
         <p><strong><?= htmlspecialchars($period['name']) ?></strong></p>
-        <?php if ($campaignLabel !== null): ?>
-            <p><strong>Campaña:</strong> <?= htmlspecialchars($campaignLabel) ?></p>
+        <?php if ($groupHeaderLabel !== null): ?>
+            <p><strong><?= htmlspecialchars($groupHeaderLabel) ?></strong></p>
         <?php endif; ?>
         <p>Período: <?= date('d/m/Y', strtotime($period['start_date'])) ?> - <?= date('d/m/Y', strtotime($period['end_date'])) ?></p>
         <p>Fecha de Pago: <?= date('d/m/Y', strtotime($period['payment_date'])) ?></p>
@@ -451,9 +488,12 @@ $dompdf->setPaper('Letter', 'landscape');
 $dompdf->render();
 
 // Output PDF
-$campaignSlug = $campaignLabel !== null
-    ? '_' . preg_replace('/[^A-Za-z0-9]+/', '-', $campaignLabel)
+$slugParts = [];
+if ($campaignLabel !== null)   $slugParts[] = 'C-' . $campaignLabel;
+if ($departmentLabel !== null) $slugParts[] = 'D-' . $departmentLabel;
+$groupSlug = !empty($slugParts)
+    ? '_' . preg_replace('/[^A-Za-z0-9]+/', '-', implode('_', $slugParts))
     : '';
-$filename = 'Nomina_' . str_replace(' ', '_', $period['name']) . $campaignSlug . '_' . date('Ymd') . '.pdf';
+$filename = 'Nomina_' . str_replace(' ', '_', $period['name']) . $groupSlug . '_' . date('Ymd') . '.pdf';
 $dompdf->stream($filename, ['Attachment' => true]);
 ?>
