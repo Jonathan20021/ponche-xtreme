@@ -14,6 +14,7 @@ session_start();
 // Buffer any accidental output (BOM, whitespace, warnings) so it cannot corrupt the XLSX stream
 ob_start();
 include 'db.php';
+require_once __DIR__ . '/lib/work_hours_calculator.php';
 date_default_timezone_set('America/Santo_Domingo');
 
 // Verificar permisos usando el mismo control que records.php
@@ -188,7 +189,8 @@ foreach ($attendanceTypes as $typeRow) {
 
 // Construir consulta principal
 $summary_query = "
-    SELECT 
+    SELECT
+        attendance.id AS attendance_id,
         attendance.user_id,
         users.full_name,
         users.username,
@@ -196,8 +198,8 @@ $summary_query = "
         DATE(attendance.timestamp) AS record_date,
         attendance.type AS type_slug,
         attendance.timestamp
-    FROM attendance 
-    JOIN users ON attendance.user_id = users.id 
+    FROM attendance
+    JOIN users ON attendance.user_id = users.id
     LEFT JOIN employees e ON e.user_id = users.id
     WHERE DATE(attendance.timestamp) IN ($datePlaceholders)
 ";
@@ -335,22 +337,7 @@ $finalizeSummaryGroup = function (?array &$group) use (
 
     $events = $group['events'];
     $eventCount = count($events);
-    $durationsAll = [];
-
-    if ($eventCount >= 2) {
-        for ($i = 0; $i < $eventCount - 1; $i++) {
-            $start = $events[$i]['timestamp'];
-            $end = $events[$i + 1]['timestamp'];
-            $delta = max(0, $end - $start);
-
-            if ($delta <= 0) {
-                continue;
-            }
-
-            $slug = $events[$i]['slug'];
-            $durationsAll[$slug] = ($durationsAll[$slug] ?? 0) + $delta;
-        }
-    }
+    $durationsAll = computeDurationsWithPauseWindows($events, $paidTypeSlugs);
 
     $durationMap = [];
     foreach ($durationTypes as $typeRow) {
@@ -496,6 +483,7 @@ foreach ($raw_summary_rows as $row) {
     }
 
     $currentGroup['events'][] = [
+        'id' => (int) ($row['attendance_id'] ?? 0),
         'slug' => $slug,
         'timestamp' => $timestamp,
     ];
