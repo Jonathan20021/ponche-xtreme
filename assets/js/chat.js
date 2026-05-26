@@ -17,6 +17,8 @@ class ChatApp {
         this.audioContext = null; // Para el sonido de notificación
         this.emojisLoaded = false;
         this.stickersLoaded = false;
+        this.uploadInProgress = false;
+        this.toastTimeout = null;
 
         // Detección de dispositivo móvil y características
         this.isMobile = this.detectMobile();
@@ -145,23 +147,24 @@ class ChatApp {
         widget.className = 'chat-widget';
         widget.setAttribute('style', 'position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 2147483647 !important; pointer-events: auto !important; visibility: visible !important; display: block !important;');
         widget.innerHTML = `
-            <button class="chat-toggle-btn" id="chatToggle">
+            <button class="chat-toggle-btn" id="chatToggle" type="button" title="Abrir chat" aria-label="Abrir chat">
                 <i class="fas fa-comments"></i>
                 <span class="unread-badge" id="unreadBadge" style="display: none;">0</span>
             </button>
             
             <div class="chat-window" id="chatWindow">
                 <div class="chat-header">
-                    <h3 class="chat-header-title">Chat</h3>
+                    <h3 class="chat-header-title">Punch Chat</h3>
                     <div class="chat-header-actions">
-                        <button class="chat-header-btn" id="newChatBtn" title="Nueva conversación">
+                        <button class="chat-header-btn" id="newChatBtn" type="button" title="Nueva conversacion" aria-label="Nueva conversacion">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button class="chat-header-btn" id="chatMinimize" title="Minimizar">
+                        <button class="chat-header-btn" id="chatMinimize" type="button" title="Minimizar" aria-label="Minimizar chat">
                             <i class="fas fa-minus"></i>
                         </button>
                     </div>
                 </div>
+                <div class="chat-toast" id="chatToast" role="status" aria-live="polite"></div>
                 
                 <div class="chat-tabs">
                     <button class="chat-tab active" data-tab="conversations">Conversaciones</button>
@@ -190,15 +193,16 @@ class ChatApp {
                     <div class="chat-typing-indicator" id="typingIndicator"></div>
                     
                     <div class="chat-input-container">
+                        <div class="chat-upload-status" id="uploadStatus" hidden></div>
                         <div class="chat-input-wrapper">
-                            <button class="chat-input-btn chat-attach-btn" id="attachBtn">
+                            <button class="chat-input-btn chat-attach-btn" id="attachBtn" type="button" title="Adjuntar archivo" aria-label="Adjuntar archivo">
                                 <i class="fas fa-paperclip"></i>
                             </button>
-                            <button class="chat-input-btn chat-emoji-btn" id="emojiBtn" title="Emojis y Stickers">
+                            <button class="chat-input-btn chat-emoji-btn" id="emojiBtn" type="button" title="Emojis y stickers" aria-label="Emojis y stickers">
                                 <i class="far fa-smile"></i>
                             </button>
-                            <textarea class="chat-input" id="messageInput" placeholder="Escribe un mensaje..." rows="1"></textarea>
-                            <button class="chat-input-btn chat-send-btn" id="sendBtn">
+                            <textarea class="chat-input" id="messageInput" placeholder="Mensaje..." rows="1"></textarea>
+                            <button class="chat-input-btn chat-send-btn" id="sendBtn" type="button" title="Enviar" aria-label="Enviar mensaje">
                                 <i class="fas fa-paper-plane"></i>
                             </button>
                         </div>
@@ -283,6 +287,14 @@ class ChatApp {
                 </div>
             </div>
             
+            <div class="chat-image-lightbox" id="chatImageLightbox" hidden>
+                <button class="chat-lightbox-close" id="chatLightboxClose" type="button" title="Cerrar" aria-label="Cerrar imagen">
+                    <i class="fas fa-times"></i>
+                </button>
+                <img id="chatLightboxImage" alt="">
+                <div class="chat-lightbox-caption" id="chatLightboxCaption"></div>
+            </div>
+
             <input type="file" id="fileInput" style="display: none;" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar">
         `;
 
@@ -444,6 +456,50 @@ class ChatApp {
         document.getElementById('fileInput').addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.uploadFile(e.target.files[0]);
+            }
+        });
+
+        document.getElementById('messageInput').addEventListener('paste', (e) => {
+            const files = Array.from(e.clipboardData?.files || []);
+            const image = files.find(file => file.type.startsWith('image/'));
+            if (image && this.currentConversationId) {
+                e.preventDefault();
+                this.uploadFile(image);
+            }
+        });
+
+        const messagesContainer = document.getElementById('messagesContainer');
+        ['dragenter', 'dragover'].forEach(eventName => {
+            messagesContainer.addEventListener(eventName, (e) => {
+                if (!this.currentConversationId) return;
+                e.preventDefault();
+                messagesContainer.classList.add('is-dragover');
+            });
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            messagesContainer.addEventListener(eventName, (e) => {
+                if (!this.currentConversationId) return;
+                e.preventDefault();
+                messagesContainer.classList.remove('is-dragover');
+                if (eventName === 'drop' && e.dataTransfer?.files?.length) {
+                    this.uploadFile(e.dataTransfer.files[0]);
+                }
+            });
+        });
+
+        document.getElementById('chatLightboxClose').addEventListener('click', () => {
+            this.closeImageLightbox();
+        });
+
+        document.getElementById('chatImageLightbox').addEventListener('click', (e) => {
+            if (e.target.id === 'chatImageLightbox') {
+                this.closeImageLightbox();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeImageLightbox();
             }
         });
 
@@ -700,8 +756,7 @@ class ChatApp {
                         ${conv.unread_count > 0 ? `<span class="chat-conversation-unread">${conv.unread_count}</span>` : ''}
                     </div>
                     <div class="chat-conversation-last-message">
-                        ${conv.last_sender ? this.escapeHtml(conv.last_sender) + ': ' : ''}
-                        ${this.escapeHtml(conv.last_message || 'Sin mensajes')}
+                        ${this.formatConversationPreview(conv)}
                     </div>
                 </div>
                 <div class="chat-conversation-time">
@@ -716,6 +771,26 @@ class ChatApp {
                 this.openConversation(parseInt(item.dataset.id));
             });
         });
+    }
+
+    formatConversationPreview(conv) {
+        const sender = conv.last_sender ? `${this.escapeHtml(conv.last_sender)}: ` : '';
+        const text = (conv.last_message || '').trim();
+        if (text) {
+            return `${sender}${this.escapeHtml(text)}`;
+        }
+
+        const attachmentName = conv.last_attachment_name ? ` - ${this.escapeHtml(conv.last_attachment_name)}` : '';
+        const previews = {
+            image: 'Imagen',
+            video: 'Video',
+            document: 'Documento',
+            file: 'Archivo',
+            audio: 'Audio'
+        };
+        const label = previews[conv.last_message_type] || 'Sin mensajes';
+
+        return `${sender}${label}${attachmentName}`;
     }
 
     async openConversation(conversationId) {
@@ -872,11 +947,15 @@ class ChatApp {
                 attachmentsHtml = msg.attachments.map(att => {
                     const basePath = this.getBasePath();
                     if (att.file_type === 'image') {
-                        return `<div class="chat-attachment">
-                            <img src="${basePath}serve.php?file=${att.file_name}" 
-                                 class="chat-attachment-image" 
-                                 alt="${this.escapeHtml(att.file_original_name)}"
-                                 onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'padding:20px;text-align:center;color:#94a3b8;\\'>📷 Imagen no disponible</div>'">
+                        const imageUrl = `${basePath}serve.php?file=${encodeURIComponent(att.file_name)}`;
+                        const imageName = this.escapeHtml(att.file_original_name || 'Imagen adjunta');
+                        return `<div class="chat-attachment chat-attachment--image">
+                            <button class="chat-attachment-image-btn" type="button" data-image-url="${imageUrl}" data-image-name="${imageName}" title="Ver imagen">
+                                <img src="${imageUrl}"
+                                     class="chat-attachment-image"
+                                     alt="${imageName}"
+                                     onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\'chat-attachment-unavailable\\'>Imagen no disponible</div>'">
+                            </button>
                         </div>`;
                     } else {
                         return `<div class="chat-attachment">
@@ -930,6 +1009,12 @@ class ChatApp {
             `;
 
             container.appendChild(messageEl);
+
+            messageEl.querySelectorAll('.chat-attachment-image-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    this.openImageLightbox(button.dataset.imageUrl, button.dataset.imageName);
+                });
+            });
         });
     }
 
@@ -960,19 +1045,36 @@ class ChatApp {
                 input.style.height = 'auto';
                 await this.loadMessages();
                 this.scrollToBottom();
+            } else {
+                this.showChatNotice(data.error || 'No se pudo enviar el mensaje', 'error');
             }
         } catch (error) {
             console.error('Error sending message:', error);
+            this.showChatNotice('Error de conexion al enviar mensaje', 'error');
         }
     }
 
     async uploadFile(file) {
-        if (!this.currentConversationId) return;
+        if (!this.currentConversationId) {
+            this.showChatNotice('Abre una conversacion antes de adjuntar archivos.', 'warning');
+            return;
+        }
+
+        if (this.uploadInProgress || !file) {
+            return;
+        }
 
         const formData = new FormData();
         formData.append('file', file);
         formData.append('conversation_id', this.currentConversationId);
         formData.append('message_text', '');
+
+        this.uploadInProgress = true;
+        this.setUploadStatus(`Subiendo ${file.type.startsWith('image/') ? 'imagen' : 'archivo'}: ${file.name}`, 'loading');
+        const attachBtn = document.getElementById('attachBtn');
+        if (attachBtn) {
+            attachBtn.disabled = true;
+        }
 
         try {
             const basePath = this.getBasePath();
@@ -981,18 +1083,84 @@ class ChatApp {
                 body: formData
             });
 
-            const data = await response.json();
+            const data = await response.json().catch(() => ({
+                success: false,
+                error: 'Respuesta invalida del servidor'
+            }));
 
             if (data.success) {
                 await this.loadMessages();
                 this.scrollToBottom();
-                document.getElementById('fileInput').value = '';
+                this.showChatNotice(file.type.startsWith('image/') ? 'Imagen enviada' : 'Archivo enviado', 'success');
             } else {
-                alert('Error al subir archivo: ' + (data.error || 'Error desconocido'));
+                this.showChatNotice(data.error || 'Error al subir archivo', 'error');
             }
         } catch (error) {
             console.error('Error uploading file:', error);
-            alert('Error al subir archivo');
+            this.showChatNotice('Error de conexion al subir archivo', 'error');
+        } finally {
+            this.uploadInProgress = false;
+            this.setUploadStatus('');
+            if (attachBtn) {
+                attachBtn.disabled = false;
+            }
+            document.getElementById('fileInput').value = '';
+        }
+    }
+
+    setUploadStatus(message, type = 'loading') {
+        const status = document.getElementById('uploadStatus');
+        if (!status) return;
+
+        if (!message) {
+            status.hidden = true;
+            status.innerHTML = '';
+            status.className = 'chat-upload-status';
+            return;
+        }
+
+        const icon = type === 'loading' ? 'fa-spinner fa-spin' : 'fa-paperclip';
+        status.hidden = false;
+        status.className = `chat-upload-status ${type}`;
+        status.innerHTML = `<i class="fas ${icon}"></i><span>${this.escapeHtml(message)}</span>`;
+    }
+
+    showChatNotice(message, type = 'info') {
+        const toast = document.getElementById('chatToast');
+        if (!toast) return;
+
+        clearTimeout(this.toastTimeout);
+        toast.className = `chat-toast ${type} visible`;
+        toast.textContent = message;
+        this.toastTimeout = setTimeout(() => {
+            toast.classList.remove('visible');
+        }, 3500);
+    }
+
+    openImageLightbox(url, caption = '') {
+        const lightbox = document.getElementById('chatImageLightbox');
+        const image = document.getElementById('chatLightboxImage');
+        const captionEl = document.getElementById('chatLightboxCaption');
+        if (!lightbox || !image) return;
+
+        image.src = url;
+        image.alt = caption || 'Imagen adjunta';
+        if (captionEl) {
+            captionEl.textContent = caption || '';
+        }
+        lightbox.hidden = false;
+        lightbox.classList.add('open');
+    }
+
+    closeImageLightbox() {
+        const lightbox = document.getElementById('chatImageLightbox');
+        const image = document.getElementById('chatLightboxImage');
+        if (!lightbox) return;
+
+        lightbox.classList.remove('open');
+        lightbox.hidden = true;
+        if (image) {
+            image.removeAttribute('src');
         }
     }
 
@@ -1546,7 +1714,7 @@ class ChatApp {
 
     escapeHtml(text) {
         const div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = text == null ? '' : String(text);
         return div.innerHTML;
     }
 

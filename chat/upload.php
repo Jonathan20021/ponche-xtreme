@@ -20,21 +20,6 @@ if (!isset($_SESSION['user_id'])) {
 
 $userId = (int)$_SESSION['user_id'];
 
-// Verificar permisos de subida
-$stmt = $pdo->prepare("
-    SELECT can_upload_files, max_file_size_mb, can_send_videos, can_send_documents
-    FROM chat_permissions
-    WHERE user_id = ?
-");
-$stmt->execute([$userId]);
-$permissions = $stmt->fetch();
-
-if (!$permissions || !$permissions['can_upload_files']) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'error' => 'No tienes permiso para subir archivos']);
-    exit;
-}
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Método no permitido']);
@@ -71,26 +56,32 @@ if (empty($_FILES['file'])) {
 
 $file = $_FILES['file'];
 
-// Validar tamaño
-$maxSizeBytes = $permissions['max_file_size_mb'] * 1024 * 1024;
-if ($file['size'] > $maxSizeBytes) {
+if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
     http_response_code(400);
-    echo json_encode([
-        'success' => false, 
-        'error' => "El archivo excede el tamaño máximo de {$permissions['max_file_size_mb']}MB"
-    ]);
+    echo json_encode(['success' => false, 'error' => getUploadErrorMessage((int)$file['error'])]);
     exit;
 }
 
 // Detectar tipo de archivo
-$mimeType = mime_content_type($file['tmp_name']);
+$permissions = getChatUploadPermissions($pdo, $userId);
+$mimeType = detectUploadedFileMimeType($file['tmp_name']);
 $fileType = 'document';
 $subdir = 'documents';
 
 if (in_array($mimeType, CHAT_ALLOWED_IMAGE_TYPES)) {
+    if (!$permissions['can_upload_files'] && !$permissions['can_upload_images']) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'No tienes permiso para subir imagenes']);
+        exit;
+    }
     $fileType = 'image';
     $subdir = 'images';
 } elseif (in_array($mimeType, CHAT_ALLOWED_VIDEO_TYPES)) {
+    if (!$permissions['can_upload_files']) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'No tienes permiso para subir archivos']);
+        exit;
+    }
     if (!$permissions['can_send_videos']) {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'No tienes permiso para enviar videos']);
@@ -99,6 +90,11 @@ if (in_array($mimeType, CHAT_ALLOWED_IMAGE_TYPES)) {
     $fileType = 'video';
     $subdir = 'videos';
 } elseif (in_array($mimeType, CHAT_ALLOWED_DOCUMENT_TYPES)) {
+    if (!$permissions['can_upload_files']) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'No tienes permiso para subir archivos']);
+        exit;
+    }
     if (!$permissions['can_send_documents']) {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'No tienes permiso para enviar documentos']);
@@ -109,6 +105,18 @@ if (in_array($mimeType, CHAT_ALLOWED_IMAGE_TYPES)) {
 } else {
     http_response_code(400);
     echo json_encode(['success' => false, 'error' => 'Tipo de archivo no permitido']);
+    exit;
+}
+
+// Validar tamano despues de resolver permisos/defaults por rol.
+$maxSizeMb = max(1, (int)$permissions['max_file_size_mb']);
+$maxSizeBytes = min($maxSizeMb * 1024 * 1024, CHAT_UPLOAD_MAX_SIZE);
+if ($file['size'] > $maxSizeBytes) {
+    http_response_code(400);
+    echo json_encode([
+        'success' => false,
+        'error' => "El archivo excede el tamano maximo de {$maxSizeMb}MB"
+    ]);
     exit;
 }
 
@@ -124,7 +132,11 @@ try {
     $messageId = $pdo->lastInsertId();
     
     // Generar nombre único para el archivo
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $extension = strtolower((string)pathinfo($file['name'], PATHINFO_EXTENSION));
+    $extension = preg_replace('/[^a-z0-9]/', '', $extension);
+    if ($extension === '') {
+        $extension = extensionForMime($mimeType);
+    }
     $fileName = uniqid('chat_', true) . '.' . $extension;
     $filePath = "{$subdir}/{$fileName}";
     $fullPath = CHAT_UPLOAD_DIR . $filePath;
@@ -149,7 +161,7 @@ try {
     $stmt->execute([
         $messageId,
         $fileName,
-        $file['name'],
+        basename((string)$file['name']),
         $filePath,
         $fileType,
         $file['size'],
@@ -187,6 +199,132 @@ try {
     
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+}
+
+/**
+ * Devuelve permisos efectivos de subida. Mantiene compatibilidad con usuarios
+ * sin fila en chat_permissions, que era el caso de varios QA/SUPERVISOR.
+ */
+function getChatUploadPermissions(PDO $pdo, int $userId): array {
+    $stmt = $pdo->prepare("
+        SELECT
+            u.role,
+            cp.can_upload_files,
+            cp.max_file_size_mb,
+            cp.can_send_videos,
+            cp.can_send_documents,
+            cp.is_restricted,
+            cp.restricted_until
+        FROM users u
+        LEFT JOIN chat_permissions cp ON cp.user_id = u.id
+        WHERE u.id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$row) {
+        return [
+            'can_upload_files' => false,
+            'can_upload_images' => false,
+            'max_file_size_mb' => 1,
+            'can_send_videos' => false,
+            'can_send_documents' => false,
+        ];
+    }
+
+    $role = strtoupper(trim((string)($row['role'] ?? '')));
+    $privilegedImageRoles = ['ADMIN', 'SUPERVISOR', 'QA'];
+    $largeUploadRoles = ['ADMIN', 'SUPERVISOR', 'DESARROLLADOR', 'OPERATIONSMANAGER', 'GENERALMANAGER', 'IT'];
+
+    $canUploadFiles = chatBoolOrDefault($row['can_upload_files'] ?? null, true);
+    $canSendVideos = chatBoolOrDefault($row['can_send_videos'] ?? null, true);
+    $canSendDocuments = chatBoolOrDefault($row['can_send_documents'] ?? null, true);
+
+    $maxFileSizeMb = (int)($row['max_file_size_mb'] ?? 0);
+    if ($maxFileSizeMb <= 0) {
+        $maxFileSizeMb = in_array($role, $largeUploadRoles, true) ? 100 : 50;
+    }
+
+    $hasActiveRestriction = !empty($row['is_restricted']) && !empty($row['restricted_until']) && strtotime((string)$row['restricted_until']) > time();
+    if ($hasActiveRestriction) {
+        $canUploadFiles = false;
+        $canSendVideos = false;
+        $canSendDocuments = false;
+    }
+
+    return [
+        'can_upload_files' => $canUploadFiles,
+        'can_upload_images' => !$hasActiveRestriction && ($canUploadFiles || in_array($role, $privilegedImageRoles, true)),
+        'max_file_size_mb' => $maxFileSizeMb,
+        'can_send_videos' => $canSendVideos,
+        'can_send_documents' => $canSendDocuments,
+    ];
+}
+
+function chatBoolOrDefault($value, bool $default): bool {
+    if ($value === null) {
+        return $default;
+    }
+
+    return (bool)$value;
+}
+
+function detectUploadedFileMimeType(string $path): string {
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mimeType = finfo_file($finfo, $path);
+            finfo_close($finfo);
+            if (is_string($mimeType) && $mimeType !== '') {
+                return $mimeType;
+            }
+        }
+    }
+
+    $mimeType = function_exists('mime_content_type') ? @mime_content_type($path) : null;
+    return is_string($mimeType) && $mimeType !== '' ? $mimeType : 'application/octet-stream';
+}
+
+function extensionForMime(string $mimeType): string {
+    $map = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'video/mp4' => 'mp4',
+        'video/mpeg' => 'mpeg',
+        'video/quicktime' => 'mov',
+        'video/x-msvideo' => 'avi',
+        'video/webm' => 'webm',
+        'application/pdf' => 'pdf',
+        'text/plain' => 'txt',
+        'text/csv' => 'csv',
+        'application/zip' => 'zip',
+        'application/x-rar-compressed' => 'rar',
+    ];
+
+    return $map[$mimeType] ?? 'bin';
+}
+
+function getUploadErrorMessage(int $errorCode): string {
+    switch ($errorCode) {
+        case UPLOAD_ERR_INI_SIZE:
+        case UPLOAD_ERR_FORM_SIZE:
+            return 'El archivo excede el tamano permitido por el servidor';
+        case UPLOAD_ERR_PARTIAL:
+            return 'El archivo se subio parcialmente. Intenta de nuevo';
+        case UPLOAD_ERR_NO_FILE:
+            return 'No se proporciono ningun archivo';
+        case UPLOAD_ERR_NO_TMP_DIR:
+            return 'No existe carpeta temporal para subir archivos';
+        case UPLOAD_ERR_CANT_WRITE:
+            return 'No se pudo guardar el archivo en el servidor';
+        case UPLOAD_ERR_EXTENSION:
+            return 'Una extension del servidor bloqueo la subida';
+        default:
+            return 'No se pudo procesar el archivo';
+    }
 }
 
 /**

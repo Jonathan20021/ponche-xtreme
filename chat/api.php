@@ -188,6 +188,35 @@ function getConversations(PDO $pdo, int $userId): void {
     
     $stmt->execute([$userId, $userId, $userId, $userId]);
     $conversations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Enrich preview data for conversations whose last message is an attachment.
+    $previewStmt = $pdo->prepare("
+        SELECT
+            m.message_type,
+            a.file_original_name
+        FROM chat_messages m
+        LEFT JOIN chat_attachments a ON a.message_id = m.id
+        WHERE m.conversation_id = ?
+        ORDER BY m.created_at DESC, a.id ASC
+        LIMIT 1
+    ");
+
+    foreach ($conversations as &$conversation) {
+        $conversation['last_message_type'] = null;
+        $conversation['last_attachment_name'] = null;
+
+        if (!empty($conversation['last_message'])) {
+            continue;
+        }
+
+        $previewStmt->execute([(int)$conversation['id']]);
+        $preview = $previewStmt->fetch(PDO::FETCH_ASSOC);
+        if ($preview) {
+            $conversation['last_message_type'] = $preview['message_type'] ?? null;
+            $conversation['last_attachment_name'] = $preview['file_original_name'] ?? null;
+        }
+    }
+    unset($conversation);
     
     echo json_encode(['success' => true, 'conversations' => $conversations]);
 }
@@ -756,4 +785,3 @@ function addGroupMemberFixed(PDO $pdo, int $userId, array $data): void {
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
 }
-
