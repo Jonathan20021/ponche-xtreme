@@ -38,13 +38,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_period'])) {
     $endDate = $_POST['end_date'];
     $paymentDate = $_POST['payment_date'];
     
-    $stmt = $pdo->prepare("
-        UPDATE payroll_periods 
-        SET name = ?, start_date = ?, end_date = ?, payment_date = ?
-        WHERE id = ? AND status = 'DRAFT'
-    ");
-    $stmt->execute([$name, $startDate, $endDate, $paymentDate, $periodId]);
-    $successMsg = "Período actualizado correctamente.";
+    $existingStmt = $pdo->prepare("SELECT status, start_date, end_date FROM payroll_periods WHERE id = ?");
+    $existingStmt->execute([$periodId]);
+    $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$existing) {
+        $errorMsg = "Período no encontrado.";
+    } elseif (!in_array($existing['status'], ['DRAFT', 'CALCULATED'], true)) {
+        $errorMsg = "Solo se pueden editar períodos en estado DRAFT o CALCULATED (actual: " . htmlspecialchars($existing['status']) . ").";
+    } else {
+        $stmt = $pdo->prepare("
+            UPDATE payroll_periods
+            SET name = ?, start_date = ?, end_date = ?, payment_date = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([$name, $startDate, $endDate, $paymentDate, $periodId]);
+
+        $rangeChanged = ($existing['start_date'] !== $startDate || $existing['end_date'] !== $endDate);
+        if ($existing['status'] === 'CALCULATED' && $rangeChanged) {
+            $successMsg = "Período actualizado. Cambiaron las fechas del rango: recalcula la nómina para reflejar el nuevo período.";
+        } else {
+            $successMsg = "Período actualizado correctamente.";
+        }
+    }
 }
 
 // Handle toggling visibility to agents
