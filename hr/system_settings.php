@@ -23,25 +23,51 @@ function updateSystemSetting($pdo, $key, $value, $userId) {
     return $stmt->execute([$value, $userId, $key]);
 }
 
+// Ensure bank-payment-export settings exist
+function ensureBankExportSettings(PDO $pdo) {
+    $defaults = [
+        'payroll_bank_export_comment' => ['Pago nómina BHD', 'string', 'Comentario que aparecerá en la columna E del Excel bancario de nómina'],
+    ];
+    foreach ($defaults as $key => $info) {
+        $stmt = $pdo->prepare("INSERT IGNORE INTO system_settings (setting_key, setting_value, setting_type, description) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$key, $info[0], $info[1], $info[2]]);
+    }
+}
+ensureBankExportSettings($pdo);
+
+// Handle bank export comment update
+if (isset($_POST['update_bank_export'])) {
+    try {
+        $bankComment = trim($_POST['payroll_bank_export_comment'] ?? '');
+        if ($bankComment === '') {
+            throw new Exception('El comentario para el archivo bancario no puede estar vacío');
+        }
+        updateSystemSetting($pdo, 'payroll_bank_export_comment', mb_substr($bankComment, 0, 250), $_SESSION['user_id']);
+        $success = 'Comentario del archivo bancario actualizado correctamente.';
+    } catch (Exception $e) {
+        $error = 'Error al actualizar el comentario bancario: ' . $e->getMessage();
+    }
+}
+
 // Handle form submission
 if (isset($_POST['update_settings'])) {
     try {
         $pdo->beginTransaction();
-        
+
         $exchangeRate = !empty($_POST['exchange_rate']) ? (float)$_POST['exchange_rate'] : 58.50;
-        
+
         // Validate exchange rate
         if ($exchangeRate <= 0) {
             throw new Exception('La tasa de cambio debe ser mayor a 0');
         }
-        
+
         // Get old value for logging
         $oldRate = getSystemSetting($pdo, 'exchange_rate_usd_to_dop', '0');
-        
+
         // Update exchange rate
         updateSystemSetting($pdo, 'exchange_rate_usd_to_dop', $exchangeRate, $_SESSION['user_id']);
         updateSystemSetting($pdo, 'exchange_rate_last_update', date('Y-m-d H:i:s'), $_SESSION['user_id']);
-        
+
         $pdo->commit();
         
         // Log the change
@@ -62,6 +88,7 @@ if (isset($_POST['update_settings'])) {
 // Get current settings
 $currentExchangeRate = getSystemSetting($pdo, 'exchange_rate_usd_to_dop', '58.50');
 $lastUpdate = getSystemSetting($pdo, 'exchange_rate_last_update', 'N/A');
+$bankExportComment = getSystemSetting($pdo, 'payroll_bank_export_comment', 'Pago nómina BHD');
 
 $theme = $_SESSION['theme'] ?? 'dark';
 if (!in_array($theme, ['dark', 'light'], true)) {
@@ -209,6 +236,48 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                 </form>
             </div>
             
+            <!-- Bank Payment Export Configuration -->
+            <div class="glass-card mb-6">
+                <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-700">
+                    <div>
+                        <h2 class="text-xl font-semibold text-white flex items-center">
+                            <i class="fas fa-university text-blue-400 mr-3"></i>
+                            Archivo Bancario de Nómina
+                        </h2>
+                        <p class="text-sm text-slate-400 mt-1">Configura el comentario que se incluirá en el Excel bancario que se exporta desde nómina</p>
+                    </div>
+                </div>
+
+                <form method="POST" class="space-y-6">
+                    <div class="form-group">
+                        <label for="payroll_bank_export_comment" class="flex items-center">
+                            <i class="fas fa-comment-dots text-blue-400 mr-2"></i>
+                            Comentario para el archivo bancario *
+                        </label>
+                        <input
+                            type="text"
+                            id="payroll_bank_export_comment"
+                            name="payroll_bank_export_comment"
+                            required
+                            maxlength="250"
+                            value="<?= htmlspecialchars($bankExportComment) ?>"
+                            class="text-lg"
+                        >
+                        <p class="text-xs text-slate-400 mt-2">
+                            <i class="fas fa-info-circle"></i>
+                            Este texto se mostrará en la columna "COMENTARIO" del archivo Excel bancario para cada empleado.
+                        </p>
+                    </div>
+
+                    <div class="flex gap-3 pt-4">
+                        <button type="submit" name="update_bank_export" class="btn-primary flex-1">
+                            <i class="fas fa-save"></i>
+                            Guardar Comentario Bancario
+                        </button>
+                    </div>
+                </form>
+            </div>
+
             <!-- Information Card -->
             <div class="glass-card bg-yellow-900/20 border-yellow-500/30">
                 <h3 class="text-white font-semibold mb-3 flex items-center">

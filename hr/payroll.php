@@ -673,6 +673,9 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                 <a href="payroll_export_excel.php?period_id=<?= $period['id'] ?>" class="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-xs" title="Excel">
                                                     <i class="fas fa-file-excel"></i>
                                                 </a>
+                                                <a href="payroll_export_bank.php?period_id=<?= $period['id'] ?>" class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs" title="Excel Bancario (BHD)">
+                                                    <i class="fas fa-university"></i>
+                                                </a>
                                             <?php endif; ?>
                                             <?php
                                                 $isVisibleToAgents = (int)($period['visible_to_agents'] ?? 0) === 1;
@@ -910,6 +913,10 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                         <a href="payroll_export_excel.php?period_id=<?= $selectedPeriod['id'] ?>" class="btn-secondary text-sm">
                             <i class="fas fa-file-excel"></i>
                             Excel
+                        </a>
+                        <a href="payroll_export_bank.php?period_id=<?= $selectedPeriod['id'] ?>" class="btn-primary text-sm" title="Archivo Excel para pago bancario (formato BHD)">
+                            <i class="fas fa-university"></i>
+                            Excel Bancario
                         </a>
                         <a href="payroll_tss.php?period_id=<?= $selectedPeriod['id'] ?>" class="btn-primary text-sm">
                             <i class="fas fa-shield-alt"></i>
