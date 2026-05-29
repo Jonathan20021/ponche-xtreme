@@ -64,7 +64,8 @@ $recordsStmt = $pdo->prepare("
     SELECT pr.net_salary,
            e.first_name, e.last_name,
            e.identification_number,
-           e.bank_account_number
+           e.bank_account_number,
+           e.email
     FROM payroll_records pr
     JOIN employees e ON e.id = pr.employee_id
     WHERE pr.payroll_period_id = ?
@@ -94,6 +95,7 @@ $headers = [
     'C' => 'DOCUMENTO IDENTIDAD',
     'D' => 'MONTO A PAGAR',
     'E' => 'COMENTARIO',
+    'F' => 'CORREO ELECTRÓNICO',
 ];
 foreach ($headers as $col => $label) {
     $sheet->setCellValue($col . '1', $label);
@@ -105,7 +107,7 @@ $headerStyle = [
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
 ];
-$sheet->getStyle('A1:E1')->applyFromArray($headerStyle);
+$sheet->getStyle('A1:F1')->applyFromArray($headerStyle);
 
 // Force account number and ID to be treated as text so leading zeros are preserved
 $sheet->getStyle('A:A')->getNumberFormat()->setFormatCode('@');
@@ -117,6 +119,7 @@ foreach ($records as $r) {
     $accountRaw = trim((string)($r['bank_account_number'] ?? ''));
     $idRaw = trim((string)($r['identification_number'] ?? ''));
     $fullName = trim($r['first_name'] . ' ' . $r['last_name']);
+    $email = trim((string)($r['email'] ?? ''));
 
     // Strip any non-digit characters from account and ID to match the bank file
     $account = preg_replace('/\D+/', '', $accountRaw);
@@ -127,6 +130,7 @@ foreach ($records as $r) {
     $sheet->setCellValueExplicit('C' . $row, $idNumber, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
     $sheet->setCellValue('D' . $row, $netSalary);
     $sheet->setCellValue('E' . $row, $bankComment);
+    $sheet->setCellValue('F' . $row, $email);
 
     // Match the template's currency-style display (no symbol, 2 decimals, thousands separator)
     $sheet->getStyle('D' . $row)->getNumberFormat()->setFormatCode('#,##0.00');
@@ -135,7 +139,7 @@ foreach ($records as $r) {
 }
 
 // Auto-size columns
-foreach (range('A', 'E') as $col) {
+foreach (range('A', 'F') as $col) {
     $sheet->getColumnDimension($col)->setAutoSize(true);
 }
 
