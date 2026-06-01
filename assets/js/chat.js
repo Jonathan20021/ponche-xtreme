@@ -1602,7 +1602,7 @@ class ChatApp {
     startPolling() {
         // Intervalo configurable desde settings.php (window.PonchePolling.chat), respaldo 5s
         const pollCfg = window.PonchePolling || {};
-        const pollMs = pollCfg.chat || 5000;
+        const pollMs = pollCfg.chat || 12000;
         const pausarSiOculta = pollCfg.pauseWhenHidden !== false; // por defecto true
         this.pollInterval = setInterval(() => {
             // Pausa el polling cuando la pestaña no está visible (evita el 429 de HostGator)

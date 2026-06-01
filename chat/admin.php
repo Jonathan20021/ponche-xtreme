@@ -502,7 +502,7 @@ function startMonitoring() {
     monitoringInterval = setInterval(() => {
         if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
         loadConversations();
-    }, (window.PonchePolling && window.PonchePolling.chatAdmin) || 10000); // configurable desde settings.php
+    }, (window.PonchePolling && window.PonchePolling.chatAdmin) || 20000); // configurable desde settings.php
 }
 
 function stopMonitoring() {

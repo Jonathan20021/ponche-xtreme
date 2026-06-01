@@ -1315,7 +1315,7 @@ function startAutoRefresh() {
     refreshInterval = setInterval(() => {
         if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
         refreshData();
-    }, (window.PonchePolling && window.PonchePolling.dashboard) || 30000);
+    }, (window.PonchePolling && window.PonchePolling.dashboard) || 45000);
 }
 
 function stopAutoRefresh() {
@@ -1535,7 +1535,7 @@ function startModalAutoRefresh() {
         if (currentAgentId && !isUserInteracting && isViewingToday()) {
             loadAgentDetails(currentAgentId, true);
         }
-    }, (window.PonchePolling && window.PonchePolling.modal) || 3000);
+    }, (window.PonchePolling && window.PonchePolling.modal) || 8000);
 }
 
 function changeModalDate(newDate) {

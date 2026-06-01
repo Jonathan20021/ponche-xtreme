@@ -560,7 +560,7 @@ include 'header.php';
             autoRefreshInterval = setInterval(() => {
                 if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
                 loadDashboardData();
-            }, (window.PonchePolling && window.PonchePolling.dashboard) || 30000); // configurable desde settings.php
+            }, (window.PonchePolling && window.PonchePolling.dashboard) || 45000); // configurable desde settings.php
         }
     }
     

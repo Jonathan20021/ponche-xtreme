@@ -938,7 +938,7 @@ $recentVacations = $pdo->query("
             setInterval(() => {
                 if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
                 updateMonitor();
-            }, (window.PonchePolling && window.PonchePolling.dashboard) || 30000);
+            }, (window.PonchePolling && window.PonchePolling.dashboard) || 45000);
             
             // Update durations every second locally to make it smooth
             setInterval(updateDurations, 1000);

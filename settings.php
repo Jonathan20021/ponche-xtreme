@@ -907,10 +907,10 @@ try {
             case 'update_polling_config':
                 // Intervalos de actualización (polling) para reducir el 429 de HostGator.
                 // Se guardan en segundos; getPollingConfig() los convierte a ms y aplica mínimos.
-                $pChat      = max(2,  (int) ($_POST['polling_chat_seconds'] ?? 5));
-                $pDashboard = max(10, (int) ($_POST['polling_dashboard_seconds'] ?? 30));
-                $pModal     = max(2,  (int) ($_POST['polling_modal_seconds'] ?? 3));
-                $pChatAdmin = max(5,  (int) ($_POST['polling_chat_admin_seconds'] ?? 10));
+                $pChat      = max(2,  (int) ($_POST['polling_chat_seconds'] ?? 12));
+                $pDashboard = max(10, (int) ($_POST['polling_dashboard_seconds'] ?? 45));
+                $pModal     = max(2,  (int) ($_POST['polling_modal_seconds'] ?? 8));
+                $pChatAdmin = max(5,  (int) ($_POST['polling_chat_admin_seconds'] ?? 20));
                 $pPause     = isset($_POST['polling_pause_when_hidden']) ? 1 : 0;
 
                 try {

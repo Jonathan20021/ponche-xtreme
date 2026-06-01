@@ -1068,10 +1068,10 @@ if (!function_exists('getPollingConfig')) {
      */
     function getPollingConfig(PDO $pdo): array
     {
-        $chat      = max(2,  (int) getSystemSetting($pdo, 'polling_chat_seconds', 5));
-        $dashboard = max(10, (int) getSystemSetting($pdo, 'polling_dashboard_seconds', 30));
-        $modal     = max(2,  (int) getSystemSetting($pdo, 'polling_modal_seconds', 3));
-        $chatAdmin = max(5,  (int) getSystemSetting($pdo, 'polling_chat_admin_seconds', 10));
+        $chat      = max(2,  (int) getSystemSetting($pdo, 'polling_chat_seconds', 12));
+        $dashboard = max(10, (int) getSystemSetting($pdo, 'polling_dashboard_seconds', 45));
+        $modal     = max(2,  (int) getSystemSetting($pdo, 'polling_modal_seconds', 8));
+        $chatAdmin = max(5,  (int) getSystemSetting($pdo, 'polling_chat_admin_seconds', 20));
         $pause     = (bool) getSystemSetting($pdo, 'polling_pause_when_hidden', true);
 
         return [
