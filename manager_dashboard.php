@@ -1028,8 +1028,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function startAutoRefresh() {
-    // Actualizar cada 30 segundos (reducido para evitar rate limiting)
-    refreshInterval = setInterval(refreshData, 30000);
+    // Intervalo configurable desde settings.php; se pausa cuando la pestaña no está visible
+    refreshInterval = setInterval(() => {
+        if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
+        refreshData();
+    }, (window.PonchePolling && window.PonchePolling.dashboard) || 30000);
 }
 
 function stopAutoRefresh() {
@@ -1228,10 +1231,11 @@ function openAdminModal(userId, fullName) {
         clearInterval(modalRefreshInterval);
     }
     modalRefreshInterval = setInterval(() => {
+        if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
         if (currentAdminId) {
             loadAdminDetails(currentAdminId);
         }
-    }, 3000);
+    }, (window.PonchePolling && window.PonchePolling.modal) || 3000);
 }
 
 function closeAdminModal() {

@@ -294,6 +294,17 @@ if ($isAuthenticated) {
             window.currentUserRole = currentUserRole;
             window.canCreateGroups = canCreateGroups;
         </script>
+        <?php $pollCfg = getPollingConfig($pdo); ?>
+        <script>
+            // Intervalos de actualización configurables desde settings.php (Rendimiento)
+            window.PonchePolling = {
+                chat: <?= $pollCfg['chat_ms'] ?>,
+                dashboard: <?= $pollCfg['dashboard_ms'] ?>,
+                modal: <?= $pollCfg['modal_ms'] ?>,
+                chatAdmin: <?= $pollCfg['chat_admin_ms'] ?>,
+                pauseWhenHidden: <?= $pollCfg['pause_when_hidden'] ? 'true' : 'false' ?>
+            };
+        </script>
         <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js?v=<?= time() ?>" defer></script>
     <?php endif; ?>
     <title>Evallish BPO Control</title>

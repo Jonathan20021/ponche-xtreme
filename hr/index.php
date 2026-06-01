@@ -934,8 +934,11 @@ $recentVacations = $pdo->query("
             // Initial load
             updateMonitor();
             
-            // Auto-refresh every 30 seconds (reducido para evitar rate limiting)
-            setInterval(updateMonitor, 30000);
+            // Auto-refresh configurable desde settings.php; se pausa cuando la pestaña no está visible
+            setInterval(() => {
+                if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
+                updateMonitor();
+            }, (window.PonchePolling && window.PonchePolling.dashboard) || 30000);
             
             // Update durations every second locally to make it smooth
             setInterval(updateDurations, 1000);

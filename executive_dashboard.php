@@ -557,7 +557,10 @@ include 'header.php';
         if (autoRefreshInterval) clearInterval(autoRefreshInterval);
 
         if (startDate === today && endDate === today) {
-            autoRefreshInterval = setInterval(loadDashboardData, 30000); // 30s refresh
+            autoRefreshInterval = setInterval(() => {
+                if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
+                loadDashboardData();
+            }, (window.PonchePolling && window.PonchePolling.dashboard) || 30000); // configurable desde settings.php
         }
     }
     

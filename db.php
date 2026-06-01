@@ -1056,4 +1056,36 @@ if (!function_exists('updateSystemSetting')) {
         }
     }
 }
+
+if (!function_exists('getPollingConfig')) {
+    /**
+     * Returns the polling / auto-refresh intervals used by the realtime
+     * dashboards and the chat widget. Values are editable from settings.php
+     * (system_settings, category 'performance'). Returns milliseconds for the
+     * JS timers plus the raw seconds for the settings UI inputs. Sensible
+     * minimums are enforced to keep the office below HostGator's per-IP
+     * LiteSpeed request limit (which triggers the 429 "Too Many Requests").
+     */
+    function getPollingConfig(PDO $pdo): array
+    {
+        $chat      = max(2,  (int) getSystemSetting($pdo, 'polling_chat_seconds', 5));
+        $dashboard = max(10, (int) getSystemSetting($pdo, 'polling_dashboard_seconds', 30));
+        $modal     = max(2,  (int) getSystemSetting($pdo, 'polling_modal_seconds', 3));
+        $chatAdmin = max(5,  (int) getSystemSetting($pdo, 'polling_chat_admin_seconds', 10));
+        $pause     = (bool) getSystemSetting($pdo, 'polling_pause_when_hidden', true);
+
+        return [
+            'chat_ms'           => $chat * 1000,
+            'dashboard_ms'      => $dashboard * 1000,
+            'modal_ms'          => $modal * 1000,
+            'chat_admin_ms'     => $chatAdmin * 1000,
+            'pause_when_hidden' => $pause,
+            // Raw seconds for the settings UI inputs
+            'chat_s'            => $chat,
+            'dashboard_s'       => $dashboard,
+            'modal_s'           => $modal,
+            'chat_admin_s'      => $chatAdmin,
+        ];
+    }
+}
 ?>

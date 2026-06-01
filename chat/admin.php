@@ -499,7 +499,10 @@ function switchTab(tab) {
 
 function startMonitoring() {
     if (monitoringInterval) return;
-    monitoringInterval = setInterval(loadConversations, 10000); // Actualizar cada 10 segundos
+    monitoringInterval = setInterval(() => {
+        if (window.PonchePolling && window.PonchePolling.pauseWhenHidden && document.hidden) return;
+        loadConversations();
+    }, (window.PonchePolling && window.PonchePolling.chatAdmin) || 10000); // configurable desde settings.php
 }
 
 function stopMonitoring() {

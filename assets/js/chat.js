@@ -1600,8 +1600,13 @@ class ChatApp {
     }
 
     startPolling() {
-        // Polling cada 5 segundos para nuevos mensajes (aumentado para evitar error 429)
+        // Intervalo configurable desde settings.php (window.PonchePolling.chat), respaldo 5s
+        const pollCfg = window.PonchePolling || {};
+        const pollMs = pollCfg.chat || 5000;
+        const pausarSiOculta = pollCfg.pauseWhenHidden !== false; // por defecto true
         this.pollInterval = setInterval(() => {
+            // Pausa el polling cuando la pestaña no está visible (evita el 429 de HostGator)
+            if (pausarSiOculta && document.hidden) return;
             if (this.currentConversationId) {
                 this.loadMessages();
                 this.checkTyping();
@@ -1619,7 +1624,7 @@ class ChatApp {
                 }
             }
             this.updateUnreadCount();
-        }, 5000);
+        }, pollMs);
     }
 
     async fetchConversations() {

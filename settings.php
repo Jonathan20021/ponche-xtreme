@@ -904,6 +904,34 @@ try {
                 }
                 break;
 
+            case 'update_polling_config':
+                // Intervalos de actualización (polling) para reducir el 429 de HostGator.
+                // Se guardan en segundos; getPollingConfig() los convierte a ms y aplica mínimos.
+                $pChat      = max(2,  (int) ($_POST['polling_chat_seconds'] ?? 5));
+                $pDashboard = max(10, (int) ($_POST['polling_dashboard_seconds'] ?? 30));
+                $pModal     = max(2,  (int) ($_POST['polling_modal_seconds'] ?? 3));
+                $pChatAdmin = max(5,  (int) ($_POST['polling_chat_admin_seconds'] ?? 10));
+                $pPause     = isset($_POST['polling_pause_when_hidden']) ? 1 : 0;
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, ?, 'performance')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['polling_chat_seconds',        (string) $pChat,      'number']);
+                    $stmt->execute(['polling_dashboard_seconds',   (string) $pDashboard, 'number']);
+                    $stmt->execute(['polling_modal_seconds',       (string) $pModal,     'number']);
+                    $stmt->execute(['polling_chat_admin_seconds',  (string) $pChatAdmin, 'number']);
+                    $stmt->execute(['polling_pause_when_hidden',   (string) $pPause,     'boolean']);
+
+                    $successMessages[] = 'Configuración de intervalos de actualización guardada. Recarga las páginas abiertas para aplicarla.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al guardar la configuración de intervalos de actualización.';
+                }
+                break;
+
             case 'update_login_logs_report_config':
                 $llRecipients       = trim($_POST['login_logs_report_recipients'] ?? '');
                 $llEnabled          = isset($_POST['login_logs_report_enabled']) ? 1 : 0;
@@ -3358,6 +3386,96 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             }
         }
         </script>
+
+        <!-- Auto-refresh / Polling Intervals Configuration -->
+        <section id="polling-config" class="glass-card space-y-6">
+            <?php $pollCfg = getPollingConfig($pdo); ?>
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-stopwatch text-cyan-400"></i>
+                        Intervalos de Actualización (Rendimiento)
+                    </h2>
+                    <p class="text-muted text-sm">Controla cada cuánto los paneles en tiempo real y el chat consultan al
+                        servidor. Subir estos valores reduce las peticiones por minuto y evita el error
+                        <strong>429 "Too Many Requests"</strong> de HostGator (que limita las peticiones por IP).</p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $pollCfg['pause_when_hidden'] ? 'check-circle text-green-400' : 'times-circle text-amber-400' ?>"></i>
+                    <?= $pollCfg['pause_when_hidden'] ? 'Pausa en 2.º plano activa' : 'Pausa en 2.º plano inactiva' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_polling_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="polling_pause_when_hidden" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $pollCfg['pause_when_hidden'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Pausar actualizaciones cuando la pestaña no está visible</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Recomendado. Si el usuario deja la pestaña en segundo plano, deja de
+                        consultar al servidor hasta que vuelva a ella. Es la mayor reducción de carga sin afectar la
+                        experiencia.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-comment-dots"></i> Chat — nuevos mensajes (segundos)</label>
+                        <input type="number" name="polling_chat_seconds" min="2" max="120"
+                            value="<?= (int) $pollCfg['chat_s'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Actual: <?= (int) $pollCfg['chat_s'] ?>s · Recomendado: 10-15s ·
+                            Mínimo: 2s. Corre en todas las páginas; es el de mayor impacto.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-users-cog"></i> Monitores en tiempo real (segundos)</label>
+                        <input type="number" name="polling_dashboard_seconds" min="10" max="300"
+                            value="<?= (int) $pollCfg['dashboard_s'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Actual: <?= (int) $pollCfg['dashboard_s'] ?>s · Recomendado:
+                            30-45s · Mínimo: 10s. Supervisor, Manager, HR y Ejecutivo.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-window-restore"></i> Modales de detalle (segundos)</label>
+                        <input type="number" name="polling_modal_seconds" min="2" max="120"
+                            value="<?= (int) $pollCfg['modal_s'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Actual: <?= (int) $pollCfg['modal_s'] ?>s · Recomendado: 8-10s ·
+                            Mínimo: 2s. Detalle de agente/administrativo abierto.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-comments"></i> Monitoreo de Chat Admin (segundos)</label>
+                        <input type="number" name="polling_chat_admin_seconds" min="5" max="300"
+                            value="<?= (int) $pollCfg['chat_admin_s'] ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Actual: <?= (int) $pollCfg['chat_admin_s'] ?>s · Recomendado:
+                            20-30s · Mínimo: 5s.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Configuración
+                    </button>
+                </div>
+            </form>
+
+            <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                <h3 class="text-blue-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-info-circle"></i>
+                    ¿Por qué ayuda esto?
+                </h3>
+                <ul class="text-sm text-blue-200 space-y-2">
+                    <li><i class="fas fa-check text-green-400"></i> HostGator limita las peticiones por IP; como la oficina
+                        comparte una sola IP (NAT), todas las pestañas suman contra el mismo límite.</li>
+                    <li><i class="fas fa-check text-green-400"></i> Subir los segundos = menos peticiones por minuto = menos
+                        bloqueos 429.</li>
+                    <li><i class="fas fa-check text-green-400"></i> La pausa en segundo plano elimina las peticiones de
+                        pestañas que nadie está viendo.</li>
+                    <li><i class="fas fa-check text-green-400"></i> Los cambios aplican cuando cada usuario recarga su
+                        página.</li>
+                </ul>
+            </div>
+        </section>
 
         <!-- Daily Absence Report Configuration -->
         <section id="absence-report-config" class="glass-card space-y-6">
@@ -6377,6 +6495,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Claude AI (global)',
                 icon: 'fas fa-robot',
                 selectors: ['#claude-global-config']
+            },
+            {
+                key: 'polling_intervals',
+                label: 'Intervalos de Actualización (Rendimiento / 429)',
+                icon: 'fas fa-stopwatch',
+                selectors: ['#polling-config']
             },
             {
                 key: 'absence_report',
