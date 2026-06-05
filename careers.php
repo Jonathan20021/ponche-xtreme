@@ -202,7 +202,7 @@ $employment_types = [
                 <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
                 <?php echo count($job_postings); ?> vacantes activas
                 <span class="text-slate-300">·</span>
-                <span class="inline-flex items-center gap-1 text-purple-600"><i class="fas fa-wand-magic-sparkles"></i> Postula con IA</span>
+                <span class="inline-flex items-center gap-1 text-purple-600"><i class="fas fa-bolt"></i> Postulación rápida</span>
             </div>
 
             <h1 class="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight mb-5 leading-[1.05]">
@@ -210,7 +210,7 @@ $employment_types = [
                 <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-purple-600">menos de 60 segundos</span>
             </h1>
             <p class="max-w-xl mx-auto text-base md:text-lg text-slate-600 mb-8">
-                Sube tu CV y nuestra IA pre-llenará tu solicitud. Sólo confirmas tus datos.
+                Completa el formulario y adjunta tu currículo para postularte. Toma solo unos minutos.
             </p>
             <div class="flex flex-wrap justify-center gap-3">
                 <a href="#vacantes" class="px-6 py-3 rounded-full bg-slate-900 text-white font-semibold shadow-pop hover:bg-brand-700 transition-colors flex items-center gap-2">
@@ -334,7 +334,7 @@ $employment_types = [
                 <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                     <div class="w-10 h-10 rounded-lg bg-brand-600 flex items-center justify-center mb-3"><i class="fas fa-bolt"></i></div>
                     <h3 class="font-semibold mb-1">Postulación express</h3>
-                    <p class="text-sm text-slate-400">Sube tu CV y completamos los datos por ti con IA.</p>
+                    <p class="text-sm text-slate-400">Completa el formulario y adjunta tu CV. Es un proceso rápido y sencillo.</p>
                 </div>
                 <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                     <div class="w-10 h-10 rounded-lg bg-purple-600 flex items-center justify-center mb-3"><i class="fas fa-shield-halved"></i></div>
@@ -399,7 +399,7 @@ $employment_types = [
                         <form id="applicationForm" class="p-6 space-y-5" enctype="multipart/form-data">
                             <input type="hidden" name="job_posting_id" id="job_posting_id">
                             <input type="hidden" name="puesto_aplicado" id="puesto_aplicado">
-                            <input type="hidden" name="form_version" value="2026-05-03-compact">
+                            <input type="hidden" name="form_version" value="2026-06-05-essential">
 
                             <!-- AI banner -->
                             <div class="ai-banner rounded-2xl p-5 text-white relative overflow-hidden">
@@ -408,19 +408,19 @@ $employment_types = [
                                 </div>
                                 <div class="relative">
                                     <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-purple-200">
-                                        <span class="pulse-dot inline-flex w-2 h-2 rounded-full bg-emerald-300"></span> Asistido por IA
+                                        <span class="pulse-dot inline-flex w-2 h-2 rounded-full bg-emerald-300"></span> Currículo requerido
                                     </div>
-                                    <h4 class="text-lg font-bold mt-1.5">¿Tienes CV?</h4>
-                                    <p class="text-sm text-purple-100 mt-0.5">Súbelo y rellenamos el resto por ti.</p>
+                                    <h4 class="text-lg font-bold mt-1.5">Adjunta tu CV</h4>
+                                    <p class="text-sm text-purple-100 mt-0.5">El currículo es obligatorio. Aun así, completa todos los campos del formulario con tu información actualizada.</p>
 
                                     <label for="cv-file" id="cvDropzone" class="mt-4 dropzone block w-full p-5 cursor-pointer text-center bg-white/10 hover:bg-white/15 border-white/30">
                                         <i class="fas fa-file-arrow-up text-3xl mb-2"></i>
-                                        <p class="text-sm font-semibold"><span id="cvFileName">Subir CV (PDF, DOC, DOCX)</span></p>
-                                        <p class="text-xs text-purple-200 mt-0.5" id="cvSubText">Máx. 5MB · Procesamiento automático</p>
+                                        <p class="text-sm font-semibold"><span id="cvFileName">Adjuntar CV (PDF, DOC, DOCX)</span></p>
+                                        <p class="text-xs text-purple-200 mt-0.5" id="cvSubText">Obligatorio · Máx. 5MB · PDF, DOC o DOCX</p>
                                         <input id="cv-file" type="file" name="cv_file" class="hidden" accept=".pdf,.doc,.docx">
                                     </label>
                                     <div id="aiStatus" class="hidden mt-3 px-3 py-2 rounded-lg bg-white/15 border border-white/30 text-sm flex items-center gap-2">
-                                        <i class="fas fa-circle-notch fa-spin"></i><span id="aiStatusText">Analizando CV con IA...</span>
+                                        <i class="fas fa-circle-notch fa-spin"></i><span id="aiStatusText">Procesando...</span>
                                     </div>
                                 </div>
                             </div>
@@ -487,14 +487,89 @@ $employment_types = [
                                             <option>Postgrado / Maestría</option>
                                         </select>
                                     </div>
+                                </div>
+                            </fieldset>
+
+                            <!-- Disponibilidad y logística -->
+                            <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">3. Disponibilidad y logística</legend>
+                                <p class="text-xs text-slate-500 mt-2">Estos datos son clave para la validación inicial. Por favor complétalos aunque hayas adjuntado tu CV.</p>
+                                <div class="grid sm:grid-cols-2 gap-4 mt-3">
                                     <div>
-                                        <label class="form-label">Disponibilidad</label>
-                                        <select name="availability_preference" class="form-input">
+                                        <label class="form-label req">Disponibilidad de horario</label>
+                                        <select name="availability_preference" class="form-input" required>
                                             <option value="">Selecciona...</option>
                                             <option value="rotating">Turno rotativo</option>
                                             <option value="weekdays">Solo Lunes a Viernes</option>
                                             <option value="weekends">Fines de semana</option>
-                                            <option value="flexible">Flexible</option>
+                                            <option value="flexible">Flexible / Tiempo completo</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Detalle de tu disponibilidad</label>
+                                        <input type="text" name="availability_details" class="form-input" placeholder="Ej: disponible desde las 7am, no sábados...">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">Medio de transporte</label>
+                                        <select name="transport_method" class="form-input" required>
+                                            <option value="">Selecciona...</option>
+                                            <option value="propio">Vehículo propio</option>
+                                            <option value="publico">Transporte público (guagua / concho)</option>
+                                            <option value="motoconcho">Motoconcho</option>
+                                            <option value="a_pie">A pie</option>
+                                            <option value="otro">Otro</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Detalle de transporte</label>
+                                        <input type="text" name="transport_details" class="form-input" placeholder="Opcional. Tiempo aprox. de traslado, ruta...">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Estudias actualmente?</label>
+                                        <select name="currently_studying" id="currentlyStudying" class="form-input" required onchange="toggleStudyFields()">
+                                            <option value="">Selecciona...</option>
+                                            <option value="SI">Sí</option>
+                                            <option value="NO">No</option>
+                                        </select>
+                                    </div>
+                                    <div id="studyScheduleWrap" class="hidden">
+                                        <label class="form-label">Horario de clases</label>
+                                        <input type="text" name="study_schedule" class="form-input" placeholder="Ej: Lun-Vie 6pm-9pm">
+                                    </div>
+                                    <div id="studySubjectWrap" class="hidden">
+                                        <label class="form-label">¿Qué estudias?</label>
+                                        <input type="text" name="study_subject" class="form-input" placeholder="Carrera o curso">
+                                    </div>
+                                    <div id="studyPlaceWrap" class="hidden">
+                                        <label class="form-label">¿Dónde estudias?</label>
+                                        <input type="text" name="study_place" class="form-input" placeholder="Universidad / institución">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Tienes otro empleo o compromiso laboral?</label>
+                                        <select name="other_commitments" id="otherCommitments" class="form-input" required onchange="toggleCommitmentField()">
+                                            <option value="">Selecciona...</option>
+                                            <option value="SI">Sí</option>
+                                            <option value="NO">No</option>
+                                        </select>
+                                    </div>
+                                    <div id="otherCommitmentsWrap" class="hidden">
+                                        <label class="form-label">Detalle del compromiso</label>
+                                        <input type="text" name="other_commitments_details" class="form-input" placeholder="Horario, tipo de trabajo, días...">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">¿Disponible para horas extras?</label>
+                                        <select name="overtime_available" class="form-input">
+                                            <option value="">Selecciona...</option>
+                                            <option value="SI">Sí</option>
+                                            <option value="NO">No</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">¿Disponible fines de semana y feriados?</label>
+                                        <select name="weekend_holiday_available" class="form-input">
+                                            <option value="">Selecciona...</option>
+                                            <option value="SI">Sí</option>
+                                            <option value="NO">No</option>
                                         </select>
                                     </div>
                                 </div>
@@ -502,7 +577,7 @@ $employment_types = [
 
                             <!-- Mensaje + fuente -->
                             <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
-                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">3. Cuéntanos más</legend>
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">4. Cuéntanos más</legend>
                                 <div class="grid sm:grid-cols-2 gap-4 mt-3">
                                     <div class="sm:col-span-2">
                                         <label class="form-label">Mensaje breve / por qué deberíamos contratarte</label>
@@ -649,6 +724,24 @@ $employment_types = [
             document.querySelector('#applicationFormPanel').scrollTop = 0;
         }
 
+        // Conditional fields: only ask study/commitment details when relevant
+        function toggleStudyFields() {
+            const studying = document.getElementById('currentlyStudying')?.value === 'SI';
+            ['studyScheduleWrap', 'studySubjectWrap', 'studyPlaceWrap'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.toggle('hidden', !studying);
+                if (!studying) el.querySelectorAll('input').forEach(i => { i.value = ''; });
+            });
+        }
+        function toggleCommitmentField() {
+            const hasCommitment = document.getElementById('otherCommitments')?.value === 'SI';
+            const el = document.getElementById('otherCommitmentsWrap');
+            if (!el) return;
+            el.classList.toggle('hidden', !hasCommitment);
+            if (!hasCommitment) el.querySelectorAll('input').forEach(i => { i.value = ''; });
+        }
+
         function backToJobInfo() {
             document.getElementById('applicationFormPanel').classList.add('hidden');
             document.getElementById('jobInfoPanel').classList.remove('hidden');
@@ -660,7 +753,9 @@ $employment_types = [
                 modal.classList.add('hidden');
                 document.body.style.overflow = '';
                 form.reset();
-                document.getElementById('cvFileName').textContent = 'Subir CV (PDF, DOC, DOCX)';
+                toggleStudyFields();
+                toggleCommitmentField();
+                document.getElementById('cvFileName').textContent = 'Adjuntar CV (PDF, DOC, DOCX)';
                 document.getElementById('aiStatus').classList.add('hidden');
                 document.getElementById('jobInfoPanel').classList.add('hidden');
                 document.getElementById('applicationFormPanel').classList.add('hidden');
@@ -686,7 +781,7 @@ $employment_types = [
             cvSubText.textContent = `${sizeMb} MB · listo para enviar`;
             // Optimistic AI hint
             aiStatus.classList.remove('hidden');
-            aiStatusText.textContent = 'CV cargado. La IA procesará tu información al enviar.';
+            aiStatusText.textContent = 'CV adjuntado. Recuerda completar todos los campos del formulario.';
         });
 
         ['dragenter', 'dragover'].forEach(ev => cvDropzone.addEventListener(ev, e => { e.preventDefault(); cvDropzone.classList.add('drag'); }));
@@ -700,12 +795,16 @@ $employment_types = [
 
         async function submitApplication() {
             if (!form.checkValidity()) { form.reportValidity(); return; }
+            if (!cvFile.files[0]) {
+                Swal.fire({ title: 'Falta tu currículo', text: 'Debes adjuntar tu CV (PDF, DOC o DOCX) para enviar la postulación.', icon: 'warning', confirmButtonColor: '#3a63f5' });
+                return;
+            }
             const btn = document.getElementById('btnSubmit');
             const orig = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando...';
             btn.disabled = true;
             aiStatus.classList.remove('hidden');
-            aiStatusText.textContent = 'Enviando solicitud y procesando con IA...';
+            aiStatusText.textContent = 'Enviando tu postulación...';
 
             try {
                 const fd = new FormData(form);

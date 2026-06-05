@@ -30,12 +30,23 @@ try {
     $expected_salary    = trim($_POST['expected_salary'] ?? '');
     $education_level    = trim($_POST['education_level'] ?? '');
     $availability_pref  = trim($_POST['availability_preference'] ?? '');
+    $availability_details = trim($_POST['availability_details'] ?? '');
+    $transport_method   = trim($_POST['transport_method'] ?? '');
+    $transport_details  = trim($_POST['transport_details'] ?? '');
+    $currently_studying = trim($_POST['currently_studying'] ?? '');
+    $study_subject      = trim($_POST['study_subject'] ?? '');
+    $study_place        = trim($_POST['study_place'] ?? '');
+    $study_schedule     = trim($_POST['study_schedule'] ?? '');
+    $other_commitments  = trim($_POST['other_commitments'] ?? '');
+    $other_commitments_details = trim($_POST['other_commitments_details'] ?? '');
+    $overtime_available = trim($_POST['overtime_available'] ?? '');
+    $weekend_holiday_available = trim($_POST['weekend_holiday_available'] ?? '');
     $cover_letter_short = trim($_POST['cover_letter_short'] ?? '');
     $source             = trim($_POST['source'] ?? '');
     $linkedin_url       = trim($_POST['linkedin_url'] ?? '');
     $puesto_aplicado    = trim($_POST['puesto_aplicado'] ?? '');
     $acepta             = !empty($_POST['acepta_datos']) ? 'SI' : 'NO';
-    $form_version       = trim($_POST['form_version'] ?? '2026-05-03-compact');
+    $form_version       = trim($_POST['form_version'] ?? '2026-06-05-essential');
 
     // Required fields
     $required = [
@@ -99,36 +110,38 @@ try {
         exit;
     }
 
-    // CV upload (optional)
+    // CV upload (required)
     $cv_filename = null;
     $cv_path = null;
-    if (isset($_FILES['cv_file']) && $_FILES['cv_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-        if ($_FILES['cv_file']['error'] !== UPLOAD_ERR_OK) {
-            echo json_encode(['success' => false, 'message' => 'Error al subir el CV.']);
-            exit;
-        }
-        $allowed = ['pdf', 'doc', 'docx'];
-        $ext = strtolower(pathinfo($_FILES['cv_file']['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, $allowed, true)) {
-            echo json_encode(['success' => false, 'message' => 'Formato no permitido. Sólo PDF, DOC o DOCX.']);
-            exit;
-        }
-        if ($_FILES['cv_file']['size'] > 5 * 1024 * 1024) {
-            echo json_encode(['success' => false, 'message' => 'CV demasiado grande (máx. 5MB).']);
-            exit;
-        }
-        $upload_dir = __DIR__ . '/uploads/cvs/';
-        if (!is_dir($upload_dir) && !mkdir($upload_dir, 0755, true) && !is_dir($upload_dir)) {
-            echo json_encode(['success' => false, 'message' => 'No se pudo preparar la carpeta de CVs.']);
-            exit;
-        }
-        $cv_filename = uniqid('cv_') . '_' . time() . '.' . $ext;
-        $cv_path = 'uploads/cvs/' . $cv_filename;
-        $cv_absolute_path = $upload_dir . $cv_filename;
-        if (!move_uploaded_file($_FILES['cv_file']['tmp_name'], $cv_absolute_path)) {
-            echo json_encode(['success' => false, 'message' => 'No se pudo guardar el CV.']);
-            exit;
-        }
+    if (!isset($_FILES['cv_file']) || $_FILES['cv_file']['error'] === UPLOAD_ERR_NO_FILE) {
+        echo json_encode(['success' => false, 'message' => 'Debes adjuntar tu currículo (PDF, DOC o DOCX).']);
+        exit;
+    }
+    if ($_FILES['cv_file']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['success' => false, 'message' => 'Error al subir el CV.']);
+        exit;
+    }
+    $allowed = ['pdf', 'doc', 'docx'];
+    $ext = strtolower(pathinfo($_FILES['cv_file']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed, true)) {
+        echo json_encode(['success' => false, 'message' => 'Formato no permitido. Sólo PDF, DOC o DOCX.']);
+        exit;
+    }
+    if ($_FILES['cv_file']['size'] > 5 * 1024 * 1024) {
+        echo json_encode(['success' => false, 'message' => 'CV demasiado grande (máx. 5MB).']);
+        exit;
+    }
+    $upload_dir = __DIR__ . '/uploads/cvs/';
+    if (!is_dir($upload_dir) && !mkdir($upload_dir, 0755, true) && !is_dir($upload_dir)) {
+        echo json_encode(['success' => false, 'message' => 'No se pudo preparar la carpeta de CVs.']);
+        exit;
+    }
+    $cv_filename = uniqid('cv_') . '_' . time() . '.' . $ext;
+    $cv_path = 'uploads/cvs/' . $cv_filename;
+    $cv_absolute_path = $upload_dir . $cv_filename;
+    if (!move_uploaded_file($_FILES['cv_file']['tmp_name'], $cv_absolute_path)) {
+        echo json_encode(['success' => false, 'message' => 'No se pudo guardar el CV.']);
+        exit;
     }
 
     // Generate unique application code
@@ -149,6 +162,29 @@ try {
         throw new Exception('No se pudo generar un código único de solicitud.');
     }
 
+    // Map schedule availability into the legacy "disponibilidad" renderer keys
+    $availLabels = [
+        'rotating' => 'Turno rotativo',
+        'weekdays' => 'Solo Lunes a Viernes',
+        'weekends' => 'Fines de semana',
+        'flexible' => 'Flexible / Tiempo completo',
+    ];
+    $dispOtroParts = [];
+    if (!in_array($availability_pref, ['rotating', 'weekdays'], true) && $availability_pref !== '') {
+        $dispOtroParts[] = $availLabels[$availability_pref] ?? $availability_pref;
+    }
+    if ($availability_details !== '') {
+        $dispOtroParts[] = $availability_details;
+    }
+
+    // Map transport into the legacy "transporte" renderer keys
+    $transportOtroTexto = '';
+    if ($transport_method === 'propio') {
+        $transportOtroTexto = 'Vehículo propio';
+    } elseif ($transport_method === 'otro') {
+        $transportOtroTexto = 'Otro';
+    }
+
     // Persist a compact JSON snapshot in cover_letter (so view_application.php form-payload renderers keep working)
     $formPayload = [
         'form_version'      => $form_version,
@@ -164,14 +200,36 @@ try {
         'experiencias'      => [
             ['empresa' => $current_company, 'cargo' => $current_position, 'tiempo' => $years_experience, 'sueldo' => '', 'tareas' => '', 'razon_salida' => '']
         ],
+        'disponibilidad'    => [
+            'turno_rotativo' => $availability_pref === 'rotating' ? 'SI' : 'NO',
+            'lunes_viernes'  => $availability_pref === 'weekdays' ? 'SI' : 'NO',
+            'otro'           => !empty($dispOtroParts) ? 'SI' : 'NO',
+            'otro_texto'     => implode(' — ', $dispOtroParts),
+        ],
+        'transporte'        => [
+            'carro_publico' => $transport_method === 'publico' ? 'SI' : 'NO',
+            'motoconcho'    => $transport_method === 'motoconcho' ? 'SI' : 'NO',
+            'a_pie'         => $transport_method === 'a_pie' ? 'SI' : 'NO',
+            'otro'          => in_array($transport_method, ['propio', 'otro'], true) ? 'SI' : 'NO',
+            'otro_texto'    => $transportOtroTexto,
+            'detalles'      => $transport_details,
+        ],
         'adicional'         => [
             'expectativas_salariales' => $expected_salary,
             'medio_vacante'           => $source !== '' ? [$source] : [],
+            'horas_extras'            => $overtime_available,
+            'dias_fiestas'            => $weekend_holiday_available,
+            'otro_empleo'             => $other_commitments,
+            'otro_empleo_detalle'     => $other_commitments_details,
             'firma'                   => trim($nombres . ' ' . $apellidos),
             'acepta_datos'            => $acepta,
         ],
         'educacion'         => [
-            'nivel' => $education_level !== '' ? [$education_level] : [],
+            'nivel'               => $education_level !== '' ? [$education_level] : [],
+            'estudia_actualmente' => $currently_studying !== '' ? $currently_studying : 'NO',
+            'que_estudia'         => $study_subject,
+            'donde_estudia'       => $study_place,
+            'horario_clases'      => $study_schedule,
         ],
     ];
 

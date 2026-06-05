@@ -1023,6 +1023,16 @@ require_once '../header.php';
                                             <?php echo htmlspecialchars($display($yesNo($value('adicional.dias_fiestas')))); ?></p>
                                     </div>
                                     <div>
+                                        <label class="text-sm text-slate-400">Otro empleo / compromiso</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($yesNo($value('adicional.otro_empleo')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Detalle del compromiso</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('adicional.otro_empleo_detalle'))); ?></p>
+                                    </div>
+                                    <div>
                                         <label class="text-sm text-slate-400">Conoce empleado</label>
                                         <p class="font-medium">
                                             <?php echo htmlspecialchars($display($yesNo($value('adicional.conoce_empleado')))); ?></p>
