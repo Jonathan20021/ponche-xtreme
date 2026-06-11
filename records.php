@@ -6,6 +6,12 @@ date_default_timezone_set('America/Santo_Domingo');
 
 ensurePermission('records');
 
+require_once __DIR__ . '/lib/authorization_functions.php';
+
+// Acceso a Modificaciones (editar/eliminar registros): restringido a los
+// usuarios configurados en Configuración > Códigos de Autorización.
+$canModifyRecords = canUserModifyRecords($pdo);
+
 if (!function_exists('sanitizeHexColorValue')) {
     function sanitizeHexColorValue(?string $color, string $fallback = '#6366F1'): string
     {
@@ -1043,7 +1049,9 @@ $tardinessTotal = count($tardiness_data);
                         <th>Fecha</th>
                         <th>Hora</th>
                         <th>IP</th>
-                        <th class="text-center">Acciones</th>
+                        <?php if ($canModifyRecords): ?>
+                            <th class="text-center">Acciones</th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
@@ -1073,16 +1081,18 @@ $tardinessTotal = count($tardiness_data);
                             <td><?= htmlspecialchars($record['record_date']) ?></td>
                             <td><?= htmlspecialchars($record['record_time']) ?></td>
                             <td><?= htmlspecialchars($record['ip_address']) ?></td>
-                            <td class="text-center">
-                                <div class="flex items-center justify-center gap-3 text-sm">
-                                    <button type="button" onclick="openEditModal(<?= $record['id'] ?>)" class="text-cyan-300 hover:text-cyan-100 transition-colors" title="Editar registro">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button type="button" onclick="openDeleteModal(<?= $record['id'] ?>)" class="text-rose-300 hover:text-rose-100 transition-colors" title="Eliminar registro">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </div>
-                            </td>
+                            <?php if ($canModifyRecords): ?>
+                                <td class="text-center">
+                                    <div class="flex items-center justify-center gap-3 text-sm">
+                                        <button type="button" onclick="openEditModal(<?= $record['id'] ?>)" class="text-cyan-300 hover:text-cyan-100 transition-colors" title="Editar registro">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" onclick="openDeleteModal(<?= $record['id'] ?>)" class="text-rose-300 hover:text-rose-100 transition-colors" title="Eliminar registro">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -1955,6 +1965,7 @@ $editAuthRequired = isAuthorizationRequiredForContext($pdo, 'edit_records');
 $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
 ?>
 
+<?php if ($canModifyRecords): ?>
 <!-- Modal para editar registro con código de autorización -->
 <div id="editModal" class="modal">
     <div class="modal-content">
@@ -2038,6 +2049,7 @@ $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- Modal: Agregar registro manual (para cuadre de nómina) -->
 <?php $manualAuthRequired = $editAuthRequired; ?>

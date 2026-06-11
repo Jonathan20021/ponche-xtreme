@@ -11,9 +11,10 @@ echo "<h3>Sistema de Autorización: " . ($systemEnabled ? '✅ HABILITADO' : '�
 
 // Check specific contexts
 $contexts = [
-    'overtime_punch' => 'Hora Extra',
-    'edit_record' => 'Editar Registros',
-    'delete_record' => 'Eliminar Registros'
+    'overtime' => 'Hora Extra',
+    'early_punch' => 'Entrada Anticipada',
+    'edit_records' => 'Editar Registros',
+    'delete_records' => 'Eliminar Registros'
 ];
 
 echo "<h3>Contextos que requieren autorización:</h3>";

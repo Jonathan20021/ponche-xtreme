@@ -2115,3 +2115,122 @@ function sendDailyGhlReport($htmlContent, $recipients, $reportData) {
         return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
     }
 }
+
+/**
+ * Send the weekly authorization code via email.
+ *
+ * @param array $codeData   ['code' => string, 'valid_from' => 'Y-m-d H:i:s', 'valid_until' => 'Y-m-d H:i:s']
+ * @param array $recipients List of email addresses.
+ * @return array{success: bool, message: string}
+ */
+function sendWeeklyAuthorizationCodeEmail(array $codeData, array $recipients) {
+    try {
+        $config = require __DIR__ . '/../config/email_config.php';
+
+        if (empty($recipients)) {
+            return ['success' => false, 'message' => 'No se especificaron destinatarios'];
+        }
+        if (empty($codeData['code'])) {
+            return ['success' => false, 'message' => 'No se especificó el código a enviar'];
+        }
+
+        $mail = new PHPMailer(true);
+        $mail->SMTPDebug = 0;
+        $mail->isSMTP();
+        $mail->Host       = $config['smtp_host'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $config['smtp_username'];
+        $mail->Password   = $config['smtp_password'];
+        $mail->SMTPSecure = $config['smtp_secure'];
+        $mail->Port       = $config['smtp_port'];
+        $mail->CharSet    = $config['charset'];
+
+        $mail->setFrom($config['from_email'], $config['from_name']);
+
+        $validRecipients = 0;
+        foreach ($recipients as $recipient) {
+            $recipient = trim($recipient);
+            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $mail->addAddress($recipient);
+                $validRecipients++;
+            }
+        }
+        if ($validRecipients === 0) {
+            return ['success' => false, 'message' => 'No se encontraron destinatarios válidos'];
+        }
+
+        $code = htmlspecialchars((string) $codeData['code']);
+        $validFrom = !empty($codeData['valid_from']) ? date('d/m/Y h:i A', strtotime($codeData['valid_from'])) : date('d/m/Y h:i A');
+        $validUntil = !empty($codeData['valid_until']) ? date('d/m/Y h:i A', strtotime($codeData['valid_until'])) : '—';
+        $appName = $config['app_name'] ?? 'Ponche Xtreme';
+
+        $mail->isHTML(true);
+        $mail->Subject = "Nuevo Código de Autorización Semanal - " . date('d/m/Y');
+        $mail->Body = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #0891b2 0%, #1e40af 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+        .content { padding: 30px; background: #f9f9f9; }
+        .code-box { background: white; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px dashed #0891b2; }
+        .code { font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1e40af; font-family: 'Courier New', monospace; }
+        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0891b2; }
+        .warning { background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin: 20px 0; }
+        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔑 Código de Autorización Semanal</h1>
+        </div>
+        <div class="content">
+            <p>Se ha generado el nuevo código de autorización para esta semana. El código anterior quedó <strong>desactivado</strong> automáticamente.</p>
+
+            <div class="code-box">
+                <p style="margin: 0 0 10px 0; color: #666;">Código vigente:</p>
+                <p class="code">{$code}</p>
+            </div>
+
+            <div class="info-box">
+                <p><strong>📅 Válido desde:</strong> {$validFrom}</p>
+                <p><strong>⏰ Vence:</strong> {$validUntil}</p>
+                <p><strong>🔓 Contextos:</strong> Editar registros, eliminar registros, hora extra y entrada anticipada.</p>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Importante:</strong> Este código es confidencial. No lo compartas con personal no autorizado.
+                Cada uso queda registrado en el historial de auditoría con usuario, fecha e IP.
+            </div>
+
+            <p>Este código se renueva automáticamente cada semana y el nuevo código será enviado a este mismo correo.</p>
+        </div>
+        <div class="footer">
+            <p>{$appName} - Sistema de Control de Asistencia</p>
+            <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
+        </div>
+    </div>
+</body>
+</html>
+HTML;
+
+        $mail->AltBody = "CÓDIGO DE AUTORIZACIÓN SEMANAL\n"
+            . "================================\n\n"
+            . "Código: {$codeData['code']}\n"
+            . "Válido desde: {$validFrom}\n"
+            . "Vence: {$validUntil}\n\n"
+            . "El código anterior quedó desactivado automáticamente.\n"
+            . "Este código es confidencial. Cada uso queda registrado en auditoría.\n\n"
+            . "---\n{$appName}";
+
+        $mail->send();
+
+        return ['success' => true, 'message' => "Código enviado a $validRecipients destinatario(s)"];
+
+    } catch (Exception $e) {
+        return ['success' => false, 'message' => 'Error al enviar email: ' . $e->getMessage()];
+    }
+}

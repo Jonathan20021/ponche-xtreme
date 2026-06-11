@@ -55,7 +55,7 @@ function isAuthorizationRequiredForContext(PDO $pdo, string $context): bool {
  * 
  * @param PDO $pdo Conexión a la base de datos
  * @param string $code Código a validar
- * @param string $context Contexto de uso (overtime, special_punch, etc)
+ * @param string $context Contexto de uso (overtime, early_punch, edit_records, delete_records)
  * @return array Array con 'valid' (bool), 'code_id' (int|null), 'message' (string)
  */
 function validateAuthorizationCode(PDO $pdo, string $code, string $context = 'overtime'): array {
@@ -678,6 +678,161 @@ function isEarlyPunchAttempt(PDO $pdo, int $userId, ?string $currentTime = null,
     } catch (PDOException $e) {
         error_log("Error detecting early punch: " . $e->getMessage());
         return false; // En caso de error, no bloquear el registro
+    }
+}
+
+/**
+ * =====================================================================
+ * Restricción de acceso a Modificaciones en Registros
+ * Solo los usuarios configurados en settings (records_modifications_allowed_users)
+ * pueden editar/eliminar registros de asistencia cuando la restricción está activa.
+ * =====================================================================
+ */
+
+/**
+ * Obtiene los IDs de usuarios con acceso a Modificaciones en Registros.
+ */
+function getRecordsModificationsAllowedUserIds(PDO $pdo): array {
+    $raw = (string) getSystemSetting($pdo, 'records_modifications_allowed_users', '');
+    $ids = array_filter(array_map('intval', preg_split('/[\s,;]+/', $raw) ?: []));
+    return array_values(array_unique($ids));
+}
+
+/**
+ * Verifica si un usuario puede acceder a las Modificaciones (editar/eliminar)
+ * de registros de asistencia.
+ *
+ * - Si la restricción está desactivada, cualquier usuario con permiso a la
+ *   sección de registros puede modificar (comportamiento original).
+ * - Si está activada, solo los usuarios de la lista configurada en settings.
+ */
+function canUserModifyRecords(PDO $pdo, ?int $userId = null): bool {
+    $userId = $userId ?? (int) ($_SESSION['user_id'] ?? 0);
+
+    $restricted = getSystemSetting($pdo, 'records_modifications_restricted', false);
+    if (!$restricted) {
+        return true;
+    }
+
+    if ($userId <= 0) {
+        return false;
+    }
+
+    $allowed = getRecordsModificationsAllowedUserIds($pdo);
+    return in_array($userId, $allowed, true);
+}
+
+/**
+ * =====================================================================
+ * Código de Autorización Semanal Automático
+ * Genera un código temporal que vence cada semana y se envía por correo
+ * a los destinatarios configurados en settings.
+ * =====================================================================
+ */
+
+const WEEKLY_AUTH_CODE_NAME = 'Código Semanal Automático';
+
+/**
+ * Obtiene la configuración de rotación semanal de códigos.
+ */
+function getWeeklyAuthRotationConfig(PDO $pdo): array {
+    return [
+        'enabled' => (bool) getSystemSetting($pdo, 'weekly_auth_rotation_enabled', false),
+        'day' => max(1, min(7, (int) getSystemSetting($pdo, 'weekly_auth_rotation_day', 1))), // 1=Lunes ... 7=Domingo
+        'time' => (string) getSystemSetting($pdo, 'weekly_auth_rotation_time', '07:00'),
+        'recipients' => (string) getSystemSetting($pdo, 'weekly_auth_rotation_recipients', ''),
+        'code_length' => (int) getSystemSetting($pdo, 'weekly_auth_code_length', 8),
+        'current_code_id' => (int) getSystemSetting($pdo, 'weekly_auth_current_code_id', 0),
+    ];
+}
+
+/**
+ * Obtiene los destinatarios (emails válidos) del código semanal.
+ */
+function getWeeklyAuthRecipients(PDO $pdo): array {
+    $config = getWeeklyAuthRotationConfig($pdo);
+    $emails = array_filter(array_map('trim', preg_split('/[\s,;]+/', $config['recipients']) ?: []));
+    return array_values(array_filter($emails, function ($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    }));
+}
+
+/**
+ * Obtiene el código semanal vigente (si existe).
+ */
+function getCurrentWeeklyAuthCode(PDO $pdo): ?array {
+    $config = getWeeklyAuthRotationConfig($pdo);
+    if ($config['current_code_id'] <= 0) {
+        return null;
+    }
+    $code = getAuthorizationCodeById($pdo, $config['current_code_id']);
+    if (!$code || (int) $code['is_active'] !== 1) {
+        return null;
+    }
+    return $code;
+}
+
+/**
+ * Rota el código de autorización semanal:
+ * 1. Desactiva el código semanal anterior.
+ * 2. Genera un código nuevo válido por 7 días (hasta las 23:59:59 del 6to día).
+ * 3. Guarda la referencia en system_settings.
+ *
+ * El envío por correo se hace por separado con sendWeeklyAuthorizationCodeEmail().
+ */
+function rotateWeeklyAuthorizationCode(PDO $pdo, ?int $createdBy = null): array {
+    try {
+        $config = getWeeklyAuthRotationConfig($pdo);
+        $length = max(6, min(20, $config['code_length'] ?: 8));
+
+        // Desactivar el código semanal anterior (y cualquier otro código semanal
+        // automático que haya quedado activo)
+        if ($config['current_code_id'] > 0) {
+            deleteAuthorizationCode($pdo, $config['current_code_id']);
+        }
+        $cleanupStmt = $pdo->prepare("UPDATE authorization_codes SET is_active = 0 WHERE code_name = ? AND is_active = 1");
+        $cleanupStmt->execute([WEEKLY_AUTH_CODE_NAME]);
+
+        $code = generateUniqueAuthCode($pdo, $length);
+        $validFrom = date('Y-m-d H:i:s');
+        $validUntil = date('Y-m-d 23:59:59', strtotime('+6 days'));
+
+        $result = createAuthorizationCode(
+            $pdo,
+            WEEKLY_AUTH_CODE_NAME,
+            $code,
+            'universal',
+            null, // válido para todos los contextos (editar, eliminar, hora extra, etc.)
+            $createdBy,
+            $validFrom,
+            $validUntil,
+            null
+        );
+
+        if (!$result['success']) {
+            return ['success' => false, 'message' => $result['message']];
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+            VALUES ('weekly_auth_current_code_id', ?, 'number', 'authorization')
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ");
+        $stmt->execute([(string) $result['code_id']]);
+
+        return [
+            'success' => true,
+            'code_id' => (int) $result['code_id'],
+            'code' => $code,
+            'valid_from' => $validFrom,
+            'valid_until' => $validUntil,
+            'recipients' => getWeeklyAuthRecipients($pdo),
+            'message' => 'Código semanal generado correctamente'
+        ];
+
+    } catch (PDOException $e) {
+        error_log("Error rotating weekly authorization code: " . $e->getMessage());
+        return ['success' => false, 'message' => 'Error al generar el código semanal'];
     }
 }
 

@@ -11,6 +11,13 @@ require_once 'lib/authorization_functions.php';
 // Check permission
 ensurePermission('records');
 
+// Acceso a Modificaciones restringido a los usuarios configurados en settings
+if (!canUserModifyRecords($pdo)) {
+    $_SESSION['error'] = 'No tienes autorización para eliminar registros de asistencia.';
+    header('Location: records.php');
+    exit;
+}
+
 function getSupervisorAccessClause(PDO $pdo): array
 {
     static $cache = null;

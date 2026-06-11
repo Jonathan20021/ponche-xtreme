@@ -882,6 +882,105 @@ try {
                 }
                 break;
 
+            case 'update_records_modifications_access':
+                $restricted = isset($_POST['records_modifications_restricted']) ? 1 : 0;
+                $allowedUsersInput = $_POST['records_modifications_allowed_users'] ?? [];
+                $allowedIds = array_values(array_unique(array_filter(array_map('intval', (array) $allowedUsersInput))));
+
+                if ($restricted && empty($allowedIds)) {
+                    $errorMessages[] = 'Debes seleccionar al menos un usuario con acceso a Modificaciones antes de activar la restricción.';
+                    break;
+                }
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, ?, 'authorization')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_type = VALUES(setting_type)
+                    ");
+                    $stmt->execute(['records_modifications_restricted', (string) $restricted, 'boolean']);
+                    $stmt->execute(['records_modifications_allowed_users', implode(',', $allowedIds), 'text']);
+
+                    $successMessages[] = 'Acceso a Modificaciones en Registros actualizado correctamente.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar el acceso a Modificaciones.';
+                }
+                break;
+
+            case 'update_weekly_auth_config':
+                $weeklyEnabled = isset($_POST['weekly_auth_rotation_enabled']) ? 1 : 0;
+                $weeklyDay = max(1, min(7, (int) ($_POST['weekly_auth_rotation_day'] ?? 1)));
+                $weeklyTime = trim($_POST['weekly_auth_rotation_time'] ?? '07:00');
+                $weeklyRecipients = trim($_POST['weekly_auth_rotation_recipients'] ?? '');
+                $weeklyLength = max(6, min(20, (int) ($_POST['weekly_auth_code_length'] ?? 8)));
+
+                if (!preg_match('/^\d{2}:\d{2}$/', $weeklyTime)) {
+                    $weeklyTime = '07:00';
+                }
+
+                $invalidEmails = [];
+                foreach (array_filter(array_map('trim', preg_split('/[\s,;]+/', $weeklyRecipients) ?: [])) as $email) {
+                    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        $invalidEmails[] = $email;
+                    }
+                }
+                if (!empty($invalidEmails)) {
+                    $errorMessages[] = 'Correos inválidos: ' . implode(', ', $invalidEmails);
+                    break;
+                }
+                if ($weeklyEnabled && $weeklyRecipients === '') {
+                    $errorMessages[] = 'Debes configurar al menos un correo destinatario para el código semanal.';
+                    break;
+                }
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, ?, 'authorization')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), setting_type = VALUES(setting_type)
+                    ");
+                    $stmt->execute(['weekly_auth_rotation_enabled', (string) $weeklyEnabled, 'boolean']);
+                    $stmt->execute(['weekly_auth_rotation_day', (string) $weeklyDay, 'text']);
+                    $stmt->execute(['weekly_auth_rotation_time', $weeklyTime, 'text']);
+                    $stmt->execute(['weekly_auth_rotation_recipients', $weeklyRecipients, 'text']);
+                    $stmt->execute(['weekly_auth_code_length', (string) $weeklyLength, 'text']);
+
+                    $successMessages[] = 'Configuración del código semanal automático actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración del código semanal.';
+                }
+                break;
+
+            case 'rotate_weekly_auth_code_now':
+                $rotation = rotateWeeklyAuthorizationCode($pdo, (int) $_SESSION['user_id']);
+
+                if (!$rotation['success']) {
+                    $errorMessages[] = 'No se pudo generar el código semanal: ' . $rotation['message'];
+                    break;
+                }
+
+                $successMessages[] = 'Nuevo código semanal generado. Vence el ' . date('d/m/Y h:i A', strtotime($rotation['valid_until'])) . '.';
+
+                if (!empty($rotation['recipients'])) {
+                    require_once 'lib/email_functions.php';
+                    $emailResult = sendWeeklyAuthorizationCodeEmail(
+                        [
+                            'code' => $rotation['code'],
+                            'valid_from' => $rotation['valid_from'],
+                            'valid_until' => $rotation['valid_until'],
+                        ],
+                        $rotation['recipients']
+                    );
+                    if ($emailResult['success']) {
+                        $successMessages[] = $emailResult['message'];
+                    } else {
+                        $errorMessages[] = $emailResult['message'];
+                    }
+                } else {
+                    $errorMessages[] = 'El código se generó, pero no hay correos destinatarios configurados; no se envió por email.';
+                }
+                break;
+
             case 'update_absence_report_config':
                 $recipients = trim($_POST['absence_report_recipients'] ?? '');
                 $enabled = isset($_POST['absence_report_enabled']) ? 1 : 0;
@@ -1797,6 +1896,34 @@ try {
     $authRequireForEdit = false;
     $authRequireForDelete = false;
     $authRequireForEarlyPunch = false;
+}
+
+// Get records modifications access + weekly auth code settings
+$recordsModRestricted = false;
+$recordsModAllowedUserIds = [];
+$weeklyAuthConfig = [
+    'enabled' => false,
+    'day' => 1,
+    'time' => '07:00',
+    'recipients' => '',
+    'code_length' => 8,
+    'current_code_id' => 0,
+];
+$weeklyAuthCurrentCode = null;
+$usersForModAccess = [];
+try {
+    $recordsModRestricted = (bool) getSystemSetting($pdo, 'records_modifications_restricted', false);
+    $recordsModAllowedUserIds = getRecordsModificationsAllowedUserIds($pdo);
+    $weeklyAuthConfig = getWeeklyAuthRotationConfig($pdo);
+    $weeklyAuthCurrentCode = getCurrentWeeklyAuthCode($pdo);
+    $usersForModAccess = $pdo->query("
+        SELECT id, username, full_name, role
+        FROM users
+        WHERE is_active = 1
+        ORDER BY full_name ASC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    // Defaults already set
 }
 
 // Get absence report settings
@@ -2836,6 +2963,152 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </form>
         </section>
 
+        <!-- Acceso a Modificaciones en Registros -->
+        <section id="records-modifications-access" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">Acceso a Modificaciones en Registros</h2>
+                    <p class="text-muted text-sm">Controla qué usuarios pueden ver y usar los botones de editar y
+                        eliminar en la sección de Registros. El resto de usuarios administrativos no verá estas
+                        opciones.</p>
+                </div>
+                <span
+                    class="chip <?= $recordsModRestricted ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' ?>">
+                    <i class="fas fa-<?= $recordsModRestricted ? 'lock' : 'lock-open' ?>"></i>
+                    <?= $recordsModRestricted ? 'Restringido' : 'Sin restricción' ?>
+                </span>
+            </div>
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_records_modifications_access">
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base font-medium cursor-pointer">
+                        <input type="checkbox" name="records_modifications_restricted" value="1"
+                            class="w-5 h-5 accent-cyan-500" <?= $recordsModRestricted ? 'checked' : '' ?>>
+                        <span>Restringir Modificaciones solo a usuarios autorizados</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Si está desactivado, cualquier usuario con acceso a la sección de
+                        Registros podrá editar y eliminar (comportamiento original).</p>
+                </div>
+                <div>
+                    <label class="form-label">Usuarios con acceso a Modificaciones</label>
+                    <select name="records_modifications_allowed_users[]" multiple size="8" class="input-control"
+                        style="height: auto;">
+                        <?php foreach ($usersForModAccess as $userOption): ?>
+                            <option value="<?= (int) $userOption['id'] ?>"
+                                <?= in_array((int) $userOption['id'], $recordsModAllowedUserIds, true) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($userOption['full_name']) ?>
+                                (<?= htmlspecialchars($userOption['username']) ?> · <?= htmlspecialchars($userOption['role']) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="text-xs text-muted mt-1">Mantén presionada la tecla Ctrl (o Cmd en Mac) para seleccionar
+                        varios usuarios.</p>
+                </div>
+                <div class="flex justify-end pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Acceso
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Código de Autorización Semanal Automático -->
+        <section id="weekly-auth-code-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">Código Semanal Automático</h2>
+                    <p class="text-muted text-sm">Genera automáticamente un código de autorización temporal cada semana,
+                        desactiva el anterior y lo envía por correo a los destinatarios configurados.</p>
+                </div>
+                <span
+                    class="chip <?= $weeklyAuthConfig['enabled'] ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' ?>">
+                    <i class="fas fa-<?= $weeklyAuthConfig['enabled'] ? 'sync-alt' : 'pause-circle' ?>"></i>
+                    <?= $weeklyAuthConfig['enabled'] ? 'Rotación activa' : 'Rotación pausada' ?>
+                </span>
+            </div>
+
+            <?php if ($weeklyAuthCurrentCode): ?>
+                <div class="modal-info" style="background: rgba(8, 145, 178, 0.08); border-left: 4px solid #0891b2; padding: 14px 18px; border-radius: 8px;">
+                    <p class="text-sm">
+                        <i class="fas fa-key"></i>
+                        <strong>Código semanal vigente:</strong>
+                        vence el <?= htmlspecialchars(date('d/m/Y h:i A', strtotime($weeklyAuthCurrentCode['valid_until']))) ?>
+                        · usos: <?= (int) $weeklyAuthCurrentCode['current_uses'] ?>.
+                        El código solo se envía por correo a los destinatarios configurados.
+                    </p>
+                </div>
+            <?php else: ?>
+                <div class="modal-info" style="background: rgba(245, 158, 11, 0.08); border-left: 4px solid #f59e0b; padding: 14px 18px; border-radius: 8px;">
+                    <p class="text-sm">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        No hay un código semanal vigente. Usa "Generar y enviar ahora" para crear el primero.
+                    </p>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_weekly_auth_config">
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base font-medium cursor-pointer">
+                        <input type="checkbox" name="weekly_auth_rotation_enabled" value="1"
+                            class="w-5 h-5 accent-cyan-500" <?= $weeklyAuthConfig['enabled'] ? 'checked' : '' ?>>
+                        <span>Habilitar rotación semanal automática</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Cada semana se genera un código nuevo (válido por 7 días) y el
+                        anterior queda desactivado automáticamente.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label">Día de rotación y envío</label>
+                        <select name="weekly_auth_rotation_day" class="input-control">
+                            <?php
+                            $weekDays = [1 => 'Lunes', 2 => 'Martes', 3 => 'Miércoles', 4 => 'Jueves', 5 => 'Viernes', 6 => 'Sábado', 7 => 'Domingo'];
+                            foreach ($weekDays as $dayNum => $dayLabel): ?>
+                                <option value="<?= $dayNum ?>" <?= $weeklyAuthConfig['day'] === $dayNum ? 'selected' : '' ?>>
+                                    <?= $dayLabel ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Hora de rotación</label>
+                        <input type="time" name="weekly_auth_rotation_time" class="input-control"
+                            value="<?= htmlspecialchars($weeklyAuthConfig['time']) ?>">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="form-label">Correos destinatarios</label>
+                        <input type="text" name="weekly_auth_rotation_recipients" class="input-control"
+                            placeholder="correo1@dominio.com, correo2@dominio.com"
+                            value="<?= htmlspecialchars($weeklyAuthConfig['recipients']) ?>">
+                        <p class="text-xs text-muted mt-1">Separa varios correos con comas. El código nuevo se envía a
+                            estos correos cada semana.</p>
+                    </div>
+                    <div>
+                        <label class="form-label">Largo del código</label>
+                        <input type="number" name="weekly_auth_code_length" class="input-control" min="6" max="20"
+                            value="<?= (int) $weeklyAuthConfig['code_length'] ?>">
+                    </div>
+                </div>
+                <div class="flex justify-end pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Configuración
+                    </button>
+                </div>
+            </form>
+
+            <form method="POST"
+                onsubmit="return confirm('Esto desactivará el código semanal actual, generará uno nuevo y lo enviará por correo. ¿Continuar?');"
+                class="flex justify-end border-t border-slate-200 pt-4">
+                <input type="hidden" name="action" value="rotate_weekly_auth_code_now">
+                <button type="submit" class="btn-secondary">
+                    <i class="fas fa-paper-plane"></i>
+                    Generar y enviar ahora
+                </button>
+            </form>
+        </section>
+
         <article id="create-auth-code-card" class="glass-card space-y-6">
             <div class="panel-heading">
                 <div>
@@ -2884,10 +3157,10 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         <label class="form-label">Contexto de Uso</label>
                         <select name="usage_context" class="input-control">
                             <option value="">Todos los contextos</option>
-                            <option value="overtime_punch">Hora Extra</option>
-                            <option value="edit_record">Editar Registros</option>
-                            <option value="delete_record">Eliminar Registros</option>
-                            <option value="special_punch">Punch Especial</option>
+                            <option value="overtime">Hora Extra</option>
+                            <option value="early_punch">Entrada Anticipada</option>
+                            <option value="edit_records">Editar Registros</option>
+                            <option value="delete_records">Eliminar Registros</option>
                         </select>
                         <p class="text-xs text-muted mt-1">Especifica dónde se puede usar este código. Vacío = todos los
                             contextos.</p>
@@ -6573,7 +6846,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 key: 'authorization',
                 label: 'Códigos de Autorización',
                 icon: 'fas fa-key',
-                selectors: ['#authorization-system-config', '#create-auth-code-card', '#authorization-codes-section']
+                selectors: ['#authorization-system-config', '#records-modifications-access', '#weekly-auth-code-config', '#create-auth-code-card', '#authorization-codes-section']
             },
             {
                 key: 'claude_global',
@@ -7207,6 +7480,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                     <select id="detail_context" name="usage_context" class="editable-field input-control w-full">
                         <option value="">🌐 Todos (Universal)</option>
                         <option value="overtime">⏰ Horas Extras</option>
+                        <option value="early_punch">🌅 Entrada Anticipada</option>
                         <option value="edit_records">✏️ Editar Registros</option>
                         <option value="delete_records">🗑️ Eliminar Registros</option>
                     </select>

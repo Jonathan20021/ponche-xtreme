@@ -9,6 +9,13 @@ date_default_timezone_set('America/Santo_Domingo');
 // Check permission
 ensurePermission('records');
 
+// Acceso a Modificaciones restringido a los usuarios configurados en settings
+if (!canUserModifyRecords($pdo)) {
+    $_SESSION['punch_error'] = 'No tienes autorización para modificar registros de asistencia.';
+    header('Location: records.php');
+    exit;
+}
+
 function getSupervisorAccessClause(PDO $pdo): array
 {
     static $cache = null;
