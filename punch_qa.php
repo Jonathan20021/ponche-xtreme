@@ -29,8 +29,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user_id = $user['id'];
                 $full_name = $user['full_name'];
 
+                // IDEMPOTENCIA: si llega una marcación idéntica reciente (mismo usuario + tipo)
+                // dentro de la ventana configurada, se trata como "ya registrada" en vez de duplicar.
+                // Evita registros duplicados por doble clic o reintentos ante 429/caída de red.
+                $idempotencyWindow = (int) getSystemSetting($pdo, 'punch_idempotency_window_seconds', 8);
+                $isDuplicateRetry = false;
+                if ($idempotencyWindow > 0) {
+                    $dupStmt = $pdo->prepare("
+                        SELECT id FROM attendance
+                        WHERE user_id = ? AND type = ?
+                          AND timestamp >= (NOW() - INTERVAL ? SECOND)
+                        ORDER BY timestamp DESC LIMIT 1
+                    ");
+                    $dupStmt->execute([$user_id, $type, $idempotencyWindow]);
+                    if ($dupStmt->fetch()) {
+                        $isDuplicateRetry = true;
+                        $success = "Marcación ya registrada (se evitó un duplicado).";
+                        $show_last_punch = true;
+                    }
+                }
+
                 // Validate if Entry or Exit already registered for the day
-                if ($type === 'Entry' || $type === 'Exit') {
+                if (!$isDuplicateRetry && ($type === 'Entry' || $type === 'Exit')) {
                     $check_stmt = $pdo->prepare("
                         SELECT COUNT(*) 
                         FROM attendance 
@@ -45,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // Validar secuencia ENTRY/EXIT
-                if (!$error) {
+                if (!$error && !$isDuplicateRetry) {
                     require_once 'lib/authorization_functions.php';
                     $sequenceValidation = validateEntryExitSequence($pdo, $user_id, $type);
                     if (!$sequenceValidation['valid']) {
@@ -53,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
-                if (!$error) {
+                if (!$error && !$isDuplicateRetry) {
                     // Register the punch
                     $ip_address = $_SERVER['REMOTE_ADDR'] === '::1' ? '127.0.0.1' : $_SERVER['REMOTE_ADDR'];
                     $insert_stmt = $pdo->prepare("

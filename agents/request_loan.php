@@ -736,7 +736,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                 if (min) html += '<div class="type-info-cell"><div class="lbl">Minimo</div><div class="val">RD$ ' + fmtInt.format(min) + '</div></div>';
                 if (max) html += '<div class="type-info-cell"><div class="lbl">Maximo</div><div class="val">RD$ ' + fmtInt.format(max) + '</div></div>';
                 html += '</div>';
-                html += '<p class="mt-3 text-xs text-emerald-300"><i class="fas fa-circle-check mr-1"></i>Beneficio laboral: 0% de interes y sin mora.</p>';
+                const rateNum = parseFloat(rate) || 0;
+                if (rateNum === 0) {
+                    html += '<p class="mt-3 text-xs text-emerald-300"><i class="fas fa-circle-check mr-1"></i>Este tipo de prestamo no genera intereses.</p>';
+                } else {
+                    html += '<p class="mt-3 text-xs text-amber-300"><i class="fas fa-circle-info mr-1"></i>Este prestamo genera ' + rateNum.toFixed(2) + '% de interes anual (cuota fija).</p>';
+                }
                 info.innerHTML = html;
                 info.classList.remove('hidden');
             }

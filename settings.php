@@ -932,6 +932,26 @@ try {
                 }
                 break;
 
+            case 'update_punch_config':
+                // Configuración de la marcación (punch.php): evita salidas/entradas perdidas.
+                $punchWindow  = max(0, (int) ($_POST['punch_idempotency_window_seconds'] ?? 8));
+                $punchRetries = max(0, (int) ($_POST['punch_client_max_retries'] ?? 3));
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'number', 'performance')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    $stmt->execute(['punch_idempotency_window_seconds', (string) $punchWindow]);
+                    $stmt->execute(['punch_client_max_retries',         (string) $punchRetries]);
+
+                    $successMessages[] = 'Configuración de marcación guardada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al guardar la configuración de marcación.';
+                }
+                break;
+
             case 'update_login_logs_report_config':
                 $llRecipients       = trim($_POST['login_logs_report_recipients'] ?? '');
                 $llEnabled          = isset($_POST['login_logs_report_enabled']) ? 1 : 0;
@@ -3473,6 +3493,71 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         pestañas que nadie está viendo.</li>
                     <li><i class="fas fa-check text-green-400"></i> Los cambios aplican cuando cada usuario recarga su
                         página.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Punch / Attendance Reliability Configuration -->
+        <section id="punch-config" class="glass-card space-y-6">
+            <?php
+                $punchWindowVal  = (int) getSystemSetting($pdo, 'punch_idempotency_window_seconds', 8);
+                $punchRetriesVal = (int) getSystemSetting($pdo, 'punch_client_max_retries', 3);
+            ?>
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-fingerprint text-emerald-400"></i>
+                        Confiabilidad de Marcación (Ponche)
+                    </h2>
+                    <p class="text-muted text-sm">Evita <strong>salidas/entradas perdidas</strong> y <strong>marcaciones
+                        duplicadas</strong>. La marcación confirma el guardado real y reintenta si el servidor responde
+                        429 (límite por IP de HostGator) o si hay un corte de red.</p>
+                </div>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_punch_config">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clone"></i> Ventana anti-duplicado (segundos)</label>
+                        <input type="number" name="punch_idempotency_window_seconds" min="0" max="120"
+                            value="<?= $punchWindowVal ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Actual: <?= $punchWindowVal ?>s · Recomendado: 8-10s. Si llega
+                            una marcación idéntica (mismo usuario y tipo) dentro de esta ventana, se trata como
+                            "ya registrada" en vez de duplicar. Pon 0 para desactivar.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-redo"></i> Reintentos del cliente ante 429/red</label>
+                        <input type="number" name="punch_client_max_retries" min="0" max="10"
+                            value="<?= $punchRetriesVal ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Actual: <?= $punchRetriesVal ?> · Recomendado: 3. Reintentos
+                            automáticos con espera creciente y aleatoria (jitter) si la marcación recibe 429 o falla la
+                            conexión. Si se agotan, se muestra un aviso para volver a marcar.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Configuración
+                    </button>
+                </div>
+            </form>
+
+            <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                <h3 class="text-emerald-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-info-circle"></i>
+                    ¿Qué problema resuelve?
+                </h3>
+                <ul class="text-sm text-emerald-200 space-y-2">
+                    <li><i class="fas fa-check text-green-400"></i> Antes, si el POST de la marcación fallaba (429 por IP
+                        compartida o corte de red), la salida <strong>no se guardaba</strong> y el colaborador se iba
+                        creyendo que había marcado.</li>
+                    <li><i class="fas fa-check text-green-400"></i> Ahora la marcación solo se da por exitosa cuando el
+                        servidor confirma que el registro existe; si falla, reintenta y, si no lo logra, avisa.</li>
+                    <li><i class="fas fa-check text-green-400"></i> La ventana anti-duplicado elimina los registros
+                        triples por doble clic o reintentos.</li>
                 </ul>
             </div>
         </section>
@@ -6501,6 +6586,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Intervalos de Actualización (Rendimiento / 429)',
                 icon: 'fas fa-stopwatch',
                 selectors: ['#polling-config']
+            },
+            {
+                key: 'punch_reliability',
+                label: 'Confiabilidad de Marcación (Ponche)',
+                icon: 'fas fa-fingerprint',
+                selectors: ['#punch-config']
             },
             {
                 key: 'absence_report',

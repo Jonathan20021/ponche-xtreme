@@ -78,6 +78,21 @@ $success = null;
 $punch_history = [];
 $show_last_punch = false;
 $selectedTypeMeta = null;
+$isDuplicateRetry = false;
+
+// Configurables desde settings.php (Configuración → Marcación)
+$idempotencyWindow = (int) getSystemSetting($pdo, 'punch_idempotency_window_seconds', 8);
+if ($idempotencyWindow < 0) {
+    $idempotencyWindow = 0;
+}
+$punchMaxRetries = (int) getSystemSetting($pdo, 'punch_client_max_retries', 3);
+if ($punchMaxRetries < 0) {
+    $punchMaxRetries = 0;
+}
+
+// Detectar peticiones AJAX para responder JSON (confirmación + reintento del cliente)
+$isAjax = (isset($_POST['ajax']) && $_POST['ajax'] === '1')
+    || strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate required POST data
@@ -105,6 +120,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($user) {
                     $user_id = $user['id'];
                     $full_name = $user['full_name'];
+
+                    // IDEMPOTENCIA: si llega una marcación idéntica (mismo usuario + tipo)
+                    // dentro de la ventana configurada, se trata como "ya registrada" en lugar
+                    // de insertar un duplicado. Esto evita los registros triples por doble clic
+                    // o por reintentos del cliente ante un 429/caída de red, y hace que reintentar
+                    // sea seguro (no rompe la secuencia ENTRY/EXIT).
+                    if ($idempotencyWindow > 0) {
+                        $dupStmt = $pdo->prepare("
+                            SELECT id, timestamp
+                            FROM attendance
+                            WHERE user_id = ?
+                              AND type = ?
+                              AND timestamp >= (NOW() - INTERVAL ? SECOND)
+                            ORDER BY timestamp DESC
+                            LIMIT 1
+                        ");
+                        $dupStmt->execute([$user_id, $typeSlug, $idempotencyWindow]);
+                        $existingRecent = $dupStmt->fetch();
+                        if ($existingRecent) {
+                            $isDuplicateRetry = true;
+                        }
+                    }
+
+                    if ($isDuplicateRetry) {
+                        // Ya existe una marcación reciente idéntica: confirmamos como éxito.
+                        $success = "Marcación ya registrada como {$typeLabel} (se evitó un duplicado).";
+                        $show_last_punch = true;
+
+                        $history_stmt = $pdo->prepare("
+                            SELECT type, timestamp
+                            FROM attendance
+                            WHERE user_id = ?
+                            ORDER BY timestamp DESC LIMIT 5
+                        ");
+                        $history_stmt->execute([$user_id]);
+                        $punch_history = $history_stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                        $punch_history = array_map(function (array $row): array {
+                            $row['type_label'] = resolveAttendanceLabel($row['type']);
+                            return $row;
+                        }, $punch_history);
+                        $last_type = $punch_history[0] ?? null;
+                    } else {
 
                     // Verificar si requiere código de autorización para hora extra
                     $authSystemEnabled = isAuthorizationSystemEnabled($pdo);
@@ -241,12 +298,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Send data to Slack
                         sendSlackNotification($full_name, $username, $selectedTypeMeta, $ip_address);
                     }
+                    } // fin else (no es reintento duplicado)
                 } else {
                     $error = "User not found.";
                 }
             }
         }
     }
+}
+
+// Respuesta JSON para el cliente AJAX: permite confirmar el guardado real y reintentar.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success'    => $error === null,
+        'duplicate'  => $isDuplicateRetry,
+        'message'    => $error ?? $success,
+        'type'       => $selectedTypeMeta['slug'] ?? null,
+        'type_label' => $selectedTypeMeta['label'] ?? ($last_type['type_label'] ?? null),
+        'timestamp'  => $last_type['timestamp'] ?? null,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 function sendSlackNotification($full_name, $username, array $type, $ip_address) {
@@ -629,9 +701,137 @@ if (isset($_COOKIE['savedUsername'])) {
     </div>
 
     <script>
+        // Configuración inyectada desde settings.php
+        const PUNCH_MAX_RETRIES = <?= (int) $punchMaxRetries ?>;
+
         // Variables globales para el sistema de autorización
         let authSystemEnabled = false;
         let authRequiredForOvertime = false;
+
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+        // Backoff exponencial con jitter. El jitter es clave: la oficina comparte una sola IP
+        // (NAT), así que sin jitter todos reintentarían a la vez y volverían a saturar el límite
+        // por IP de LiteSpeed (429). El jitter de-sincroniza esos reintentos.
+        function punchBackoff(attempt) {
+            const base = Math.min(4000, 400 * Math.pow(2, attempt));
+            return base + Math.floor(Math.random() * 600);
+        }
+
+        async function safeJson(resp) {
+            try { return await resp.json(); } catch (e) { return null; }
+        }
+
+        // Banner prominente de resultado (verde = ok, rojo = falló)
+        function showResult(ok, message) {
+            const statusDiv = document.getElementById('storageStatus');
+            statusDiv.className = ok
+                ? 'mb-6 status-message bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-r font-semibold'
+                : 'mb-6 status-message bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-r font-bold text-lg';
+            statusDiv.innerHTML = (ok ? '<i class="fas fa-check-circle mr-2"></i>' : '<i class="fas fa-exclamation-triangle mr-2"></i>')
+                + message;
+            statusDiv.classList.remove('hidden');
+            statusDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function setPunchButtonsDisabled(disabled) {
+            document.querySelectorAll('.punch-button').forEach(function (b) {
+                b.disabled = disabled;
+                b.classList.toggle('loading', disabled);
+                b.style.opacity = disabled ? '0.6' : '';
+            });
+        }
+
+        // Envía la marcación por AJAX, confirma el guardado real y reintenta ante 429/red.
+        async function submitPunch(type) {
+            const usernameInput = document.getElementById('username');
+            const username = usernameInput.value.trim();
+            if (!username) {
+                showResult(false, 'Ingresa tu usuario antes de marcar.');
+                usernameInput.focus();
+                return;
+            }
+            saveUsername(username);
+
+            const authContainer = document.getElementById('authCodeContainer');
+            const authInput = document.getElementById('authorization_code');
+            if (!authContainer.classList.contains('hidden') && !authInput.value.trim()) {
+                showResult(false, 'Por favor ingrese el código de autorización para hora extra.');
+                authInput.focus();
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append('username', username);
+            fd.append('type', type);
+            fd.append('ajax', '1');
+            if (authInput.value.trim()) {
+                fd.append('authorization_code', authInput.value.trim());
+            }
+
+            setPunchButtonsDisabled(true);
+            showResult(true, 'Registrando marcación…');
+
+            let attempt = 0;
+            while (attempt <= PUNCH_MAX_RETRIES) {
+                try {
+                    const resp = await fetch(window.location.href, {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        cache: 'no-store'
+                    });
+
+                    // 429 (throttle por IP) o 5xx => reintentar con backoff + jitter
+                    if (resp.status === 429 || resp.status >= 500) {
+                        attempt++;
+                        if (attempt > PUNCH_MAX_RETRIES) break;
+                        showResult(true, `Servidor ocupado, reintentando (${attempt}/${PUNCH_MAX_RETRIES})…`);
+                        await sleep(punchBackoff(attempt));
+                        continue;
+                    }
+
+                    const data = await safeJson(resp);
+
+                    if (!resp.ok || !data) {
+                        showResult(false, (data && data.message) ? data.message : 'No se pudo registrar la marcación. Vuelve a intentar.');
+                        setPunchButtonsDisabled(false);
+                        return;
+                    }
+
+                    if (data.success) {
+                        // Éxito confirmado por el servidor (el registro existe en la BD).
+                        // Guardamos confirmación y recargamos para mostrar el historial real.
+                        try {
+                            sessionStorage.setItem('punchConfirm', JSON.stringify({
+                                label: data.type_label || type,
+                                duplicate: !!data.duplicate
+                            }));
+                        } catch (e) {}
+                        showResult(true, '✅ ' + (data.message || 'Marcación registrada.'));
+                        await sleep(900);
+                        window.location.reload();
+                        return;
+                    }
+
+                    // Error de validación devuelto por el servidor (secuencia, código, etc.)
+                    showResult(false, data.message || 'No se pudo registrar la marcación.');
+                    setPunchButtonsDisabled(false);
+                    return;
+
+                } catch (e) {
+                    // Fallo de red / conexión
+                    attempt++;
+                    if (attempt > PUNCH_MAX_RETRIES) break;
+                    showResult(true, `Sin conexión, reintentando (${attempt}/${PUNCH_MAX_RETRIES})…`);
+                    await sleep(punchBackoff(attempt));
+                }
+            }
+
+            // Reintentos agotados: aviso FUERTE para que el colaborador NO se vaya creyendo que marcó.
+            showResult(false, '⚠️ Tu marcación NO se registró (conexión saturada). Por favor vuelve a marcar.');
+            setPunchButtonsDisabled(false);
+        }
 
         // Verificar configuración del sistema de autorización al cargar
         async function checkAuthorizationRequirement() {
@@ -695,12 +895,13 @@ if (isset($_COOKIE['savedUsername'])) {
         // FunciÃ³n para guardar el username usando diferentes mÃ©todos
         function saveUsername(username) {
             try {
+                // Guardar siempre la cookie: tras un envío AJAX exitoso recargamos la página (GET)
+                // y el historial "Recent Activity" se renderiza a partir de esta cookie.
+                document.cookie = `savedUsername=${username};path=/;max-age=31536000`;
                 if (isLocalStorageAvailable()) {
                     localStorage.setItem('savedUsername', username);
                     showStatus('Username saved successfully!');
                 } else {
-                    // Alternativa usando cookies si localStorage no estÃ¡ disponible
-                    document.cookie = `savedUsername=${username};path=/;max-age=31536000`; // 1 aÃ±o
                     showStatus('Username saved using cookies');
                 }
             } catch (error) {
@@ -745,6 +946,17 @@ if (isset($_COOKIE['savedUsername'])) {
         // Event Listeners
         document.addEventListener('DOMContentLoaded', async function() {
             try {
+                // Mostrar confirmación persistente tras recargar después de un éxito
+                try {
+                    const confRaw = sessionStorage.getItem('punchConfirm');
+                    if (confRaw) {
+                        sessionStorage.removeItem('punchConfirm');
+                        const conf = JSON.parse(confRaw);
+                        showResult(true, '✅ ' + (conf.duplicate ? 'Marcación ya registrada' : 'Marcación registrada')
+                            + (conf.label ? ': ' + conf.label : '') + '.');
+                    }
+                } catch (e) {}
+
                 // Verificar configuración de autorización
                 await checkAuthorizationRequirement();
 
@@ -775,23 +987,20 @@ if (isset($_COOKIE['savedUsername'])) {
                     }
                 });
 
-                // Configurar el formulario
-                document.getElementById('punchForm').addEventListener('submit', async function(e) {
-                    const username = document.getElementById('username').value;
-                    if (username) {
-                        saveUsername(username);
+                // Marcación por AJAX: interceptamos el envío nativo del formulario para
+                // confirmar el guardado real y poder reintentar ante 429/caída de red.
+                let lastPunchType = null;
+                document.querySelectorAll('.punch-button').forEach(function (btn) {
+                    btn.addEventListener('click', function () { lastPunchType = btn.value; });
+                });
+                document.getElementById('punchForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    const type = (e.submitter && e.submitter.value) ? e.submitter.value : lastPunchType;
+                    if (!type) {
+                        showResult(false, 'Selecciona un tipo de marcación.');
+                        return;
                     }
-
-                    // Si el campo de autorización está visible y vacío, prevenir envío
-                    const authContainer = document.getElementById('authCodeContainer');
-                    const authInput = document.getElementById('authorization_code');
-                    
-                    if (!authContainer.classList.contains('hidden') && !authInput.value.trim()) {
-                        e.preventDefault();
-                        showStatus('Por favor ingrese el código de autorización para hora extra.', true);
-                        authInput.focus();
-                        return false;
-                    }
+                    submitPunch(type);
                 });
 
                 // Configurar el botÃ³n de limpiar

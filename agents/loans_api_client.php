@@ -37,13 +37,16 @@ function getLoanTypesFromFinance(): array {
             ORDER BY name
         ");
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        // Préstamos a empleados: exentos de interés por política.
-        // Forzamos 0 aquí para que UI y cálculo siempre lo reflejen,
-        // independientemente del valor histórico en loan_types.
-        foreach ($rows as &$row) {
-            $row['default_interest_rate'] = '0.0000';
+        // La exención de interés para empleados es configurable en
+        // loan_settings (pantalla Configuración de la app de Finanzas).
+        // Solo si está activa se fuerza 0%; de lo contrario la tasa del
+        // tipo de préstamo aplica tal cual.
+        if (getLoanSetting($pdo, 'employee_loans_interest_exempt', '0') === '1') {
+            foreach ($rows as &$row) {
+                $row['default_interest_rate'] = '0.0000';
+            }
+            unset($row);
         }
-        unset($row);
         return $rows;
     } catch (Throwable $e) {
         error_log('getLoanTypesFromFinance failed: ' . $e->getMessage());
@@ -208,11 +211,9 @@ function createLoanRequestInFinance(array $payload): array {
     }
 
     // Validar préstamos activos
-    $maxActive = (int) (getFinanzasConfig($finanzasPdo, 'max_active_loans_per_employee') ?? 2);
+    $maxActive = (int) getLoanSetting($finanzasPdo, 'max_active_loans_per_employee', '2');
     if ($maxActive <= 0) {
-        $stmt = $finanzasPdo->prepare("SELECT setting_value FROM loan_settings WHERE setting_key = 'max_active_loans_per_employee'");
-        $stmt->execute();
-        $maxActive = (int) ($stmt->fetchColumn() ?: 2);
+        $maxActive = 2;
     }
     $stmt = $finanzasPdo->prepare("
         SELECT COUNT(*) FROM loans
@@ -224,11 +225,25 @@ function createLoanRequestInFinance(array $payload): array {
         return ['ok' => false, 'error' => "Excedido el máximo de préstamos activos simultáneos ({$maxActive}). Liquida un préstamo antes de solicitar otro."];
     }
 
+    // Términos financieros según configuración (loan_settings):
+    // la exención de interés/mora para empleados solo aplica si está activa.
+    $interestExempt = getLoanSetting($finanzasPdo, 'employee_loans_interest_exempt', '0') === '1';
+    $lateFeeExempt  = getLoanSetting($finanzasPdo, 'employee_loans_late_fee_exempt', '0') === '1';
+    $annualRate = $interestExempt ? 0.0 : max(0.0, (float) $loanType['default_interest_rate']);
+    if ($interestExempt || $annualRate <= 0) {
+        $interestMethod = 'zero';
+    } elseif (empty($payload['interest_method'])) {
+        $interestMethod = getLoanSetting($finanzasPdo, 'default_interest_method', 'french');
+    }
+    $lateFeeRate = $lateFeeExempt
+        ? 0.0
+        : (float) getLoanSetting($finanzasPdo, 'default_late_fee_rate', '2.0');
+
     // Calcular amortización
     $startDate = $firstDueDate ?? date('Y-m-d');
     $amort = calculateAmortizationPHP([
         'principal' => $principal,
-        'annualInterestRate' => (float) $loanType['default_interest_rate'],
+        'annualInterestRate' => $annualRate,
         'installmentCount' => $installmentCount,
         'frequency' => $frequency,
         'startDate' => $startDate,
@@ -284,9 +299,9 @@ function createLoanRequestInFinance(array $payload): array {
         $insertLoan->execute([
             $loanNumber, (int) $loanType['id'], (string) $employeeId, $employee['name'],
             $employee['document'], $employee['email'], $employee['phone'], $employee['position'], $employee['department'],
-            $employee['monthly_salary'], $currency, $principal, (float) $loanType['default_interest_rate'], $interestMethod,
+            $employee['monthly_salary'], $currency, $principal, $annualRate, $interestMethod,
             $installmentCount, $installmentCount, $frequency, $amort['installmentAmount'], $amort['totalInterest'],
-            $amort['totalPayable'], 2.0, $applicationDate,
+            $amort['totalPayable'], $lateFeeRate, $applicationDate,
             $amort['installments'][0]['due_date'] ?? null,
             $amort['installments'][count($amort['installments']) - 1]['due_date'] ?? null,
             $amort['totalPayable'],
@@ -361,7 +376,7 @@ function createLoanRequestInFinance(array $payload): array {
             'loan_type_name' => $loanType['name'],
             'currency' => $currency,
             'principal_amount' => $principal,
-            'interest_rate' => (float) $loanType['default_interest_rate'],
+            'interest_rate' => $annualRate,
             'interest_method' => $interestMethod,
             'installment_count' => $installmentCount,
             'installment_frequency' => $frequency,

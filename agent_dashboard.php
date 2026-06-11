@@ -185,11 +185,24 @@ if (isset($_SESSION['vacation_error'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
     $typeSlug = sanitizeAttendanceTypeSlug($_POST['punch_type'] ?? '');
     $date_filter_post = $_GET['dates'] ?? date('Y-m-d');
-    
-    if ($typeSlug === '') {
-        $_SESSION['punch_error'] = "Tipo de asistencia no válido.";
+
+    // Detectar AJAX para responder JSON (confirmación de guardado + reintento del cliente).
+    // Si no es AJAX, se mantiene el flujo clásico POST-Redirect-GET con mensajes en sesión.
+    $isAjax = (isset($_POST['ajax']) && $_POST['ajax'] === '1')
+        || strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
+    $punchRespond = function (bool $ok, string $message) use ($isAjax, $date_filter_post) {
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => $ok, 'message' => $message], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $_SESSION[$ok ? 'punch_success' : 'punch_error'] = $message;
         header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
         exit;
+    };
+
+    if ($typeSlug === '') {
+        $punchRespond(false, "Tipo de asistencia no válido.");
     }
     
     $attendanceTypesForPunch = getAttendanceTypes($pdo, false);
@@ -202,14 +215,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
     }
     
     if (!isset($attendanceTypeMapForPunch[$typeSlug])) {
-        $_SESSION['punch_error'] = "Tipo de asistencia no válido.";
-        header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-        exit;
+        $punchRespond(false, "Tipo de asistencia no válido.");
     }
     
     $selectedTypeMeta = $attendanceTypeMapForPunch[$typeSlug];
     $typeLabel = $selectedTypeMeta['label'] ?? $selectedTypeMeta['slug'];
-    
+
+    // IDEMPOTENCIA: si llega una marcación idéntica (mismo usuario + tipo) dentro de la ventana
+    // configurada, se trata como "ya registrada" en vez de duplicar. Evita los registros triples
+    // por doble clic o reintentos ante 429/caída de red, y hace que reintentar sea seguro.
+    $idempotencyWindow = (int) getSystemSetting($pdo, 'punch_idempotency_window_seconds', 8);
+    if ($idempotencyWindow > 0) {
+        $dupStmt = $pdo->prepare("
+            SELECT id FROM attendance
+            WHERE user_id = ? AND type = ?
+              AND timestamp >= (NOW() - INTERVAL ? SECOND)
+            ORDER BY timestamp DESC LIMIT 1
+        ");
+        $dupStmt->execute([$user_id, $typeSlug, $idempotencyWindow]);
+        if ($dupStmt->fetch()) {
+            $punchRespond(true, "Marcación ya registrada como {$typeLabel} (se evitó un duplicado).");
+        }
+    }
+
     // Validate unique per day constraint
     if ((int) ($selectedTypeMeta['is_unique_daily'] ?? 0) === 1) {
         $check_stmt = $pdo->prepare("
@@ -221,9 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
         $exists = (int) $check_stmt->fetchColumn();
         
         if ($exists > 0) {
-            $_SESSION['punch_error'] = "Solo puedes registrar '{$typeLabel}' una vez por día.";
-            header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-            exit;
+            $punchRespond(false, "Solo puedes registrar '{$typeLabel}' una vez por día.");
         }
     }
     
@@ -231,9 +257,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
     require_once 'lib/authorization_functions.php';
     $sequenceValidation = validateEntryExitSequence($pdo, $user_id, $typeSlug);
     if (!$sequenceValidation['valid']) {
-        $_SESSION['punch_error'] = $sequenceValidation['message'];
-        header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-        exit;
+        $punchRespond(false, $sequenceValidation['message']);
     }
     
     // Check authorization requirements
@@ -250,16 +274,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
 
         if ($isOvertime) {
             if ($authCode === '') {
-                $_SESSION['punch_error'] = "Se requiere código de autorización para registrar hora extra.";
-                header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-                exit;
+                $punchRespond(false, "Se requiere código de autorización para registrar hora extra.");
             }
 
             $validation = validateAuthorizationCode($pdo, $authCode, 'overtime');
             if (!$validation['valid']) {
-                $_SESSION['punch_error'] = "Código de autorización inválido: " . $validation['message'];
-                header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-                exit;
+                $punchRespond(false, "Código de autorización inválido: " . $validation['message']);
             }
 
             $authorizationCodeId = $validation['code_id'];
@@ -273,16 +293,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
 
         if ($isEarly) {
             if ($authCode === '') {
-                $_SESSION['punch_error'] = "Se requiere código de autorización para marcar entrada antes de su horario.";
-                header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-                exit;
+                $punchRespond(false, "Se requiere código de autorización para marcar entrada antes de su horario.");
             }
 
             $validation = validateAuthorizationCode($pdo, $authCode, 'early_punch');
             if (!$validation['valid']) {
-                $_SESSION['punch_error'] = "Código de autorización inválido: " . $validation['message'];
-                header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-                exit;
+                $punchRespond(false, "Código de autorización inválido: " . $validation['message']);
             }
 
             if ($authorizationCodeId === null) {
@@ -329,10 +345,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
         ['type' => $typeSlug, 'ip_address' => $ip_address, 'authorization_code_id' => $authorizationCodeId]
     );
     
-    // Set success message and redirect
-    $_SESSION['punch_success'] = "¡Asistencia registrada exitosamente como {$typeLabel}!";
-    header('Location: agent_dashboard.php?dates=' . urlencode($date_filter_post));
-    exit;
+    // Set success message and redirect (o JSON si es AJAX)
+    $punchRespond(true, "¡Asistencia registrada exitosamente como {$typeLabel}!");
 }
 
 $date_filter = $_GET['dates'] ?? date('Y-m-d');
@@ -685,8 +699,10 @@ $chartColorsJson = json_encode($chartColors);
                 </div>
             </div>
         <?php endif; ?>
-        
-        <form method="POST" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+
+        <div id="agentPunchStatus" class="hidden mb-4"></div>
+
+        <form method="POST" id="agentPunchForm" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div class="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-7">
                 <label for="authorization_code" class="block text-xs font-semibold text-slate-200 uppercase tracking-wide mb-2">
                     Código de autorización (si aplica)
@@ -1259,5 +1275,113 @@ document.getElementById('dates')?.addEventListener('change', function () {
     }
 }
 </style>
+
+<script>
+    // Marcación por AJAX en el dashboard del agente: confirma el guardado real y reintenta
+    // ante 429 (límite por IP de HostGator) o caídas de red, para que ninguna salida/entrada
+    // se pierda silenciosamente.
+    (function () {
+        const form = document.getElementById('agentPunchForm');
+        if (!form) return;
+
+        const PUNCH_MAX_RETRIES = <?= (int) getSystemSetting($pdo, 'punch_client_max_retries', 3) ?>;
+        const statusDiv = document.getElementById('agentPunchStatus');
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+        // Backoff exponencial con jitter: de-sincroniza los reintentos de la oficina (IP NAT compartida).
+        function backoff(attempt) {
+            return Math.min(4000, 400 * Math.pow(2, attempt)) + Math.floor(Math.random() * 600);
+        }
+
+        function showStatus(ok, message) {
+            statusDiv.className = (ok
+                ? 'mb-4 rounded-lg p-4 bg-green-500/10 border border-green-500/30 text-green-300 font-semibold'
+                : 'mb-4 rounded-lg p-4 bg-red-500/10 border border-red-500/40 text-red-300 font-bold');
+            statusDiv.innerHTML = (ok ? '<i class="fas fa-check-circle mr-2"></i>' : '<i class="fas fa-exclamation-triangle mr-2"></i>') + message;
+            statusDiv.classList.remove('hidden');
+            statusDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function setButtonsDisabled(disabled) {
+            form.querySelectorAll('.punch-btn').forEach(function (b) {
+                b.disabled = disabled;
+                b.style.opacity = disabled ? '0.6' : '';
+                b.style.pointerEvents = disabled ? 'none' : '';
+            });
+        }
+
+        async function safeJson(resp) {
+            try { return await resp.json(); } catch (e) { return null; }
+        }
+
+        let lastType = null;
+        form.querySelectorAll('.punch-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () { lastType = btn.value; });
+        });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const type = (e.submitter && e.submitter.value) ? e.submitter.value : lastType;
+            if (!type) { showStatus(false, 'Selecciona un tipo de marcación.'); return; }
+
+            const authInput = document.getElementById('authorization_code');
+            const fd = new FormData();
+            fd.append('punch_type', type);
+            fd.append('ajax', '1');
+            if (authInput && authInput.value.trim()) fd.append('authorization_code', authInput.value.trim());
+
+            setButtonsDisabled(true);
+            showStatus(true, 'Registrando marcación…');
+
+            const url = window.location.pathname + window.location.search;
+            let attempt = 0;
+            while (attempt <= PUNCH_MAX_RETRIES) {
+                try {
+                    const resp = await fetch(url, {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        cache: 'no-store'
+                    });
+
+                    if (resp.status === 429 || resp.status >= 500) {
+                        attempt++;
+                        if (attempt > PUNCH_MAX_RETRIES) break;
+                        showStatus(true, `Servidor ocupado, reintentando (${attempt}/${PUNCH_MAX_RETRIES})…`);
+                        await sleep(backoff(attempt));
+                        continue;
+                    }
+
+                    const data = await safeJson(resp);
+                    if (!resp.ok || !data) {
+                        showStatus(false, (data && data.message) ? data.message : 'No se pudo registrar la marcación. Vuelve a intentar.');
+                        setButtonsDisabled(false);
+                        return;
+                    }
+
+                    if (data.success) {
+                        showStatus(true, '✅ ' + (data.message || 'Marcación registrada.'));
+                        await sleep(900);
+                        window.location.reload();
+                        return;
+                    }
+
+                    showStatus(false, data.message || 'No se pudo registrar la marcación.');
+                    setButtonsDisabled(false);
+                    return;
+
+                } catch (err) {
+                    attempt++;
+                    if (attempt > PUNCH_MAX_RETRIES) break;
+                    showStatus(true, `Sin conexión, reintentando (${attempt}/${PUNCH_MAX_RETRIES})…`);
+                    await sleep(backoff(attempt));
+                }
+            }
+
+            showStatus(false, '⚠️ Tu marcación NO se registró (conexión saturada). Por favor vuelve a marcar.');
+            setButtonsDisabled(false);
+        });
+    })();
+</script>
 
 <?php include 'footer.php'; ?>

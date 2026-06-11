@@ -191,6 +191,23 @@ function validateAffordabilityPHP(float $installmentAmount, float $monthlySalary
 }
 
 /**
+ * Lee una configuración del módulo de préstamos (tabla loan_settings de
+ * finanzas). Es la misma tabla que edita la pantalla de Configuración de
+ * la app Next.js, así que ambos sistemas comparten la política vigente.
+ */
+function getLoanSetting(PDO $finanzasPdo, string $key, ?string $default = null): ?string {
+    try {
+        $stmt = $finanzasPdo->prepare("SELECT setting_value FROM loan_settings WHERE setting_key = ?");
+        $stmt->execute([$key]);
+        $val = $stmt->fetchColumn();
+        if ($val !== false && $val !== null && trim((string) $val) !== '') {
+            return (string) $val;
+        }
+    } catch (Throwable $e) {}
+    return $default;
+}
+
+/**
  * Lee una configuración de la tabla automation_config de finanzas o variable
  * de entorno (en ese orden de prioridad).
  */

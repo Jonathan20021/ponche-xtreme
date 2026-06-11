@@ -2,6 +2,7 @@
 session_start();
 require_once '../db.php';
 require_once 'payroll_functions.php';
+require_once 'loans_payroll_bridge.php';
 require_once '../lib/logging_functions.php';
 require_once '../lib/work_hours_calculator.php';
 
@@ -109,6 +110,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         if (!$period) {
             throw new Exception("Período no encontrado");
         }
+
+        // Traer de finanzas las cuotas de préstamo pendientes y registrarlas
+        // como deducciones del período ANTES de calcular, para que la nómina
+        // las incluya automáticamente. Best-effort: si finanzas no responde,
+        // la nómina se calcula igual (aviso en el mensaje).
+        $loanSync = syncLoanDeductionsFromFinanceForPeriod($pdo, $period);
 
         $manualIncentivesMap = getPayrollManualIncentivesMap($pdo, $periodId);
         $holidaysMap = getPayrollHolidaysMap($pdo, $period['start_date'], $period['end_date']);
@@ -350,9 +357,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         
         $pdo->commit();
         $successMsg = "Nómina calculada correctamente para " . count($employees) . " empleados.";
+        if (!empty($loanSync)) {
+            if (!$loanSync['ok']) {
+                $successMsg .= " ⚠️ Préstamos: no se pudo sincronizar con finanzas (" . implode('; ', $loanSync['errors']) . ").";
+            } elseif ($loanSync['scheduled'] > 0) {
+                $successMsg .= " Préstamos: {$loanSync['scheduled']} cuota(s) programada(s) como deducción.";
+            }
+            if ($loanSync['ok'] && !empty($loanSync['errors'])) {
+                $successMsg .= " Avisos préstamos: " . implode('; ', $loanSync['errors']);
+            }
+        }
     } catch (Exception $e) {
         $pdo->rollBack();
         $errorMsg = "Error al calcular nómina: " . $e->getMessage();
+    }
+}
+
+// Handle period approval (CALCULATED -> APPROVED)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_period'])) {
+    $periodId = (int)$_POST['period_id'];
+
+    $stmt = $pdo->prepare("SELECT * FROM payroll_periods WHERE id = ?");
+    $stmt->execute([$periodId]);
+    $period = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$period) {
+        $errorMsg = "Período no encontrado.";
+    } elseif ($period['status'] !== 'CALCULATED') {
+        $errorMsg = "Solo se pueden aprobar períodos en estado CALCULATED (actual: " . htmlspecialchars($period['status']) . ").";
+    } else {
+        $pdo->prepare("UPDATE payroll_periods SET status = 'APPROVED', updated_at = NOW() WHERE id = ?")->execute([$periodId]);
+        $successMsg = "Período aprobado. Al marcarlo como PAGADO se registrarán los pagos de préstamos en finanzas.";
+    }
+}
+
+// Handle period payment (CALCULATED/APPROVED -> PAID) + write-back de préstamos a finanzas
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_period_paid'])) {
+    $periodId = (int)$_POST['period_id'];
+
+    $stmt = $pdo->prepare("SELECT * FROM payroll_periods WHERE id = ?");
+    $stmt->execute([$periodId]);
+    $period = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$period) {
+        $errorMsg = "Período no encontrado.";
+    } elseif (!in_array($period['status'], ['CALCULATED', 'APPROVED'], true)) {
+        $errorMsg = "Solo se pueden marcar como pagados períodos CALCULATED o APPROVED (actual: " . htmlspecialchars($period['status']) . ").";
+    } else {
+        // 1) Registrar en finanzas los pagos de cuotas de préstamo descontadas
+        $writeback = applyLoanPaymentsWritebackForPeriod($pdo, $period);
+
+        // 2) Marcar el período como pagado
+        $pdo->prepare("UPDATE payroll_periods SET status = 'PAID', updated_at = NOW() WHERE id = ?")->execute([$periodId]);
+
+        $successMsg = "Período marcado como PAGADO.";
+        if (!$writeback['ok']) {
+            $errorMsg = "El período quedó PAGADO, pero NO se pudieron registrar los pagos de préstamos en finanzas: "
+                . implode('; ', $writeback['errors'])
+                . " — Puedes aplicarlos manualmente desde la app de finanzas (Préstamos → Nómina).";
+        } else {
+            if ($writeback['applied'] > 0) {
+                $successMsg .= " Préstamos: {$writeback['applied']} pago(s) registrado(s) en finanzas.";
+            }
+            if (!empty($writeback['errors'])) {
+                $successMsg .= " Avisos: " . implode('; ', $writeback['errors']);
+            }
+        }
     }
 }
 
@@ -692,6 +762,22 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                 <a href="payroll_export_bank.php?period_id=<?= $period['id'] ?>" class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs" title="Excel Bancario (BHD)">
                                                     <i class="fas fa-university"></i>
                                                 </a>
+                                                <form method="POST" class="inline" onsubmit="return confirm('¿Aprobar este período de nómina?')">
+                                                    <input type="hidden" name="approve_period" value="1">
+                                                    <input type="hidden" name="period_id" value="<?= $period['id'] ?>">
+                                                    <button type="submit" class="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white text-xs" title="Aprobar período">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+                                            <?php if ($period['status'] === 'CALCULATED' || $period['status'] === 'APPROVED'): ?>
+                                                <form method="POST" class="inline" onsubmit="return confirm('¿Marcar este período como PAGADO?\n\nSe registrarán automáticamente en la app de finanzas los pagos de las cuotas de préstamo descontadas en esta nómina. Esta acción cierra el período.')">
+                                                    <input type="hidden" name="mark_period_paid" value="1">
+                                                    <input type="hidden" name="period_id" value="<?= $period['id'] ?>">
+                                                    <button type="submit" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs" title="Marcar como pagada (registra pagos de préstamos en finanzas)">
+                                                        <i class="fas fa-money-check-dollar"></i>
+                                                    </button>
+                                                </form>
                                             <?php endif; ?>
                                             <?php
                                                 $isVisibleToAgents = (int)($period['visible_to_agents'] ?? 0) === 1;
