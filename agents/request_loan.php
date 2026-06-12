@@ -671,7 +671,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                                     <span class="val" id="cMonto">—</span>
                                 </div>
                                 <div class="calc-row">
-                                    <span class="lbl">Tasa anual</span>
+                                    <span class="lbl">Tasa mensual</span>
                                     <span class="val" id="cTasa">—</span>
                                 </div>
                                 <div class="calc-row">
@@ -731,7 +731,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                 let html = '';
                 if (desc) html += '<p class="mb-2 text-slate-300">' + desc + '</p>';
                 html += '<div class="type-info-grid">';
-                html += '<div class="type-info-cell"><div class="lbl">Tasa anual</div><div class="val">' + rate + '%</div></div>';
+                html += '<div class="type-info-cell"><div class="lbl">Tasa mensual</div><div class="val">' + rate + '%</div></div>';
                 html += '<div class="type-info-cell"><div class="lbl">Plazo sugerido</div><div class="val">' + term + ' meses</div></div>';
                 if (min) html += '<div class="type-info-cell"><div class="lbl">Minimo</div><div class="val">RD$ ' + fmtInt.format(min) + '</div></div>';
                 if (max) html += '<div class="type-info-cell"><div class="lbl">Maximo</div><div class="val">RD$ ' + fmtInt.format(max) + '</div></div>';
@@ -740,7 +740,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                 if (rateNum === 0) {
                     html += '<p class="mt-3 text-xs text-emerald-300"><i class="fas fa-circle-check mr-1"></i>Este tipo de prestamo no genera intereses.</p>';
                 } else {
-                    html += '<p class="mt-3 text-xs text-amber-300"><i class="fas fa-circle-info mr-1"></i>Este prestamo genera ' + rateNum.toFixed(2) + '% de interes anual (cuota fija).</p>';
+                    html += '<p class="mt-3 text-xs text-amber-300"><i class="fas fa-circle-info mr-1"></i>Este prestamo genera ' + rateNum.toFixed(2) + '% de interes mensual (cuota fija).</p>';
                 }
                 info.innerHTML = html;
                 info.classList.remove('hidden');
@@ -759,12 +759,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                     return;
                 }
 
-                const annualRate = parseFloat(opt.dataset.rate || '0') / 100;
+                // La tasa del tipo es MENSUAL (igual que en la app de finanzas);
+                // se prorratea a la frecuencia: mensual x 12 / periodos al anio.
+                const monthlyRate = parseFloat(opt.dataset.rate || '0') / 100;
                 const min = parseFloat(opt.dataset.min || '0');
                 const max = parseFloat(opt.dataset.max || '0');
 
                 const periodsPerYear = freq === 'monthly' ? 12 : (freq === 'biweekly' ? 26 : 52);
-                const r = annualRate / periodsPerYear;
+                const r = monthlyRate * 12 / periodsPerYear;
 
                 let installment;
                 if (r > 0) {
@@ -777,7 +779,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                 const freqLabel = { biweekly: 'Quincenal', monthly: 'Mensual', weekly: 'Semanal' }[freq];
 
                 document.getElementById('cMonto').textContent     = 'RD$ ' + fmt.format(amount);
-                document.getElementById('cTasa').textContent      = (annualRate * 100).toFixed(2) + '%';
+                document.getElementById('cTasa').textContent      = (monthlyRate * 100).toFixed(2) + '%';
                 document.getElementById('cCuotas').textContent    = cuotas;
                 document.getElementById('cFreq').textContent      = freqLabel;
                 document.getElementById('cIntereses').textContent = 'RD$ ' + fmt.format(interest);

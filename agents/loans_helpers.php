@@ -307,7 +307,7 @@ function sendLoanCreatedNotificationPHP(PDO $finanzasPdo, array $data): array {
     ];
     $finRows = [
         ['Capital',          '<strong>' . $fmtMoney((float) $data['principal_amount'], $cur) . '</strong>'],
-        ['Tasa de interés',  number_format((float) $data['interest_rate'], 2) . '% anual (' . htmlspecialchars($data['interest_method']) . ')'],
+        ['Tasa de interés',  number_format((float) $data['interest_rate'], 2) . '% mensual (' . htmlspecialchars($data['interest_method']) . ')'],
         ['Cuotas',           (int) $data['installment_count'] . ' cuotas ' . strtolower($freqLabel)],
         ['Cuota',            '<strong style="color:#059669;">' . $fmtMoney((float) $data['installment_amount'], $cur) . '</strong>'],
         ['Intereses totales', $fmtMoney((float) $data['total_interest'], $cur)],
