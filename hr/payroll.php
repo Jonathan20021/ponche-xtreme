@@ -831,6 +831,11 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                         <input type="hidden" name="save_manual_incentives" value="1">
                         <input type="hidden" name="period_id" value="<?= $selectedPeriod['id'] ?>">
 
+                        <p class="mb-3 text-xs text-slate-400">
+                            Las horas de ponche se separan por semana laboral (lunes a domingo): primeras 44h regulares y excedente como extra.
+                            El total trabajado es la suma de regular + extra.
+                        </p>
+
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm">
                                 <thead>
@@ -863,6 +868,8 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                         // Pre-filling with punched hours caused doubled-hours bugs because old
                                         // calculate logic summed the input into the punch total.
                                         $punchHours = $payrollHoursMap[(int)$agent['id']] ?? ['regular_hours' => 0.0, 'overtime_hours' => 0.0];
+                                        $punchTotalHours = (float)$punchHours['regular_hours'] + (float)$punchHours['overtime_hours'];
+                                        $hasPunchOvertime = (float)$punchHours['overtime_hours'] > 0.0001;
                                         $regularDisplay = (float)$agentIncentive['manual_regular_hours'];
                                         $overtimeDisplay = (float)$agentIncentive['manual_overtime_hours'];
                                     ?>
@@ -879,6 +886,12 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                     <?php endif; ?>
                                                 </div>
                                                 <div class="text-xs text-slate-400"><?= htmlspecialchars($agent['position'] ?: ($agent['role'] ?: 'Empleado')) ?></div>
+                                                <div class="mt-1 text-[11px] text-slate-500">
+                                                    Total ponche: <?= number_format($punchTotalHours, 2) ?>h
+                                                    <?php if ($hasPunchOvertime): ?>
+                                                        <span class="text-amber-300">(extra semanal: <?= number_format((float)$punchHours['overtime_hours'], 2) ?>h)</span>
+                                                    <?php endif; ?>
+                                                </div>
                                             </td>
                                             <td class="py-2 px-2 text-slate-300"><?= htmlspecialchars($agent['employee_code']) ?></td>
                                             <td class="py-2 px-2 text-center">
@@ -899,7 +912,7 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                     value="<?= htmlspecialchars(number_format($regularDisplay, 2, '.', '')) ?>"
                                                     placeholder="Ponche: <?= number_format($punchHours['regular_hours'], 2) ?>"
                                                     class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right placeholder:text-slate-500"
-                                                    title="Horas reales del ponche: <?= number_format($punchHours['regular_hours'], 2) ?>. Marca 'Corregir Base' y escribe un valor para reemplazar."
+                                                    title="Horas regulares del ponche segun la regla semanal de 44h: <?= number_format($punchHours['regular_hours'], 2) ?>. Marca 'Corregir Base' y escribe un valor para reemplazar."
                                                 >
                                                 <div class="text-xs text-slate-500 mt-1 text-right">Ponche: <?= number_format($punchHours['regular_hours'], 2) ?></div>
                                             </td>
@@ -912,7 +925,7 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                     value="<?= htmlspecialchars(number_format($overtimeDisplay, 2, '.', '')) ?>"
                                                     placeholder="Ponche: <?= number_format($punchHours['overtime_hours'], 2) ?>"
                                                     class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right placeholder:text-slate-500"
-                                                    title="Horas extra reales del ponche: <?= number_format($punchHours['overtime_hours'], 2) ?>. Marca 'Corregir Base' y escribe un valor para reemplazar."
+                                                    title="Horas extra del ponche por excedente semanal sobre 44h: <?= number_format($punchHours['overtime_hours'], 2) ?>. Marca 'Corregir Base' y escribe un valor para reemplazar."
                                                 >
                                                 <div class="text-xs text-slate-500 mt-1 text-right">Ponche: <?= number_format($punchHours['overtime_hours'], 2) ?></div>
                                             </td>
