@@ -494,8 +494,9 @@ function getAuthorizationCodeUsageHistory(PDO $pdo, int $codeId, int $limit = 50
 }
 
 /**
- * Verifica si un empleado está intentando registrar hora extra
- * Solo se considera overtime DESPUÉS de 8 horas efectivas/pagadas trabajadas en el día
+ * Verifica si un empleado está intentando registrar hora extra.
+ * Para autorización, se activa cuando las horas efectivas/pagadas de la semana
+ * ISO (lunes-domingo) alcanzan o exceden 44 horas.
  */
 function isOvertimeAttempt(PDO $pdo, int $userId, string $typeSlug): bool {
     try {
@@ -518,45 +519,56 @@ function isOvertimeAttempt(PDO $pdo, int $userId, string $typeSlug): bool {
             return false;
         }
 
-        // NUEVA LÓGICA: Calcular horas pagadas trabajadas HOY
         require_once __DIR__ . '/../db.php';
-        $paidTypes = getPaidAttendanceTypeSlugs($pdo);
+        require_once __DIR__ . '/work_hours_calculator.php';
+
+        $typeSlug = sanitizeAttendanceTypeSlug($typeSlug);
+        $paidTypes = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', getPaidAttendanceTypeSlugs($pdo))));
         
         if (empty($paidTypes)) {
             return false; // No hay tipos pagados configurados
         }
-        
-        // Construir query para sumar segundos de tipos pagados
-        $paidTypesPlaceholders = implode(',', array_fill(0, count($paidTypes), '?'));
-        $paidTypesUpper = array_map('strtoupper', $paidTypes);
-        
+
+        if (!in_array($typeSlug, $paidTypes, true)) {
+            return false;
+        }
+
+        $today = date('Y-m-d');
+        $weekStart = getIsoWeekStartDate($today);
+        $now = date('Y-m-d H:i:s');
+
         $hoursStmt = $pdo->prepare("
-            SELECT 
-                COALESCE(SUM(seconds), 0) as total_paid_seconds
+            SELECT id, type, timestamp, DATE(timestamp) AS work_date
             FROM attendance
             WHERE user_id = ?
-            AND DATE(timestamp) = CURDATE()
-            AND UPPER(type) IN ($paidTypesPlaceholders)
+              AND DATE(timestamp) BETWEEN ? AND ?
+            ORDER BY timestamp ASC
         ");
-        
-        $params = array_merge([$userId], $paidTypesUpper);
-        $hoursStmt->execute($params);
-        $result = $hoursStmt->fetch(PDO::FETCH_ASSOC);
-        
-        $totalPaidSeconds = (int)($result['total_paid_seconds'] ?? 0);
+
+        $hoursStmt->execute([$userId, $weekStart, $today]);
+        $punches = $hoursStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $punches[] = [
+            'type' => $typeSlug,
+            'timestamp' => $now,
+            'work_date' => $today,
+        ];
+
+        $weeklyThresholdSeconds = 44 * 3600;
+        $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($punches, $paidTypes);
+        $weeklySplit = splitWeeklyRegularOvertimeSeconds($dailyWorkSeconds, $weeklyThresholdSeconds);
+        $weekKey = (new DateTimeImmutable($today))->format('o-\WW');
+        $totalPaidSeconds = (int)($weeklySplit['by_week'][$weekKey]['work_seconds'] ?? 0);
         $totalPaidHours = $totalPaidSeconds / 3600;
-        
+
         // Log para debugging
-        error_log("Usuario $userId - Horas pagadas hoy: " . number_format($totalPaidHours, 2) . " horas ($totalPaidSeconds segundos)");
-        
-        // Si ya tiene 8 o más horas pagadas trabajadas, cualquier hora adicional es overtime
-        if ($totalPaidHours >= 8.0) {
-            error_log("Usuario $userId - OVERTIME detectado (>= 8 horas pagadas)");
+        error_log("Usuario $userId - Horas pagadas semana $weekKey: " . number_format($totalPaidHours, 2) . " horas ($totalPaidSeconds segundos)");
+
+        if ($totalPaidSeconds >= $weeklyThresholdSeconds) {
+            error_log("Usuario $userId - OVERTIME detectado (>= 44 horas semanales)");
             return true;
         }
-        
-        // Si tiene menos de 8 horas, NO es overtime aunque sea fuera de horario
-        error_log("Usuario $userId - NO es overtime (solo " . number_format($totalPaidHours, 2) . " horas pagadas)");
+
+        error_log("Usuario $userId - NO es overtime semanal (solo " . number_format($totalPaidHours, 2) . " horas pagadas)");
         return false;
 
     } catch (PDOException $e) {

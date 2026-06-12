@@ -67,6 +67,106 @@ function calculateWorkSecondsFromPunches(array $punches, array $paidTypeSlugs): 
 }
 
 /**
+ * @param array<int, array{type:string,timestamp:string|int,id?:int,work_date?:string}> $punches
+ * @param string[] $paidTypeSlugs
+ * @return array<string,int> date (Y-m-d) => paid work seconds
+ */
+function calculateDailyWorkSecondsFromPunchRows(array $punches, array $paidTypeSlugs): array
+{
+    $byDate = [];
+    foreach ($punches as $row) {
+        $date = $row['work_date'] ?? null;
+        if (!$date) {
+            $ts = is_int($row['timestamp'] ?? null) ? $row['timestamp'] : strtotime((string)($row['timestamp'] ?? ''));
+            if ($ts === false || $ts === null) {
+                continue;
+            }
+            $date = date('Y-m-d', (int)$ts);
+        }
+        $byDate[$date][] = $row;
+    }
+
+    $dailyWorkSeconds = [];
+    foreach ($byDate as $date => $dayPunches) {
+        $calc = calculateWorkSecondsFromPunches($dayPunches, $paidTypeSlugs);
+        $workSeconds = (int)($calc['work_seconds'] ?? 0);
+        if ($workSeconds > 0) {
+            $dailyWorkSeconds[$date] = $workSeconds;
+        }
+    }
+
+    ksort($dailyWorkSeconds);
+    return $dailyWorkSeconds;
+}
+
+function getIsoWeekStartDate(string $date): string
+{
+    $dt = new DateTimeImmutable($date);
+    $dayOfWeek = (int)$dt->format('N');
+    return $dt->modify('-' . ($dayOfWeek - 1) . ' days')->format('Y-m-d');
+}
+
+function getIsoWeekEndDate(string $date): string
+{
+    return (new DateTimeImmutable(getIsoWeekStartDate($date)))->modify('+6 days')->format('Y-m-d');
+}
+
+/**
+ * Splits actual paid work seconds into regular/overtime by ISO week.
+ * Regular time resets every Monday and caps at 44 hours per week.
+ *
+ * @param array<string,int> $dailyWorkSeconds date (Y-m-d) => actual paid work seconds
+ * @return array{by_day:array<string,array{work_seconds:int,regular_seconds:int,overtime_seconds:int,week_key:string}>,by_week:array<string,array{work_seconds:int,regular_seconds:int,overtime_seconds:int}>}
+ */
+function splitWeeklyRegularOvertimeSeconds(array $dailyWorkSeconds, int $weeklyThresholdSeconds = 158400): array
+{
+    ksort($dailyWorkSeconds);
+
+    $byDay = [];
+    $byWeek = [];
+    $weekUsedSeconds = [];
+    $weeklyThresholdSeconds = max(0, $weeklyThresholdSeconds);
+
+    foreach ($dailyWorkSeconds as $date => $workSeconds) {
+        $workSeconds = max(0, (int)$workSeconds);
+        if ($workSeconds <= 0) {
+            continue;
+        }
+
+        $dt = new DateTimeImmutable($date);
+        $weekKey = $dt->format('o-\WW');
+        $used = (int)($weekUsedSeconds[$weekKey] ?? 0);
+        $regularRemaining = max(0, $weeklyThresholdSeconds - $used);
+        $regularSeconds = min($workSeconds, $regularRemaining);
+        $overtimeSeconds = $workSeconds - $regularSeconds;
+
+        $weekUsedSeconds[$weekKey] = $used + $workSeconds;
+        $byDay[$date] = [
+            'work_seconds' => $workSeconds,
+            'regular_seconds' => $regularSeconds,
+            'overtime_seconds' => $overtimeSeconds,
+            'week_key' => $weekKey,
+        ];
+
+        if (!isset($byWeek[$weekKey])) {
+            $byWeek[$weekKey] = [
+                'work_seconds' => 0,
+                'regular_seconds' => 0,
+                'overtime_seconds' => 0,
+            ];
+        }
+        $byWeek[$weekKey]['work_seconds'] += $workSeconds;
+        $byWeek[$weekKey]['regular_seconds'] += $regularSeconds;
+        $byWeek[$weekKey]['overtime_seconds'] += $overtimeSeconds;
+    }
+
+    return [
+        'by_day' => $byDay,
+        'by_week' => $byWeek,
+    ];
+}
+
+/**
  * Computes per-slug durations from a list of events already sorted by timestamp.
  *
  * Handles the two cases that the naïve "delta to next event" approach gets wrong:

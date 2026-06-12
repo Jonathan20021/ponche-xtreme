@@ -2,65 +2,58 @@
 
 ## Descripción General
 
-El sistema de horas extras calcula automáticamente las horas trabajadas después de la hora de salida configurada para cada empleado. El cálculo incluye un multiplicador personalizable para determinar el pago adicional por horas extras.
+El sistema de horas extras de nómina calcula automáticamente el excedente semanal sobre 44 horas efectivas pagadas. El cálculo incluye un multiplicador personalizable para determinar el pago adicional por horas extras.
 
 ## Características Principales
 
 ### 1. Configuración Global (Settings)
 - **Activar/Desactivar**: Habilita o deshabilita el cálculo de horas extras en todo el sistema
 - **Multiplicador de Pago**: Factor por el cual se multiplica la tarifa por hora (ej: 1.5 = tiempo y medio, 2.0 = tiempo doble)
-- **Minutos de Gracia**: Tiempo después de la hora de salida antes de comenzar a contar horas extras (ej: 15 minutos)
+- **Minutos de Gracia**: Se usa en reportes diarios y alertas operativas de salida; no define el corte de horas extra de nómina.
 
 ### 2. Configuración por Empleado
-- **Hora de Salida Personalizada**: Cada empleado puede tener su propia hora de salida (si está vacío, usa la hora global)
+- **Hora de Salida Personalizada**: Se usa para reportes diarios y alertas operativas de salida
 - **Multiplicador Personalizado**: Cada empleado puede tener su propio multiplicador de horas extras (si está vacío, usa el multiplicador global)
 
 ## Cómo se Calculan las Horas Extras
 
-### Fórmula de Cálculo
+### Fórmula de Cálculo de Nómina
 
 ```
-1. Detectar hora de salida configurada:
-   - Si el empleado tiene hora de salida personalizada → usar esa hora
-   - Si no → usar hora de salida global del sistema
+1. Sumar las horas efectivas pagadas de cada día:
+   - Solo cuentan tipos de asistencia marcados como pagados.
+   - Pausas, lunch, baño, ENTRY y EXIT no cuentan como horas pagadas.
 
-2. Aplicar minutos de gracia:
-   Hora inicio HE = Hora salida + Minutos de gracia
+2. Agrupar por semana ISO:
+   - Cada semana corre de lunes a domingo.
 
-3. Detectar hora de salida real:
-   - Buscar el último evento "EXIT" del día
-   - Si no hay EXIT → usar el último evento registrado
+3. Separar horas regulares y extra:
+   - Las primeras 44 horas semanales son regulares.
+   - Solo el excedente sobre 44 horas semanales es hora extra.
 
-4. Calcular horas extras:
-   Si (Hora salida real > Hora inicio HE):
-       Horas extras = Hora salida real - Hora inicio HE
-
-5. Calcular pago de horas extras:
+4. Calcular pago de horas extras:
    Multiplicador = Multiplicador personalizado del empleado O Multiplicador global
-   Pago HE = (Horas extras / 3600) × Tarifa por hora × Multiplicador
+   Pago HE = Horas extra semanales × Tarifa por hora × Multiplicador
 
-6. Pago total:
+5. Pago total:
    Pago Total = Pago regular + Pago de horas extras
 ```
 
 ### Ejemplo Práctico
 
 **Configuración:**
-- Hora de salida global: 19:00
 - Multiplicador global: 1.5 (tiempo y medio)
-- Minutos de gracia: 15 minutos
 - Tarifa por hora del empleado: $10.00 USD
 
 **Escenario:**
-- Empleado marca EXIT a las 20:30
+- El empleado acumula 47 horas efectivas pagadas de lunes a domingo.
 
 **Cálculo:**
-1. Hora inicio HE = 19:00 + 15 min = 19:15
-2. Hora salida real = 20:30
-3. Horas extras = 20:30 - 19:15 = 1 hora 15 minutos = 1.25 horas
-4. Pago HE = 1.25 × $10.00 × 1.5 = $18.75
-5. Si trabajó 8 horas regulares: Pago regular = 8 × $10.00 = $80.00
-6. **Pago Total = $80.00 + $18.75 = $98.75**
+1. Horas regulares = 44
+2. Horas extras = 47 - 44 = 3
+3. Pago HE = 3 × $10.00 × 1.5 = $45.00
+4. Pago regular = 44 × $10.00 = $440.00
+5. **Pago Total = $440.00 + $45.00 = $485.00**
 
 ## Configuración en el Sistema
 
@@ -85,7 +78,7 @@ El sistema de horas extras calcula automáticamente las horas trabajadas despué
 1. Ir a **Records** → **Resumen de tiempo trabajado**
 2. Columnas disponibles:
    - **Horas trabajadas**: Horas regulares de trabajo
-   - **Horas extra**: Tiempo trabajado después de la hora de salida
+   - **Horas extra**: Excedente semanal sobre 44 horas efectivas pagadas
    - **Pago HE (USD)**: Pago calculado por horas extras con multiplicador
    - **Pago Total (USD)**: Pago regular + Pago de horas extras
 
@@ -101,16 +94,17 @@ El sistema de horas extras calcula automáticamente las horas trabajadas despué
 - Empleados especiales con multiplicador 2.0 (tiempo doble)
 - Empleados sin configuración personalizada usan el global
 
-### Caso 3: Diferentes horarios de salida
-- Turno matutino: Hora salida 14:00
-- Turno tarde: Hora salida 19:00
-- Turno noche: Hora salida 02:00
-- Configurar hora de salida personalizada para cada empleado
+### Caso 3: Semana sin horas extra aunque haya un día largo
+- Lunes a jueves: 8 horas por día
+- Viernes: 10 horas
+- Total semanal: 42 horas
+- Resultado: 0 horas extra, porque no supera 44 horas semanales
 
-### Caso 4: Minutos de gracia
-- Configurar 15 minutos de gracia
-- Empleado sale a las 19:10 → No cuenta como hora extra
-- Empleado sale a las 19:20 → 5 minutos de hora extra (19:20 - 19:15)
+### Caso 4: Semana con horas extra
+- Lunes a jueves: 8 horas por día
+- Viernes: 15 horas
+- Total semanal: 47 horas
+- Resultado: 44 horas regulares y 3 horas extra
 
 ## Migración de Base de Datos
 
@@ -137,7 +131,7 @@ ADD COLUMN `overtime_multiplier` DECIMAL(4,2) DEFAULT NULL;
 ## Preguntas Frecuentes
 
 **P: ¿Qué pasa si un empleado no marca EXIT?**
-R: El sistema usa el último evento registrado del día como hora de salida.
+R: Para nómina, solo se calculan intervalos cerrados por los punches registrados. Si faltan marcas, RRHH debe corregir el registro antes de recalcular.
 
 **P: ¿Se pueden desactivar las horas extras?**
 R: Sí, desmarca "Activar cálculo de horas extras" en Settings.
@@ -146,7 +140,7 @@ R: Sí, desmarca "Activar cálculo de horas extras" en Settings.
 R: No, el sistema requiere un mínimo de 1.0 para evitar errores de cálculo.
 
 **P: ¿Las horas extras afectan el cálculo de horas trabajadas?**
-R: No, las horas trabajadas y las horas extras son independientes. Las horas extras son adicionales.
+R: No duplican las horas. El sistema separa el total semanal entre horas regulares y horas extra.
 
 **P: ¿Puedo tener diferentes multiplicadores por día de la semana?**
 R: Actualmente no, pero puedes configurar multiplicadores personalizados por empleado.

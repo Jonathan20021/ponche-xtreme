@@ -5983,8 +5983,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         </div>
                         <div>
                             <h3 class="text-primary text-base font-semibold">Configuracion de Horas Extras</h3>
-                            <p class="text-muted text-xs">Las horas extras se calculan automaticamente despues de la
-                                hora de salida configurada para cada empleado.</p>
+                            <p class="text-muted text-xs">En nomina, las horas extras se calculan automaticamente
+                                despues de 44 horas efectivas pagadas por semana.</p>
                         </div>
                     </div>
 
@@ -6013,12 +6013,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <label class="form-label">
                                 Minutos de gracia
                                 <i class="fas fa-info-circle text-xs text-muted ml-1"
-                                    title="Minutos despues de la hora de salida antes de comenzar a contar horas extras. Ejemplo: 15 minutos = las horas extras comienzan 15 minutos despues de la hora de salida"></i>
+                                    title="Minutos despues de la hora de salida usados por reportes diarios y alertas operativas. La nomina separa horas extra por acumulado semanal de 44 horas."></i>
                             </label>
                             <input type="number" min="0" step="1" name="overtime_start_minutes"
                                 value="<?= htmlspecialchars((string) ($scheduleConfig['overtime_start_minutes'] ?? 0)) ?>"
                                 class="input-control" placeholder="0">
-                            <p class="text-muted text-xs mt-1">Minutos despues de la salida para iniciar conteo</p>
+                            <p class="text-muted text-xs mt-1">Usado en reportes diarios/operativos</p>
                         </div>
                     </div>
 
@@ -6029,10 +6029,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             Como se calculan las horas extras:
                         </h4>
                         <ul class="text-muted text-xs space-y-1 ml-6 list-disc">
-                            <li>El sistema detecta la hora de salida (EXIT) de cada empleado</li>
-                            <li>Compara con la hora de salida configurada (global o personalizada por empleado)</li>
-                            <li>Si trabajo mas alla de la hora de salida + minutos de gracia, se cuentan como horas
-                                extras</li>
+                            <li>El sistema suma las horas efectivas pagadas de la semana (lunes a domingo)</li>
+                            <li>Las primeras 44 horas semanales se consideran regulares</li>
+                            <li>Solo el excedente sobre 44 horas semanales se considera hora extra</li>
                             <li>El pago se calcula: (Horas extras × Tarifa por hora × Multiplicador)</li>
                             <li>Cada empleado puede tener su propio multiplicador personalizado desde la seccion de
                                 usuarios</li>

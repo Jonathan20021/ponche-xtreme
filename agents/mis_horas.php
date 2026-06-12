@@ -16,8 +16,7 @@ ensurePayrollHolidaysTable($pdo);
 $userId = (int)$_SESSION['user_id'];
 $fullName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Agente';
 
-$config = getScheduleConfig($pdo);
-$scheduledHours = (float)($config['scheduled_hours'] ?? 8.00);
+$weeklyOvertimeThresholdHours = 44.00;
 
 $paidTypeSlugsRaw = getPaidAttendanceTypeSlugs($pdo);
 $paidTypeSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', $paidTypeSlugsRaw)));
@@ -26,7 +25,7 @@ $paidTypeSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug
 // holiday hours qualify for double pay (fixed-salary employees are excluded).
 $userComp = [];
 try {
-    $userCompStmt = $pdo->prepare("SELECT compensation_type, role, monthly_salary FROM users WHERE id = ?");
+    $userCompStmt = $pdo->prepare("SELECT compensation_type, role, monthly_salary, monthly_salary_dop FROM users WHERE id = ?");
     $userCompStmt->execute([$userId]);
     $userComp = $userCompStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 } catch (PDOException $e) {
@@ -36,7 +35,7 @@ try {
 $userQualifiesForHolidayDouble = shouldApplyHolidayDoublePay(
     $userComp['compensation_type'] ?? null,
     $userComp['role'] ?? null,
-    (float)($userComp['monthly_salary'] ?? 0)
+    max((float)($userComp['monthly_salary'] ?? 0), (float)($userComp['monthly_salary_dop'] ?? 0))
 );
 
 $periodsStmt = $pdo->prepare("
@@ -77,14 +76,18 @@ if (!$selectedPeriod && !empty($periods)) {
  * Calcula horas trabajadas por día y totales para un rango de fechas.
  * Solo cuenta días hasta HOY (si la quincena incluye fechas futuras).
  *
+ * Las horas extra se separan por semana ISO (lunes-domingo): primero se
+ * acumulan 44 horas regulares y solo el excedente semanal cuenta como extra.
+ *
  * Si el usuario califica para pago doble en feriados, las horas de ese día
  * se multiplican por el multiplicador del feriado (típicamente 2x), igual
  * que en el cálculo de nómina, para que el agente vea cifras consistentes.
  */
-function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, string $endDate, array $paidTypeSlugs, float $scheduledHours, bool $applyHolidayDouble = false): array
+function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, string $endDate, array $paidTypeSlugs, float $weeklyThresholdHours = 44.0, bool $applyHolidayDouble = false): array
 {
     $today = date('Y-m-d');
     $effectiveEnd = ($endDate > $today) ? $today : $endDate;
+    $contextStart = getIsoWeekStartDate($startDate);
 
     $result = [
         'total_seconds' => 0,
@@ -106,35 +109,23 @@ function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, str
           AND DATE(timestamp) BETWEEN ? AND ?
         ORDER BY timestamp ASC
     ");
-    $stmt->execute([$userId, $startDate, $effectiveEnd]);
+    $stmt->execute([$userId, $contextStart, $effectiveEnd]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $byDate = [];
-    foreach ($rows as $r) {
-        $byDate[$r['work_date']][] = $r;
-    }
-
     $holidaysMap = getPayrollHolidaysMap($pdo, $startDate, $effectiveEnd);
-    $scheduledSeconds = (int) round($scheduledHours * 3600);
+    $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($rows, $paidTypeSlugs);
+    $weeklySplit = splitWeeklyRegularOvertimeSeconds($dailyWorkSeconds, (int) round($weeklyThresholdHours * 3600));
 
-    foreach ($byDate as $date => $punches) {
-        $calc = calculateWorkSecondsFromPunches($punches, $paidTypeSlugs);
-        $workSeconds = (int)($calc['work_seconds'] ?? 0);
-        if ($workSeconds <= 0) {
+    foreach ($weeklySplit['by_day'] as $date => $daySplit) {
+        if ($date < $startDate || $date > $effectiveEnd) {
             continue;
         }
 
+        $workSeconds = (int) ($daySplit['work_seconds'] ?? 0);
         $rawSeconds = $workSeconds;
         $isHoliday = isset($holidaysMap[$date]);
-
-        // 1) Split actual worked hours into regular vs. overtime first.
-        if ($workSeconds > $scheduledSeconds) {
-            $regSeconds = $scheduledSeconds;
-            $otSeconds = $workSeconds - $scheduledSeconds;
-        } else {
-            $regSeconds = $workSeconds;
-            $otSeconds = 0;
-        }
+        $regSeconds = (int) ($daySplit['regular_seconds'] ?? 0);
+        $otSeconds = (int) ($daySplit['overtime_seconds'] ?? 0);
 
         // 2) Apply holiday multiplier to BOTH parts after splitting, so the displayed
         // hours match what payroll will pay (true multiplier × normal pay).
@@ -192,7 +183,7 @@ foreach ($periods as $p) {
         $p['start_date'],
         $p['end_date'],
         $paidTypeSlugs,
-        $scheduledHours,
+        $weeklyOvertimeThresholdHours,
         $userQualifiesForHolidayDouble
     );
     $periodSummaries[(int)$p['id']] = $summary;
@@ -282,7 +273,7 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                     <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-4">
                         <p class="text-xs text-slate-400 uppercase">Días Trabajados</p>
                         <p class="text-2xl font-bold text-indigo-400"><?= (int)$selectedSummary['days_worked'] ?></p>
-                        <p class="text-xs text-slate-500">jornada base: <?= number_format($scheduledHours, 2) ?>h</p>
+                        <p class="text-xs text-slate-500">base semanal: <?= number_format($weeklyOvertimeThresholdHours, 2) ?>h</p>
                     </div>
                 </div>
 

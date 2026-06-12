@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         // de doble pago (ej. registros duplicados marcados terminados sin fecha).
         $empStmt = $pdo->prepare("
             SELECT e.id, e.employment_status,
-                   u.id as user_id, u.hourly_rate, u.monthly_salary, u.overtime_multiplier,
+                   u.id as user_id, u.hourly_rate, u.monthly_salary, u.monthly_salary_dop, u.overtime_multiplier,
                    u.compensation_type, u.role
             FROM employees e
             JOIN users u ON u.id = e.user_id
@@ -147,6 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         
         $config = getScheduleConfig($pdo);
         $scheduledHours = (float)$config['scheduled_hours'];
+        $weeklyOvertimeThresholdHours = 44.00;
         
         // Get paid attendance type slugs for payroll calculation
         $paidTypes = getPaidAttendanceTypeSlugs($pdo);
@@ -164,7 +165,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 $paidTypeSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', $paidTypes)));
             }
 
-            // Get all punches for the period (ALL types)
+            // Get all punches needed for weekly overtime context (ALL types).
+            // If a payroll period starts mid-week, previous days from that ISO
+            // week still count toward the 44-hour overtime threshold.
+            $attendanceContextStart = getIsoWeekStartDate($period['start_date']);
             $punchesStmt = $pdo->prepare("
                 SELECT 
                     id,
@@ -177,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 ORDER BY timestamp ASC
             ");
 
-            $punchesStmt->execute([$userId, $period['start_date'], $period['end_date']]);
+            $punchesStmt->execute([$userId, $attendanceContextStart, $period['end_date']]);
             $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
             
             $totalRegularHours = 0;
@@ -189,53 +193,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $applyHolidayDouble = shouldApplyHolidayDoublePay(
                 $emp['compensation_type'] ?? null,
                 $emp['role'] ?? null,
-                (float)($emp['monthly_salary'] ?? 0)
+                max((float)($emp['monthly_salary'] ?? 0), (float)($emp['monthly_salary_dop'] ?? 0))
             );
 
-            // Group punches by date and calculate hours
-            $punchesByDate = [];
-            foreach ($punches as $punch) {
-                $date = $punch['work_date'];
-                if (!isset($punchesByDate[$date])) {
-                    $punchesByDate[$date] = [];
+            $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($punches, $paidTypeSlugs);
+            $weeklySplit = splitWeeklyRegularOvertimeSeconds(
+                $dailyWorkSeconds,
+                (int) round($weeklyOvertimeThresholdHours * 3600)
+            );
+
+            foreach ($weeklySplit['by_day'] as $date => $daySplit) {
+                if ($date < $period['start_date'] || $date > $period['end_date']) {
+                    continue;
                 }
-                $punchesByDate[$date][] = $punch;
-            }
 
-            // Calculate hours for each day
-            foreach ($punchesByDate as $date => $dayPunches) {
-                $calc = calculateWorkSecondsFromPunches($dayPunches, $paidTypeSlugs);
-                $totalSecondsWorked = (int) ($calc['work_seconds'] ?? 0);
-
-                // Convert to hours
-                if ($totalSecondsWorked > 0) {
-                    $daysWorked++;
-                    $workedHours = $totalSecondsWorked / 3600;
-
-                    // 1) Split actual worked hours into regular vs. overtime first.
-                    if ($workedHours > $scheduledHours) {
-                        $dayRegular = $scheduledHours;
-                        $dayOvertime = $workedHours - $scheduledHours;
-                    } else {
-                        $dayRegular = $workedHours;
-                        $dayOvertime = 0.0;
-                    }
-
-                    // 2) For holidays, apply the multiplier to BOTH regular and overtime
-                    // shares of the day, so that the resulting pay equals exactly
-                    // (multiplier × normal pay). Multiplying workedHours BEFORE the split
-                    // would overflow into overtime and overpay (e.g. 8h × 2 = 16h would
-                    // become 8 reg + 8 OT, paying 20H instead of the intended 16H).
-                    // Fixed-salary employees are excluded — their salary is not hour-based.
-                    if ($applyHolidayDouble && isset($holidaysMap[$date])) {
-                        $multiplier = (float) $holidaysMap[$date]['multiplier'];
-                        $dayRegular *= $multiplier;
-                        $dayOvertime *= $multiplier;
-                    }
-
-                    $totalRegularHours += $dayRegular;
-                    $totalOvertimeHours += $dayOvertime;
+                $totalSecondsWorked = (int) ($daySplit['work_seconds'] ?? 0);
+                if ($totalSecondsWorked <= 0) {
+                    continue;
                 }
+
+                $daysWorked++;
+                $dayRegular = ((int) ($daySplit['regular_seconds'] ?? 0)) / 3600;
+                $dayOvertime = ((int) ($daySplit['overtime_seconds'] ?? 0)) / 3600;
+
+                // Apply holiday multiplier after the weekly regular/overtime split.
+                // Fixed-salary employees are excluded — their salary is not hour-based.
+                if ($applyHolidayDouble && isset($holidaysMap[$date])) {
+                    $multiplier = (float) $holidaysMap[$date]['multiplier'];
+                    $dayRegular *= $multiplier;
+                    $dayOvertime *= $multiplier;
+                }
+
+                $totalRegularHours += $dayRegular;
+                $totalOvertimeHours += $dayOvertime;
             }
 
             $manualRegularHours = max(0, round((float) ($manualInput['manual_regular_hours'] ?? 0), 2));
@@ -255,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $compTypeForOt = strtolower(trim($emp['compensation_type'] ?? 'hourly'));
             $roleForOt = strtoupper(trim($emp['role'] ?? ''));
             if ($compTypeForOt === '' || $compTypeForOt === 'hourly') {
-                if ($roleForOt !== 'AGENT' && (float)($emp['monthly_salary'] ?? 0) > 0) {
+                if ($roleForOt !== 'AGENT' && max((float)($emp['monthly_salary'] ?? 0), (float)($emp['monthly_salary_dop'] ?? 0)) > 0) {
                     $compTypeForOt = 'fixed';
                 }
             }

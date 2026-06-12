@@ -128,4 +128,36 @@ $res5 = calculateWorkSecondsFromPunches($punches5, $paid);
 assertEqual(27895, $res5['work_seconds'], 'normal flow unchanged');
 assertEqual(900, $res5['durations_all']['BREAK'] ?? 0, 'normal flow break = 15min');
 
+// Case 7: Weekly overtime threshold — a long day does not create overtime
+// unless the ISO week exceeds 44 paid hours.
+$weekly42 = splitWeeklyRegularOvertimeSeconds([
+    '2026-06-08' => 8 * 3600,
+    '2026-06-09' => 8 * 3600,
+    '2026-06-10' => 8 * 3600,
+    '2026-06-11' => 8 * 3600,
+    '2026-06-12' => 10 * 3600,
+], 44 * 3600);
+assertEqual(42 * 3600, $weekly42['by_week']['2026-W24']['regular_seconds'], 'weekly threshold: 42h all regular');
+assertEqual(0, $weekly42['by_week']['2026-W24']['overtime_seconds'], 'weekly threshold: 42h no overtime');
+
+$weekly47 = splitWeeklyRegularOvertimeSeconds([
+    '2026-06-08' => 8 * 3600,
+    '2026-06-09' => 8 * 3600,
+    '2026-06-10' => 8 * 3600,
+    '2026-06-11' => 8 * 3600,
+    '2026-06-12' => 15 * 3600,
+], 44 * 3600);
+assertEqual(44 * 3600, $weekly47['by_week']['2026-W24']['regular_seconds'], 'weekly threshold: 47h caps regular at 44h');
+assertEqual(3 * 3600, $weekly47['by_week']['2026-W24']['overtime_seconds'], 'weekly threshold: 47h yields 3h overtime');
+
+// Case 8: Payroll period starts mid-week. Prior days in the same ISO week
+// consume the 44-hour regular bank, but only in-period days are paid.
+$midWeek = splitWeeklyRegularOvertimeSeconds([
+    '2026-06-08' => 20 * 3600,
+    '2026-06-09' => 20 * 3600,
+    '2026-06-10' => 8 * 3600,
+], 44 * 3600);
+assertEqual(4 * 3600, $midWeek['by_day']['2026-06-10']['regular_seconds'], 'mid-week period: first 4h remain regular');
+assertEqual(4 * 3600, $midWeek['by_day']['2026-06-10']['overtime_seconds'], 'mid-week period: remaining 4h become overtime');
+
 echo "All tests passed.\n";
