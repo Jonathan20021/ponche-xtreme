@@ -40,13 +40,14 @@ function sendPayrollSlipEmails(PDO $pdo, int $periodId): array {
             JOIN employees e ON e.id = pr.employee_id
             LEFT JOIN departments d ON d.id = e.department_id
             WHERE pr.payroll_period_id = ? AND e.email IS NOT NULL AND e.email != ''
+                  AND pr.net_salary > 0
             ORDER BY e.last_name, e.first_name
         ");
         $employeesStmt->execute([$periodId]);
         $employees = $employeesStmt->fetchAll(PDO::FETCH_ASSOC);
-        
+
         if (empty($employees)) {
-            return ['success' => false, 'message' => 'No se encontraron empleados con direcciones de correo válidas'];
+            return ['success' => false, 'message' => 'No se encontraron empleados con monto de nómina y correo válido'];
         }
         
         $sentCount = 0;
