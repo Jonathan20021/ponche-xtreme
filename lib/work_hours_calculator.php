@@ -179,16 +179,38 @@ function splitWeeklyRegularOvertimeSeconds(array $dailyWorkSeconds, int $weeklyT
  *  - Sub-pauses (e.g. BA_NO) punched in the middle of an outer pause (e.g. BREAK).
  *    The outer-pause slug absorbs the sub-pause time, matching what supervisors
  *    expect when they extend a paid punch's timestamp past intermediate pauses.
+ *  - Boundary markers (ENTRY / EXIT) are NOT pauses. ENTRY is the clock-in marker
+ *    and EXIT the clock-out marker; neither should open a pause window. The old
+ *    model treated every non-paid slug as a pause-opener, so a day punched as
+ *    DISPONIBLE -> ENTRY -> EXIT had the redundant ENTRY open a pause that swallowed
+ *    the whole shift, attributing ~9h to ENTRY (unpaid) and crediting 0 paid hours.
+ *    Here state carries forward: once a paid state is active, an ENTRY does not
+ *    interrupt it; only a genuine pause slug (BREAK/PAUSA/BA_NO/LUNCH...) or EXIT
+ *    ends the paid run.
  *
  * @param array<int, array{slug:string,timestamp:int,id?:int}> $sortedEvents timestamps ASC
  * @param string[] $paidTypeSlugs
+ * @param string[]|null $boundarySlugs marker slugs (clock-in/out) that never open a
+ *        pause window; defaults to ENTRY/EXIT (EXIT also ends the active paid run).
  * @return array<string,int>
  */
-function computeDurationsWithPauseWindows(array $sortedEvents, array $paidTypeSlugs): array
+function computeDurationsWithPauseWindows(array $sortedEvents, array $paidTypeSlugs, ?array $boundarySlugs = null): array
 {
     $paidSet = [];
     foreach ($paidTypeSlugs as $slug) {
         $paidSet[$slug] = true;
+    }
+
+    // Boundary markers (clock-in/out) never open a pause window. ENTRY is a pure
+    // marker (does not change the active state); EXIT additionally ends the paid run.
+    if ($boundarySlugs === null) {
+        $boundarySlugs = [sanitizeAttendanceTypeSlug('ENTRY'), sanitizeAttendanceTypeSlug('EXIT')];
+    }
+    $entrySlug = sanitizeAttendanceTypeSlug('ENTRY');
+    $exitSlug = sanitizeAttendanceTypeSlug('EXIT');
+    $boundarySet = [];
+    foreach ($boundarySlugs as $slug) {
+        $boundarySet[$slug] = true;
     }
 
     // Pass 1: drop the phantom of any edit-induced same-paid duplicate.
@@ -226,15 +248,28 @@ function computeDurationsWithPauseWindows(array $sortedEvents, array $paidTypeSl
         return $durationsAll;
     }
 
-    // Pass 2: walk events, open/close pause windows on paid boundaries.
+    // Pass 2: walk events tracking the active accruing state. Each event credits
+    // its forward interval (this.ts -> next.ts) to whatever state is active during
+    // that interval:
+    //   - a paid slug starts/resumes paid work (and closes any open pause);
+    //   - a genuine pause slug (non-paid, non-boundary) opens a pause window
+    //     (first-wins; an in-progress window absorbs nested sub-pauses);
+    //   - EXIT ends the paid run and closes any open pause (clock-out);
+    //   - ENTRY is a pure marker: it changes nothing, so a paid state already
+    //     active before it carries straight through (the fix for DISPONIBLE->ENTRY).
+    $activePaidSlug = null;
     $pauseStart = null;
     $pauseSlug = null;
 
     for ($i = 0; $i < $count; $i++) {
         $event = $events[$i];
-        $isPaid = isset($paidSet[$event['slug']]);
+        $slug = $event['slug'];
+        $isPaid = isset($paidSet[$slug]);
+        $isBoundary = isset($boundarySet[$slug]);
+        $isExit = ($slug === $exitSlug);
 
         if ($isPaid) {
+            // Resume/begin paid work; close any open pause against this timestamp.
             if ($pauseStart !== null) {
                 $delta = $event['timestamp'] - $pauseStart;
                 if ($delta > 0) {
@@ -243,18 +278,45 @@ function computeDurationsWithPauseWindows(array $sortedEvents, array $paidTypeSl
                 $pauseStart = null;
                 $pauseSlug = null;
             }
-            if ($i + 1 < $count) {
-                $delta = $events[$i + 1]['timestamp'] - $event['timestamp'];
+            $activePaidSlug = $slug;
+        } elseif ($isExit) {
+            // Clock-out: close any open pause and end the paid run.
+            if ($pauseStart !== null) {
+                $delta = $event['timestamp'] - $pauseStart;
                 if ($delta > 0) {
-                    $durationsAll[$event['slug']] = ($durationsAll[$event['slug']] ?? 0) + $delta;
+                    $durationsAll[$pauseSlug] = ($durationsAll[$pauseSlug] ?? 0) + $delta;
                 }
+                $pauseStart = null;
+                $pauseSlug = null;
             }
+            $activePaidSlug = null;
+        } elseif ($isBoundary) {
+            // ENTRY (or other pure marker): does not change the active state.
         } else {
+            // Genuine pause slug: ends the paid run and opens a pause window.
+            $activePaidSlug = null;
             if ($pauseStart === null) {
                 $pauseStart = $event['timestamp'];
-                $pauseSlug = $event['slug'];
+                $pauseSlug = $slug;
             }
             // else: in-progress pause window absorbs this event's time (no-op).
+        }
+
+        // Credit the forward interval to whatever state is active during it.
+        if ($i + 1 < $count) {
+            $delta = $events[$i + 1]['timestamp'] - $event['timestamp'];
+            if ($delta > 0) {
+                if ($activePaidSlug !== null) {
+                    $durationsAll[$activePaidSlug] = ($durationsAll[$activePaidSlug] ?? 0) + $delta;
+                } elseif ($pauseStart !== null) {
+                    // Inside a pause window — credited when the pause closes so that
+                    // nested sub-pauses are absorbed by the outer pause slug.
+                } else {
+                    // Idle/pre-work (e.g. ENTRY before going DISPONIBLE, or after
+                    // EXIT): attribute to this marker's slug for display parity.
+                    $durationsAll[$slug] = ($durationsAll[$slug] ?? 0) + $delta;
+                }
+            }
         }
     }
 
