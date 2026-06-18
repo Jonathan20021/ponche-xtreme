@@ -1,7 +1,7 @@
 <?php
-// Enable error reporting for debugging
+// Producción: registrar errores, no mostrarlos al usuario (config central en db.php)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', '0');
 
 session_start();
 require_once '../db.php';
@@ -93,7 +93,7 @@ try {
     error_log("Contract saved to database with ID: $contractId");
 } catch (PDOException $e) {
     error_log("Database error: " . $e->getMessage());
-    die("Error al guardar el contrato en la base de datos: " . $e->getMessage());
+    die("Error al guardar el contrato en la base de datos. Por favor intente más tarde.");
 }
 
 // Format date for contract
@@ -412,5 +412,5 @@ try {
     error_log("Contract generated successfully: $filename");
 } catch (Exception $e) {
     error_log("Error generating contract: " . $e->getMessage());
-    die("Error al generar el contrato: " . $e->getMessage());
+    die("Error al generar el contrato. Por favor intente más tarde.");
 }

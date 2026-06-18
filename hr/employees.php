@@ -608,7 +608,7 @@ $terminatedEmployees = $pdo->query("
                         <h3 class="text-3xl font-bold text-white"><?= $stats['total'] ?></h3>
                     </div>
                     <div class="w-12 h-12 rounded-lg flex items-center justify-center"
-                        style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                        style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <i class="fas fa-users text-white text-xl"></i>
                     </div>
                 </div>
@@ -664,7 +664,7 @@ $terminatedEmployees = $pdo->query("
                 </div>
                 <div class="form-group flex-1 min-w-[150px]">
                     <label for="status">Estado</label>
-                    <select id="status" name="status">
+                    <select id="status" name="status" onchange="this.form.submit()">
                         <option value="all" <?= $statusFilter === 'all' ? 'selected' : '' ?>>Todos</option>
                         <option value="active" <?= $statusFilter === 'active' ? 'selected' : '' ?>>Activos</option>
                         <option value="trial" <?= $statusFilter === 'trial' ? 'selected' : '' ?>>En Prueba</option>
@@ -676,7 +676,7 @@ $terminatedEmployees = $pdo->query("
                 </div>
                 <div class="form-group flex-1 min-w-[150px]">
                     <label for="department">Departamento</label>
-                    <select id="department" name="department">
+                    <select id="department" name="department" onchange="this.form.submit()">
                         <option value="all" <?= $departmentFilter === 'all' ? 'selected' : '' ?>>Todos</option>
                         <?php foreach ($departments as $dept): ?>
                             <option value="<?= $dept['id'] ?>" <?= $departmentFilter == $dept['id'] ? 'selected' : '' ?>>
@@ -1619,13 +1619,16 @@ $terminatedEmployees = $pdo->query("
         <div class="glass-card">
             <h2 class="text-xl font-semibold text-white mb-4">
                 <i class="fas fa-list text-blue-400 mr-2"></i>
-                Empleados (<?= count($employees) ?>)
+                Empleados (<span id="empCount"><?= count($employees) ?></span>)
             </h2>
+            <p id="empNoResults" class="text-slate-400 text-center py-8" style="display:none;">
+                <i class="fas fa-user-slash mr-2"></i>No hay empleados que coincidan con tu búsqueda.
+            </p>
 
             <?php if (empty($employees)): ?>
                     <p class="text-slate-400 text-center py-8">No se encontraron empleados.</p>
             <?php else: ?>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div id="employeeGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <?php foreach ($employees as $employee): ?>
                                                 <?php
                                                 $statusColors = [
@@ -1636,7 +1639,8 @@ $terminatedEmployees = $pdo->query("
                                                 ];
                                                 $statusColor = $statusColors[$employee['employment_status']] ?? 'bg-gray-500';
                                                 ?>
-                                                <div
+                                                <div data-emp-card
+                                                    data-search="<?= htmlspecialchars(strtolower(trim(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '') . ' ' . ($employee['employee_code'] ?? '') . ' ' . ($employee['position'] ?? '') . ' ' . ($employee['department_name'] ?? '') . ' ' . ($employee['campaign_name'] ?? '') . ' ' . ($employee['email'] ?? '') . ' ' . ($employee['username'] ?? '')))) ?>"
                                                     class="bg-slate-800/50 rounded-lg p-4 border border-slate-700 hover:border-blue-500 transition-all">
                                                     <div class="flex items-start gap-3 mb-3">
                                                         <?php if (!empty($employee['photo_path']) && file_exists('../' . $employee['photo_path'])): ?>
@@ -1645,7 +1649,7 @@ $terminatedEmployees = $pdo->query("
                                                                             class="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-blue-500">
                                                         <?php else: ?>
                                                                         <div class="w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
-                                                                            style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                                                                            style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                                                                             <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
                                                                         </div>
                                                         <?php endif; ?>
@@ -2456,7 +2460,7 @@ $terminatedEmployees = $pdo->query("
 
                 <div class="form-group">
                     <label for="edit_campaign_color">Color</label>
-                    <input type="color" id="edit_campaign_color" name="color" value="#3b82f6">
+                    <input type="color" id="edit_campaign_color" name="color" value="#264b8b">
                 </div>
 
                 <div class="form-actions">
@@ -2472,5 +2476,31 @@ $terminatedEmployees = $pdo->query("
     </div>
 
     <script src="../assets/js/image-compressor.js"></script>
+    <script>
+    /* Real-time employee search (client-side filter of loaded cards, accent-insensitive) */
+    (function () {
+        var input = document.getElementById('search');
+        var cards = Array.prototype.slice.call(document.querySelectorAll('[data-emp-card]'));
+        var countEl = document.getElementById('empCount');
+        var noRes = document.getElementById('empNoResults');
+        var grid = document.getElementById('employeeGrid');
+        if (!input || !cards.length) return;
+        function norm(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+        function filter() {
+            var q = norm(input.value.trim());
+            var visible = 0;
+            cards.forEach(function (c) {
+                var match = q === '' || norm(c.getAttribute('data-search')).indexOf(q) !== -1;
+                c.style.display = match ? '' : 'none';
+                if (match) visible++;
+            });
+            if (countEl) countEl.textContent = visible;
+            if (noRes) noRes.style.display = visible === 0 ? '' : 'none';
+            if (grid) grid.style.display = visible === 0 ? 'none' : '';
+        }
+        input.addEventListener('input', filter);
+        input.setAttribute('autocomplete', 'off');
+    })();
+    </script>
     <?php include '../footer.php'; ?>
 </body>

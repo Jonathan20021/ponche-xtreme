@@ -17,7 +17,8 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 // Configuración de Gemini API
-define('GEMINI_API_KEY', 'AIzaSyDpmWKNdDxjPy5uFVQ7hbEJKZGGJKPmmZM'); // Reemplazar con tu API key
+$__sec = @include __DIR__ . '/../../config/secrets.php';
+define('GEMINI_API_KEY', getenv('GEMINI_KEY_WASAPI') ?: (is_array($__sec) ? ($__sec['gemini_key_wasapi'] ?? '') : ''));
 define('GEMINI_MODEL', 'gemini-1.5-flash');
 define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/' . GEMINI_MODEL . ':generateContent');
 

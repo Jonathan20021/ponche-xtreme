@@ -206,8 +206,8 @@ require_once __DIR__ . '/../header.php';
                     <div class="form-group">
                         <label for="categoryColor">Color</label>
                         <div class="color-picker-wrapper">
-                            <input type="color" id="categoryColor" name="color" value="#6366f1" style="width: 60px; height: 40px; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;">
-                            <span id="colorValue" style="font-size: 13px; color: #6b7280;">#6366f1</span>
+                            <input type="color" id="categoryColor" name="color" value="#3a5da0" style="width: 60px; height: 40px; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;">
+                            <span id="colorValue" style="font-size: 13px; color: #6b7280;">#3a5da0</span>
                         </div>
                     </div>
                 </div>
@@ -318,8 +318,8 @@ function openAddModal() {
     document.getElementById('modalTitle').textContent = 'Nueva Categoría';
     document.getElementById('categoryForm').reset();
     document.getElementById('categoryId').value = '';
-    document.getElementById('categoryColor').value = '#6366f1';
-    document.getElementById('colorValue').textContent = '#6366f1';
+    document.getElementById('categoryColor').value = '#3a5da0';
+    document.getElementById('colorValue').textContent = '#3a5da0';
     document.getElementById('categoryModal').style.display = 'block';
 }
 

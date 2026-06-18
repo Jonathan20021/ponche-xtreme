@@ -73,19 +73,19 @@ require_once '../header.php';
 
 <style>
     .job-tile {
-        background: rgba(30, 41, 59, 0.55);
-        border: 1px solid rgba(148, 163, 184, 0.15);
+        background: var(--surface);
+        border: 1px solid var(--border);
         border-radius: 18px;
         overflow: hidden;
         display: flex;
         flex-direction: column;
         transition: transform .2s, box-shadow .2s, border-color .2s;
     }
-    .job-tile:hover { transform: translateY(-3px); border-color: rgba(99,102,241,0.45); box-shadow: 0 18px 30px -20px rgba(99,102,241,0.5); }
+    .job-tile:hover { transform: translateY(-3px); border-color: rgba(58, 93, 160,0.45); box-shadow: 0 18px 30px -20px rgba(58, 93, 160,0.5); }
     .theme-light .job-tile { background: #fff; border: 1px solid #e2e8f0; color:#0f172a; }
     .job-tile-banner {
         height: 110px;
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        background: linear-gradient(135deg, #1f3f76 0%, #5e7cba 100%);
         position: relative; overflow: hidden;
     }
     .job-tile-banner img { width:100%; height:100%; object-fit:cover; }
@@ -101,14 +101,14 @@ require_once '../header.php';
         padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600;
         border: 1px solid transparent; transition: all .15s ease;
     }
-    .filter-tab.active { background: linear-gradient(135deg, #4f46e5, #7c3aed); color:#fff; border-color: transparent; }
+    .filter-tab.active { background: linear-gradient(135deg, #1f3f76, #5e7cba); color:#fff; border-color: transparent; }
     .filter-tab.idle   { color:#94a3b8; background: rgba(148,163,184,0.1); }
     .filter-tab.idle:hover { color:#fff; background: rgba(148,163,184,0.25); }
     .theme-light .filter-tab.idle { color: #475569; background:#f1f5f9; }
     .theme-light .filter-tab.idle:hover { color:#0f172a; background:#e2e8f0; }
 
     .ai-button {
-        background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #06b6d4 100%);
+        background: linear-gradient(135deg, #5e7cba 0%, #1f3f76 50%, #3a5da0 100%);
         color:#fff; border-radius: 12px; padding: .55rem .9rem;
         display:inline-flex; align-items:center; gap:.5rem; font-weight:600; font-size:.85rem;
         border: none; cursor:pointer; transition: filter .15s ease, transform .15s ease;
@@ -118,13 +118,13 @@ require_once '../header.php';
 
     .modal { display:none; }
     .modal.show { display:flex; }
-    .modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,0.7); backdrop-filter: blur(6px); z-index:200; }
+    .modal-overlay { position:fixed; inset:0; background: var(--surface-2); backdrop-filter: blur(6px); z-index:200; }
     .modal-panel {
         position: fixed; inset: 0; z-index: 210; display:flex; align-items:center; justify-content:center; padding: 1rem;
     }
     .modal-card {
         max-width: 56rem; width: 100%; max-height: 90vh; overflow-y: auto;
-        background: #0f172a; color:#e2e8f0; border-radius: 18px; border: 1px solid rgba(148,163,184,0.2);
+        background: var(--surface); color:#e2e8f0; border-radius: 18px; border: 1px solid var(--border);
     }
     .theme-light .modal-card { background:#fff; color:#0f172a; border-color:#e2e8f0; }
 
@@ -141,7 +141,7 @@ require_once '../header.php';
         background:#f8fafc; border-color:#e2e8f0; color:#0f172a;
     }
     .field input:focus, .field select:focus, .field textarea:focus {
-        outline:none; border-color:#6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+        outline:none; border-color:#3a5da0; box-shadow: 0 0 0 3px rgba(58, 93, 160,0.2);
     }
 </style>
 
@@ -258,7 +258,7 @@ require_once '../header.php';
                     </p>
 
                     <div class="grid grid-cols-3 gap-2 mb-4 text-center">
-                        <div class="px-2 py-2.5 rounded-lg border border-indigo-500/30" style="background:rgba(99,102,241,0.18)">
+                        <div class="px-2 py-2.5 rounded-lg border border-indigo-500/30" style="background:rgba(58, 93, 160,0.18)">
                             <div class="text-xl font-extrabold text-white"><?php echo (int) $job['application_count']; ?></div>
                             <div class="text-[10px] font-semibold uppercase text-indigo-200 tracking-wider mt-0.5">Solicitudes</div>
                         </div>

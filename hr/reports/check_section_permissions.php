@@ -2,7 +2,7 @@
 require_once '../../db.php';
 
 echo "<h2>Verificación de Section Permissions</h2>";
-echo "<style>body { font-family: monospace; padding: 20px; background: #1e293b; color: #fff; } pre { background: #0f172a; padding: 15px; border-radius: 8px; } h3 { color: #3b82f6; } .alert { background: #ef4444; color: white; padding: 15px; border-radius: 8px; margin: 10px 0; }</style>";
+echo "<style>body { font-family: monospace; padding: 20px; background: var(--surface-2); color: #fff; } pre { background: var(--surface); padding: 15px; border-radius: 8px; } h3 { color: #264b8b; } .alert { background: #ef4444; color: white; padding: 15px; border-radius: 8px; margin: 10px 0; }</style>";
 
 // Ver tu sesión actual
 session_start();

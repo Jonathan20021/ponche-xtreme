@@ -10,7 +10,7 @@ require_once __DIR__ . '/quality_db.php';
 date_default_timezone_set('America/Santo_Domingo');
 
 if (!function_exists('sanitizeHexColorValue')) {
-    function sanitizeHexColorValue(?string $color, string $fallback = '#6366F1'): string
+    function sanitizeHexColorValue(?string $color, string $fallback = '#3a5da0'): string
     {
         $value = strtoupper(trim((string) $color));
         return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : strtoupper($fallback);
@@ -441,7 +441,7 @@ foreach ($eventRows as $row) {
     $meta = $attendanceTypeMap[$slug] ?? null;
     $label = $meta['label'] ?? ($row['type'] ?? $slug);
     $icon = $meta['icon_class'] ?? 'fas fa-circle';
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#38BDF8', '#38BDF8');
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#92a9da', '#92a9da');
     $timestamp = strtotime($row['timestamp'] ?? '');
     if ($timestamp === false) {
         continue;
@@ -504,15 +504,15 @@ $insightCards = [
         'value' => gmdate('H:i:s', $workSeconds),
         'description' => 'Tiempo válido para pago',
         'icon' => 'fas fa-briefcase',
-        'color_start' => '#38BDF8',
-        'color_end' => '#2563EB',
+        'color_start' => '#92a9da',
+        'color_end' => '#1f3f76',
     ],
 ];
 
 foreach ($durationTypes as $typeMeta) {
     $slug = $typeMeta['slug'];
     $meta = $attendanceTypeMap[$slug] ?? null;
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#6366F1', '#6366F1');
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#3a5da0', '#3a5da0');
     $colorEnd = sanitizeHexColorValue($meta['color_end'] ?? $colorStart, $colorStart);
     $insightCards[] = [
         'label' => $typeMeta['label'],
@@ -529,8 +529,8 @@ $insightCards[] = [
     'value' => $productivity_score . '%',
     'description' => 'Tiempo productivo vs total',
     'icon' => 'fas fa-bolt',
-    'color_start' => '#C084FC',
-    'color_end' => '#7C3AED',
+    'color_start' => '#92a9da',
+    'color_end' => '#5e7cba',
 ];
 
 // Get employee data for HR requests
@@ -636,7 +636,7 @@ $chartTotal = 0;
 if ($workSeconds > 0) {
     $chartLabels[] = 'Productivo';
     $chartData[] = $workSeconds;
-    $chartColors[] = '#38BDF8';
+    $chartColors[] = '#92a9da';
     $chartTotal += $workSeconds;
 }
 
@@ -647,7 +647,7 @@ foreach ($durationTypes as $typeMeta) {
         continue;
     }
     $meta = $attendanceTypeMap[$slug] ?? null;
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#6366F1', '#6366F1');
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#3a5da0', '#3a5da0');
     $chartLabels[] = $typeMeta['label'];
     $chartData[] = $value;
     $chartColors[] = $colorStart;
@@ -722,7 +722,7 @@ $chartColorsJson = json_encode($chartColors);
                     $buttonSlug = htmlspecialchars($type['slug'], ENT_QUOTES, 'UTF-8');
                     $buttonLabel = htmlspecialchars($type['label'], ENT_QUOTES, 'UTF-8');
                     $iconClass = htmlspecialchars($type['icon_class'] ?? 'fas fa-circle', ENT_QUOTES, 'UTF-8');
-                    $colorStart = htmlspecialchars($type['color_start'] ?? '#6366F1', ENT_QUOTES, 'UTF-8');
+                    $colorStart = htmlspecialchars($type['color_start'] ?? '#3a5da0', ENT_QUOTES, 'UTF-8');
                     $colorEnd = htmlspecialchars($type['color_end'] ?? $colorStart, ENT_QUOTES, 'UTF-8');
                 ?>
                 <button type="submit" 
@@ -825,7 +825,47 @@ $chartColorsJson = json_encode($chartColors);
         </form>
     </section>
 
-    <section class="metric-grid">
+    <div class="insight-grid agent-focus-grid">
+        <article class="glass-card chart-card <?= $chartTotal <= 0 ? 'is-empty' : '' ?>">
+            <header class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-primary">Distribución de tiempo</h2>
+            </header>
+            <canvas id="timeBreakdownChart" aria-label="Distribución de tiempo" role="img"></canvas>
+            <p class="chart-empty <?= $chartTotal > 0 ? 'hidden' : '' ?>" data-chart-empty>Sin datos suficientes para graficar en esta fecha.</p>
+        </article>
+
+        <article class="glass-card timeline-card">
+            <header>
+                <h2 class="text-lg font-semibold text-primary">Timeline de actividades</h2>
+                <p class="text-sm text-muted">Historial cronológico de tus marcaciones.</p>
+            </header>
+            <?php if (!empty($records)): ?>
+                <ol class="timeline">
+                    <?php foreach ($records as $record): ?>
+                        <li class="timeline-item">
+                            <span class="timeline-dot" style="--dot-color: <?= htmlspecialchars($record['color'], ENT_QUOTES, 'UTF-8') ?>;"></span>
+                            <div class="timeline-content">
+                                <div class="timeline-title">
+                                    <i class="<?= htmlspecialchars($record['icon']) ?>"></i>
+                                    <span><?= htmlspecialchars($record['label']) ?></span>
+                                </div>
+                                <div class="timeline-time"><?= htmlspecialchars($record['time']) ?> &ndash; <?= htmlspecialchars($record['ip']) ?></div>
+                            </div>
+                        </li>
+                    <?php endforeach; ?>
+                </ol>
+            <?php else: ?>
+                <p class="timeline-empty">Aún no hay eventos registrados para esta fecha.</p>
+            <?php endif; ?>
+        </article>
+    </div>
+
+    <section class="metric-section">
+        <header class="metric-section__head">
+            <h2>Desglose de tiempo por actividad</h2>
+            <p>Tiempo acumulado del día por cada tipo de marcación.</p>
+        </header>
+        <div class="metric-grid">
         <?php foreach ($insightCards as $card): ?>
             <article class="metric-card" style="--metric-start: <?= htmlspecialchars($card['color_start'], ENT_QUOTES, 'UTF-8') ?>; --metric-end: <?= htmlspecialchars($card['color_end'], ENT_QUOTES, 'UTF-8') ?>;">
                 <div class="metric-icon"><i class="<?= htmlspecialchars($card['icon']) ?>"></i></div>
@@ -834,6 +874,7 @@ $chartColorsJson = json_encode($chartColors);
                 <p class="metric-sub"><?= htmlspecialchars($card['description']) ?></p>
             </article>
         <?php endforeach; ?>
+        </div>
     </section>
 
     <section class="glass-card mb-6">
@@ -860,7 +901,7 @@ $chartColorsJson = json_encode($chartColors);
             </div>
         <?php else: ?>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div class="metric-card" style="--metric-start: #0ea5e9; --metric-end: #2563eb;">
+                <div class="metric-card" style="--metric-start: #264b8b; --metric-end: #1f3f76;">
                     <div class="metric-icon"><i class="fas fa-clipboard-check"></i></div>
                     <p class="metric-label">Evaluaciones</p>
                     <p class="metric-value"><?= (int) $qualityMetrics['total_evaluations'] ?></p>
@@ -878,7 +919,7 @@ $chartColorsJson = json_encode($chartColors);
                     <p class="metric-value"><?= (int) $qualityMetrics['audited_calls'] ?></p>
                     <p class="metric-sub">Con evaluación</p>
                 </div>
-                <div class="metric-card" style="--metric-start: #a855f7; --metric-end: #7c3aed;">
+                <div class="metric-card" style="--metric-start: #92a9da; --metric-end: #5e7cba;">
                     <div class="metric-icon"><i class="fas fa-star"></i></div>
                     <p class="metric-label">Mejor / Peor</p>
                     <p class="metric-value">
@@ -886,7 +927,7 @@ $chartColorsJson = json_encode($chartColors);
                     </p>
                     <p class="metric-sub">Rango de desempeño</p>
                 </div>
-                <div class="metric-card" style="--metric-start: #14b8a6; --metric-end: #0f766e;">
+                <div class="metric-card" style="--metric-start: #1f3f76; --metric-end: #0f766e;">
                     <div class="metric-icon"><i class="fas fa-chart-bar"></i></div>
                     <p class="metric-label">Score Analítico</p>
                     <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_ai_score'], 2) ?></p>
@@ -967,40 +1008,6 @@ $chartColorsJson = json_encode($chartColors);
         </div>
     </article>
 
-    <div class="insight-grid">
-        <article class="glass-card chart-card <?= $chartTotal <= 0 ? 'is-empty' : '' ?>">
-            <header class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-primary">Distribución de tiempo</h2>
-            </header>
-            <canvas id="timeBreakdownChart" aria-label="Distribución de tiempo" role="img"></canvas>
-            <p class="chart-empty <?= $chartTotal > 0 ? 'hidden' : '' ?>" data-chart-empty>Sin datos suficientes para graficar en esta fecha.</p>
-        </article>
-
-        <article class="glass-card timeline-card">
-            <header>
-                <h2 class="text-lg font-semibold text-primary">Timeline de actividades</h2>
-                <p class="text-sm text-muted">Historial cronológico de tus marcaciones.</p>
-            </header>
-            <?php if (!empty($records)): ?>
-                <ol class="timeline">
-                    <?php foreach ($records as $record): ?>
-                        <li class="timeline-item">
-                            <span class="timeline-dot" style="--dot-color: <?= htmlspecialchars($record['color'], ENT_QUOTES, 'UTF-8') ?>;"></span>
-                            <div class="timeline-content">
-                                <div class="timeline-title">
-                                    <i class="<?= htmlspecialchars($record['icon']) ?>"></i>
-                                    <span><?= htmlspecialchars($record['label']) ?></span>
-                                </div>
-                                <div class="timeline-time"><?= htmlspecialchars($record['time']) ?> &ndash; <?= htmlspecialchars($record['ip']) ?></div>
-                            </div>
-                        </li>
-                    <?php endforeach; ?>
-                </ol>
-            <?php else: ?>
-                <p class="timeline-empty">Aún no hay eventos registrados para esta fecha.</p>
-            <?php endif; ?>
-        </article>
-    </div>
 
     <article class="glass-card table-card">
         <header>
@@ -1034,16 +1041,49 @@ $chartColorsJson = json_encode($chartColors);
     </article>
 
     <?php if ($employeeId): ?>
-    <!-- HR Requests Section -->
-    <div class="insight-grid">
-        <article class="glass-card">
-            <header class="mb-6">
-                <h2 class="text-lg font-semibold text-primary flex items-center gap-2">
-                    <i class="fas fa-calendar-check text-blue-400"></i>
-                    Solicitar Permiso
-                </h2>
-                <p class="text-sm text-muted">Envía una solicitud de permiso a Recursos Humanos</p>
-            </header>
+    <!-- Solicitudes a RH: tarjetas de acción que abren modales profesionales -->
+    <section class="glass-card agent-requests-card">
+        <header class="agent-requests-head">
+            <h2 class="text-lg font-semibold text-primary flex items-center gap-2">
+                <i class="fas fa-paper-plane text-blue-400"></i>
+                Solicitudes a Recursos Humanos
+            </h2>
+            <p class="text-sm text-muted">Permisos, vacaciones y préstamos — envía y da seguimiento.</p>
+        </header>
+        <?php if ($permission_success || $vacation_success): ?>
+            <div class="req-banner req-banner--ok animate-fade-in"><i class="fas fa-check-circle"></i><span><?= htmlspecialchars($permission_success ?: $vacation_success) ?></span></div>
+        <?php endif; ?>
+        <?php if ($permission_error || $vacation_error): ?>
+            <div class="req-banner req-banner--err animate-fade-in"><i class="fas fa-exclamation-circle"></i><span><?= htmlspecialchars($permission_error ?: $vacation_error) ?></span></div>
+        <?php endif; ?>
+        <div class="req-actions-grid">
+            <button type="button" class="req-action" data-modal-open="modalPermiso">
+                <span class="req-action__icon" style="--c1:#3b82f6;--c2:#2563eb;"><i class="fas fa-calendar-check"></i></span>
+                <span class="req-action__body"><span class="req-action__title">Solicitar Permiso</span><span class="req-action__sub"><?= count($pendingPermissions ?? []) ?> en seguimiento</span></span>
+                <i class="fas fa-chevron-right req-action__arrow"></i>
+            </button>
+            <button type="button" class="req-action" data-modal-open="modalVacaciones">
+                <span class="req-action__icon" style="--c1:#a855f7;--c2:#7c3aed;"><i class="fas fa-umbrella-beach"></i></span>
+                <span class="req-action__body"><span class="req-action__title">Solicitar Vacaciones</span><span class="req-action__sub"><?= count($pendingVacations ?? []) ?> en seguimiento</span></span>
+                <i class="fas fa-chevron-right req-action__arrow"></i>
+            </button>
+            <a href="agents/request_loan.php" class="req-action">
+                <span class="req-action__icon" style="--c1:#10b981;--c2:#059669;"><i class="fas fa-hand-holding-dollar"></i></span>
+                <span class="req-action__body"><span class="req-action__title">Solicitar Préstamo</span><span class="req-action__sub">Ir al portal de préstamos</span></span>
+                <i class="fas fa-chevron-right req-action__arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    <!-- Modal: Solicitar Permiso -->
+    <div class="ev-modal" id="modalPermiso" aria-hidden="true">
+        <div class="ev-modal__overlay" data-modal-close></div>
+        <div class="ev-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modalPermisoTitle">
+            <div class="ev-modal__header">
+                <h3 id="modalPermisoTitle"><i class="fas fa-calendar-check text-blue-400"></i> Solicitar Permiso</h3>
+                <button type="button" class="ev-modal__close" data-modal-close aria-label="Cerrar"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="ev-modal__body">
             
             <?php if ($permission_success): ?>
                 <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
@@ -1112,16 +1152,19 @@ $chartColorsJson = json_encode($chartColors);
                     </div>
                 </div>
             <?php endif; ?>
-        </article>
+            </div>
+        </div>
+    </div>
 
-        <article class="glass-card">
-            <header class="mb-6">
-                <h2 class="text-lg font-semibold text-primary flex items-center gap-2">
-                    <i class="fas fa-umbrella-beach text-purple-400"></i>
-                    Solicitar Vacaciones
-                </h2>
-                <p class="text-sm text-muted">Envía una solicitud de vacaciones a Recursos Humanos</p>
-            </header>
+    <!-- Modal: Solicitar Vacaciones -->
+    <div class="ev-modal" id="modalVacaciones" aria-hidden="true">
+        <div class="ev-modal__overlay" data-modal-close></div>
+        <div class="ev-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modalVacacionesTitle">
+            <div class="ev-modal__header">
+                <h3 id="modalVacacionesTitle"><i class="fas fa-umbrella-beach text-purple-400"></i> Solicitar Vacaciones</h3>
+                <button type="button" class="ev-modal__close" data-modal-close aria-label="Cerrar"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="ev-modal__body">
 
             <?php if ($vacation_success): ?>
                 <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
@@ -1184,7 +1227,8 @@ $chartColorsJson = json_encode($chartColors);
                     </div>
                 </div>
             <?php endif; ?>
-        </article>
+            </div>
+        </div>
     </div>
     <?php endif; ?>
 </div>
@@ -1274,6 +1318,50 @@ document.getElementById('dates')?.addEventListener('change', function () {
         font-size: 0.625rem;
     }
 }
+
+/* ============ Hero del agente: texto legible sobre el navy + aro de productividad ============ */
+.dashboard-hero .text-primary, .dashboard-hero h1 { color: #fff !important; }
+.dashboard-hero .text-muted { color: rgba(255,255,255,.72) !important; }
+.dashboard-hero .hero-progress { height: auto; background: transparent; border-radius: 0; overflow: visible; display: flex; flex-direction: column; align-items: center; gap: .45rem; }
+.dashboard-hero .hero-progress > span { background: transparent !important; color: rgba(255,255,255,.72) !important; font-size: .72rem; font-weight: 700; letter-spacing: .14em; }
+.dashboard-hero .progress-circle { width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; position: relative; background: conic-gradient(#ffffff var(--progress, 0%), rgba(255,255,255,.18) 0); }
+.dashboard-hero .progress-circle::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: #1f3f76; }
+.dashboard-hero .progress-circle span { position: relative; font-weight: 800; font-size: 1.15rem; color: #fff; letter-spacing: -.02em; }
+
+/* ============ Tarjetas de acción de solicitudes ============ */
+.agent-requests-head { margin-bottom: 1.1rem; }
+.req-actions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .9rem; }
+.req-action { display: flex; align-items: center; gap: .9rem; padding: 1rem 1.1rem; border-radius: .9rem; background: var(--surface-2); border: 1px solid var(--border); cursor: pointer; text-decoration: none; text-align: left; transition: transform .18s, box-shadow .18s, border-color .18s, background .18s; width: 100%; font-family: inherit; }
+.req-action:hover { border-color: var(--brand); transform: translateY(-2px); box-shadow: var(--shadow-md); background: var(--surface); }
+.req-action__icon { width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 1.1rem; background: linear-gradient(135deg, var(--c1, var(--brand-bright)), var(--c2, var(--brand))); }
+.req-action__body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.req-action__title { font-weight: 700; color: var(--text); font-size: .95rem; }
+.req-action__sub { font-size: .78rem; color: var(--text-muted); }
+.req-action__arrow { color: var(--text-subtle, var(--text-muted)); font-size: .8rem; }
+.req-banner { display: flex; align-items: center; gap: .6rem; padding: .8rem 1rem; border-radius: .7rem; margin-bottom: 1rem; font-size: .9rem; font-weight: 600; }
+.req-banner--ok { background: rgba(16,185,129,.12); color: #047857; border: 1px solid rgba(16,185,129,.3); }
+.req-banner--err { background: rgba(239,68,68,.1); color: #b91c1c; border: 1px solid rgba(239,68,68,.3); }
+
+/* ============ Sistema de modales profesional ============ */
+.ev-modal { position: fixed; inset: 0; z-index: 1200; display: none; }
+.ev-modal.is-open { display: block; }
+.ev-modal__overlay { position: absolute; inset: 0; background: rgba(10,18,35,.55); backdrop-filter: blur(4px); animation: evFade .2s ease; }
+.ev-modal__dialog { position: relative; width: calc(100% - 2rem); max-width: 540px; margin: 6vh auto; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; box-shadow: 0 24px 60px -12px rgba(15,23,42,.45); max-height: 88vh; display: flex; flex-direction: column; animation: evPop .24s cubic-bezier(.2,.8,.25,1); }
+.ev-modal__header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.4rem; border-bottom: 1px solid var(--border); }
+.ev-modal__header h3 { font-size: 1.1rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: .55rem; margin: 0; }
+.ev-modal__close { width: 36px; height: 36px; border-radius: 10px; background: var(--surface-2); color: var(--text-muted); border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
+.ev-modal__close:hover { background: var(--danger); color: #fff; }
+.ev-modal__body { padding: 1.4rem; overflow-y: auto; }
+.ev-modal__body label { color: var(--text); }
+@keyframes evFade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes evPop { from { opacity: 0; transform: translateY(16px) scale(.98) } to { opacity: 1; transform: none } }
+@media (max-width: 600px) {
+    .ev-modal__dialog { width: 100%; max-width: 100%; min-height: 100vh; margin: 0; border-radius: 0; max-height: 100vh; }
+}
+
+/* Punch buttons del dashboard: más altos y táctiles (el sistema de diseño vive en agent-portal.css) */
+.agent-shell .punch-btn { border-radius: .95rem; padding: 1.05rem .75rem; min-height: 88px; transition: transform .15s ease, box-shadow .2s ease, filter .2s ease; }
+.agent-shell .punch-btn:hover { transform: translateY(-2px); filter: brightness(1.05); }
 </style>
 
 <script>
@@ -1382,6 +1470,20 @@ document.getElementById('dates')?.addEventListener('change', function () {
             setButtonsDisabled(false);
         });
     })();
+</script>
+
+<script>
+/* Modales profesionales del portal de agente (permiso / vacaciones) */
+(function () {
+    function openModal(id){ var m = document.getElementById(id); if(!m) return; m.classList.add('is-open'); m.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; }
+    function closeModal(m){ if(!m) return; m.classList.remove('is-open'); m.setAttribute('aria-hidden','true'); document.body.style.overflow=''; }
+    document.querySelectorAll('[data-modal-open]').forEach(function(b){ b.addEventListener('click', function(){ openModal(b.getAttribute('data-modal-open')); }); });
+    document.querySelectorAll('[data-modal-close]').forEach(function(b){ b.addEventListener('click', function(){ closeModal(b.closest('.ev-modal')); }); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ document.querySelectorAll('.ev-modal.is-open').forEach(closeModal); } });
+    // Reabrir el modal correspondiente si la última solicitud falló, para corregir y reintentar
+    <?php if (!empty($permission_error)): ?>openModal('modalPermiso');<?php endif; ?>
+    <?php if (!empty($vacation_error)): ?>openModal('modalVacaciones');<?php endif; ?>
+})();
 </script>
 
 <?php include 'footer.php'; ?>

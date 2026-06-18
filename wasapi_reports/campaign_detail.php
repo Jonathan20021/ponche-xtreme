@@ -23,8 +23,8 @@ if (!$campaignId) {
         <div class="flex-1">
             <div class="flex items-center gap-4">
                 <div class="h-14 w-14 rounded-xl flex items-center justify-center"
-                    :style="'background-color: ' + (campaign?.color || '#3B82F6') + '20'">
-                    <i class="fas fa-bullhorn text-2xl" :style="'color: ' + (campaign?.color || '#3B82F6')"></i>
+                    :style="'background-color: ' + (campaign?.color || '#264b8b') + '20'">
+                    <i class="fas fa-bullhorn text-2xl" :style="'color: ' + (campaign?.color || '#264b8b')"></i>
                 </div>
                 <div>
                     <h1 class="text-2xl font-bold text-gray-800" x-text="campaign?.name || 'Cargando...'"></h1>
@@ -277,7 +277,7 @@ document.addEventListener('alpine:init', () => {
                             {
                                 label: 'Ventas',
                                 data: this.dailyTransactions.map(d => d.sales),
-                                backgroundColor: 'rgba(139, 92, 246, 0.8)',
+                                backgroundColor: 'rgba(111, 139, 189, 0.8)',
                                 borderRadius: 4
                             }
                         ]
@@ -305,8 +305,8 @@ document.addEventListener('alpine:init', () => {
                         datasets: [{
                             label: 'Llamadas',
                             data: this.dailyPerformance.map(d => d.calls_handled),
-                            borderColor: 'rgba(59, 130, 246, 1)',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderColor: 'rgba(38, 75, 139, 1)',
+                            backgroundColor: 'rgba(38, 75, 139, 0.1)',
                             fill: true,
                             tension: 0.4
                         }]

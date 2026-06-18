@@ -293,11 +293,11 @@ if (!isset($_SESSION['user_id'])) {
                         datasets: [{
                             label: 'Volumen',
                             data: [],
-                            borderColor: 'rgba(139, 92, 246, 1)',
-                            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                            borderColor: 'rgba(111, 139, 189, 1)',
+                            backgroundColor: 'rgba(111, 139, 189, 0.1)',
                             fill: true,
                             tension: 0.4,
-                            pointBackgroundColor: 'rgba(139, 92, 246, 1)',
+                            pointBackgroundColor: 'rgba(111, 139, 189, 1)',
                             pointBorderColor: '#1e293b',
                             pointBorderWidth: 2,
                             pointRadius: 4

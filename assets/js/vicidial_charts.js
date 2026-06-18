@@ -6,12 +6,12 @@ class VicidialCharts {
     constructor() {
         this.charts = {};
         this.colors = {
-            cyan: 'rgb(6, 182, 212)',
-            blue: 'rgb(59, 130, 246)',
+            cyan: 'rgb(38, 75, 139)',
+            blue: 'rgb(58, 93, 160)',
             green: 'rgb(34, 197, 94)',
-            purple: 'rgb(168, 85, 247)',
-            indigo: 'rgb(99, 102, 241)',
-            pink: 'rgb(236, 72, 153)',
+            purple: 'rgb(111, 139, 189)',
+            indigo: 'rgb(31, 63, 118)',
+            pink: 'rgb(157, 177, 210)',
             orange: 'rgb(251, 146, 60)',
             red: 'rgb(239, 68, 68)',
             yellow: 'rgb(234, 179, 8)'
@@ -258,7 +258,7 @@ class VicidialCharts {
                         label: 'Llamadas',
                         data: data.map(d => d.calls),
                         borderColor: this.colors.cyan,
-                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        backgroundColor: 'rgba(38, 75, 139, 0.1)',
                         tension: 0.4,
                         fill: true
                     },
@@ -339,7 +339,7 @@ class VicidialCharts {
                         agentData.normalized.efficiency,
                         agentData.normalized.contact_rate
                     ],
-                    backgroundColor: 'rgba(6, 182, 212, 0.2)',
+                    backgroundColor: 'rgba(38, 75, 139, 0.2)',
                     borderColor: this.colors.cyan,
                     borderWidth: 2,
                     pointBackgroundColor: this.colors.cyan,

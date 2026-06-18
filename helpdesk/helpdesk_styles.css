@@ -10,8 +10,8 @@
 .theme-light {
     --primary: #0f172a;
     --primary-light: #1e293b;
-    --accent: #3b82f6;
-    --accent-light: #60a5fa;
+    --accent: #264b8b;
+    --accent-light: #5e7cba;
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
@@ -31,8 +31,8 @@
 .theme-dark {
     --primary: #f8fafc;
     --primary-light: #e2e8f0;
-    --accent: #60a5fa;
-    --accent-light: #93c5fd;
+    --accent: #5e7cba;
+    --accent-light: #9db1d2;
     --success: #34d399;
     --warning: #fbbf24;
     --danger: #f87171;
@@ -230,10 +230,10 @@ body {
     box-shadow: var(--shadow-lg);
 }
 
-.stat-card.open::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.stat-card.open::before { background: linear-gradient(90deg, #264b8b, #5e7cba); }
 .stat-card.in-progress::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
 .stat-card.resolved::before { background: linear-gradient(90deg, #10b981, #34d399); }
-.stat-card.total::before { background: linear-gradient(90deg, #6366f1, #818cf8); }
+.stat-card.total::before { background: linear-gradient(90deg, #264b8b, #5e7cba); }
 
 .stat-header {
     display: flex;
@@ -257,14 +257,14 @@ body {
 }
 
 .stat-card.open .stat-icon { 
-    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-    color: #3b82f6;
+    background: linear-gradient(135deg, #e8eef8, #d4ddf0);
+    color: #264b8b;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
 .theme-dark .stat-card.open .stat-icon {
-    background: linear-gradient(135deg, #1e3a8a, #1e40af);
-    color: #93c5fd;
+    background: linear-gradient(135deg, #1e3a8a, #1f3f76);
+    color: #9db1d2;
     box-shadow: 0 4px 12px rgba(147, 197, 253, 0.3);
 }
 
@@ -293,14 +293,14 @@ body {
 }
 
 .stat-card.total .stat-icon { 
-    background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-    color: #6366f1;
+    background: linear-gradient(135deg, #e8eef8, #dce4f4);
+    color: #264b8b;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
 }
 
 .theme-dark .stat-card.total .stat-icon {
     background: linear-gradient(135deg, #312e81, #3730a3);
-    color: #c7d2fe;
+    color: #dce4f4;
     box-shadow: 0 4px 12px rgba(199, 210, 254, 0.3);
 }
 
@@ -460,7 +460,7 @@ body {
     font-size: 13px;
     font-weight: 700;
     color: var(--accent);
-    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+    background: linear-gradient(135deg, #e8eef8, #d4ddf0);
     padding: 6px 12px;
     border-radius: 8px;
     letter-spacing: 0.5px;
@@ -483,13 +483,13 @@ body {
 }
 
 .badge-status-open { 
-    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-    color: #1e40af;
+    background: linear-gradient(135deg, #e8eef8, #d4ddf0);
+    color: #1f3f76;
 }
 
 .theme-dark .badge-status-open {
-    background: linear-gradient(135deg, #1e3a8a, #1e40af);
-    color: #93c5fd;
+    background: linear-gradient(135deg, #1e3a8a, #1f3f76);
+    color: #9db1d2;
 }
 
 .badge-status-in_progress { 
@@ -533,13 +533,13 @@ body {
 }
 
 .badge-priority-low { 
-    background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+    background: linear-gradient(135deg, #e8eef8, #dce4f4);
     color: #3730a3;
 }
 
 .theme-dark .badge-priority-low {
     background: linear-gradient(135deg, #312e81, #3730a3);
-    color: #c7d2fe;
+    color: #dce4f4;
 }
 
 .badge-priority-medium { 

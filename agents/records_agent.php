@@ -8,7 +8,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT',
 include '../db.php';
 
 if (!function_exists('sanitizeHexColorValue')) {
-    function sanitizeHexColorValue(?string $color, string $fallback = '#6366F1'): string
+    function sanitizeHexColorValue(?string $color, string $fallback = '#3a5da0'): string
     {
         $value = strtoupper(trim((string) $color));
         return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : strtoupper($fallback);
@@ -48,7 +48,7 @@ foreach ($rawRecords as $row) {
     $meta = $attendanceTypeMap[$slug] ?? null;
     $label = $meta['label'] ?? ($row['type'] ?? $slug);
     $icon = $meta['icon_class'] ?? 'fas fa-circle';
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#6366F1', '#6366F1');
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#3a5da0', '#3a5da0');
     $colorEnd = sanitizeHexColorValue($meta['color_end'] ?? $colorStart, $colorStart);
     $badgeStyle = sprintf(
         'background: linear-gradient(135deg, %1$s 0%%, %2$s 100%%); color:#fff; padding:0.25rem 0.55rem; border-radius:9999px; display:inline-flex; align-items:center; gap:0.3rem; font-weight:600; box-shadow:0 4px 10px rgba(15,23,42,0.18);',

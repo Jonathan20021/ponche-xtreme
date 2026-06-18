@@ -794,12 +794,12 @@ const trendHours = trendData.map(item => {
 const trendLate = trendData.map(item => Number(item.late_count || 0));
 
 const palette = getComputedStyle(document.body);
-const cyan = palette.getPropertyValue('--accent-cyan') || '#22d3ee';
+const cyan = palette.getPropertyValue('--accent-cyan') || '#5e7cba';
 const emerald = palette.getPropertyValue('--accent-emerald') || '#34d399';
 const textColor = palette.getPropertyValue('--text-primary') || '#e2e8f0';
 const mutedColor = palette.getPropertyValue('--text-muted') || '#94a3b8';
 const amber = '#f59e0b';
-const violet = '#8b5cf6';
+const violet = '#6f8bbd';
 
 const departmentCtx = document.getElementById('departmentChart');
 if (typeof Chart !== 'undefined') {

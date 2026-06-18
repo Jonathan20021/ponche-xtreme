@@ -3,7 +3,7 @@ session_start();
 require_once '../../db.php';
 
 echo "<h2>Fix de Sesión - Establecer Role</h2>";
-echo "<style>body { font-family: monospace; padding: 20px; background: #1e293b; color: #fff; } pre { background: #0f172a; padding: 15px; border-radius: 8px; } h3 { color: #3b82f6; } .success { background: #10b981; color: white; padding: 15px; border-radius: 8px; margin: 10px 0; } .alert { background: #ef4444; color: white; padding: 15px; border-radius: 8px; margin: 10px 0; }</style>";
+echo "<style>body { font-family: monospace; padding: 20px; background: var(--surface-2); color: #fff; } pre { background: var(--surface); padding: 15px; border-radius: 8px; } h3 { color: #264b8b; } .success { background: #10b981; color: white; padding: 15px; border-radius: 8px; margin: 10px 0; } .alert { background: #ef4444; color: white; padding: 15px; border-radius: 8px; margin: 10px 0; }</style>";
 
 echo "<h3>Sesión ANTES del fix:</h3>";
 echo "<pre>";
@@ -44,6 +44,6 @@ echo "</pre>";
 
 echo "<hr>";
 echo "<h3>Acciones:</h3>";
-echo "<a href='../../hr/index.php' style='display: inline-block; background: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; margin: 5px;'>Ir a HR Dashboard</a>";
-echo "<a href='debug_permissions.php' style='display: inline-block; background: #8b5cf6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; margin: 5px;'>Ver Debug Completo</a>";
+echo "<a href='../../hr/index.php' style='display: inline-block; background: #264b8b; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; margin: 5px;'>Ir a HR Dashboard</a>";
+echo "<a href='debug_permissions.php' style='display: inline-block; background: #6f8bbd; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; margin: 5px;'>Ver Debug Completo</a>";
 ?>

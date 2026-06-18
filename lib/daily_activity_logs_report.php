@@ -476,9 +476,9 @@ if (!function_exists('generateActivityLogsReportHTML')) {
         $statSubStyle = 'font-size:12px;color:#666;margin:4px 0 0 0;';
 
         $statsRow1 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
-            . "<td style='{$statCardStyle}border-top:4px solid #0ea5e9;'><p style='{$statLabelStyle}'>Total acciones</p><p style='{$statNumberStyle}'>{$totals['total_actions']}</p></td>"
-            . "<td style='{$statCardStyle}border-top:4px solid #0ea5e9;'><p style='{$statLabelStyle}'>Módulos tocados</p><p style='{$statNumberStyle}'>{$totals['modules_touched']}</p></td>"
-            . "<td style='{$statCardStyle}border-top:4px solid #0ea5e9;'><p style='{$statLabelStyle}'>Usuarios activos</p><p style='{$statNumberStyle}'>{$totals['unique_users']}</p></td>"
+            . "<td style='{$statCardStyle}border-top:4px solid #264b8b;'><p style='{$statLabelStyle}'>Total acciones</p><p style='{$statNumberStyle}'>{$totals['total_actions']}</p></td>"
+            . "<td style='{$statCardStyle}border-top:4px solid #264b8b;'><p style='{$statLabelStyle}'>Módulos tocados</p><p style='{$statNumberStyle}'>{$totals['modules_touched']}</p></td>"
+            . "<td style='{$statCardStyle}border-top:4px solid #264b8b;'><p style='{$statLabelStyle}'>Usuarios activos</p><p style='{$statNumberStyle}'>{$totals['unique_users']}</p></td>"
             . "<td style='{$statCardStyle}border-top:4px solid #f59e0b;'><p style='{$statLabelStyle}'>Hora pico</p><p style='{$statNumberStyle};font-size:18px;'>{$peakHourLabel}</p></td>"
             . "</tr></table>";
 
@@ -498,7 +498,7 @@ if (!function_exists('generateActivityLogsReportHTML')) {
 <style>
   body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; line-height: 1.5; }
   .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  .header { background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
+  .header { background: linear-gradient(135deg, #0f172a 0%, #1f3f76 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
   .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
   .header p { margin: 8px 0 0 0; font-size: 15px; opacity: 0.95; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -508,7 +508,7 @@ if (!function_exists('generateActivityLogsReportHTML')) {
   tbody tr:nth-child(even) { background-color: #fafafa; }
   td.num { font-family: 'Courier New', monospace; white-space: nowrap; text-align: right; }
   .muted { color: #888; font-size: 11px; }
-  .bar { background: linear-gradient(90deg, #0ea5e9, #6366f1); height: 16px; border-radius: 3px; min-width: 2px; }
+  .bar { background: linear-gradient(90deg, #264b8b, #3a5da0); height: 16px; border-radius: 3px; min-width: 2px; }
   .pill { display: inline-block; background: #e2e8f0; color: #1e293b; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
   .footer { text-align: center; padding: 18px; color: #777; font-size: 12px; margin-top: 20px; }
 </style>

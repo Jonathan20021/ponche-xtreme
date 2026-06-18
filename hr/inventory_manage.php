@@ -179,7 +179,7 @@ $items = $pdo->query("
             backdrop-filter: blur(4px);
         }
         .modal-content {
-            background-color: #0f172a !important;
+            background-color: var(--surface) !important;
             border: 1px solid #334155;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
         }
@@ -226,7 +226,7 @@ $items = $pdo->query("
                             <div class="form-group mb-3">
                                 <label class="text-slate-300 flex items-center justify-between">
                                     <span>Nombre del Item *</span>
-                                    <button type="button" id="aiSuggestBtn" class="text-xs px-2 py-1 rounded-full" style="background:linear-gradient(135deg,#7c3aed,#0891b2);color:white;">
+                                    <button type="button" id="aiSuggestBtn" class="text-xs px-2 py-1 rounded-full" style="background:linear-gradient(135deg,#5e7cba,#1f3f76);color:white;">
                                         <i class="fas fa-magic-wand-sparkles mr-1"></i> Sugerir con IA
                                     </button>
                                 </label>

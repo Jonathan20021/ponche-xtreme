@@ -13,7 +13,7 @@ require_once __DIR__ . '/lib/authorization_functions.php';
 $canModifyRecords = canUserModifyRecords($pdo);
 
 if (!function_exists('sanitizeHexColorValue')) {
-    function sanitizeHexColorValue(?string $color, string $fallback = '#6366F1'): string
+    function sanitizeHexColorValue(?string $color, string $fallback = '#3a5da0'): string
     {
         $value = strtoupper(trim((string) $color));
         return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : strtoupper($fallback);
@@ -212,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['punch_type'])) {
     // Send Slack notification
     $slack_webhook_url = 'https://hooks.slack.com/services/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';
     $current_timestamp = date('Y-m-d H:i:s');
-    $color = sanitizeHexColorValue($selectedTypeMeta['color_start'] ?? null, '#6366F1');
+    $color = sanitizeHexColorValue($selectedTypeMeta['color_start'] ?? null, '#3a5da0');
     
     $message = [
         "text" => "New Punch Recorded",
@@ -431,7 +431,7 @@ foreach ($records as &$record) {
     $record['type_icon_class'] = $meta['icon_class'] ?? ($record['type_icon_class'] ?? 'fas fa-circle');
 
     $colorStartCandidate = $meta['color_start'] ?? ($record['type_color_start'] ?? null);
-    $record['type_color_start'] = sanitizeHexColorValue($colorStartCandidate, '#6366F1');
+    $record['type_color_start'] = sanitizeHexColorValue($colorStartCandidate, '#3a5da0');
 
     $colorEndCandidate = $meta['color_end'] ?? ($record['type_color_end'] ?? $record['type_color_start']);
     $record['type_color_end'] = sanitizeHexColorValue($colorEndCandidate, $record['type_color_start']);
@@ -932,7 +932,7 @@ $tardinessTotal = count($tardiness_data);
                     $buttonSlug = htmlspecialchars($type['slug'], ENT_QUOTES, 'UTF-8');
                     $buttonLabel = htmlspecialchars($type['label'], ENT_QUOTES, 'UTF-8');
                     $iconClass = htmlspecialchars($type['icon_class'] ?? 'fas fa-circle', ENT_QUOTES, 'UTF-8');
-                    $colorStart = htmlspecialchars($type['color_start'] ?? '#6366F1', ENT_QUOTES, 'UTF-8');
+                    $colorStart = htmlspecialchars($type['color_start'] ?? '#3a5da0', ENT_QUOTES, 'UTF-8');
                     $colorEnd = htmlspecialchars($type['color_end'] ?? $colorStart, ENT_QUOTES, 'UTF-8');
                 ?>
                 <button type="submit" 
@@ -1060,7 +1060,7 @@ $tardinessTotal = count($tardiness_data);
                             $typeSlug = $record['type_slug'] ?? '';
                             $typeLabel = $record['type_label'] ?? $typeSlug;
                             $iconClass = htmlspecialchars($record['type_icon_class'] ?? 'fas fa-circle');
-                            $colorStart = sanitizeHexColorValue($record['type_color_start'] ?? null, '#6366F1');
+                            $colorStart = sanitizeHexColorValue($record['type_color_start'] ?? null, '#3a5da0');
                             $colorEnd = sanitizeHexColorValue($record['type_color_end'] ?? null, $colorStart);
                             $badgeStyle = sprintf(
                                 'background: linear-gradient(135deg, %1$s 0%%, %2$s 100%%); color: #ffffff; border: none; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: 9999px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25); text-transform: none; font-weight: 600; letter-spacing: 0;',
@@ -1178,7 +1178,7 @@ $tardinessTotal = count($tardiness_data);
                     </span>
                 <?php endif; ?>
                 <?php if ($paymentTotals['DOP']['count'] > 0): ?>
-                    <span class="chip" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white;">
+                    <span class="chip" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%); color: white;">
                         <i class="fas fa-coins"></i> RD$<?= number_format($paymentTotals['DOP']['total_payment'], 2) ?> DOP
                     </span>
                 <?php endif; ?>
@@ -1215,7 +1215,7 @@ $tardinessTotal = count($tardiness_data);
                     <?php endforeach; ?>
                 </tbody>
                 <tfoot>
-                    <tr style="background: rgba(99, 102, 241, 0.1); font-weight: 600;">
+                    <tr style="background: rgba(58, 93, 160, 0.1); font-weight: 600;">
                         <td colspan="3" class="text-right"><strong>Totales:</strong></td>
                         <td><?= gmdate('H:i:s', max(0, (int) ($paymentTotals['USD']['work_seconds'] + $paymentTotals['DOP']['work_seconds']))) ?></td>
                         <td><?= gmdate('H:i:s', max(0, (int) ($paymentTotals['USD']['overtime_seconds'] + $paymentTotals['DOP']['overtime_seconds']))) ?></td>
@@ -1688,16 +1688,16 @@ $(document).ready(function() {
 }
 
 .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-    border-color: #2563eb !important;
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%) !important;
+    border-color: #1f3f76 !important;
     color: #ffffff !important;
     font-weight: 600 !important;
     box-shadow: 0 2px 4px 0 rgba(37, 99, 235, 0.3) !important;
 }
 
 .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
-    border-color: #1d4ed8 !important;
+    background: linear-gradient(135deg, #1f3f76 0%, #152849 100%) !important;
+    border-color: #152849 !important;
     color: #ffffff !important;
     transform: translateY(-1px) !important;
 }
@@ -1742,9 +1742,9 @@ $(document).ready(function() {
 }
 
 .dataTables_wrapper .dataTables_length select:focus {
-    border-color: #3b82f6 !important;
+    border-color: #264b8b !important;
     outline: none !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    box-shadow: 0 0 0 3px rgba(38, 75, 139, 0.1) !important;
 }
 
 .dataTables_wrapper .dataTables_filter input {
@@ -1757,9 +1757,9 @@ $(document).ready(function() {
 }
 
 .dataTables_wrapper .dataTables_filter input:focus {
-    border-color: #3b82f6 !important;
+    border-color: #264b8b !important;
     outline: none !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    box-shadow: 0 0 0 3px rgba(38, 75, 139, 0.1) !important;
 }
 
 @media (max-width: 768px) {
@@ -1791,7 +1791,8 @@ $(document).ready(function() {
 }
 
 .modal-content {
-    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    background: var(--surface);
+    border: 1px solid var(--border);
     margin: 10% auto;
     padding: 2rem;
     border-radius: 1rem;
@@ -1818,11 +1819,11 @@ $(document).ready(function() {
     align-items: center;
     margin-bottom: 1.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(226, 232, 240, 0.1);
+    border-bottom: 1px solid var(--border);
 }
 
 .modal-header h3 {
-    color: #f1f5f9;
+    color: var(--text);
     font-size: 1.25rem;
     font-weight: 600;
     margin: 0;
@@ -1841,7 +1842,7 @@ $(document).ready(function() {
 
 .modal-close:hover,
 .modal-close:focus {
-    color: #f1f5f9;
+    color: var(--text);
 }
 
 .modal-body {
@@ -1854,7 +1855,7 @@ $(document).ready(function() {
 
 .modal-input-group label {
     display: block;
-    color: #cbd5e1;
+    color: var(--text);
     font-size: 0.875rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
@@ -1864,25 +1865,25 @@ $(document).ready(function() {
 .modal-input-group select {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid rgba(226, 232, 240, 0.2);
+    border: 1px solid var(--border);
     border-radius: 0.5rem;
-    background: rgba(248, 250, 252, 0.05);
-    color: #f1f5f9;
+    background: var(--surface-2);
+    color: var(--text);
     font-size: 0.875rem;
     transition: all 0.2s;
 }
 
 .modal-input-group select option {
-    background: #0f172a;
-    color: #f1f5f9;
+    background: var(--surface);
+    color: var(--text);
 }
 
 .modal-input-group input:focus,
 .modal-input-group select:focus {
     outline: none;
-    border-color: #3b82f6;
-    background: rgba(248, 250, 252, 0.1);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: #264b8b;
+    background: var(--surface-2);
+    box-shadow: 0 0 0 3px rgba(38, 75, 139, 0.1);
 }
 
 .modal-input-group input::placeholder {
@@ -1891,7 +1892,7 @@ $(document).ready(function() {
 
 .modal-input-group input[type="date"],
 .modal-input-group input[type="time"] {
-    color-scheme: dark;
+    color-scheme: light;
 }
 
 .modal-info {
@@ -1936,23 +1937,23 @@ $(document).ready(function() {
 }
 
 .modal-btn-secondary {
-    background: rgba(148, 163, 184, 0.2);
-    color: #cbd5e1;
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
 }
 
 .modal-btn-secondary:hover {
-    background: rgba(148, 163, 184, 0.3);
-    color: #f1f5f9;
+    background: rgba(148, 163, 184, 0.18);
+    color: var(--text);
 }
 
 .modal-btn-primary {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
     color: white;
 }
 
 .modal-btn-primary:hover {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    background: linear-gradient(135deg, #1f3f76 0%, #152849 100%);
     transform: translateY(-2px);
     box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
 }

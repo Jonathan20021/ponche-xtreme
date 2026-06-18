@@ -221,7 +221,7 @@ include '../header.php';
 
 /* Hover effects for cards */
 .bg-slate-800\/50:hover {
-    background-color: rgba(30, 41, 59, 0.7);
+    background-color: var(--surface);
     transition: all 0.3s ease;
 }
 
@@ -270,7 +270,7 @@ button:active {
 
 /* Gradient text effect */
 .gradient-text {
-    background: linear-gradient(135deg, #06b6d4, #3b82f6);
+    background: linear-gradient(135deg, #3a5da0, #264b8b);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -280,7 +280,7 @@ button:active {
 .glass {
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
-    background-color: rgba(30, 41, 59, 0.75);
+    background-color: var(--surface);
     border: 1px solid rgba(255, 255, 255, 0.125);
 }
 </style>

@@ -189,7 +189,7 @@ function formatDuration(?int $seconds): string
         </section>
     <?php else: ?>
         <section class="metric-grid">
-            <article class="metric-card" style="--metric-start:#0ea5e9; --metric-end:#2563eb;">
+            <article class="metric-card" style="--metric-start:#264b8b; --metric-end:#1f3f76;">
                 <div class="metric-icon"><i class="fas fa-clipboard-check"></i></div>
                 <p class="metric-label">Evaluaciones</p>
                 <p class="metric-value"><?= (int) $qualityMetrics['total_evaluations'] ?></p>
@@ -207,13 +207,13 @@ function formatDuration(?int $seconds): string
                 <p class="metric-value"><?= (int) $qualityMetrics['audited_calls'] ?></p>
                 <p class="metric-sub">Con call_id</p>
             </article>
-            <article class="metric-card" style="--metric-start:#a855f7; --metric-end:#7c3aed;">
+            <article class="metric-card" style="--metric-start:#92a9da; --metric-end:#5e7cba;">
                 <div class="metric-icon"><i class="fas fa-star"></i></div>
                 <p class="metric-label">Mejor / Peor</p>
                 <p class="metric-value"><?= number_format((float) $qualityMetrics['max_percentage'], 2) ?>% / <?= number_format((float) $qualityMetrics['min_percentage'], 2) ?>%</p>
                 <p class="metric-sub">Rango de desempeño</p>
             </article>
-            <article class="metric-card" style="--metric-start:#14b8a6; --metric-end:#0f766e;">
+            <article class="metric-card" style="--metric-start:#1f3f76; --metric-end:#0f766e;">
                 <div class="metric-icon"><i class="fas fa-chart-bar"></i></div>
                 <p class="metric-label">Score Analítico</p>
                 <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_ai_score'], 2) ?></p>

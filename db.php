@@ -2,11 +2,26 @@
 // Establecer zona horaria para todo el sistema
 date_default_timezone_set('America/Santo_Domingo');
 
-// Configuración de base de datos
-$host = '192.185.46.27';
-$dbname = 'hhempeos_ponche';
-$username = 'hhempeos_ponche';
-$password = 'Hugo##2025#';
+// ============================================================
+// Configuración de errores (PRODUCCIÓN): registrar en el log del
+// servidor, NUNCA mostrar detalles (rutas, SQL, stack) al usuario.
+// Centralizado aquí porque db.php es incluido por todas las páginas.
+// Para depurar en LOCAL: cambia 'display_errors' a '1' temporalmente.
+// ============================================================
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+ini_set('log_errors', '1');
+
+// Configuración de base de datos — credenciales externalizadas.
+// Prioridad: variables de entorno > config/secrets.php (no versionado).
+// Plantilla: config/secrets.example.php
+$__sec = @include __DIR__ . '/config/secrets.php';
+if (!is_array($__sec)) { $__sec = []; }
+$host     = getenv('DB_HOST') ?: ($__sec['db_main']['host'] ?? '');
+$dbname   = getenv('DB_NAME') ?: ($__sec['db_main']['name'] ?? '');
+$username = getenv('DB_USER') ?: ($__sec['db_main']['user'] ?? '');
+$password = getenv('DB_PASS') ?: ($__sec['db_main']['pass'] ?? '');
 
 try {
     // Usar conexión persistente para reducir overhead de conexiones
@@ -20,7 +35,9 @@ try {
     // Configurar zona horaria de MySQL para coincidir con PHP
     $pdo->exec("SET time_zone = '-04:00'");
 } catch (PDOException $e) {
-    die("Error de conexión a la base de datos: " . $e->getMessage());
+    error_log('DB connection error (PDO): ' . $e->getMessage());
+    http_response_code(503);
+    die('Error de conexión a la base de datos. Por favor intente más tarde.');
 }
 
 // MySQLi connection - Lazy loaded
@@ -33,7 +50,9 @@ if (!function_exists('getMysqli')) {
         if ($mysqli === null) {
             $mysqli = new mysqli($host, $username, $password, $dbname);
             if ($mysqli->connect_error) {
-                die("Error de conexión MySQLi: " . $mysqli->connect_error);
+                error_log('DB connection error (MySQLi): ' . $mysqli->connect_error);
+                http_response_code(503);
+                die('Error de conexión a la base de datos. Por favor intente más tarde.');
             }
             $mysqli->set_charset("utf8mb4");
             $mysqli->query("SET time_zone = '-04:00'");

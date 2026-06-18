@@ -38,23 +38,23 @@ if ($userId > 0) {
         .msg-row { display:flex; gap:.75rem; margin-bottom: 1rem; }
         .msg-user { justify-content: flex-end; }
         .msg-bubble { padding: .75rem 1rem; border-radius: .75rem; max-width: min(80%, 720px); }
-        .msg-user .msg-bubble  { background: linear-gradient(135deg,#0891b2,#0e7490); color:white; }
-        .msg-ai   .msg-bubble  { background: rgba(30,41,59,.85); color:#e2e8f0; border:1px solid rgba(148,163,184,.15); }
+        .msg-user .msg-bubble  { background: linear-gradient(135deg,#1f3f76,#152849); color:white; }
+        .msg-ai   .msg-bubble  { background: var(--surface); color:var(--text); border: 1px solid var(--border); }
         .msg-ai .msg-bubble table { border-collapse: collapse; margin: .5em 0; width:100%; font-size:.85em; }
-        .msg-ai .msg-bubble table th, .msg-ai .msg-bubble table td { border:1px solid rgba(148,163,184,.25); padding: 4px 8px; text-align:left; }
+        .msg-ai .msg-bubble table th, .msg-ai .msg-bubble table td { border: 1px solid var(--border); padding: 4px 8px; text-align:left; }
         .msg-ai .msg-bubble table th { background: rgba(124,58,237,.2); color:#e9d5ff; }
-        .msg-ai .msg-bubble code { background: rgba(15,23,42,.8); padding: 2px 5px; border-radius: 4px; font-size:.85em; }
-        .msg-ai .msg-bubble pre { background: rgba(15,23,42,.95); padding: .75rem; border-radius: 8px; overflow-x:auto; }
+        .msg-ai .msg-bubble code { background: var(--surface-2); padding: 2px 5px; border-radius: 4px; font-size:.85em; }
+        .msg-ai .msg-bubble pre { background: var(--surface-2); padding: .75rem; border-radius: 8px; overflow-x:auto; }
         .msg-ai .msg-bubble pre code { background: transparent; padding: 0; }
         .msg-ai .msg-bubble h1, .msg-ai .msg-bubble h2, .msg-ai .msg-bubble h3 { font-weight: 600; margin: .6em 0 .3em; }
         .msg-ai .msg-bubble ul, .msg-ai .msg-bubble ol { margin: .3em 0 .3em 1.5em; }
         .avatar { width: 36px; height: 36px; border-radius: 50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
         .avatar-user { background: rgba(8,145,178,.25); color:#67e8f9; }
-        .avatar-ai   { background: linear-gradient(135deg,#7c3aed,#0891b2); color:white; }
+        .avatar-ai   { background: linear-gradient(135deg,#5e7cba,#1f3f76); color:white; }
         .typing-dot { width:8px; height:8px; background:#94a3b8; border-radius:50%; display:inline-block; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both; }
         .typing-dot:nth-child(1) { animation-delay: -.32s; } .typing-dot:nth-child(2) { animation-delay: -.16s; }
         @keyframes bounce { 0%,80%,100%{transform:scale(0)} 40%{transform:scale(1)} }
-        .chip { font-size:.75rem; padding: 4px 10px; border-radius:999px; background: rgba(148,163,184,.15); color:#cbd5e1; cursor:pointer; border:1px solid rgba(148,163,184,.2); transition: all .15s; }
+        .chip { font-size:.75rem; padding: 4px 10px; border-radius:999px; background: rgba(148,163,184,.15); color:var(--text); cursor:pointer; border: 1px solid var(--border); transition: all .15s; }
         .chip:hover { background: rgba(124,58,237,.2); color:#e9d5ff; border-color: rgba(124,58,237,.4); }
     </style>
 </head>
@@ -67,7 +67,7 @@ if ($userId > 0) {
                 <a href="inventory.php" class="text-slate-400 hover:text-white"><i class="fas fa-arrow-left text-xl"></i></a>
                 <div>
                     <h1 class="text-2xl font-bold text-white">
-                        <span style="background: linear-gradient(135deg,#7c3aed,#0891b2); -webkit-background-clip:text; background-clip:text; color:transparent;">
+                        <span style="background: linear-gradient(135deg,#5e7cba,#1f3f76); -webkit-background-clip:text; background-clip:text; color:transparent;">
                             <i class="fas fa-robot"></i> Asistente IA
                         </span>
                         de Inventario
@@ -84,7 +84,7 @@ if ($userId > 0) {
             <div id="chatMessages" class="chat-messages">
                 <?php if (empty($history)): ?>
                     <div id="welcome" class="text-center py-12">
-                        <div class="inline-block p-4 rounded-full mb-4" style="background: linear-gradient(135deg,#7c3aed,#0891b2);">
+                        <div class="inline-block p-4 rounded-full mb-4" style="background: linear-gradient(135deg,#5e7cba,#1f3f76);">
                             <i class="fas fa-robot text-3xl text-white"></i>
                         </div>
                         <h3 class="text-xl font-bold text-white mb-2">Hola! Soy tu asistente de inventario</h3>
@@ -126,7 +126,7 @@ if ($userId > 0) {
                         class="flex-1 bg-slate-800 border border-slate-700 rounded-lg text-white p-3 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
                     <button type="submit" id="sendBtn"
                         class="btn-primary px-5"
-                        style="background: linear-gradient(135deg,#7c3aed,#0891b2);">
+                        style="background: linear-gradient(135deg,#5e7cba,#1f3f76);">
                         <i class="fas fa-paper-plane"></i>
                     </button>
                 </form>

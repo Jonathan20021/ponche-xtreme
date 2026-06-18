@@ -1,7 +1,7 @@
 <?php
-// Enable error reporting for debugging
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+// Producción: registrar errores, no mostrarlos al usuario (config central en db.php)
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
 
 session_start();
@@ -160,33 +160,34 @@ while ($row = $itemsQuery->fetch(PDO::FETCH_ASSOC)) {
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
         .select2-container--default .select2-selection--single {
-            background-color: #1e293b;
+            background-color: var(--surface-2);
             border: 1px solid #334155;
             border-radius: 0.5rem;
             height: 48px;
             padding: 8px;
         }
         .select2-container--default .select2-selection--single .select2-selection__rendered {
-            color: white;
+            color: var(--text);
             line-height: 32px;
         }
         .select2-container--default .select2-selection--single .select2-selection__arrow {
             height: 46px;
         }
         .select2-dropdown {
-            background-color: #1e293b;
+            background-color: var(--surface-2);
             border: 1px solid #334155;
         }
         .select2-container--default .select2-results__option {
-            color: #cbd5e1;
+            color: var(--text);
         }
         .select2-container--default .select2-results__option--highlighted[aria-selected] {
-            background-color: #0891b2;
+            background-color: #1f3f76;
+            color: #fff;
         }
         .select2-container--default .select2-search--dropdown .select2-search__field {
-            background-color: #0f172a;
+            background-color: var(--surface);
             border: 1px solid #334155;
-            color: white;
+            color: var(--text);
         }
     </style>
 </head>

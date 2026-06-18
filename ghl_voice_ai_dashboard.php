@@ -66,20 +66,21 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GHL Voice AI - Reportes Integrales</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="assets/css/theme.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
-            --primary: #3B82F6;
+            --primary: #264b8b;
             --success: #10B981;
             --warning: #F59E0B;
             --danger: #EF4444;
-            --info: #06B6D4;
+            --info: #3a5da0;
         }
         
         body {
-            background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
-            color: #E2E8F0;
+            background: linear-gradient(135deg, #ffffff 0%, #f7f9fd 100%);
+            color: #14223e;
         }
         
         .dashboard-container {
@@ -89,18 +90,18 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         }
         
         .metric-card {
-            background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: linear-gradient(135deg, #f7f9fd 0%, #ffffff 100%);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 6px rgba(20, 42, 82, 0.08);
             transition: all 0.3s ease;
         }
         
         .metric-card:hover {
-            border-color: rgba(59, 130, 246, 0.5);
+            border-color: rgba(38, 75, 139, 0.5);
             transform: translateY(-2px);
-            box-shadow: 0 8px 12px rgba(59, 130, 246, 0.2);
+            box-shadow: 0 8px 12px rgba(38, 75, 139, 0.2);
         }
         
         .metric-value {
@@ -111,14 +112,14 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         
         .metric-label {
             font-size: 0.875rem;
-            color: #94A3B8;
+            color: #586a87;
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
         
         .chart-container {
-            background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: linear-gradient(135deg, #f7f9fd 0%, #ffffff 100%);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -127,24 +128,24 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         }
         
         .table-container {
-            background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: linear-gradient(135deg, #f7f9fd 0%, #ffffff 100%);
+            border: 1px solid var(--border);
             border-radius: 12px;
             overflow: hidden;
             margin-bottom: 2rem;
         }
         
         .table-header {
-            background: linear-gradient(90deg, #0F172A 0%, #1E293B 100%);
+            background: linear-gradient(90deg, #ffffff 0%, #f7f9fd 100%);
             padding: 1.5rem;
-            border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+            border-bottom: 2px solid rgba(38, 75, 139, 0.3);
             font-weight: 600;
             font-size: 0.95rem;
         }
         
         .table-row {
             padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            border-bottom: 1px solid var(--border);
             display: grid;
             gap: 1rem;
             align-items: center;
@@ -155,7 +156,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         }
         
         .table-row:hover {
-            background: rgba(59, 130, 246, 0.05);
+            background: rgba(38, 75, 139, 0.05);
         }
         
         .badge {
@@ -184,7 +185,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         
         .badge-info {
             background: rgba(6, 182, 212, 0.15);
-            color: #06B6D4;
+            color: #3a5da0;
         }
         
         .progress-bar {
@@ -204,21 +205,21 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         .header-section {
             margin-bottom: 2rem;
             padding-bottom: 1.5rem;
-            border-bottom: 2px solid rgba(59, 130, 246, 0.2);
+            border-bottom: 2px solid rgba(38, 75, 139, 0.2);
         }
         
         .title {
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
-            background: linear-gradient(90deg, #3B82F6 0%, #06B6D4 100%);
+            background: linear-gradient(90deg, #264b8b 0%, #3a5da0 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
         
         .subtitle {
-            color: #94A3B8;
+            color: #586a87;
             font-size: 0.875rem;
         }
         
@@ -232,22 +233,22 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         
         .filter-input, .filter-button {
             padding: 0.75rem 1rem;
-            border: 1px solid rgba(148, 163, 184, 0.3);
+            border: 1px solid var(--border);
             border-radius: 8px;
-            background: rgba(15, 23, 42, 0.5);
-            color: #E2E8F0;
+            background: var(--surface-2);
+            color: #14223e;
             font-size: 0.875rem;
             transition: all 0.3s ease;
         }
         
         .filter-input:focus, .filter-button:hover {
-            border-color: rgb(59, 130, 246);
-            background: rgba(59, 130, 246, 0.1);
+            border-color: rgb(38, 75, 139);
+            background: rgba(38, 75, 139, 0.1);
             outline: none;
         }
         
         .filter-button {
-            background: linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%);
+            background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
             border: none;
             cursor: pointer;
             font-weight: 600;
@@ -276,7 +277,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
             font-size: 1.4rem;
             font-weight: 600;
             margin-bottom: 1.5rem;
-            color: #F1F5F9;
+            color: #14223e;
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -286,17 +287,17 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
             content: '';
             width: 4px;
             height: 24px;
-            background: linear-gradient(90deg, #3B82F6 0%, #06B6D4 100%);
+            background: linear-gradient(90deg, #264b8b 0%, #3a5da0 100%);
             border-radius: 2px;
         }
         
         .no-data {
             padding: 3rem;
             text-align: center;
-            color: #94A3B8;
-            background: rgba(59, 130, 246, 0.05);
+            color: #586a87;
+            background: rgba(38, 75, 139, 0.05);
             border-radius: 12px;
-            border: 2px dashed rgba(59, 130, 246, 0.3);
+            border: 2px dashed rgba(38, 75, 139, 0.3);
         }
         
         @media (max-width: 768px) {
@@ -314,7 +315,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         }
     </style>
 </head>
-<body>
+<body class="theme-light">
     <div class="dashboard-container">
         <!-- Header -->
         <div class="header-section">
@@ -324,7 +325,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
 
         <!-- Filtros de Fecha -->
         <form method="GET" class="filter-section">
-            <label style="color: #94A3B8; font-weight: 500;">Período:</label>
+            <label style="color: #586a87; font-weight: 500;">Período:</label>
             <input type="date" name="start_date" value="<?php echo htmlspecialchars($start_date); ?>" class="filter-input" required>
             <span style="color: #64748B;">a</span>
             <input type="date" name="end_date" value="<?php echo htmlspecialchars($end_date); ?>" class="filter-input" required>
@@ -335,7 +336,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
         <div class="grid-4">
             <div class="metric-card">
                 <div class="metric-label">📞 Total Llamadas</div>
-                <div class="metric-value" style="color: #3B82F6;"><?php echo number_format($total_calls); ?></div>
+                <div class="metric-value" style="color: #264b8b;"><?php echo number_format($total_calls); ?></div>
                 <div class="metric-label" style="font-size: 0.75rem; margin-top: 0.5rem;">Período seleccionado</div>
             </div>
 
@@ -347,9 +348,9 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
 
             <div class="metric-card">
                 <div class="metric-label">🎙️ Grabaciones</div>
-                <div class="metric-value" style="color: #06B6D4;"><?php echo number_format($recording_coverage, 1); ?>%</div>
+                <div class="metric-value" style="color: #3a5da0;"><?php echo number_format($recording_coverage, 1); ?>%</div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: <?php echo min($recording_coverage, 100); ?>%; background: linear-gradient(90deg, #06B6D4 0%, #0891B2 100%);"></div>
+                    <div class="progress-fill" style="width: <?php echo min($recording_coverage, 100); ?>%; background: linear-gradient(90deg, #3a5da0 0%, #1f3f76 100%);"></div>
                 </div>
             </div>
 
@@ -382,7 +383,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
                         <?php foreach (array_slice($disposition_stats, 0, 5) as $disp): ?>
                             <div class="table-row" style="grid-template-columns: 1fr auto;">
                                 <div style="font-weight: 500;"><?php echo htmlspecialchars($disp['disposition'] ?? 'N/A'); ?></div>
-                                <div style="text-align: right; font-weight: 600; color: #3B82F6;"><?php echo number_format($disp['total'] ?? 0); ?></div>
+                                <div style="text-align: right; font-weight: 600; color: #264b8b;"><?php echo number_format($disp['total'] ?? 0); ?></div>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -400,7 +401,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
                     <?php foreach ($disposition_stats as $disp): ?>
                         <div class="table-row" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;">
                             <div style="font-weight: 500;"><?php echo htmlspecialchars($disp['disposition'] ?? 'N/A'); ?></div>
-                            <div style="text-align: center; color: #3B82F6; font-weight: 600;"><?php echo number_format($disp['total'] ?? 0); ?></div>
+                            <div style="text-align: center; color: #264b8b; font-weight: 600;"><?php echo number_format($disp['total'] ?? 0); ?></div>
                             <div style="text-align: center; color: #10B981;"><?php echo number_format($disp['inbound'] ?? 0); ?></div>
                             <div style="text-align: center; color: #F59E0B;"><?php echo number_format($disp['outbound'] ?? 0); ?></div>
                             <div style="text-align: center;">
@@ -453,7 +454,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
                             <div style="text-align: center;">
                                 <span class="badge badge-<?php echo $score_class; ?>"><?php echo number_format($score, 1); ?></span>
                             </div>
-                            <div style="text-align: center; color: #06B6D4;"><?php echo number_format($agent['recording_pct'] ?? 0, 1); ?>%</div>
+                            <div style="text-align: center; color: #3a5da0;"><?php echo number_format($agent['recording_pct'] ?? 0, 1); ?>%</div>
                             <div style="text-align: center; color: #F59E0B;"><?php echo number_format($agent['transcript_pct'] ?? 0, 1); ?>%</div>
                             <div style="text-align: center; color: #10B981;"><?php echo number_format($agent['summary_pct'] ?? 0, 1); ?>%</div>
                         </div>
@@ -490,7 +491,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
                         <?php foreach (array_slice($disposition_by_agent, 0, 10) as $agent): ?>
                             <div class="table-row" style="display: grid; grid-template-columns: 1fr auto auto; gap: 1rem;">
                                 <div style="font-weight: 500;"><?php echo htmlspecialchars($agent['agent_name'] ?? 'N/A'); ?></div>
-                                <div style="text-align: center; color: #3B82F6; font-weight: 600;"><?php echo number_format($agent['total_calls'] ?? 0); ?></div>
+                                <div style="text-align: center; color: #264b8b; font-weight: 600;"><?php echo number_format($agent['total_calls'] ?? 0); ?></div>
                                 <div style="text-align: center; color: #10B981; font-weight: 600;"><?php echo number_format($agent['total_handled_calls'] ?? 0); ?></div>
                             </div>
                         <?php endforeach; ?>
@@ -506,9 +507,9 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
             <div class="grid-3">
                 <div class="metric-card">
                     <div class="metric-label">🎙️ Cobertura de Grabación</div>
-                    <div class="metric-value" style="color: #06B6D4;"><?php echo number_format($recording_coverage, 1); ?>%</div>
+                    <div class="metric-value" style="color: #3a5da0;"><?php echo number_format($recording_coverage, 1); ?>%</div>
                     <div class="progress-bar">
-                        <div class="progress-fill" style="width: <?php echo min($recording_coverage, 100); ?>%; background: linear-gradient(90deg, #06B6D4 0%, #0891B2 100%);"></div>
+                        <div class="progress-fill" style="width: <?php echo min($recording_coverage, 100); ?>%; background: linear-gradient(90deg, #3a5da0 0%, #1f3f76 100%);"></div>
                     </div>
                     <div class="badge badge-<?php echo $recording_coverage >= 95 ? 'success' : 'warning'; ?>" style="margin-top: 0.75rem;">
                         <?php echo $recording_coverage >= 95 ? '✓ Excelente' : '⚠ Revisar'; ?>
@@ -543,13 +544,13 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
     <script>
         // Colores consistentes
         const colors = {
-            primary: '#3B82F6',
+            primary: '#264b8b',
             success: '#10B981',
             warning: '#F59E0B',
             danger: '#EF4444',
-            info: '#06B6D4',
-            dark: '#1E293B',
-            darkest: '#0F172A'
+            info: '#3a5da0',
+            dark: '#f7f9fd',
+            darkest: '#ffffff'
         };
 
         const chartOptions = {
@@ -558,18 +559,18 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
             plugins: {
                 legend: {
                     labels: {
-                        color: '#E2E8F0',
+                        color: '#14223e',
                         font: { size: 12 }
                     }
                 }
             },
             scales: {
                 y: {
-                    ticks: { color: '#94A3B8' },
+                    ticks: { color: '#586a87' },
                     grid: { color: 'rgba(148, 163, 184, 0.1)' }
                 },
                 x: {
-                    ticks: { color: '#94A3B8' },
+                    ticks: { color: '#586a87' },
                     grid: { color: 'rgba(148, 163, 184, 0.1)' }
                 }
             }
@@ -587,10 +588,10 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
                     datasets: [{
                         data: dispositionData,
                         backgroundColor: [
-                            '#3B82F6', '#10B981', '#F59E0B', '#EF4444', 
-                            '#06B6D4', '#8B5CF6', '#EC4899', '#14B8A6'
+                            '#264b8b', '#10B981', '#F59E0B', '#EF4444', 
+                            '#3a5da0', '#6f8bbd', '#9db1d2', '#1f3f76'
                         ],
-                        borderColor: '#0F172A',
+                        borderColor: '#ffffff',
                         borderWidth: 2
                     }]
                 },
@@ -622,7 +623,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
                         foreach ($timeline as $day) {
                             $data[] = $day[$disp_name] ?? 0;
                         }
-                        $colors_list = ['#3B82F6', '#10B981', '#F59E0B'];
+                        $colors_list = ['#264b8b', '#10B981', '#F59E0B'];
                 ?>
                 {
                     label: '<?php echo htmlspecialchars($disp_name); ?>',
@@ -696,7 +697,7 @@ $interaction_totals = $comprehensive_data['interactions']['totals_by_channel'] ?
                         {
                             label: 'Total de Llamadas',
                             data: agentDispCalls,
-                            backgroundColor: '#3B82F6',
+                            backgroundColor: '#264b8b',
                             borderRadius: 6,
                             borderSkipped: false
                         },

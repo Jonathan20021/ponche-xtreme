@@ -86,12 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <style>
         :root {
-            --primary-color: #2563eb;
-            --secondary-color: #1e40af;
+            --primary-color: #1f3f76;
+            --secondary-color: #1f3f76;
             --success-color: #10b981;
             --warning-color: #f59e0b;
             --danger-color: #ef4444;
-            --info-color: #3b82f6;
+            --info-color: #264b8b;
             --text-dark: #1f2937;
             --text-light: #6b7280;
             --bg-light: #f9fafb;
@@ -179,9 +179,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($application_code)) {
             gap: 0.5rem;
         }
 
-        .status-new { background: #dbeafe; color: #1e40af; }
+        .status-new { background: #dbeafe; color: #1f3f76; }
         .status-reviewing { background: #fef3c7; color: #92400e; }
-        .status-shortlisted { background: #e0e7ff; color: #4338ca; }
+        .status-shortlisted { background: #e0e7ff; color: #152849; }
         .status-interview_scheduled { background: #ddd6fe; color: #5b21b6; }
         .status-interviewed { background: #fce7f3; color: #9f1239; }
         .status-offer_extended { background: #d1fae5; color: #065f46; }

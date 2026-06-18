@@ -19,7 +19,8 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 if (!defined('WASAPI_TOKEN')) {
-    define('WASAPI_TOKEN', '338529|NeQrFHvdJ3lX6O2Hs26QPjc0IyrgzKFxQGwVcvCM0575a229');
+    $__sec = @include __DIR__ . '/../../config/secrets.php';
+    define('WASAPI_TOKEN', getenv('WASAPI_TOKEN') ?: (is_array($__sec) ? ($__sec['wasapi_token'] ?? '') : ''));
 }
 if (!defined('WASAPI_BASE_URL')) {
     define('WASAPI_BASE_URL', 'https://api.wasapi.io/prod/api/v1/');

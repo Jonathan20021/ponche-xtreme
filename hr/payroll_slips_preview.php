@@ -179,8 +179,8 @@ function generatePayrollSlipPreview($data) {
     ob_start();
     ?>
     <div style="font-family: Arial, sans-serif; font-size: 12px;">
-        <div style="text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 20px;">
-            <h3 style="color: #1e40af; margin: 0;">VOLANTE DE NÓMINA</h3>
+        <div style="text-align: center; border-bottom: 2px solid #1f3f76; padding-bottom: 10px; margin-bottom: 20px;">
+            <h3 style="color: #1f3f76; margin: 0;">VOLANTE DE NÓMINA</h3>
             <p style="margin: 5px 0;"><?= htmlspecialchars($data['period_name']) ?></p>
             <p style="margin: 5px 0; font-size: 11px;">
                 <?= htmlspecialchars($data['period_formatted']) ?> | 
@@ -208,7 +208,7 @@ function generatePayrollSlipPreview($data) {
         </div>
 
         <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
-            <tr style="background: #2563eb; color: white;">
+            <tr style="background: #1f3f76; color: white;">
                 <th style="padding: 8px; text-align: left;">Concepto</th>
                 <th style="padding: 8px; text-align: right;">Monto</th>
             </tr>

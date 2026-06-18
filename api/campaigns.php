@@ -243,7 +243,7 @@ function handlePost($pdo, $action) {
         $name = trim($data['name'] ?? '');
         $code = trim($data['code'] ?? '');
         $description = trim($data['description'] ?? '');
-        $color = trim($data['color'] ?? '#6366f1');
+        $color = trim($data['color'] ?? '#3a5da0');
         $is_active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
         
         error_log("Campaign CREATE - Name: $name, Code: $code");
@@ -293,7 +293,7 @@ function handlePost($pdo, $action) {
         $name = trim($data['name'] ?? '');
         $code = trim($data['code'] ?? '');
         $description = trim($data['description'] ?? '');
-        $color = trim($data['color'] ?? '#6366f1');
+        $color = trim($data['color'] ?? '#3a5da0');
         $is_active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
         
         error_log("Campaign UPDATE - ID: $id, Name: $name, Code: $code");
@@ -429,7 +429,7 @@ function handlePut($pdo) {
     $name = trim($data['name'] ?? '');
     $code = trim($data['code'] ?? '');
     $description = trim($data['description'] ?? '');
-    $color = trim($data['color'] ?? '#6366f1');
+    $color = trim($data['color'] ?? '#3a5da0');
     $is_active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
     
     if (empty($name) || empty($code)) {

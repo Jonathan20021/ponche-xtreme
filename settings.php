@@ -80,7 +80,7 @@ function sanitize_role_name(string $value): string
     return preg_replace('/[^A-Za-z0-9_]/', '', $value);
 }
 
-function normalize_hex_color(string $color, string $default = '#6366f1'): string
+function normalize_hex_color(string $color, string $default = '#3a5da0'): string
 {
     $color = trim($color);
     if (preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
@@ -523,7 +523,7 @@ try {
                 $icon = trim($_POST['attendance_icon'] ?? 'fas fa-circle');
                 $shortcut = strtoupper(trim($_POST['attendance_shortcut'] ?? ''));
                 $sortOrder = (int) ($_POST['attendance_sort_order'] ?? 0);
-                $colorStart = normalize_hex_color($_POST['attendance_color_start'] ?? '#6366f1', '#6366f1');
+                $colorStart = normalize_hex_color($_POST['attendance_color_start'] ?? '#3a5da0', '#3a5da0');
                 $colorEnd = normalize_hex_color($_POST['attendance_color_end'] ?? $colorStart, $colorStart);
                 $isUnique = isset($_POST['attendance_unique']) ? 1 : 0;
                 $isActive = isset($_POST['attendance_active']) ? 1 : 0;
@@ -611,7 +611,7 @@ try {
                     $iconValue = trim($icons[$id] ?? 'fas fa-circle');
                     $shortcutValue = strtoupper(trim($shortcuts[$id] ?? ''));
                     $shortcutValue = $shortcutValue !== '' ? mb_substr($shortcutValue, 0, 2) : null;
-                    $colorStartValue = normalize_hex_color($colorStarts[$id] ?? '#6366f1', '#6366f1');
+                    $colorStartValue = normalize_hex_color($colorStarts[$id] ?? '#3a5da0', '#3a5da0');
                     $colorEndValue = normalize_hex_color($colorEnds[$id] ?? $colorStartValue, $colorStartValue);
                     $sortOrderValue = (int) ($sortOrders[$id] ?? 0);
                     $isUniqueValue = isset($uniques[$id]) ? 1 : 0;
@@ -2755,11 +2755,11 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="form-label">Color inicio</label>
-                        <input type="color" name="attendance_color_start" class="input-control" value="#6366f1">
+                        <input type="color" name="attendance_color_start" class="input-control" value="#3a5da0">
                     </div>
                     <div>
                         <label class="form-label">Color fin</label>
-                        <input type="color" name="attendance_color_end" class="input-control" value="#4338ca">
+                        <input type="color" name="attendance_color_end" class="input-control" value="#152849">
                     </div>
                     <div>
                         <label class="form-label">Orden</label>
@@ -2843,12 +2843,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                         </td>
                                         <td>
                                             <input type="color" name="attendance_color_start[<?= $typeId ?>]"
-                                                value="<?= htmlspecialchars($type['color_start'] ?? '#6366f1') ?>"
+                                                value="<?= htmlspecialchars($type['color_start'] ?? '#3a5da0') ?>"
                                                 class="input-control h-11">
                                         </td>
                                         <td>
                                             <input type="color" name="attendance_color_end[<?= $typeId ?>]"
-                                                value="<?= htmlspecialchars($type['color_end'] ?? '#4338ca') ?>"
+                                                value="<?= htmlspecialchars($type['color_end'] ?? '#152849') ?>"
                                                 class="input-control h-11">
                                         </td>
                                         <td>
@@ -3029,7 +3029,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
 
             <?php if ($weeklyAuthCurrentCode): ?>
-                <div class="modal-info" style="background: rgba(8, 145, 178, 0.08); border-left: 4px solid #0891b2; padding: 14px 18px; border-radius: 8px;">
+                <div class="modal-info" style="background: rgba(8, 145, 178, 0.08); border-left: 4px solid #1f3f76; padding: 14px 18px; border-radius: 8px;">
                     <p class="text-sm">
                         <i class="fas fa-key"></i>
                         <strong>Código semanal vigente:</strong>
@@ -7017,9 +7017,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             transform: translateY(-1px);
         }
         .settings-tab-button.is-active {
-            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            background: linear-gradient(135deg, #3a5da0, #264b8b);
             color: #ffffff;
-            box-shadow: 0 12px 28px rgba(59, 130, 246, 0.25);
+            box-shadow: 0 12px 28px rgba(38, 75, 139, 0.25);
             border-color: rgba(255, 255, 255, 0.18);
         }
         .settings-tab-panel {
@@ -7661,9 +7661,9 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
     }
 
     .editable-field:not(:disabled) {
-        border-color: #3b82f6 !important;
+        border-color: #264b8b !important;
         background-color: #eff6ff !important;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        box-shadow: 0 0 0 3px rgba(38, 75, 139, 0.1);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -7672,7 +7672,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         }
 
         .editable-field:not(:disabled) {
-            background-color: rgba(59, 130, 246, 0.15) !important;
+            background-color: rgba(38, 75, 139, 0.15) !important;
         }
     }
 
@@ -7702,8 +7702,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
     }
 
     .pagination-link.is-active {
-        background: #0ea5e9;
-        border-color: #0ea5e9;
+        background: #264b8b;
+        border-color: #264b8b;
         color: #fff;
     }
 
@@ -7723,7 +7723,7 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         overflow-x: auto;
         overflow-y: hidden;
         border-radius: 999px;
-        background: rgba(15, 23, 42, 0.08);
+        background: var(--surface-2);
         scrollbar-color: rgba(14, 116, 144, 0.6) transparent;
         scrollbar-width: thin;
         position: sticky;

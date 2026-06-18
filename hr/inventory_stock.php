@@ -71,11 +71,11 @@ $suppliers  = $pdo->query("SELECT id, name FROM inventory_suppliers WHERE is_act
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
         .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 50; backdrop-filter: blur(4px); }
-        .modal-content { background: #0f172a !important; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0,0,0,.5); }
+        .modal-content { background: var(--surface) !important; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0,0,0,.5); }
         .progress-bar { height: 6px; border-radius: 4px; overflow: hidden; background: rgba(148,163,184,.15); }
         .progress-fill { height: 100%; transition: width .6s ease; }
         .stock-cell { min-width: 160px; }
-        .ai-badge { background: linear-gradient(135deg,#7c3aed,#0891b2); color:white; font-size:.65rem; padding:2px 8px; border-radius:999px; }
+        .ai-badge { background: linear-gradient(135deg,#5e7cba,#1f3f76); color:white; font-size:.65rem; padding:2px 8px; border-radius:999px; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">

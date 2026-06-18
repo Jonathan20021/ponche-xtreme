@@ -53,7 +53,7 @@ require_once __DIR__ . '/../header.php';
 }
 
 .action-card {
-    background: linear-gradient(135deg, #667eea05 0%, #764ba205 100%);
+    background: linear-gradient(135deg, rgba(38,75,139,0.04) 0%, rgba(38,75,139,0.02) 100%);
     color: var(--text-primary);
     padding: 28px;
     border-radius: var(--radius);
@@ -112,56 +112,56 @@ require_once __DIR__ . '/../header.php';
 }
 
 .tickets-table thead th {
-    background: #f9fafb;
+    background: var(--surface-2);
     padding: 12px 16px;
     text-align: left;
     font-weight: 500;
-    color: #6b7280;
+    color: var(--text-muted);
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--border);
 }
 
 .tickets-table tbody tr {
-    background: white;
+    background: var(--surface);
     transition: all 0.15s ease;
     cursor: pointer;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--border);
 }
 
 .tickets-table tbody tr:hover {
-    background: #f9fafb;
+    background: var(--surface-2);
 }
 
 .tickets-table tbody td {
     padding: 14px 16px;
     font-size: 13px;
-    color: #374151;
+    color: var(--text);
 }
 
 .assign-select {
     padding: 6px 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-size: 12px;
     cursor: pointer;
-    background: white;
+    background: var(--surface);
 }
 
 .assign-select:focus {
     outline: none;
-    border-color: #111827;
+    border-color: var(--brand);
 }
 
 .status-select {
     padding: 6px 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-size: 12px;
     cursor: pointer;
     font-weight: 500;
-    background: white;
+    background: var(--surface);
 }
 </style>
 
@@ -236,7 +236,7 @@ require_once __DIR__ . '/../header.php';
                         <tr>
                             <td colspan="9" style="text-align: center; padding: 40px;">
                                 <i class="fas fa-spinner fa-spin" style="font-size: 32px; color: #667eea;"></i>
-                                <p style="margin-top: 15px; color: #6b7280;">Cargando tickets...</p>
+                                <p style="margin-top: 15px; color: var(--text-muted);">Cargando tickets...</p>
                             </td>
                         </tr>
                     </tbody>
@@ -259,9 +259,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 let agents = [];
 
+/* Safe JSON parser: tolerates empty/non-JSON responses so the dashboard
+   degrades gracefully instead of throwing "Unexpected end of JSON input". */
+function hdSafeJson(response) {
+    return response.text().then(function (t) {
+        if (!t) return {};
+        try { return JSON.parse(t); } catch (e) { return {}; }
+    });
+}
+
 function loadAgents() {
     fetch('../hr/helpdesk_api.php?action=get_agents')
-        .then(response => response.json())
+        .then(hdSafeJson)
         .then(data => {
             if (data.success) {
                 agents = data.agents;
@@ -271,7 +280,7 @@ function loadAgents() {
 
 function loadAdminStatistics() {
     fetch('../hr/helpdesk_api.php?action=get_statistics')
-        .then(response => response.json())
+        .then(hdSafeJson)
         .then(data => {
             if (data.success) {
                 displayAdminStats(data.statistics);
@@ -323,7 +332,7 @@ function displayAdminStats(stats) {
 
 function loadAdminFilters() {
     fetch('../hr/helpdesk_api.php?action=get_categories')
-        .then(response => response.json())
+        .then(hdSafeJson)
         .then(data => {
             if (data.success) {
                 displayAdminFilters(data.categories);
@@ -384,12 +393,13 @@ function loadAllTickets() {
     if (search) url += '&search=' + encodeURIComponent(search);
     
     fetch(url)
-        .then(response => response.json())
+        .then(hdSafeJson)
         .then(data => {
             if (data.success) {
                 displayTicketsTable(data.tickets);
             }
-        });
+        })
+        .catch(function () { /* network/abort during polling — ignore, next tick retries */ });
 }
 
 function displayTicketsTable(tickets) {
@@ -399,8 +409,8 @@ function displayTicketsTable(tickets) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="9" style="text-align: center; padding: 40px;">
-                    <i class="fas fa-inbox" style="font-size: 48px; color: #d1d5db;"></i>
-                    <p style="margin-top: 15px; color: #6b7280;">No se encontraron tickets</p>
+                    <i class="fas fa-inbox" style="font-size: 48px; color: var(--border-strong);"></i>
+                    <p style="margin-top: 15px; color: var(--text-muted);">No se encontraron tickets</p>
                 </td>
             </tr>
         `;
@@ -458,7 +468,7 @@ function updateTicketStatus(ticketId, newStatus) {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(hdSafeJson)
     .then(data => {
         if (data.success) {
             loadAllTickets();
@@ -477,7 +487,7 @@ function assignTicket(ticketId, agentId) {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(hdSafeJson)
     .then(data => {
         if (data.success) {
             loadAllTickets();

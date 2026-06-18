@@ -17,11 +17,11 @@ $attendanceTypesAll = getAttendanceTypes($pdo, false);
 if (empty($attendanceTypesAll)) {
     $attendanceTypesAll = [
         ['id' => null, 'slug' => 'ENTRY', 'label' => 'Entry', 'icon_class' => 'fas fa-sign-in-alt', 'shortcut_key' => 'E', 'color_start' => '#22C55E', 'color_end' => '#16A34A', 'sort_order' => 10, 'is_unique_daily' => 1, 'is_active' => 1],
-        ['id' => null, 'slug' => 'BREAK', 'label' => 'Break', 'icon_class' => 'fas fa-coffee', 'shortcut_key' => 'B', 'color_start' => '#3B82F6', 'color_end' => '#2563EB', 'sort_order' => 20, 'is_unique_daily' => 0, 'is_active' => 1],
+        ['id' => null, 'slug' => 'BREAK', 'label' => 'Break', 'icon_class' => 'fas fa-coffee', 'shortcut_key' => 'B', 'color_start' => '#264b8b', 'color_end' => '#1f3f76', 'sort_order' => 20, 'is_unique_daily' => 0, 'is_active' => 1],
         ['id' => null, 'slug' => 'LUNCH', 'label' => 'Lunch', 'icon_class' => 'fas fa-utensils', 'shortcut_key' => 'L', 'color_start' => '#EAB308', 'color_end' => '#CA8A04', 'sort_order' => 30, 'is_unique_daily' => 0, 'is_active' => 1],
-        ['id' => null, 'slug' => 'MEETING', 'label' => 'Meeting', 'icon_class' => 'fas fa-users', 'shortcut_key' => 'M', 'color_start' => '#A855F7', 'color_end' => '#7C3AED', 'sort_order' => 40, 'is_unique_daily' => 0, 'is_active' => 1],
-        ['id' => null, 'slug' => 'FOLLOW_UP', 'label' => 'Follow Up', 'icon_class' => 'fas fa-tasks', 'shortcut_key' => 'F', 'color_start' => '#6366F1', 'color_end' => '#4338CA', 'sort_order' => 50, 'is_unique_daily' => 0, 'is_active' => 1],
-        ['id' => null, 'slug' => 'READY', 'label' => 'Ready', 'icon_class' => 'fas fa-check', 'shortcut_key' => 'R', 'color_start' => '#8B5CF6', 'color_end' => '#6D28D9', 'sort_order' => 60, 'is_unique_daily' => 0, 'is_active' => 1],
+        ['id' => null, 'slug' => 'MEETING', 'label' => 'Meeting', 'icon_class' => 'fas fa-users', 'shortcut_key' => 'M', 'color_start' => '#92a9da', 'color_end' => '#5e7cba', 'sort_order' => 40, 'is_unique_daily' => 0, 'is_active' => 1],
+        ['id' => null, 'slug' => 'FOLLOW_UP', 'label' => 'Follow Up', 'icon_class' => 'fas fa-tasks', 'shortcut_key' => 'F', 'color_start' => '#3a5da0', 'color_end' => '#152849', 'sort_order' => 50, 'is_unique_daily' => 0, 'is_active' => 1],
+        ['id' => null, 'slug' => 'READY', 'label' => 'Ready', 'icon_class' => 'fas fa-check', 'shortcut_key' => 'R', 'color_start' => '#6f8bbd', 'color_end' => '#1f3f76', 'sort_order' => 60, 'is_unique_daily' => 0, 'is_active' => 1],
         ['id' => null, 'slug' => 'EXIT', 'label' => 'Exit', 'icon_class' => 'fas fa-sign-out-alt', 'shortcut_key' => 'X', 'color_start' => '#EF4444', 'color_end' => '#DC2626', 'sort_order' => 70, 'is_unique_daily' => 1, 'is_active' => 1],
     ];
 }
@@ -34,7 +34,7 @@ $attendanceTypesAll = array_map(function (array $row) {
     }
     $row['label'] = $row['label'] ?? $row['slug'];
     $row['icon_class'] = trim($row['icon_class'] ?? '') !== '' ? trim($row['icon_class']) : 'fas fa-circle';
-    $row['color_start'] = normalizeColorValue($row['color_start'] ?? null, '#6366F1');
+    $row['color_start'] = normalizeColorValue($row['color_start'] ?? null, '#3a5da0');
     $row['color_end'] = normalizeColorValue($row['color_end'] ?? null, $row['color_start']);
     $row['shortcut_key'] = strtoupper(trim($row['shortcut_key'] ?? ''));
     $row['sort_order'] = (int) ($row['sort_order'] ?? 0);
@@ -326,7 +326,7 @@ function sendSlackNotification($full_name, $username, array $type, $ip_address) 
     $current_timestamp = date('Y-m-d H:i:s');
     $typeLabel = $type['label'] ?? ($type['slug'] ?? 'Tipo');
     $typeSlug = sanitizeAttendanceTypeSlug($type['slug'] ?? $typeLabel);
-    $color = normalizeColorValue($type['color_start'] ?? null, '#6366F1');
+    $color = normalizeColorValue($type['color_start'] ?? null, '#3a5da0');
 
     $message = [
         "text" => "New Punch Recorded",
@@ -422,7 +422,7 @@ if (isset($_COOKIE['savedUsername'])) {
     <title>Register Attendance</title>
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --primary-gradient: linear-gradient(135deg, #3a5da0 0%, #92a9da 100%);
             --success-gradient: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
         }
@@ -439,8 +439,8 @@ if (isset($_COOKIE['savedUsername'])) {
         }
 
         .punch-button {
-            --color-start: #6366F1;
-            --color-end: #4338CA;
+            --color-start: #3a5da0;
+            --color-end: #152849;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
@@ -478,7 +478,7 @@ if (isset($_COOKIE['savedUsername'])) {
         }
 
         .punch-button:focus-visible {
-            outline: 3px solid rgba(59, 130, 246, 0.35);
+            outline: 3px solid rgba(38, 75, 139, 0.35);
             outline-offset: 3px;
         }
 
@@ -487,7 +487,7 @@ if (isset($_COOKIE['savedUsername'])) {
             top: 8px;
             right: 10px;
             font-size: 0.75rem;
-            background: rgba(15, 23, 42, 0.35);
+            background: var(--surface-2);
             padding: 0.1rem 0.45rem;
             border-radius: 9999px;
             border: 1px solid rgba(255, 255, 255, 0.35);
@@ -653,7 +653,7 @@ if (isset($_COOKIE['savedUsername'])) {
                                         $iconClass = htmlspecialchars($type['icon_class'] ?? 'fas fa-circle', ENT_QUOTES, 'UTF-8');
                                         $shortcutRaw = strtoupper(trim($type['shortcut_key'] ?? ''));
                                         $shortcutSafe = htmlspecialchars($shortcutRaw, ENT_QUOTES, 'UTF-8');
-                                        $colorStart = htmlspecialchars($type['color_start'] ?? '#6366F1', ENT_QUOTES, 'UTF-8');
+                                        $colorStart = htmlspecialchars($type['color_start'] ?? '#3a5da0', ENT_QUOTES, 'UTF-8');
                                         $colorEnd = htmlspecialchars($type['color_end'] ?? $colorStart, ENT_QUOTES, 'UTF-8');
                                         $style = sprintf('--color-start: %s; --color-end: %s;', $colorStart, $colorEnd);
                                     ?>

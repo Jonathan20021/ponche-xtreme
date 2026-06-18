@@ -69,20 +69,20 @@ try {
             border-radius: 4px;
         }
         .employee-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
             transition: all 0.3s ease;
         }
         .employee-card:hover {
-            background: rgba(30, 41, 59, 0.8);
-            border-color: rgba(99, 102, 241, 0.3);
+            background: var(--surface);
+            border-color: rgba(58, 93, 160, 0.3);
             transform: translateY(-2px);
         }
         .theme-light .employee-card {
             background: rgba(255, 255, 255, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            border: 1px solid var(--border);
         }
         .theme-light .employee-card:hover {
             background: rgba(255, 255, 255, 1);
@@ -152,7 +152,7 @@ try {
                             <?= count(array_filter($trialEmployees, fn($e) => $e['days_remaining'] < 0)) ?>
                         </h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-clock text-white text-xl"></i>
                     </div>
                 </div>
@@ -181,7 +181,7 @@ try {
                             <div class="flex-1">
                                 <div class="flex items-center gap-4 mb-3">
                                     <div class="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white" 
-                                         style="background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);">
+                                         style="background: linear-gradient(135deg, #3a5da0 0%, #152849 100%);">
                                         <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
                                     </div>
                                     <div>

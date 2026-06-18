@@ -237,12 +237,12 @@ ob_start();
         .header {
             text-align: center;
             margin-bottom: 20px;
-            border-bottom: 2px solid #2563eb;
+            border-bottom: 2px solid #1f3f76;
             padding-bottom: 10px;
         }
         .header h1 {
             margin: 0;
-            color: #1e40af;
+            color: #1f3f76;
             font-size: 18px;
         }
         .header p {
@@ -270,12 +270,12 @@ ob_start();
             margin-top: 10px;
         }
         table.payroll th {
-            background: #2563eb;
+            background: #1f3f76;
             color: white;
             padding: 8px 4px;
             text-align: left;
             font-size: 9px;
-            border: 1px solid #1e40af;
+            border: 1px solid #1f3f76;
         }
         table.payroll td {
             padding: 6px 4px;
@@ -296,7 +296,7 @@ ob_start();
             font-weight: bold;
         }
         .section-title {
-            background: #1e40af;
+            background: #1f3f76;
             color: white;
             padding: 5px 10px;
             margin-top: 15px;

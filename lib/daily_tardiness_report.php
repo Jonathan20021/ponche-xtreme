@@ -455,7 +455,7 @@ if (!function_exists('generateTardinessReportHTML')) {
   .stat-card { display: table-cell; background: #fff; padding: 18px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
   .stat-card.danger  { border-top: 4px solid #ef4444; }
   .stat-card.warning { border-top: 4px solid #f59e0b; }
-  .stat-card.primary { border-top: 4px solid #0ea5e9; }
+  .stat-card.primary { border-top: 4px solid #264b8b; }
   .stat-card.success { border-top: 4px solid #10b981; }
   .stat-card.muted   { border-top: 4px solid #64748b; }
   .stat-number { font-size: 26px; font-weight: 700; margin: 8px 0 0 0; }

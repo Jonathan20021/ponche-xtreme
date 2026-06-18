@@ -13,7 +13,8 @@ if (!isset($_SESSION['user_id']) || !userHasPermission('hr_recruitment_ai')) {
 }
 
 // Gemini AI Configuration
-define('GEMINI_API_KEY', 'AIzaSyDJMoBOmGPa5wQUck3OKiUMlenHP5oyJ5o');
+$__sec = @include __DIR__ . '/../config/secrets.php';
+define('GEMINI_API_KEY', getenv('GEMINI_KEY_HR') ?: (is_array($__sec) ? ($__sec['gemini_key_hr'] ?? '') : ''));
 define('GEMINI_MODEL', 'gemini-2.0-flash-exp');
 define('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/' . GEMINI_MODEL . ':generateContent');
 

@@ -211,7 +211,7 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM permission_requests WHERE stat
                         <p class="text-slate-400 text-sm mb-1">Total</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['total'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-list text-white text-xl"></i>
                     </div>
                 </div>
@@ -284,7 +284,7 @@ $pendingCount = $pdo->query("SELECT COUNT(*) FROM permission_requests WHERE stat
                                 <div class="flex-1">
                                     <div class="flex items-center gap-3 mb-2">
                                         <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" 
-                                             style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                                             style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                                             <?= strtoupper(substr($request['first_name'], 0, 1) . substr($request['last_name'], 0, 1)) ?>
                                         </div>
                                         <div>

@@ -258,7 +258,7 @@ $balances = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">Total</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['total'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%);">
                         <i class="fas fa-umbrella-beach text-white text-xl"></i>
                     </div>
                 </div>
@@ -303,7 +303,7 @@ $balances = $pdo->query("
                                     <td class="py-3 px-4 text-center text-orange-400 font-medium">
                                         <?= number_format($balance['used_days'], 1) ?>
                                     </td>
-                                    <td class="py-3 px-4 text-center text-green-400 font-semibold">
+                                    <td class="py-3 px-4 text-center font-semibold <?= $balance['remaining_days'] < 0 ? 'text-red-500' : 'text-green-500' ?>">
                                         <?= number_format($balance['remaining_days'], 1) ?>
                                     </td>
                                     <td class="py-3 px-4">
@@ -368,7 +368,7 @@ $balances = $pdo->query("
                                 <div class="flex-1">
                                     <div class="flex items-center gap-3 mb-2">
                                         <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" 
-                                             style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);">
+                                             style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%);">
                                             <?= strtoupper(substr($request['first_name'], 0, 1) . substr($request['last_name'], 0, 1)) ?>
                                         </div>
                                         <div>

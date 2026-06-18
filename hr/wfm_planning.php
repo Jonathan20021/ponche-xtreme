@@ -546,7 +546,7 @@ include __DIR__ . '/../header.php';
                     {
                         label: 'SMA (Tendencia 3 días)',
                         data: smaData,
-                        borderColor: '#22d3ee',
+                        borderColor: '#5e7cba',
                         borderDash: [5, 5],
                         pointRadius: 0,
                         tension: 0.3
@@ -612,8 +612,8 @@ include __DIR__ . '/../header.php';
                     {
                         label: 'Vol. Prom. Ofrecidas',
                         data: hourlyOffered,
-                        borderColor: '#6366f1',
-                        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                        borderColor: '#3a5da0',
+                        backgroundColor: 'rgba(58, 93, 160, 0.2)',
                         fill: true,
                         tension: 0.4
                     },

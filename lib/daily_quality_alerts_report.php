@@ -464,7 +464,7 @@ if (!function_exists('generateQualityAlertsReportHTML')) {
   .stat-card { display: table-cell; background: #fff; padding: 18px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
   .stat-card.danger  { border-top: 4px solid #ef4444; }
   .stat-card.warning { border-top: 4px solid #f59e0b; }
-  .stat-card.primary { border-top: 4px solid #0ea5e9; }
+  .stat-card.primary { border-top: 4px solid #264b8b; }
   .stat-card.muted   { border-top: 4px solid #64748b; }
   .stat-number { font-size: 28px; font-weight: 700; margin: 8px 0 0 0; }
   .stat-label  { color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
@@ -487,9 +487,9 @@ if (!function_exists('generateQualityAlertsReportHTML')) {
   .alert-agent { color: #111; font-size: 15px; margin-right: 10px; }
   .alert-score { font-size: 22px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 6px 14px; border-radius: 20px; }
   .alert-meta { color: #666; font-size: 12px; margin-bottom: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
-  .chip { display: inline-block; background: #eff6ff; color: #1e40af; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-left: 6px; }
+  .chip { display: inline-block; background: #eff6ff; color: #1f3f76; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-left: 6px; }
   .improv-box { background: #f9fafb; border-left: 3px solid #9ca3af; padding: 8px 12px; margin-top: 8px; font-size: 13px; border-radius: 4px; }
-  .improv-box.ai-box { border-left-color: #0ea5e9; background: #eff6ff; }
+  .improv-box.ai-box { border-left-color: #264b8b; background: #eff6ff; }
   .footer { text-align: center; padding: 18px; color: #777; font-size: 12px; margin-top: 20px; }
 </style>
 </head>

@@ -71,7 +71,7 @@ foreach ($movements as $m) {
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
         .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 50; backdrop-filter: blur(4px); }
-        .modal-content { background: #0f172a !important; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0,0,0,.5); }
+        .modal-content { background: var(--surface) !important; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0,0,0,.5); }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">

@@ -116,9 +116,9 @@ $anniversariesThisMonth = count(array_filter($upcomingAnniversaries, fn($a) => $
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
-        .report-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 16px; padding: 1.5rem; }
+        .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
         .theme-light .report-card { background: #ffffff; border-color: rgba(148, 163, 184, 0.2); }
-        .stat-box { background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 1.25rem; }
+        .stat-box { background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%); border: 1px solid rgba(38, 75, 139, 0.2); border-radius: 12px; padding: 1.25rem; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -263,14 +263,14 @@ $anniversariesThisMonth = count(array_filter($upcomingAnniversaries, fn($a) => $
         <?php if (!empty($birthdaysByMonth)): ?>
         new Chart(document.getElementById('birthdaysChart'), {
             type: 'bar',
-            data: { labels: <?= json_encode(array_column($birthdaysByMonth, 'month_name')) ?>, datasets: [{ label: 'Cumpleaños', data: <?= json_encode(array_column($birthdaysByMonth, 'count')) ?>, backgroundColor: '#ec4899' }] },
+            data: { labels: <?= json_encode(array_column($birthdaysByMonth, 'month_name')) ?>, datasets: [{ label: 'Cumpleaños', data: <?= json_encode(array_column($birthdaysByMonth, 'count')) ?>, backgroundColor: '#9db1d2' }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
         });
         <?php endif; ?>
         <?php if (!empty($anniversariesByYear)): ?>
         new Chart(document.getElementById('anniversariesChart'), {
             type: 'doughnut',
-            data: { labels: <?= json_encode(array_map(fn($a) => $a['years'] . ' año' . ($a['years'] > 1 ? 's' : ''), $anniversariesByYear)) ?>, datasets: [{ data: <?= json_encode(array_column($anniversariesByYear, 'count')) ?>, backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'] }] },
+            data: { labels: <?= json_encode(array_map(fn($a) => $a['years'] . ' año' . ($a['years'] > 1 ? 's' : ''), $anniversariesByYear)) ?>, datasets: [{ data: <?= json_encode(array_column($anniversariesByYear, 'count')) ?>, backgroundColor: ['#264b8b', '#6f8bbd', '#10b981', '#f59e0b', '#ef4444', '#3a5da0', '#9db1d2'] }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } } }
         });
         <?php endif; ?>

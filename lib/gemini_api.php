@@ -9,7 +9,11 @@ class GeminiAPI {
     private $apiUrl;
     
     public function __construct($apiKey = null) {
-        $this->apiKey = $apiKey ?? 'AIzaSyBsNFvo5gaMsHcQTKRsYQ5ElSQBVN5ulZ0';
+        if ($apiKey === null || $apiKey === '') {
+            $__sec = @include __DIR__ . '/../config/secrets.php';
+            $apiKey = getenv('GEMINI_KEY_MAIN') ?: (is_array($__sec) ? ($__sec['gemini_key_main'] ?? '') : '');
+        }
+        $this->apiKey = $apiKey;
         $this->apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
     }
     

@@ -1,6 +1,7 @@
 <?php
+// Producción: registrar errores, no mostrarlos al usuario (config central en db.php)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', '0');
 
 session_start();
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT', 'IT', 'Supervisor'], true)) {
@@ -11,7 +12,7 @@ if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT',
 include 'db.php';
 
 if (!function_exists('sanitizeHexColorValue')) {
-    function sanitizeHexColorValue(?string $color, string $fallback = '#6366F1'): string
+    function sanitizeHexColorValue(?string $color, string $fallback = '#3a5da0'): string
     {
         $value = strtoupper(trim((string) $color));
         return preg_match('/^#[0-9A-F]{6}$/', $value) ? $value : strtoupper($fallback);
@@ -65,8 +66,8 @@ foreach ($attendanceTypes as $typeRow) {
         $durationTypes[] = [
             'slug' => $slug,
             'label' => $typeRow['label'] ?? $slug,
-            'color_start' => sanitizeHexColorValue($typeRow['color_start'] ?? '#6366F1', '#6366F1'),
-            'color_end' => sanitizeHexColorValue($typeRow['color_end'] ?? ($typeRow['color_start'] ?? '#6366F1'), '#6366F1'),
+            'color_start' => sanitizeHexColorValue($typeRow['color_start'] ?? '#3a5da0', '#3a5da0'),
+            'color_end' => sanitizeHexColorValue($typeRow['color_end'] ?? ($typeRow['color_start'] ?? '#3a5da0'), '#3a5da0'),
         ];
     }
 }
@@ -92,7 +93,7 @@ foreach ($dailyRows as $row) {
     }
     $meta = $attendanceTypeMap[$slug] ?? null;
     $label = $meta['label'] ?? ($row['type'] ?? $slug);
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#38BDF8', '#38BDF8');
+    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#92a9da', '#92a9da');
     $timestamp = strtotime($row['timestamp'] ?? '');
     if ($timestamp === false) {
         continue;
@@ -196,8 +197,8 @@ $metricCards = [
         'label' => 'Productividad',
         'value' => $dailyProductivity . '%',
         'description' => 'Relación entre tiempos productivos y totales',
-        'color_start' => '#A855F7',
-        'color_end' => '#7C3AED',
+        'color_start' => '#92a9da',
+        'color_end' => '#5e7cba',
     ],
 ];
 

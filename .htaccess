@@ -20,6 +20,27 @@
     php_value memory_limit 256M
 </IfModule>
 
+# ============================================================
+# SEGURIDAD (endurecimiento pre-producción):
+# Bloquea del acceso web TODOS los scripts de desarrollo / diagnóstico /
+# migración / privilegio. NO deben ser alcanzables por URL en producción
+# (varios vuelcan sesión, permisos o esquema, ejecutan DDL, o mutan roles).
+# Verificado: ninguno está referenciado por el código real de la app.
+# (Apache 2.4 — directiva Require). Reversible: elimina estos bloques.
+#   Peligrosos confirmados por la auditoría:
+#   - run_*/migrate_*: ejecutan DDL/DML al cargar la URL
+#   - fix_session / fix_developer_role / make_codes_universal / install_*: mutan/elevan sesión, roles o ajustes
+#   - debug_auth_code: vuelca códigos de autorización sin auth (+XSS)
+#   - debug_*/check_*/validate_*: vuelcan sesión / permisos / esquema DB
+#   - *_test / test_*: andamiaje de pruebas (p.ej. campaign_staffing_test con permiso desactivado)
+# ============================================================
+<FilesMatch "^(debug_|tmp_|setup_|migrate_|run_|fix_|make_|install_|check_|verify_|validate_|analyze_|simulate_|recalculate_|test_).*\.php$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "(_test\.php$|^ghl_api_examples\.php$|^configure_test_email\.php$|^punch_qa\.php$|^secrets\.php$|^secrets\.example\.php$)">
+    Require all denied
+</FilesMatch>
+
 # Habilitar el motor de reescritura
 RewriteEngine On
 

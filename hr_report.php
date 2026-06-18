@@ -609,7 +609,7 @@ include __DIR__ . '/header.php';
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    color: var(--accent-cyan, #22d3ee);
+    color: var(--accent-cyan, #5e7cba);
     font-size: 0.8rem;
     margin-top: 0.35rem;
 }
@@ -626,8 +626,8 @@ include __DIR__ . '/header.php';
     z-index: 9999;
 }
 .hours-modal {
-    background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.92));
-    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: linear-gradient(145deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border);
     border-radius: 18px;
     width: min(1100px, 100%);
     max-height: 90vh;
@@ -663,7 +663,7 @@ include __DIR__ . '/header.php';
     width: 40px;
     height: 40px;
     border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary, #e2e8f0);
     cursor: pointer;
@@ -703,7 +703,7 @@ include __DIR__ . '/header.php';
     padding: 0.95rem 1rem;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(148, 163, 184, 0.18);
+    border: 1px solid var(--border);
 }
 .theme-light .hours-mini-card {
     background: rgba(255, 255, 255, 0.75);
@@ -744,7 +744,7 @@ include __DIR__ . '/header.php';
 .hours-table th,
 .hours-table td {
     padding: 0.55rem 0.75rem;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    border-bottom: 1px solid var(--border);
     text-align: left;
 }
 .hours-table th {
@@ -802,7 +802,7 @@ include __DIR__ . '/header.php';
     background: rgba(255, 255, 255, 0.8);
 }
 .theme-light .report-tab-button.active {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(14, 165, 233, 0.15));
+    background: linear-gradient(135deg, rgba(38, 75, 139, 0.15), rgba(14, 165, 233, 0.15));
     color: #0f172a;
 }
 .report-tab {
@@ -1839,12 +1839,12 @@ document.addEventListener('DOMContentLoaded', function() {
 const departmentChartData = <?= $departmentChartJson ?>;
 const employeeChartData = <?= $employeeChartJson ?>;
 const palette = getComputedStyle(document.body);
-const cyan = (palette.getPropertyValue('--accent-cyan') || '#22d3ee').trim();
+const cyan = (palette.getPropertyValue('--accent-cyan') || '#5e7cba').trim();
 const emerald = (palette.getPropertyValue('--accent-emerald') || '#34d399').trim();
 const textColor = (palette.getPropertyValue('--text-primary') || '#e2e8f0').trim();
 const mutedColor = (palette.getPropertyValue('--text-muted') || '#94a3b8').trim();
 const amber = '#f59e0b';
-const violet = '#8b5cf6';
+const violet = '#6f8bbd';
 
 if (typeof Chart !== 'undefined') {
     const departmentCtx = document.getElementById('departmentChart');

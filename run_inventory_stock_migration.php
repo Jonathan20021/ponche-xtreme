@@ -9,7 +9,7 @@ require_once __DIR__ . '/db.php';
 $cli = (PHP_SAPI === 'cli');
 $nl  = $cli ? "\n" : "<br>\n";
 if (!$cli) {
-    echo "<pre style='font-family:Consolas,monospace;background:#0f172a;color:#cbd5e1;padding:16px;'>";
+    echo "<pre style='font-family:Consolas,monospace;background: var(--surface);color:#cbd5e1;padding:16px;'>";
 }
 
 $schema = $pdo->query("SELECT DATABASE()")->fetchColumn();

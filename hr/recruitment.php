@@ -163,12 +163,12 @@ function scoreColor(?int $score): string
 <link rel="stylesheet" href="../assets/css/recruitment.css">
 <style>
     .view-toggle button { padding: .45rem .9rem; border-radius: 10px; font-size: .85rem; font-weight: 600; border: 1px solid transparent; }
-    .view-toggle button.active { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; }
+    .view-toggle button.active { background: linear-gradient(135deg, #1f3f76, #5e7cba); color: #fff; }
     .view-toggle button.idle { background: rgba(148,163,184,0.12); color: #94a3b8; }
     .theme-light .view-toggle button.idle { background: #f1f5f9; color: #475569; }
 
     .ai-action-btn {
-        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        background: linear-gradient(135deg, #5e7cba, #1f3f76);
         color: #fff; padding: .35rem .65rem; border-radius: 8px; font-size: .72rem;
         display:inline-flex; align-items:center; gap:.25rem;
     }
@@ -176,11 +176,11 @@ function scoreColor(?int $score): string
 
     .pill { display:inline-flex; align-items:center; gap:.25rem; padding:.2rem .55rem; border-radius:999px; font-size:.7rem; font-weight:600; }
     .pill.muted { background: rgba(148,163,184,0.15); color:#94a3b8; }
-    .pill.indigo { background: rgba(99,102,241,0.18); color:#a5b4fc; }
+    .pill.indigo { background: rgba(58, 93, 160,0.18); color:#92a9da; }
     .pill.amber  { background: rgba(245,158,11,0.18); color:#fbbf24; }
     .pill.emerald { background: rgba(16,185,129,0.18); color:#34d399; }
 
-    .modal-content { border: 1px solid rgba(148,163,184,0.2); }
+    .modal-content { border: 1px solid var(--border); }
 </style>
 
 <div class="container-fluid mx-auto px-4 py-6">
@@ -208,16 +208,16 @@ function scoreColor(?int $score): string
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <?php
         $statBoxes = [
-            ['Total',          $stats['total'],               '#6366f1', 'fa-users'],
-            ['Nuevas',         $stats['new'],                 '#3b82f6', 'fa-file-circle-plus'],
+            ['Total',          $stats['total'],               '#3a5da0', 'fa-users'],
+            ['Nuevas',         $stats['new'],                 '#264b8b', 'fa-file-circle-plus'],
             ['Revisión',       $stats['reviewing'],           '#f59e0b', 'fa-magnifying-glass'],
-            ['Shortlist',      $stats['shortlisted'],         '#8b5cf6', 'fa-star'],
-            ['Entrevistas',    $stats['interview_scheduled'], '#ec4899', 'fa-calendar-check'],
+            ['Shortlist',      $stats['shortlisted'],         '#6f8bbd', 'fa-star'],
+            ['Entrevistas',    $stats['interview_scheduled'], '#9db1d2', 'fa-calendar-check'],
             ['Contratados',    $stats['hired'],               '#10b981', 'fa-circle-check'],
         ];
         foreach ($statBoxes as [$label, $value, $color, $icon]):
         ?>
-            <div class="glass-card p-4" style="background: linear-gradient(135deg, <?php echo $color; ?>26 0%, rgba(15,23,42,0.5) 90%); border: 1px solid <?php echo $color; ?>40;">
+            <div class="glass-card p-4" style="background: linear-gradient(135deg, <?php echo $color; ?>26 0%, var(--surface) 90%); border: 1px solid <?php echo $color; ?>40;">
                 <div class="flex items-center justify-between gap-3">
                     <div class="min-w-0">
                         <div class="text-[11px] font-semibold uppercase tracking-widest text-slate-200 opacity-90 whitespace-nowrap"><?php echo $label; ?></div>

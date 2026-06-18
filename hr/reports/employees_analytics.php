@@ -222,8 +222,8 @@ $totalActive = array_sum(array_column($employeesByStatus, 'count'));
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
         .report-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
         }
@@ -232,8 +232,8 @@ $totalActive = array_sum(array_column($employeesByStatus, 'count'));
             border-color: rgba(148, 163, 184, 0.2);
         }
         .stat-box {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
-            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%);
+            border: 1px solid rgba(38, 75, 139, 0.2);
             border-radius: 12px;
             padding: 1.25rem;
         }
@@ -535,7 +535,7 @@ $totalActive = array_sum(array_column($employeesByStatus, 'count'));
                 labels: <?= json_encode(array_column($genderDistribution, 'gender')) ?>,
                 datasets: [{
                     data: <?= json_encode(array_column($genderDistribution, 'count')) ?>,
-                    backgroundColor: ['#3b82f6', '#ec4899', '#8b5cf6']
+                    backgroundColor: ['#264b8b', '#9db1d2', '#6f8bbd']
                 }]
             },
             options: {
@@ -553,7 +553,7 @@ $totalActive = array_sum(array_column($employeesByStatus, 'count'));
                 datasets: [{
                     label: 'Empleados',
                     data: <?= json_encode(array_column($ageDistribution, 'count')) ?>,
-                    backgroundColor: '#8b5cf6'
+                    backgroundColor: '#6f8bbd'
                 }]
             },
             options: {
@@ -575,7 +575,7 @@ $totalActive = array_sum(array_column($employeesByStatus, 'count'));
                 datasets: [{
                     label: 'Empleados',
                     data: <?= json_encode(array_column($tenureDistribution, 'count')) ?>,
-                    backgroundColor: '#3b82f6'
+                    backgroundColor: '#264b8b'
                 }]
             },
             options: {
@@ -601,7 +601,7 @@ $totalActive = array_sum(array_column($employeesByStatus, 'count'));
                         datasets: [{
                             label: 'Empleados',
                             data: departmentData,
-                            backgroundColor: '#06b6d4'
+                            backgroundColor: '#3a5da0'
                         }]
                     },
                     options: {
@@ -658,8 +658,8 @@ $totalActive = array_sum(array_column($employeesByStatus, 'count'));
                         datasets: [{
                             label: 'Nuevos Ingresos',
                             data: hiringData,
-                            borderColor: '#6366f1',
-                            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                            borderColor: '#3a5da0',
+                            backgroundColor: 'rgba(58, 93, 160, 0.1)',
                             borderWidth: 3,
                             fill: true,
                             tension: 0.4

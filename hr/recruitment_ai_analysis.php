@@ -54,8 +54,8 @@ $recentApplications = $pdo->query("
         }
         
         .stat-card {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: linear-gradient(135deg, rgba(58, 93, 160, 0.1) 0%, rgba(111, 139, 189, 0.1) 100%);
+            border: 1px solid rgba(58, 93, 160, 0.2);
             border-radius: 16px;
             padding: 1.5rem;
             transition: all 0.3s ease;
@@ -64,8 +64,8 @@ $recentApplications = $pdo->query("
         
         .stat-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 12px 24px rgba(99, 102, 241, 0.2);
-            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 12px 24px rgba(58, 93, 160, 0.2);
+            border-color: rgba(58, 93, 160, 0.4);
         }
         
         .stat-icon {
@@ -79,8 +79,8 @@ $recentApplications = $pdo->query("
         }
         
         .query-card {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 2rem;
             backdrop-filter: blur(10px);
@@ -93,9 +93,9 @@ $recentApplications = $pdo->query("
         }
         
         .filter-chip {
-            background: rgba(99, 102, 241, 0.15);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            color: #818cf8;
+            background: rgba(58, 93, 160, 0.15);
+            border: 1px solid rgba(58, 93, 160, 0.3);
+            color: #5e7cba;
             padding: 0.5rem 1rem;
             border-radius: 999px;
             font-size: 0.875rem;
@@ -108,8 +108,8 @@ $recentApplications = $pdo->query("
         }
         
         .filter-chip:hover {
-            background: rgba(99, 102, 241, 0.25);
-            border-color: rgba(99, 102, 241, 0.5);
+            background: rgba(58, 93, 160, 0.25);
+            border-color: rgba(58, 93, 160, 0.5);
             transform: translateY(-1px);
         }
         
@@ -132,8 +132,8 @@ $recentApplications = $pdo->query("
         }
         
         .ai-response-card {
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
-            border: 1px solid rgba(139, 92, 246, 0.3);
+            background: linear-gradient(135deg, rgba(111, 139, 189, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%);
+            border: 1px solid rgba(111, 139, 189, 0.3);
             border-radius: 16px;
             padding: 1.5rem;
             margin-top: 1.5rem;
@@ -141,8 +141,8 @@ $recentApplications = $pdo->query("
         }
         
         .result-table {
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 12px;
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
@@ -159,7 +159,7 @@ $recentApplications = $pdo->query("
         }
         
         .result-table thead {
-            background: rgba(99, 102, 241, 0.2);
+            background: rgba(58, 93, 160, 0.2);
         }
         
         .result-table th {
@@ -169,14 +169,14 @@ $recentApplications = $pdo->query("
             font-size: 0.875rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: #a5b4fc;
+            color: var(--text-muted);
             white-space: nowrap;
             min-width: 120px;
         }
         
         .result-table td {
             padding: 1rem;
-            border-top: 1px solid rgba(148, 163, 184, 0.1);
+            border-top: 1px solid var(--border);
             white-space: nowrap;
             min-width: 120px;
         }
@@ -186,7 +186,7 @@ $recentApplications = $pdo->query("
         }
         
         .result-table tbody tr:hover {
-            background: rgba(99, 102, 241, 0.1);
+            background: rgba(58, 93, 160, 0.1);
         }
         
         /* Responsive table */
@@ -228,9 +228,9 @@ $recentApplications = $pdo->query("
         
         /* Pagination styles */
         .pagination-btn {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            color: #e2e8f0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
             padding: 0.5rem 1rem;
             border-radius: 8px;
             font-weight: 500;
@@ -241,8 +241,8 @@ $recentApplications = $pdo->query("
         }
         
         .pagination-btn:hover:not(:disabled) {
-            background: rgba(99, 102, 241, 0.3);
-            border-color: rgba(99, 102, 241, 0.4);
+            background: rgba(58, 93, 160, 0.3);
+            border-color: rgba(58, 93, 160, 0.4);
             transform: translateY(-1px);
         }
         
@@ -252,14 +252,14 @@ $recentApplications = $pdo->query("
         }
         
         .pagination-btn.active {
-            background: rgba(99, 102, 241, 0.4);
-            border-color: rgba(99, 102, 241, 0.6);
-            color: #6366f1;
+            background: rgba(58, 93, 160, 0.4);
+            border-color: rgba(58, 93, 160, 0.6);
+            color: #3a5da0;
             font-weight: 600;
         }
         
         .pagination-info {
-            color: #94a3b8;
+            color: var(--text-muted);
             font-size: 0.875rem;
             padding: 0.5rem 1rem;
         }
@@ -318,16 +318,16 @@ $recentApplications = $pdo->query("
             display: inline-block;
         }
         
-        .status-new { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .status-new { background: rgba(38, 75, 139, 0.2); color: #5e7cba; border: 1px solid rgba(38, 75, 139, 0.3); }
         .status-reviewing { background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
-        .status-shortlisted { background: rgba(139, 92, 246, 0.2); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
-        .status-interview_scheduled { background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+        .status-shortlisted { background: rgba(111, 139, 189, 0.2); color: #a78bfa; border: 1px solid rgba(111, 139, 189, 0.3); }
+        .status-interview_scheduled { background: rgba(58, 93, 160, 0.2); color: #5e7cba; border: 1px solid rgba(58, 93, 160, 0.3); }
         .status-hired { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
         .status-rejected { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
         
         .loading-spinner {
-            border: 3px solid rgba(99, 102, 241, 0.3);
-            border-top: 3px solid #6366f1;
+            border: 3px solid rgba(58, 93, 160, 0.3);
+            border-top: 3px solid #3a5da0;
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -340,8 +340,8 @@ $recentApplications = $pdo->query("
         }
         
         .quick-filter-btn {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: var(--surface);
+            border: 1px solid var(--border);
             padding: 0.75rem 1.25rem;
             border-radius: 12px;
             color: #e2e8f0;
@@ -352,8 +352,8 @@ $recentApplications = $pdo->query("
         }
         
         .quick-filter-btn:hover {
-            background: rgba(99, 102, 241, 0.2);
-            border-color: rgba(99, 102, 241, 0.4);
+            background: rgba(58, 93, 160, 0.2);
+            border-color: rgba(58, 93, 160, 0.4);
             transform: translateY(-2px);
         }
         
@@ -371,8 +371,8 @@ $recentApplications = $pdo->query("
         }
         
         .chart-container {
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 1.5rem;
             margin-top: 1.5rem;
@@ -410,7 +410,7 @@ $recentApplications = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1 font-medium">Total Aplicaciones</p>
                         <h3 class="text-3xl font-bold text-white"><?= number_format($totalApplications) ?></h3>
                     </div>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%);">
                         <i class="fas fa-file-alt text-white"></i>
                     </div>
                 </div>
@@ -422,7 +422,7 @@ $recentApplications = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1 font-medium">Aplicaciones Nuevas</p>
                         <h3 class="text-3xl font-bold text-white"><?= number_format($newApplications) ?></h3>
                     </div>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <i class="fas fa-inbox text-white"></i>
                     </div>
                 </div>
@@ -434,7 +434,7 @@ $recentApplications = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1 font-medium">Vacantes Activas</p>
                         <h3 class="text-3xl font-bold text-white"><?= number_format($activePostings) ?></h3>
                     </div>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-briefcase text-white"></i>
                     </div>
                 </div>
@@ -895,7 +895,7 @@ $recentApplications = $pdo->query("
             const columns = Object.keys(allResults[0]);
             
             let tableHTML = `
-                <div class="mb-4 p-4 rounded-lg result-count-banner" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div class="mb-4 p-4 rounded-lg result-count-banner" style="background: rgba(38, 75, 139, 0.1); border: 1px solid rgba(38, 75, 139, 0.3);">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
                             <i class="fas fa-check-circle text-blue-400 text-xl"></i>

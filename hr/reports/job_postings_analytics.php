@@ -110,9 +110,9 @@ $avgAppsPerPosting = $postingsOverview['total_postings'] > 0 ? $totalApps / $pos
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
-        .report-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 16px; padding: 1.5rem; }
+        .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
         .theme-light .report-card { background: #ffffff; border-color: rgba(148, 163, 184, 0.2); }
-        .stat-box { background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 1.25rem; }
+        .stat-box { background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%); border: 1px solid rgba(38, 75, 139, 0.2); border-radius: 12px; padding: 1.25rem; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -260,7 +260,7 @@ $avgAppsPerPosting = $postingsOverview['total_postings'] > 0 ? $totalApps / $pos
         <?php if (!empty($postingsByDept)): ?>
         new Chart(document.getElementById('deptChart'), {
             type: 'doughnut',
-            data: { labels: <?= json_encode(array_column($postingsByDept, 'department')) ?>, datasets: [{ data: <?= json_encode(array_column($postingsByDept, 'count')) ?>, backgroundColor: ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6'] }] },
+            data: { labels: <?= json_encode(array_column($postingsByDept, 'department')) ?>, datasets: [{ data: <?= json_encode(array_column($postingsByDept, 'count')) ?>, backgroundColor: ['#3a5da0', '#6f8bbd', '#9db1d2', '#f59e0b', '#10b981', '#3a5da0', '#264b8b'] }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } } }
         });
         <?php endif; ?>

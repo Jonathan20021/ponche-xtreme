@@ -6,9 +6,9 @@ session_start();
 <head>
     <title>Debug Permisos</title>
     <style>
-        body { font-family: monospace; padding: 20px; background: #1e293b; color: #fff; }
-        pre { background: #0f172a; padding: 15px; border-radius: 8px; overflow-x: auto; }
-        h2 { color: #3b82f6; }
+        body { font-family: monospace; padding: 20px; background: var(--surface-2); color: #fff; }
+        pre { background: var(--surface); padding: 15px; border-radius: 8px; overflow-x: auto; }
+        h2 { color: #264b8b; }
     </style>
 </head>
 <body>

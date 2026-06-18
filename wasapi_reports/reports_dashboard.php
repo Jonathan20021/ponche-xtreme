@@ -22,19 +22,19 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .text-gray-700 { color: #374151 !important; }
 .claude-ui .text-gray-800 { color: #1f2937 !important; }
 .claude-ui .text-gray-900 { color: #111827 !important; }
-.claude-ui .text-indigo-500 { color: #6366f1 !important; }
-.claude-ui .text-indigo-600 { color: #4f46e5 !important; }
-.claude-ui .text-indigo-700 { color: #4338ca !important; }
+.claude-ui .text-indigo-500 { color: #3a5da0 !important; }
+.claude-ui .text-indigo-600 { color: #1f3f76 !important; }
+.claude-ui .text-indigo-700 { color: #152849 !important; }
 .claude-ui .text-indigo-800 { color: #3730a3 !important; }
-.claude-ui .text-violet-500 { color: #8b5cf6 !important; }
-.claude-ui .text-violet-600 { color: #7c3aed !important; }
+.claude-ui .text-violet-500 { color: #6f8bbd !important; }
+.claude-ui .text-violet-600 { color: #5e7cba !important; }
 .claude-ui .text-fuchsia-400 { color: #e879f9 !important; }
 .claude-ui .text-emerald-400 { color: #34d399 !important; }
 .claude-ui .text-emerald-500 { color: #10b981 !important; }
 .claude-ui .text-emerald-600 { color: #059669 !important; }
 .claude-ui .text-emerald-700 { color: #047857 !important; }
 .claude-ui .text-emerald-800 { color: #065f46 !important; }
-.claude-ui .text-teal-500 { color: #14b8a6 !important; }
+.claude-ui .text-teal-500 { color: #1f3f76 !important; }
 .claude-ui .text-teal-600 { color: #0d9488 !important; }
 .claude-ui .text-amber-400 { color: #fbbf24 !important; }
 .claude-ui .text-amber-500 { color: #f59e0b !important; }
@@ -51,8 +51,8 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .text-red-500 { color: #ef4444 !important; }
 .claude-ui .text-red-600 { color: #dc2626 !important; }
 .claude-ui .text-red-700 { color: #b91c1c !important; }
-.claude-ui .text-blue-500 { color: #3b82f6 !important; }
-.claude-ui .text-blue-600 { color: #2563eb !important; }
+.claude-ui .text-blue-500 { color: #264b8b !important; }
+.claude-ui .text-blue-600 { color: #1f3f76 !important; }
 
 .claude-ui .bg-gradient-to-br.text-white,
 .claude-ui .bg-gradient-to-br.text-white *,
@@ -65,7 +65,7 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .bg-gray-900 .text-fuchsia-400 { color: #e879f9 !important; }
 .claude-ui .bg-gray-900 .text-gray-400 { color: #9ca3af !important; }
 
-.claude-ui .font-mono, .claude-ui code { color: #4338ca !important; }
+.claude-ui .font-mono, .claude-ui code { color: #152849 !important; }
 
 .claude-ui .bg-white { background-color: #ffffff !important; }
 .claude-ui .bg-gray-50 { background-color: #f9fafb !important; }
@@ -79,7 +79,7 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .bg-emerald-500 { background-color: #10b981 !important; }
 .claude-ui .bg-emerald-600 { background-color: #059669 !important; }
 .claude-ui .bg-teal-50 { background-color: #f0fdfa !important; }
-.claude-ui .bg-teal-500 { background-color: #14b8a6 !important; }
+.claude-ui .bg-teal-500 { background-color: #1f3f76 !important; }
 .claude-ui .bg-teal-600 { background-color: #0d9488 !important; }
 .claude-ui .bg-amber-50 { background-color: #fffbeb !important; }
 .claude-ui .bg-amber-100 { background-color: #fef3c7 !important; }
@@ -98,19 +98,19 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .bg-violet-50 { background-color: #f5f3ff !important; }
 .claude-ui .bg-violet-100 { background-color: #ede9fe !important; }
 .claude-ui .bg-violet-200 { background-color: #ddd6fe !important; }
-.claude-ui .bg-violet-500 { background-color: #8b5cf6 !important; }
-.claude-ui .bg-violet-600 { background-color: #7c3aed !important; }
-.claude-ui .bg-violet-700 { background-color: #6d28d9 !important; }
-.claude-ui .bg-cyan-500 { background-color: #06b6d4 !important; }
+.claude-ui .bg-violet-500 { background-color: #6f8bbd !important; }
+.claude-ui .bg-violet-600 { background-color: #5e7cba !important; }
+.claude-ui .bg-violet-700 { background-color: #1f3f76 !important; }
+.claude-ui .bg-cyan-500 { background-color: #3a5da0 !important; }
 .claude-ui .bg-indigo-50 { background-color: #eef2ff !important; }
 .claude-ui .bg-indigo-100 { background-color: #e0e7ff !important; }
-.claude-ui .bg-indigo-200 { background-color: #c7d2fe !important; }
-.claude-ui .bg-indigo-500 { background-color: #6366f1 !important; }
-.claude-ui .bg-indigo-600 { background-color: #4f46e5 !important; }
-.claude-ui .bg-indigo-700 { background-color: #4338ca !important; }
+.claude-ui .bg-indigo-200 { background-color: #dce4f4 !important; }
+.claude-ui .bg-indigo-500 { background-color: #3a5da0 !important; }
+.claude-ui .bg-indigo-600 { background-color: #1f3f76 !important; }
+.claude-ui .bg-indigo-700 { background-color: #152849 !important; }
 .claude-ui .bg-blue-50 { background-color: #eff6ff !important; }
 .claude-ui .bg-blue-100 { background-color: #dbeafe !important; }
-.claude-ui .bg-blue-500 { background-color: #3b82f6 !important; }
+.claude-ui .bg-blue-500 { background-color: #264b8b !important; }
 .claude-ui .bg-red-50 { background-color: #fef2f2 !important; }
 .claude-ui .bg-red-100 { background-color: #fee2e2 !important; }
 .claude-ui .bg-red-500 { background-color: #ef4444 !important; }
@@ -129,7 +129,7 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .border-rose-400 { border-color: #fb7185 !important; }
 .claude-ui .border-rose-500 { border-color: #f43f5e !important; }
 .claude-ui .border-indigo-100 { border-color: #e0e7ff !important; }
-.claude-ui .border-indigo-200 { border-color: #c7d2fe !important; }
+.claude-ui .border-indigo-200 { border-color: #dce4f4 !important; }
 .claude-ui .border-violet-100 { border-color: #ede9fe !important; }
 .claude-ui .border-violet-200 { border-color: #ddd6fe !important; }
 .claude-ui .border-violet-400 { border-color: #a78bfa !important; }
@@ -138,13 +138,13 @@ if (!isset($_SESSION['user_id'])) {
 
 /* from-* defaults to 2 stops (no transparent via flare). */
 .claude-ui [class*="from-emerald-500"] { --tw-gradient-from: #10b981 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(16, 185, 129, 0)) !important; }
-.claude-ui [class*="from-teal-500"]    { --tw-gradient-from: #14b8a6 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(20, 184, 166, 0)) !important; }
+.claude-ui [class*="from-teal-500"]    { --tw-gradient-from: #1f3f76 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(20, 184, 166, 0)) !important; }
 .claude-ui [class*="from-amber-500"]   { --tw-gradient-from: #f59e0b !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(245, 158, 11, 0)) !important; }
 .claude-ui [class*="from-rose-500"]    { --tw-gradient-from: #f43f5e !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(244, 63, 94, 0)) !important; }
-.claude-ui [class*="from-violet-600"]  { --tw-gradient-from: #7c3aed !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
-.claude-ui [class*="from-fuchsia-500"] { --tw-gradient-from: #d946ef !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(217, 70, 239, 0)) !important; }
-.claude-ui [class*="from-indigo-500"]  { --tw-gradient-from: #6366f1 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(99, 102, 241, 0)) !important; }
-.claude-ui [class*="from-indigo-600"]  { --tw-gradient-from: #4f46e5 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(79, 70, 229, 0)) !important; }
+.claude-ui [class*="from-violet-600"]  { --tw-gradient-from: #5e7cba !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
+.claude-ui [class*="from-fuchsia-500"] { --tw-gradient-from: #6f8bbd !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(217, 70, 239, 0)) !important; }
+.claude-ui [class*="from-indigo-500"]  { --tw-gradient-from: #3a5da0 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(58, 93, 160, 0)) !important; }
+.claude-ui [class*="from-indigo-600"]  { --tw-gradient-from: #1f3f76 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(79, 70, 229, 0)) !important; }
 .claude-ui [class*="from-red-600"]     { --tw-gradient-from: #dc2626 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(220, 38, 38, 0)) !important; }
 .claude-ui [class*="from-gray-50"]     { --tw-gradient-from: #f9fafb !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(249, 250, 251, 0)) !important; }
 .claude-ui [class*="from-amber-50"]    { --tw-gradient-from: #fffbeb !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(255, 251, 235, 0)) !important; }
@@ -153,10 +153,10 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui [class*="from-violet-50"]   { --tw-gradient-from: #f5f3ff !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(245, 243, 255, 0)) !important; }
 
 /* via-* overrides stops to 3 stops. Must come AFTER from-*. */
-.claude-ui [class*="via-violet-600"]   { --tw-gradient-stops: var(--tw-gradient-from), #7c3aed, var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
+.claude-ui [class*="via-violet-600"]   { --tw-gradient-stops: var(--tw-gradient-from), #5e7cba, var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
 
 .claude-ui [class*="to-teal-600"]      { --tw-gradient-to: #0d9488 !important; }
-.claude-ui [class*="to-teal-500"]      { --tw-gradient-to: #14b8a6 !important; }
+.claude-ui [class*="to-teal-500"]      { --tw-gradient-to: #1f3f76 !important; }
 .claude-ui [class*="to-orange-600"]    { --tw-gradient-to: #ea580c !important; }
 .claude-ui [class*="to-orange-500"]    { --tw-gradient-to: #f97316 !important; }
 .claude-ui [class*="to-red-600"]       { --tw-gradient-to: #dc2626 !important; }
@@ -164,11 +164,11 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui [class*="to-rose-500"]      { --tw-gradient-to: #f43f5e !important; }
 .claude-ui [class*="to-rose-600"]      { --tw-gradient-to: #e11d48 !important; }
 .claude-ui [class*="to-rose-800"]      { --tw-gradient-to: #9f1239 !important; }
-.claude-ui [class*="to-violet-600"]    { --tw-gradient-to: #7c3aed !important; }
-.claude-ui [class*="to-violet-700"]    { --tw-gradient-to: #6d28d9 !important; }
-.claude-ui [class*="to-indigo-600"]    { --tw-gradient-to: #4f46e5 !important; }
-.claude-ui [class*="to-indigo-700"]    { --tw-gradient-to: #4338ca !important; }
-.claude-ui [class*="to-fuchsia-500"]   { --tw-gradient-to: #d946ef !important; }
+.claude-ui [class*="to-violet-600"]    { --tw-gradient-to: #5e7cba !important; }
+.claude-ui [class*="to-violet-700"]    { --tw-gradient-to: #1f3f76 !important; }
+.claude-ui [class*="to-indigo-600"]    { --tw-gradient-to: #1f3f76 !important; }
+.claude-ui [class*="to-indigo-700"]    { --tw-gradient-to: #152849 !important; }
+.claude-ui [class*="to-fuchsia-500"]   { --tw-gradient-to: #6f8bbd !important; }
 .claude-ui [class*="to-fuchsia-600"]   { --tw-gradient-to: #c026d3 !important; }
 .claude-ui [class*="to-white"]         { --tw-gradient-to: #ffffff !important; }
 .claude-ui [class*="to-orange-50"]     { --tw-gradient-to: #fff7ed !important; }
@@ -1948,7 +1948,7 @@ function advancedReportsDashboard() {
                     datasets: [{
                         label: 'Conversaciones Promedio',
                         data: days.map(d => d.avg_conversations),
-                        backgroundColor: days.map(d => d.is_peak ? '#EF4444' : d.is_low ? '#10B981' : '#6366F1'),
+                        backgroundColor: days.map(d => d.is_peak ? '#EF4444' : d.is_low ? '#10B981' : '#3a5da0'),
                         borderRadius: 8
                     }]
                 },
@@ -1989,12 +1989,12 @@ function advancedReportsDashboard() {
                         {
                             label: 'Agentes Sugeridos',
                             data: days.map(d => d.suggested_agents),
-                            borderColor: '#8B5CF6',
-                            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                            borderColor: '#6f8bbd',
+                            backgroundColor: 'rgba(111, 139, 189, 0.1)',
                             fill: true,
                             tension: 0.4,
                             pointRadius: 6,
-                            pointBackgroundColor: days.map(d => d.is_peak ? '#EF4444' : '#8B5CF6')
+                            pointBackgroundColor: days.map(d => d.is_peak ? '#EF4444' : '#6f8bbd')
                         },
                         {
                             label: 'Mínimo Requerido',
@@ -2035,7 +2035,7 @@ function advancedReportsDashboard() {
                         {
                             label: 'Total Conversaciones',
                             data: days.map(d => d.total_conversations),
-                            backgroundColor: '#3B82F6',
+                            backgroundColor: '#264b8b',
                             borderRadius: 4
                         },
                         {
@@ -2115,7 +2115,7 @@ function advancedReportsDashboard() {
                     datasets: [{
                         label: 'Cantidad',
                         data: distribution.map(d => d.count),
-                        backgroundColor: ['#6366F1', '#8B5CF6', '#F59E0B'],
+                        backgroundColor: ['#3a5da0', '#6f8bbd', '#F59E0B'],
                         borderRadius: 8
                     }]
                 },
@@ -2148,8 +2148,8 @@ function advancedReportsDashboard() {
                         {
                             label: 'Abiertas',
                             data: trends.map(t => t.conversations_opened),
-                            borderColor: '#3B82F6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderColor: '#264b8b',
+                            backgroundColor: 'rgba(38, 75, 139, 0.1)',
                             fill: true,
                             tension: 0.4
                         },
@@ -2192,7 +2192,7 @@ function advancedReportsDashboard() {
                     datasets: [{
                         label: 'Promedio Conversaciones',
                         data: pattern.map(p => p.avg_conversations),
-                        backgroundColor: pattern.map(p => p.is_peak ? '#F59E0B' : '#6366F1'),
+                        backgroundColor: pattern.map(p => p.is_peak ? '#F59E0B' : '#3a5da0'),
                         borderRadius: 8
                     }]
                 },
@@ -2226,7 +2226,7 @@ function advancedReportsDashboard() {
                         {
                             label: 'Período Actual',
                             data: metrics.map(m => m.current),
-                            backgroundColor: '#6366F1',
+                            backgroundColor: '#3a5da0',
                             borderRadius: 4
                         },
                         {

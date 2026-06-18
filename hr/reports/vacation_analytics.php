@@ -110,9 +110,9 @@ $approvalRate = $overview['total_requests'] > 0 ? ($overview['approved'] / $over
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
-        .report-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 16px; padding: 1.5rem; }
+        .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
         .theme-light .report-card { background: #ffffff; border-color: rgba(148, 163, 184, 0.2); }
-        .stat-box { background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 1.25rem; }
+        .stat-box { background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%); border: 1px solid rgba(38, 75, 139, 0.2); border-radius: 12px; padding: 1.25rem; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -258,7 +258,7 @@ $approvalRate = $overview['total_requests'] > 0 ? ($overview['approved'] / $over
         <?php if (!empty($byDept)): ?>
         new Chart(document.getElementById('deptChart'), {
             type: 'bar',
-            data: { labels: <?= json_encode(array_column($byDept, 'department')) ?>, datasets: [{ label: 'Días', data: <?= json_encode(array_column($byDept, 'days_approved')) ?>, backgroundColor: '#06b6d4' }] },
+            data: { labels: <?= json_encode(array_column($byDept, 'department')) ?>, datasets: [{ label: 'Días', data: <?= json_encode(array_column($byDept, 'days_approved')) ?>, backgroundColor: '#3a5da0' }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
         });
         <?php endif; ?>

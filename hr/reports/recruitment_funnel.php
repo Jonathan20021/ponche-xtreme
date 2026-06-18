@@ -130,9 +130,9 @@ $hires = $recentHires->fetchAll(PDO::FETCH_ASSOC);
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
-        .report-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 16px; padding: 1.5rem; }
+        .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
         .theme-light .report-card { background: #ffffff; border-color: rgba(148, 163, 184, 0.2); }
-        .stat-box { background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 1.25rem; }
+        .stat-box { background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%); border: 1px solid rgba(38, 75, 139, 0.2); border-radius: 12px; padding: 1.25rem; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -288,7 +288,7 @@ $hires = $recentHires->fetchAll(PDO::FETCH_ASSOC);
                 datasets: [{ 
                     label: 'Candidatos', 
                     data: [<?= $funnel['total_applications'] ?>, <?= $funnel['reviewing'] ?>, <?= $funnel['interview'] ?>, <?= $funnel['hired'] ?>, <?= $funnel['rejected'] ?>], 
-                    backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#ef4444'] 
+                    backgroundColor: ['#264b8b', '#f59e0b', '#6f8bbd', '#10b981', '#ef4444'] 
                 }] 
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
@@ -297,14 +297,14 @@ $hires = $recentHires->fetchAll(PDO::FETCH_ASSOC);
         <?php if (!empty($byPosition)): ?>
         new Chart(document.getElementById('positionChart'), {
             type: 'bar',
-            data: { labels: <?= json_encode(array_column($byPosition, 'position')) ?>, datasets: [{ label: 'Aplicaciones', data: <?= json_encode(array_column($byPosition, 'applications')) ?>, backgroundColor: '#8b5cf6' }, { label: 'Contratados', data: <?= json_encode(array_column($byPosition, 'hired')) ?>, backgroundColor: '#10b981' }] },
+            data: { labels: <?= json_encode(array_column($byPosition, 'position')) ?>, datasets: [{ label: 'Aplicaciones', data: <?= json_encode(array_column($byPosition, 'applications')) ?>, backgroundColor: '#6f8bbd' }, { label: 'Contratados', data: <?= json_encode(array_column($byPosition, 'hired')) ?>, backgroundColor: '#10b981' }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
         });
         <?php endif; ?>
         <?php if (!empty($trend)): ?>
         new Chart(document.getElementById('trendChart'), {
             type: 'line',
-            data: { labels: <?= json_encode(array_column($trend, 'month_label')) ?>, datasets: [{ label: 'Aplicaciones', data: <?= json_encode(array_column($trend, 'applications')) ?>, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true }, { label: 'Contratados', data: <?= json_encode(array_column($trend, 'hired')) ?>, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }] },
+            data: { labels: <?= json_encode(array_column($trend, 'month_label')) ?>, datasets: [{ label: 'Aplicaciones', data: <?= json_encode(array_column($trend, 'applications')) ?>, borderColor: '#264b8b', backgroundColor: 'rgba(38, 75, 139, 0.1)', fill: true }, { label: 'Contratados', data: <?= json_encode(array_column($trend, 'hired')) ?>, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
         });
         <?php endif; ?>

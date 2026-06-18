@@ -209,11 +209,11 @@
     letter-spacing: 0.025em;
 }
 
-.status-new { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.status-new { background: rgba(59, 130, 246, 0.2); color: #5e7cba; }
 .status-reviewing { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
 .status-shortlisted { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
 .status-interview_scheduled { background: rgba(236, 72, 153, 0.2); color: #f472b6; }
-.status-interviewed { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+.status-interviewed { background: rgba(168, 85, 247, 0.2); color: #92a9da; }
 .status-offer_extended { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .status-hired { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .status-rejected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
@@ -258,7 +258,7 @@
 }
 
 .btn-view {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
     color: white;
 }
 
@@ -268,7 +268,7 @@
 }
 
 .btn-edit {
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    background: linear-gradient(135deg, #3a5da0 0%, #264b8b 100%);
     color: white;
 }
 
@@ -355,7 +355,7 @@
 }
 
 .theme-light .ai-banner-card .text-purple-200,
-.theme-light .ai-banner-card .text-purple-300 { color: #6d28d9 !important; }
+.theme-light .ai-banner-card .text-purple-300 { color: #1f3f76 !important; }
 .theme-light .ai-banner-card .text-slate-100,
 .theme-light .ai-banner-card .text-slate-200 { color: #1e293b !important; }
 .theme-light .ai-banner-card strong.text-white { color: #1e1b4b !important; }
@@ -363,7 +363,7 @@
 
 .score-donut {
     --pct: 0;
-    --color: #6366f1;
+    --color: #264b8b;
     width: 56px;
     height: 56px;
     border-radius: 50%;

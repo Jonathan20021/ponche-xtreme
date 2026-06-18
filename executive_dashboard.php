@@ -654,7 +654,7 @@ include 'header.php';
                     {
                         label: 'Empleados Activos',
                         data: activeData,
-                        borderColor: '#22d3ee', // Cyan
+                        borderColor: '#3a5da0', // Cyan
                         backgroundColor: 'rgba(34, 211, 238, 0.1)',
                         yAxisID: 'y',
                         tension: 0.4,
@@ -719,11 +719,11 @@ include 'header.php';
                     data: [chartsData.cost_distribution.USD, chartsData.cost_distribution.DOP],
                     backgroundColor: [
                         'rgba(74, 222, 128, 0.6)', // Green
-                        'rgba(96, 165, 250, 0.6)'  // Blue
+                        'rgba(94, 124, 186, 0.6)'  // Blue
                     ],
                     borderColor: [
                         '#4ade80',
-                        '#60a5fa'
+                        '#5e7cba'
                     ],
                     borderWidth: 1
                 }]
@@ -794,8 +794,8 @@ include 'header.php';
                 datasets: [{
                     label: 'Activos',
                     data: data,
-                    backgroundColor: 'rgba(99, 102, 241, 0.6)',
-                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(58, 93, 160, 0.6)',
+                    borderColor: '#264b8b',
                     borderWidth: 1
                 }]
             },
@@ -977,7 +977,7 @@ include 'header.php';
                     {
                         label: 'Promedio QA',
                         data: avgScores,
-                        borderColor: '#38bdf8',
+                        borderColor: '#5e7cba',
                         backgroundColor: 'rgba(56, 189, 248, 0)',
                         yAxisID: 'y1',
                         borderDash: [6, 4],
@@ -996,7 +996,7 @@ include 'header.php';
                         type: 'linear',
                         display: true,
                         position: 'right',
-                        ticks: { color: '#38bdf8' },
+                        ticks: { color: '#5e7cba' },
                         grid: { drawOnChartArea: false }
                     }
                 }
@@ -1029,8 +1029,8 @@ include 'header.php';
                     {
                         label: 'Evaluaciones',
                         data: evals,
-                        backgroundColor: 'rgba(99, 102, 241, 0.6)',
-                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(58, 93, 160, 0.6)',
+                        borderColor: '#264b8b',
                         borderWidth: 1,
                         yAxisID: 'y'
                     },
@@ -1038,7 +1038,7 @@ include 'header.php';
                         label: 'Promedio QA',
                         data: avgScores,
                         backgroundColor: 'rgba(34, 211, 238, 0.3)',
-                        borderColor: '#22d3ee',
+                        borderColor: '#3a5da0',
                         borderWidth: 2,
                         type: 'line',
                         yAxisID: 'y1',
@@ -1057,7 +1057,7 @@ include 'header.php';
                         type: 'linear',
                         display: true,
                         position: 'right',
-                        ticks: { color: '#22d3ee' },
+                        ticks: { color: '#3a5da0' },
                         grid: { drawOnChartArea: false }
                     }
                 }

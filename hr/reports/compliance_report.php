@@ -137,9 +137,9 @@ $trialEmployees = $pdo->query("
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
-        .report-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 16px; padding: 1.5rem; }
+        .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
         .theme-light .report-card { background: #ffffff; border-color: rgba(148, 163, 184, 0.2); }
-        .stat-box { background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 1.25rem; }
+        .stat-box { background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%); border: 1px solid rgba(38, 75, 139, 0.2); border-radius: 12px; padding: 1.25rem; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -355,14 +355,14 @@ $trialEmployees = $pdo->query("
         <?php if (!empty($contractsByType)): ?>
         new Chart(document.getElementById('typeChart'), {
             type: 'doughnut',
-            data: { labels: <?= json_encode(array_column($contractsByType, 'contract_type')) ?>, datasets: [{ data: <?= json_encode(array_column($contractsByType, 'count')) ?>, backgroundColor: ['#14b8a6', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'] }] },
+            data: { labels: <?= json_encode(array_column($contractsByType, 'contract_type')) ?>, datasets: [{ data: <?= json_encode(array_column($contractsByType, 'count')) ?>, backgroundColor: ['#1f3f76', '#264b8b', '#f59e0b', '#6f8bbd', '#ef4444'] }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } } }
         });
         <?php endif; ?>
         <?php if (!empty($employeeStatus)): ?>
         new Chart(document.getElementById('statusChart'), {
             type: 'bar',
-            data: { labels: <?= json_encode(array_column($employeeStatus, 'employment_status')) ?>, datasets: [{ label: 'Empleados', data: <?= json_encode(array_column($employeeStatus, 'count')) ?>, backgroundColor: '#8b5cf6' }] },
+            data: { labels: <?= json_encode(array_column($employeeStatus, 'employment_status')) ?>, datasets: [{ label: 'Empleados', data: <?= json_encode(array_column($employeeStatus, 'count')) ?>, backgroundColor: '#6f8bbd' }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
         });
         <?php endif; ?>

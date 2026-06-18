@@ -353,7 +353,7 @@ $htmlReportExample = <<<'HTML'
       background: #f5f5f5; 
       padding: 15px; 
       margin: 10px 0; 
-      border-left: 4px solid #60a5fa;
+      border-left: 4px solid #5e7cba;
     }
     table { width: 100%; border-collapse: collapse; margin: 20px 0; }
     th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }

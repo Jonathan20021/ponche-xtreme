@@ -1,0 +1,209 @@
+/* =====================================================================
+   EVALLISH BPO · PORTAL DE AGENTE — Sistema de diseño premium
+   Lenguaje limpio y editorial (inspirado en Linear/Stripe): color
+   restringido, tipografía con jerarquía, profundidad sutil, columna
+   de contenido centrada. Cargado por header_agent.php → TODAS las
+   páginas del agente. Scoped a .agent-shell (no afecta admin).
+   ===================================================================== */
+
+/* ---------- Columna de contenido centrada (ancho de lectura) ---------- */
+.agent-shell {
+    /* centra ~1300px dentro del espacio tras el sidebar, conservando el margen del sidebar */
+    padding-left:  max(clamp(1.1rem, 2.4vw, 2.25rem), calc((100vw - var(--sidebar-w) - 1300px) / 2)) !important;
+    padding-right: max(clamp(1.1rem, 2.4vw, 2.25rem), calc((100vw - var(--sidebar-w) - 1300px) / 2)) !important;
+    padding-bottom: 4rem !important;
+}
+body.sidebar-collapsed .agent-shell {
+    padding-left:  max(clamp(1.1rem, 2.4vw, 2.25rem), calc((100vw - var(--sidebar-collapsed) - 1300px) / 2)) !important;
+    padding-right: max(clamp(1.1rem, 2.4vw, 2.25rem), calc((100vw - var(--sidebar-collapsed) - 1300px) / 2)) !important;
+}
+
+/* ---------- Ritmo vertical entre secciones ---------- */
+.agent-shell > section,
+.agent-shell > article,
+.agent-shell > .insight-grid,
+.agent-shell > .metric-grid { margin-bottom: 1.5rem; }
+.agent-shell > .ev-modal { margin-bottom: 0; }
+
+/* ---------- Tarjeta base: superficie limpia con profundidad sutil ---------- */
+.agent-shell .glass-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 1.6rem 1.7rem;
+    box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 22px -16px rgba(16,24,40,.22);
+    transition: box-shadow .2s ease, border-color .2s ease;
+}
+.agent-shell > section.glass-card:hover,
+.agent-shell > article.glass-card:hover { border-color: var(--border-strong); box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 18px 38px -22px rgba(16,24,40,.32); }
+
+/* ---------- Encabezados de sección: jerarquía editorial ---------- */
+.agent-shell .glass-card > header { margin-bottom: 1.35rem; }
+.agent-shell .glass-card h2 {
+    font-size: 1.1rem; font-weight: 700; letter-spacing: -.015em; color: var(--heading); line-height: 1.3;
+    display: flex; align-items: center; gap: .55rem; font-family: var(--font-display);
+}
+.agent-shell .glass-card > header p,
+.agent-shell .glass-card > header > div > p { color: var(--text-muted); font-size: .84rem; margin-top: .22rem; line-height: 1.5; }
+
+/* ---------- Cuadrículas ---------- */
+.agent-shell .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1rem; }
+.agent-shell .insight-grid { gap: 1.4rem; }
+
+/* ---------- Tarjetas métricas: calmas, refinadas, color restringido ---------- */
+.agent-shell .metric-card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.3rem 1.35rem;
+    box-shadow: 0 1px 2px rgba(16,24,40,.03);
+    transition: transform .17s ease, box-shadow .17s ease, border-color .17s ease;
+}
+.agent-shell .metric-card::before { content: none; }   /* fuera la franja arcoíris */
+.agent-shell .metric-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+.agent-shell .metric-card .metric-icon {
+    width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: .98rem; margin-bottom: 1rem;
+    color: var(--metric-end, var(--brand));
+    background: var(--surface-2);
+    background: color-mix(in srgb, var(--metric-end, var(--brand)) 12%, var(--surface));
+}
+.agent-shell .metric-card .metric-label {
+    font-size: .68rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted);
+}
+.agent-shell .metric-card .metric-value {
+    font-size: 1.8rem; font-weight: 800; letter-spacing: -.03em; line-height: 1.08; color: var(--heading);
+    margin: .4rem 0 .28rem; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; font-family: var(--font-display);
+}
+.agent-shell .metric-card .metric-sub { font-size: .76rem; color: var(--text-muted); line-height: 1.45; }
+
+/* ---------- Hero: navy con profundidad, foco claro ---------- */
+.agent-shell .dashboard-hero {
+    background: linear-gradient(140deg, #16345f 0%, #20457e 48%, #18386c 100%);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 22px;
+    padding: 2rem 2.1rem;
+    color: #fff;
+    box-shadow: 0 26px 54px -34px rgba(13,28,58,.85);
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column; gap: 1.6rem;
+}
+/* Layout interno del hero: apilado con aire, SIN solapes ("pegado") */
+.agent-shell .dashboard-hero .hero-main { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; margin: 0; }
+.agent-shell .dashboard-hero .hero-main > .space-y-2 { flex: 1; min-width: 240px; }
+.agent-shell .dashboard-hero .hero-metric-grid { margin-top: 0 !important; }
+.agent-shell .dashboard-hero .hero-range-filter { margin-top: 0 !important; display: flex; align-items: flex-end; gap: .85rem; flex-wrap: wrap; }
+.agent-shell .dashboard-hero .hero-range-filter label { display: flex; flex-direction: column; gap: .35rem; color: rgba(255,255,255,.82); font-size: .8rem; }
+.agent-shell .dashboard-hero .hero-range-filter .input-control { min-width: 170px; }
+.agent-shell .dashboard-hero::after {
+    content: ''; position: absolute; top: -50%; right: -5%; width: 440px; height: 440px;
+    background: radial-gradient(circle, rgba(118,158,234,.2), transparent 62%); pointer-events: none;
+}
+.agent-shell .dashboard-hero > * { position: relative; z-index: 1; }
+.agent-shell .dashboard-hero h1 { color: #fff !important; font-size: 1.78rem; font-weight: 800; letter-spacing: -.025em; font-family: var(--font-display); }
+.agent-shell .dashboard-hero .text-xl, .agent-shell .dashboard-hero .text-2xl { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.agent-shell .dashboard-hero .text-primary { color: #fff !important; }
+.agent-shell .dashboard-hero .text-muted { color: rgba(255,255,255,.72) !important; }
+.agent-shell .dashboard-hero .badge--info { background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.22); }
+.agent-shell .dashboard-hero .hero-metric { background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15); border-radius: 14px; }
+.agent-shell .dashboard-hero .hero-metric .metric-value,
+.agent-shell .dashboard-hero .hero-metric .text-2xl { font-variant-numeric: tabular-nums; }
+.agent-shell .dashboard-hero .input-control { background: rgba(255,255,255,.96); color: #14223e; border: 1px solid transparent; }
+.agent-shell .dashboard-hero .btn-primary { background: #fff !important; color: var(--brand-strong) !important; font-weight: 700; box-shadow: 0 6px 16px -8px rgba(0,0,0,.4); }
+.agent-shell .dashboard-hero .btn-primary:hover { background: #eef2fb !important; transform: translateY(-1px); }
+/* Anula la barra de 8px de .hero-progress del tema (evita la "línea blanca") */
+.agent-shell .dashboard-hero .hero-progress { height: auto; background: transparent; border-radius: 0; overflow: visible; }
+
+/* ---------- Tablas refinadas ---------- */
+.agent-shell .table-card { padding: 1.5rem 1.6rem; }
+.agent-shell .table-card table { width: 100%; border-collapse: collapse; }
+.agent-shell .table-card thead th {
+    font-size: .68rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--text-muted); text-align: left; padding: .7rem 1rem; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.agent-shell .table-card tbody td { padding: .92rem 1rem; border-bottom: 1px solid var(--border); color: var(--text); font-size: .9rem; vertical-align: middle; font-variant-numeric: tabular-nums; }
+.agent-shell .table-card tbody tr { transition: background .14s ease; }
+.agent-shell .table-card tbody tr:hover { background: var(--surface-2); }
+.agent-shell .table-card tbody tr:last-child td { border-bottom: none; }
+
+/* ---------- Formularios ---------- */
+.agent-shell label { font-size: .84rem; font-weight: 600; color: var(--text); }
+.agent-shell .input-control,
+.agent-shell input[type="text"], .agent-shell input[type="date"], .agent-shell input[type="number"],
+.agent-shell input[type="email"], .agent-shell input[type="time"], .agent-shell input[type="tel"],
+.agent-shell select, .agent-shell textarea {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px;
+    padding: .72rem .9rem; color: var(--text); font-size: .9rem; width: 100%;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.agent-shell .input-control:focus, .agent-shell input:focus, .agent-shell select:focus, .agent-shell textarea:focus {
+    outline: none; border-color: var(--brand); background: var(--surface); box-shadow: 0 0 0 3px rgba(38,75,139,.13);
+}
+.agent-shell textarea { resize: vertical; min-height: 92px; }
+
+/* ---------- Estados vacíos amables ---------- */
+.agent-shell .table-card td[colspan] { text-align: center; color: var(--text-muted); padding: 2.4rem 1rem; }
+.agent-shell .empty-state { text-align: center; color: var(--text-muted); padding: 2.6rem 1rem; }
+.agent-shell .empty-state .empty-icon {
+    width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 1rem; display: grid; place-items: center;
+    background: var(--surface-2); color: var(--brand); font-size: 1.35rem;
+}
+
+/* ---------- Chips de estado ---------- */
+.agent-shell .badge { border-radius: 999px; font-size: .71rem; font-weight: 700; padding: .3rem .7rem; }
+
+/* ---------- Superficies con vida (degradado sutil, no plano blanco) ---------- */
+.agent-shell .glass-card { background-image: linear-gradient(180deg, rgba(255,255,255,.6), rgba(244,247,252,.55)); }
+.agent-shell .metric-card { background-image: linear-gradient(180deg, rgba(255,255,255,.7), rgba(244,247,252,.6)); }
+.agent-shell .dashboard-hero { background-image: linear-gradient(140deg, #16345f 0%, #20457e 48%, #18386c 100%); }
+
+/* ---------- Gráfico de distribución: prominente ---------- */
+.agent-shell .chart-card canvas { max-height: 250px; }
+.agent-shell .chart-card.is-empty, .agent-shell .timeline-card { min-height: 290px; }
+
+/* ---------- Estados vacíos con icono (no texto suelto = menos "muerto") ---------- */
+.agent-shell .chart-empty, .agent-shell .timeline-empty {
+    text-align: center; color: var(--text-muted); font-size: .88rem; line-height: 1.6; padding: 2rem 1rem 1.4rem;
+}
+.agent-shell .chart-empty::before, .agent-shell .timeline-empty::before {
+    font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 1.35rem; color: var(--brand);
+    display: grid; place-items: center; width: 54px; height: 54px; margin: 0 auto 1rem; border-radius: 16px;
+    background: color-mix(in srgb, var(--brand) 10%, var(--surface-2));
+}
+.agent-shell .chart-empty::before { content: '\f200'; }      /* chart-pie */
+.agent-shell .timeline-empty::before { content: '\f017'; }   /* clock */
+
+/* ---------- Timeline de actividades refinado ---------- */
+.agent-shell .timeline { list-style: none; margin: 0; padding: .25rem 0 0; position: relative; }
+.agent-shell .timeline::before { content: ''; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+.agent-shell .timeline-item { position: relative; display: flex; gap: .9rem; padding: .25rem 0 1rem 1.6rem; }
+.agent-shell .timeline-dot { position: absolute; left: 0; top: .45rem; width: 16px; height: 16px; border-radius: 50%; background: var(--dot-color, var(--brand)); box-shadow: 0 0 0 3px var(--surface), 0 0 0 4px var(--border); }
+.agent-shell .timeline-title { display: flex; align-items: center; gap: .5rem; font-weight: 600; color: var(--text); font-size: .92rem; }
+.agent-shell .timeline-time { font-size: .8rem; color: var(--text-muted); margin-top: .15rem; }
+
+/* ---------- Grid de foco: gráfico interactivo PROMINENTE arriba ---------- */
+.agent-shell .agent-focus-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 1.4rem; }
+.agent-shell .agent-focus-grid .chart-card { min-height: 330px; display: flex; flex-direction: column; }
+.agent-shell .agent-focus-grid .chart-card canvas { flex: 1; max-height: 290px; }
+.agent-shell .agent-focus-grid .timeline-card { min-height: 330px; }
+@media (max-width: 960px) { .agent-shell .agent-focus-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Desglose por actividad: tira compacta y ordenada (no 10 cajas grandes) ---------- */
+.agent-shell .metric-section__head { margin-bottom: 1rem; }
+.agent-shell .metric-section__head h2 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.015em; color: var(--heading); font-family: var(--font-display); }
+.agent-shell .metric-section__head p { color: var(--text-muted); font-size: .84rem; margin-top: .2rem; }
+.agent-shell .metric-section .metric-grid { grid-template-columns: repeat(auto-fill, minmax(162px, 1fr)); gap: .85rem; }
+.agent-shell .metric-section .metric-card { padding: 1.05rem 1.1rem; border-radius: 14px; }
+.agent-shell .metric-section .metric-card .metric-icon { width: 34px; height: 34px; margin-bottom: .65rem; font-size: .85rem; border-radius: 10px; }
+.agent-shell .metric-section .metric-card .metric-value { font-size: 1.35rem; margin: .25rem 0 .15rem; }
+.agent-shell .metric-section .metric-card .metric-sub { font-size: .72rem; }
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 768px) {
+    .agent-shell { padding-left: 1rem !important; padding-right: 1rem !important; }
+    .agent-shell .glass-card { padding: 1.25rem 1.2rem; border-radius: 16px; }
+    .agent-shell .dashboard-hero { padding: 1.55rem 1.4rem; border-radius: 18px; }
+    .agent-shell .dashboard-hero h1 { font-size: 1.42rem; }
+    .agent-shell .metric-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .8rem; }
+}

@@ -58,7 +58,7 @@
                         <p class="text-slate-400 text-sm mb-1">Total</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['total'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <i class="fas fa-file-medical text-white text-xl"></i>
                     </div>
                 </div>
@@ -94,7 +94,7 @@
                         <p class="text-slate-400 text-sm mb-1">Activas</p>
                         <h3 class="text-3xl font-bold text-white"><?= $stats['active'] ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-user-injured text-white text-xl"></i>
                     </div>
                 </div>
@@ -214,7 +214,7 @@
                                     <td class="py-3 px-4">
                                         <div class="flex items-center gap-3">
                                             <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" 
-                                                 style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                                                 style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                                                 <?= strtoupper(substr($leave['first_name'], 0, 1) . substr($leave['last_name'], 0, 1)) ?>
                                             </div>
                                             <div>
@@ -292,7 +292,7 @@
                                                 </button>
                                             <?php endif; ?>
                                             <?php if (in_array($leave['status'], ['APPROVED', 'EXTENDED'])): ?>
-                                                <button onclick="extendLeave(<?= $leave['id'] ?>, '<?= $leave['end_date'] ?>')" class="btn-sm" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);" title="Extender">
+                                                <button onclick="extendLeave(<?= $leave['id'] ?>, '<?= $leave['end_date'] ?>')" class="btn-sm" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);" title="Extender">
                                                     <i class="fas fa-plus"></i>
                                                 </button>
                                             <?php endif; ?>

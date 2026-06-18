@@ -89,7 +89,7 @@ foreach ($birthdays as $birthday) {
         'type' => 'birthday',
         'title' => $birthday['first_name'] . ' ' . $birthday['last_name'],
         'icon' => 'fa-birthday-cake',
-        'color' => '#ec4899',
+        'color' => '#9db1d2',
         'data' => $birthday
     ];
 }
@@ -110,7 +110,7 @@ foreach ($permissionsList as $permission) {
                 'title' => $permission['first_name'] . ' ' . $permission['last_name'],
                 'subtitle' => str_replace('_', ' ', ucwords(strtolower($permission['request_type']))),
                 'icon' => 'fa-clipboard-list',
-                'color' => '#8b5cf6',
+                'color' => '#6f8bbd',
                 'data' => $permission
             ];
         }
@@ -133,7 +133,7 @@ foreach ($vacationsList as $vacation) {
                 'title' => $vacation['first_name'] . ' ' . $vacation['last_name'],
                 'subtitle' => 'Vacaciones',
                 'icon' => 'fa-umbrella-beach',
-                'color' => '#06b6d4',
+                'color' => '#3a5da0',
                 'data' => $vacation
             ];
         }
@@ -148,10 +148,10 @@ foreach ($medicalLeavesList as $medicalLeave) {
     // Define colors and labels by leave type
     $leaveTypeInfo = [
         'MEDICAL' => ['label' => 'Licencia Médica', 'color' => '#ef4444', 'icon' => 'fa-notes-medical'],
-        'MATERNITY' => ['label' => 'Maternidad', 'color' => '#ec4899', 'icon' => 'fa-baby'],
-        'PATERNITY' => ['label' => 'Paternidad', 'color' => '#3b82f6', 'icon' => 'fa-baby-carriage'],
+        'MATERNITY' => ['label' => 'Maternidad', 'color' => '#9db1d2', 'icon' => 'fa-baby'],
+        'PATERNITY' => ['label' => 'Paternidad', 'color' => '#264b8b', 'icon' => 'fa-baby-carriage'],
         'ACCIDENT' => ['label' => 'Accidente', 'color' => '#f97316', 'icon' => 'fa-ambulance'],
-        'SURGERY' => ['label' => 'Cirugía', 'color' => '#a855f7', 'icon' => 'fa-user-injured'],
+        'SURGERY' => ['label' => 'Cirugía', 'color' => '#92a9da', 'icon' => 'fa-user-injured'],
         'CHRONIC' => ['label' => 'Crónica', 'color' => '#eab308', 'icon' => 'fa-heartbeat']
     ];
     
@@ -263,17 +263,17 @@ if ($nextMonth > 12) {
     <style>
         .calendar-cell {
             min-height: 120px;
-            background: rgba(30, 41, 59, 0.3);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             transition: all 0.3s ease;
         }
         .calendar-cell:hover {
-            background: rgba(30, 41, 59, 0.5);
-            border-color: rgba(99, 102, 241, 0.3);
+            background: var(--surface);
+            border-color: rgba(58, 93, 160, 0.3);
         }
         .calendar-cell.today {
-            border: 2px solid #6366f1;
-            background: rgba(99, 102, 241, 0.1);
+            border: 2px solid #3a5da0;
+            background: rgba(58, 93, 160, 0.1);
         }
         .calendar-cell.other-month {
             opacity: 0.4;
@@ -295,26 +295,26 @@ if ($nextMonth > 12) {
             align-items: center;
             gap: 8px;
             padding: 8px 12px;
-            background: rgba(30, 41, 59, 0.5);
+            background: var(--surface);
             border-radius: 8px;
         }
         
         /* Light Theme */
         .theme-light .calendar-cell {
             background: rgba(255, 255, 255, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.25);
+            border: 1px solid var(--border);
         }
         .theme-light .calendar-cell:hover {
             background: rgba(255, 255, 255, 0.9);
-            border-color: rgba(99, 102, 241, 0.4);
+            border-color: rgba(58, 93, 160, 0.4);
         }
         .theme-light .calendar-cell.today {
-            border: 2px solid #6366f1;
-            background: rgba(99, 102, 241, 0.08);
+            border: 2px solid #3a5da0;
+            background: rgba(58, 93, 160, 0.08);
         }
         .theme-light .legend-item {
             background: rgba(255, 255, 255, 0.7);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            border: 1px solid var(--border);
         }
     </style>
 </head>
@@ -366,15 +366,15 @@ if ($nextMonth > 12) {
         <div class="glass-card mb-6">
             <div class="flex flex-wrap gap-4">
                 <div class="legend-item">
-                    <i class="fas fa-birthday-cake" style="color: #ec4899;"></i>
+                    <i class="fas fa-birthday-cake" style="color: #9db1d2;"></i>
                     <span class="text-white text-sm">Cumpleaños</span>
                 </div>
                 <div class="legend-item">
-                    <i class="fas fa-clipboard-list" style="color: #8b5cf6;"></i>
+                    <i class="fas fa-clipboard-list" style="color: #6f8bbd;"></i>
                     <span class="text-white text-sm">Permisos</span>
                 </div>
                 <div class="legend-item">
-                    <i class="fas fa-umbrella-beach" style="color: #06b6d4;"></i>
+                    <i class="fas fa-umbrella-beach" style="color: #3a5da0;"></i>
                     <span class="text-white text-sm">Vacaciones</span>
                 </div>
                 <div class="legend-item">
@@ -382,7 +382,7 @@ if ($nextMonth > 12) {
                     <span class="text-white text-sm">Licencias Médicas</span>
                 </div>
                 <div class="legend-item">
-                    <i class="fas fa-calendar-check" style="color: #6366f1;"></i>
+                    <i class="fas fa-calendar-check" style="color: #3a5da0;"></i>
                     <span class="text-white text-sm">Eventos Personalizados</span>
                 </div>
             </div>
@@ -642,16 +642,16 @@ if ($nextMonth > 12) {
                     <div class="form-group">
                         <label>Color</label>
                         <div class="color-picker-wrapper">
-                            <div class="color-option selected" style="background: #6366f1;" data-color="#6366f1" onclick="selectColor(this)"></div>
-                            <div class="color-option" style="background: #ec4899;" data-color="#ec4899" onclick="selectColor(this)"></div>
-                            <div class="color-option" style="background: #8b5cf6;" data-color="#8b5cf6" onclick="selectColor(this)"></div>
-                            <div class="color-option" style="background: #06b6d4;" data-color="#06b6d4" onclick="selectColor(this)"></div>
+                            <div class="color-option selected" style="background: #3a5da0;" data-color="#3a5da0" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #9db1d2;" data-color="#9db1d2" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #6f8bbd;" data-color="#6f8bbd" onclick="selectColor(this)"></div>
+                            <div class="color-option" style="background: #3a5da0;" data-color="#3a5da0" onclick="selectColor(this)"></div>
                             <div class="color-option" style="background: #10b981;" data-color="#10b981" onclick="selectColor(this)"></div>
                             <div class="color-option" style="background: #f59e0b;" data-color="#f59e0b" onclick="selectColor(this)"></div>
                             <div class="color-option" style="background: #ef4444;" data-color="#ef4444" onclick="selectColor(this)"></div>
                             <div class="color-option" style="background: #64748b;" data-color="#64748b" onclick="selectColor(this)"></div>
                         </div>
-                        <input type="hidden" id="eventColor" name="color" value="#6366f1">
+                        <input type="hidden" id="eventColor" name="color" value="#3a5da0">
                     </div>
                 </form>
             </div>

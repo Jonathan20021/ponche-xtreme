@@ -168,7 +168,7 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
             <div class="glass-card mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white" 
-                         style="background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);">
+                         style="background: linear-gradient(135deg, #3a5da0 0%, #152849 100%);">
                         <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
                     </div>
                     <div class="flex-1">

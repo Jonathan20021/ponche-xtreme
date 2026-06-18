@@ -566,7 +566,7 @@ if (!function_exists('generatePayrollReportHTML')) {
   .header p { margin: 8px 0 0 0; font-size: 15px; opacity: 0.95; }
   .stats-grid { display: table; width: 100%; margin: 18px 0; border-spacing: 10px; }
   .stat-card { display: table-cell; background: #fff; padding: 18px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-  .stat-card.primary  { border-top: 4px solid #0ea5e9; }
+  .stat-card.primary  { border-top: 4px solid #264b8b; }
   .stat-card.success  { border-top: 4px solid #10b981; }
   .stat-card.warning  { border-top: 4px solid #f59e0b; }
   .stat-card.muted    { border-top: 4px solid #64748b; }
@@ -584,7 +584,7 @@ if (!function_exists('generatePayrollReportHTML')) {
   tbody tr:nth-child(even) { background-color: #fafafa; }
   td.num { font-family: 'Courier New', monospace; white-space: nowrap; text-align: right; }
   .muted { color: #888; font-size: 11px; }
-  .attachment-note { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 12px 16px; border-radius: 8px; font-size: 14px; margin: 14px 0; }
+  .attachment-note { background: #eff6ff; border: 1px solid #bfdbfe; color: #1f3f76; padding: 12px 16px; border-radius: 8px; font-size: 14px; margin: 14px 0; }
   .no-data { text-align: center; padding: 20px; color: #666; font-style: italic; }
   .footer { text-align: center; padding: 18px; color: #777; font-size: 12px; margin-top: 20px; }
 </style>

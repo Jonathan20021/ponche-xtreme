@@ -19,9 +19,9 @@ include __DIR__ . '/../header.php';
 
 <style>
 :root {
-    --ai-primary: #2563eb;
-    --ai-primary-hover: #1d4ed8;
-    --ai-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    --ai-primary: #1f3f76;
+    --ai-primary-hover: #152849;
+    --ai-gradient: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
     --ai-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     --ai-shadow-lg: 0 10px 25px rgba(37, 99, 235, 0.15);
 }

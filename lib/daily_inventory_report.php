@@ -578,16 +578,16 @@ if (!function_exists('generateInventoryReportHTML')) {
 <style>
   body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; line-height: 1.5; }
   .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  .header { background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
+  .header { background: linear-gradient(135deg, #264b8b 0%, #0369a1 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
   .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
   .header p { margin: 8px 0 0 0; font-size: 15px; opacity: 0.95; }
   .stats-grid { display: table; width: 100%; margin: 18px 0; border-spacing: 10px; }
   .stat-card { display: table-cell; background: #fff; padding: 16px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-  .stat-card.primary  { border-top: 4px solid #0ea5e9; }
+  .stat-card.primary  { border-top: 4px solid #264b8b; }
   .stat-card.success  { border-top: 4px solid #10b981; }
   .stat-card.warn     { border-top: 4px solid #f59e0b; }
   .stat-card.danger   { border-top: 4px solid #ef4444; }
-  .stat-card.info     { border-top: 4px solid #6366f1; }
+  .stat-card.info     { border-top: 4px solid #3a5da0; }
   .stat-card.muted    { border-top: 4px solid #64748b; }
   .stat-number { font-size: 26px; font-weight: 700; margin: 8px 0 0 0; }
   .stat-sub { font-size: 12px; color: #666; margin-top: 4px; }
@@ -596,9 +596,9 @@ if (!function_exists('generateInventoryReportHTML')) {
   .ai-badge { display: inline-block; background: #f59e0b; color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 10px; }
   .ai-body { color: #333; font-size: 14px; white-space: pre-wrap; }
   .section { background: #fff; margin: 18px 0; padding: 22px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-  .section h2 { margin: 0 0 14px 0; font-size: 18px; border-bottom: 2px solid #0ea5e9; padding-bottom: 8px; }
+  .section h2 { margin: 0 0 14px 0; font-size: 18px; border-bottom: 2px solid #264b8b; padding-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead { background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); }
+  thead { background: linear-gradient(135deg, #264b8b 0%, #0369a1 100%); }
   th { color: #fff; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 12px; }
   td { padding: 10px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
   tbody tr:nth-child(even) { background-color: #fafafa; }
@@ -608,7 +608,7 @@ if (!function_exists('generateInventoryReportHTML')) {
   .muted { color: #888; font-size: 11px; }
   .muted-small { color: #666; font-size: 12px; margin-bottom: 8px; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #fff; }
-  .badge-info     { background: #6366f1; }
+  .badge-info     { background: #3a5da0; }
   .badge-warn     { background: #f59e0b; }
   .badge-danger   { background: #ef4444; }
   .badge-critical { background: #7f1d1d; }

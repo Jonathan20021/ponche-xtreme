@@ -91,15 +91,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
         position: fixed; inset: 0; z-index: -1; pointer-events: none;
         background:
             radial-gradient(ellipse 700px 400px at 8% -5%, rgba(16,185,129,.16), transparent 55%),
-            radial-gradient(ellipse 600px 500px at 95% 0%, rgba(59,130,246,.13), transparent 55%),
-            radial-gradient(ellipse 700px 400px at 50% 110%, rgba(168,85,247,.10), transparent 50%);
+            radial-gradient(ellipse 600px 500px at 95% 0%, rgba(38, 75, 139,.13), transparent 55%),
+            radial-gradient(ellipse 700px 400px at 50% 110%, rgba(146, 169, 210,.10), transparent 50%);
     }
     .loan-mono { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: -0.02em; }
 
     /* ---------- HERO ---------- */
     .loan-hero {
-        background: linear-gradient(135deg, rgba(16,185,129,.22) 0%, rgba(15,23,42,.5) 45%, rgba(59,130,246,.2) 100%);
-        border: 1px solid rgba(148,163,184,.22);
+        background: linear-gradient(135deg, rgba(16,185,129,.22) 0%, var(--surface-2) 45%, rgba(38, 75, 139,.2) 100%);
+        border: 1px solid var(--border);
         border-radius: 1.25rem;
         padding: 1.75rem 2rem;
         position: relative;
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     }
     .loan-hero h1 {
         font-size: 2.1rem; font-weight: 800;
-        background: linear-gradient(135deg, #f1f5f9, #94a3b8);
+        background: linear-gradient(135deg, #13326b, #2b5199);
         -webkit-background-clip: text; background-clip: text; color: transparent;
         line-height: 1.1; letter-spacing: -0.03em;
     }
@@ -138,14 +138,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
 
     /* ---------- PANEL ---------- */
     .panel-card {
-        background: linear-gradient(135deg, rgba(15,23,42,.72), rgba(15,23,42,.45));
-        border: 1px solid rgba(148,163,184,.14);
+        background: linear-gradient(135deg, var(--surface-2), var(--surface-2));
+        border: 1px solid var(--border);
         border-radius: 1.1rem;
         padding: 1.5rem;
         backdrop-filter: blur(10px);
     }
     .panel-title {
-        font-size: 1rem; font-weight: 700; color: white;
+        font-size: 1rem; font-weight: 700; color: var(--text);
         display: flex; align-items: center; gap: .6rem;
         margin-bottom: 1.1rem;
     }
@@ -159,8 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
 
     /* ---------- EMPLOYEE TILE ---------- */
     .emp-tile {
-        background: linear-gradient(135deg, rgba(16,185,129,.08), rgba(15,23,42,.4));
-        border: 1px solid rgba(148,163,184,.15);
+        background: linear-gradient(135deg, rgba(16,185,129,.08), var(--surface-2));
+        border: 1px solid var(--border);
         border-radius: .85rem;
         padding: 1rem 1.1rem;
     }
@@ -169,10 +169,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
         color: #94a3b8; text-transform: uppercase; letter-spacing: .1em;
         margin-bottom: .3rem;
     }
-    .emp-tile .val { color: white; font-weight: 600; font-size: .92rem; }
+    .emp-tile .val { color: var(--text); font-weight: 600; font-size: .92rem; }
     .emp-avatar {
         width: 56px; height: 56px; border-radius: 50%;
-        background: linear-gradient(135deg, #10b981, #06b6d4);
+        background: linear-gradient(135deg, #10b981, #3a5da0);
         display: flex; align-items: center; justify-content: center;
         color: white; font-weight: 700; font-size: 1.2rem;
         box-shadow: 0 8px 20px -6px rgba(16,185,129,.45);
@@ -182,7 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     .field-label {
         display: flex; align-items: center; gap: .5rem;
         font-size: .75rem; font-weight: 600;
-        color: #cbd5e1; text-transform: uppercase; letter-spacing: .06em;
+        color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em;
         margin-bottom: .5rem;
     }
     .field-label .field-icon {
@@ -194,18 +194,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     .field-label .req { color: #fbbf24; font-weight: 800; }
     .input-control {
         width: 100%;
-        background: rgba(15,23,42,.7);
-        border: 1px solid rgba(148,163,184,.22);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
         border-radius: .65rem;
         padding: .75rem .9rem;
-        color: white;
+        color: var(--text);
         font-size: .95rem;
         transition: all .2s ease;
     }
     .input-control:focus {
         outline: none;
         border-color: #10b981;
-        background: rgba(15,23,42,.85);
+        background: var(--surface-2);
         box-shadow: 0 0 0 3px rgba(16,185,129,.18);
     }
     .input-control:hover:not(:focus) { border-color: rgba(148,163,184,.4); }
@@ -230,19 +230,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     .type-info {
         margin-top: .75rem;
         padding: .85rem 1rem;
-        background: linear-gradient(135deg, rgba(16,185,129,.1), rgba(15,23,42,.6));
+        background: linear-gradient(135deg, rgba(16,185,129,.1), var(--surface-2));
         border: 1px solid rgba(16,185,129,.25);
         border-radius: .65rem;
         font-size: .82rem;
-        color: #cbd5e1;
+        color: var(--text);
     }
     .type-info-grid {
         display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
         gap: .75rem; margin-top: .5rem;
     }
     .type-info-cell {
-        background: rgba(15,23,42,.5);
-        border: 1px solid rgba(148,163,184,.12);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
         border-radius: .5rem; padding: .5rem .7rem;
     }
     .type-info-cell .lbl { font-size: .62rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }
@@ -252,26 +252,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     .check-card {
         display: flex; align-items: flex-start; gap: .85rem;
         padding: 1rem 1.1rem;
-        background: rgba(15,23,42,.55);
-        border: 1px solid rgba(148,163,184,.18);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
         border-radius: .85rem;
         cursor: pointer;
         transition: all .2s ease;
     }
-    .check-card:hover { border-color: rgba(16,185,129,.4); background: rgba(15,23,42,.7); }
+    .check-card:hover { border-color: rgba(16,185,129,.4); background: var(--surface-2); }
     .check-card input[type=checkbox] {
         width: 20px; height: 20px;
         accent-color: #10b981;
         flex-shrink: 0; margin-top: 2px;
     }
     .check-card-text { flex: 1; }
-    .check-card-text .title { color: white; font-weight: 600; font-size: .92rem; }
+    .check-card-text .title { color: var(--text); font-weight: 600; font-size: .92rem; }
     .check-card-text .sub { color: #94a3b8; font-size: .78rem; margin-top: .2rem; }
 
     /* ---------- CONSENT ---------- */
     .consent-card {
-        background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(168,85,247,.05));
-        border: 1px solid rgba(59,130,246,.3);
+        background: linear-gradient(135deg, rgba(38, 75, 139,.1), rgba(146, 169, 210,.05));
+        border: 1px solid rgba(38, 75, 139,.3);
         border-radius: .9rem;
         padding: 1.1rem 1.2rem;
         position: relative;
@@ -281,35 +281,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
         content: '\f3ed';
         font-family: 'Font Awesome 6 Free'; font-weight: 900;
         position: absolute; right: -10px; bottom: -10px;
-        font-size: 6rem; color: rgba(59,130,246,.06);
+        font-size: 6rem; color: rgba(38, 75, 139,.06);
     }
     .consent-card .title-row {
         display: flex; align-items: center; gap: .6rem; margin-bottom: .6rem;
     }
     .consent-card .shield {
         width: 32px; height: 32px; border-radius: .5rem;
-        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        background: linear-gradient(135deg, #264b8b, #152849);
         color: white; display: flex; align-items: center; justify-content: center;
         flex-shrink: 0;
     }
     .consent-card .legal-note {
-        font-size: .82rem; color: #cbd5e1; line-height: 1.55;
+        font-size: .82rem; color: var(--text); line-height: 1.55;
     }
-    .consent-card .legal-note strong { color: white; }
-    .consent-card .legal-note .law { color: #93c5fd; font-weight: 700; }
+    .consent-card .legal-note strong { color: var(--text); }
+    .consent-card .legal-note .law { color: #9db1d2; font-weight: 700; }
 
     /* ---------- BUTTONS ---------- */
     .btn-cancel {
         padding: .75rem 1.25rem;
-        background: rgba(15,23,42,.6);
-        border: 1px solid rgba(148,163,184,.25);
-        color: #cbd5e1; font-weight: 600;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        color: var(--text); font-weight: 600;
         border-radius: .7rem;
         transition: all .2s ease;
         text-decoration: none;
         display: inline-flex; align-items: center; gap: .5rem;
     }
-    .btn-cancel:hover { background: rgba(15,23,42,.85); color: white; }
+    .btn-cancel:hover { background: var(--surface-2); color: var(--text); }
 
     .btn-submit {
         padding: .85rem 1.75rem;
@@ -330,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
         position: sticky; top: 1.5rem;
         background:
             radial-gradient(ellipse 300px 200px at 90% 0%, rgba(16,185,129,.15), transparent 65%),
-            linear-gradient(135deg, rgba(15,23,42,.85), rgba(15,23,42,.6));
+            linear-gradient(135deg, var(--surface-2), var(--surface-2));
         border: 1px solid rgba(16,185,129,.25);
         border-radius: 1.1rem;
         padding: 1.5rem;
@@ -343,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     }
     .calc-row:last-child { border-bottom: 0; }
     .calc-row .lbl { font-size: .78rem; color: #94a3b8; }
-    .calc-row .val { font-weight: 700; color: white; font-family: 'JetBrains Mono', monospace; }
+    .calc-row .val { font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace; }
     .calc-highlight {
         margin-top: 1rem; padding: 1.1rem 1.2rem;
         background: linear-gradient(135deg, rgba(16,185,129,.18), rgba(6,182,212,.08));
@@ -355,7 +355,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     .calc-highlight .val {
         font-family: 'JetBrains Mono', monospace;
         font-size: 1.85rem; font-weight: 800;
-        background: linear-gradient(135deg, #6ee7b7, #06b6d4);
+        background: linear-gradient(135deg, #6ee7b7, #3a5da0);
         -webkit-background-clip: text; background-clip: text; color: transparent;
         margin-top: .15rem;
         letter-spacing: -0.03em;
@@ -392,12 +392,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
         gap: .85rem; margin-top: 1.5rem;
     }
     .success-cell {
-        background: rgba(15,23,42,.6);
-        border: 1px solid rgba(148,163,184,.15);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
         border-radius: .75rem; padding: .9rem;
     }
     .success-cell .lbl { font-size: .65rem; text-transform: uppercase; letter-spacing: .1em; color: #94a3b8; font-weight: 700; }
-    .success-cell .val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: white; font-size: 1rem; margin-top: .25rem; }
+    .success-cell .val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); font-size: 1rem; margin-top: .25rem; }
 
     @media (max-width: 1024px) {
         .calc-panel { position: static; }
@@ -438,13 +438,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
     </div>
 
     <?php if (isset($errorBootstrap)): ?>
-        <div class="panel-card border-l-4 mb-6" style="border-color:#f43f5e; background: linear-gradient(135deg, rgba(244,63,94,.1), rgba(15,23,42,.6));">
+        <div class="panel-card border-l-4 mb-6" style="border-color:#f43f5e; background: linear-gradient(135deg, rgba(244,63,94,.1), var(--surface-2));">
             <p class="text-rose-300 flex items-center gap-2">
                 <i class="fas fa-circle-exclamation"></i><?= htmlspecialchars($errorBootstrap) ?>
             </p>
         </div>
     <?php elseif ($flash && $flash['type'] === 'error'): ?>
-        <div class="panel-card border-l-4 mb-6" style="border-color:#f43f5e; background: linear-gradient(135deg, rgba(244,63,94,.1), rgba(15,23,42,.6));">
+        <div class="panel-card border-l-4 mb-6" style="border-color:#f43f5e; background: linear-gradient(135deg, rgba(244,63,94,.1), var(--surface-2));">
             <p class="text-rose-300 flex items-center gap-2">
                 <i class="fas fa-circle-exclamation"></i><?= htmlspecialchars($flash['msg']) ?>
             </p>
@@ -655,7 +655,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $employee && isset($_POST['action']
                 <div class="lg:col-span-1">
                     <div class="calc-panel">
                         <h3 class="panel-title" style="margin-bottom:.5rem;">
-                            <span class="num" style="background: linear-gradient(135deg, #06b6d4, #0891b2);"><i class="fas fa-calculator"></i></span>
+                            <span class="num" style="background: linear-gradient(135deg, #3a5da0, #1f3f76);"><i class="fas fa-calculator"></i></span>
                             Resumen
                         </h3>
                         <p class="text-xs text-slate-400 mb-4">Calculo estimado en tiempo real. El monto final lo determina finanzas.</p>

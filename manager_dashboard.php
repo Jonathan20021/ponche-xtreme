@@ -182,38 +182,38 @@ include 'header.php';
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --text-muted: #64748b;
-    --punch-status-bg: rgba(15, 23, 42, 0.6);
-    --stat-badge-bg: rgba(99, 102, 241, 0.1);
-    --stat-badge-border: rgba(99, 102, 241, 0.2);
-    --stat-badge-text: #a5b4fc;
-    --filter-btn-bg: rgba(30, 41, 59, 0.8);
+    --punch-status-bg: var(--surface);
+    --stat-badge-bg: rgba(58, 93, 160, 0.1);
+    --stat-badge-border: rgba(58, 93, 160, 0.2);
+    --stat-badge-text: #92a9da;
+    --filter-btn-bg: var(--surface-2);
     --filter-btn-border: rgba(148, 163, 184, 0.2);
     --filter-btn-text: #94a3b8;
-    --filter-btn-active-bg: rgba(99, 102, 241, 0.2);
-    --filter-btn-active-border: #6366f1;
-    --filter-btn-active-text: #a5b4fc;
+    --filter-btn-active-bg: rgba(58, 93, 160, 0.2);
+    --filter-btn-active-border: #264b8b;
+    --filter-btn-active-text: #92a9da;
     --summary-card-bg: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
-    --last-update-bg: rgba(15, 23, 42, 0.4);
+    --last-update-bg: var(--surface);
 }
 
 .theme-light {
     --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
     --border-color: rgba(203, 213, 225, 0.5);
-    --border-hover: rgba(99, 102, 241, 0.4);
+    --border-hover: rgba(58, 93, 160, 0.4);
     --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.1);
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --text-muted: #64748b;
     --punch-status-bg: rgba(248, 250, 252, 0.8);
-    --stat-badge-bg: rgba(99, 102, 241, 0.08);
-    --stat-badge-border: rgba(99, 102, 241, 0.2);
-    --stat-badge-text: #4f46e5;
+    --stat-badge-bg: rgba(58, 93, 160, 0.08);
+    --stat-badge-border: rgba(58, 93, 160, 0.2);
+    --stat-badge-text: #1f3f76;
     --filter-btn-bg: rgba(255, 255, 255, 0.9);
     --filter-btn-border: rgba(203, 213, 225, 0.5);
     --filter-btn-text: #475569;
-    --filter-btn-active-bg: rgba(99, 102, 241, 0.1);
-    --filter-btn-active-border: #6366f1;
-    --filter-btn-active-text: #4f46e5;
+    --filter-btn-active-bg: rgba(58, 93, 160, 0.1);
+    --filter-btn-active-border: #264b8b;
+    --filter-btn-active-text: #1f3f76;
     --summary-card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
     --last-update-bg: rgba(248, 250, 252, 0.6);
 }
@@ -229,7 +229,7 @@ include 'header.php';
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--punch-color-start, #6366f1), var(--punch-color-end, #4338ca));
+    background: linear-gradient(135deg, var(--punch-color-start, #264b8b), var(--punch-color-end, #152849));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -368,7 +368,7 @@ include 'header.php';
 }
 
 .theme-light .summary-value.text-blue-400 {
-    color: #1e40af !important;
+    color: #1f3f76 !important;
 }
 
 .theme-light .summary-value.text-orange-400 {
@@ -376,7 +376,7 @@ include 'header.php';
 }
 
 .theme-light .summary-value.text-purple-400 {
-    color: #7c3aed !important;
+    color: #5e7cba !important;
 }
 
 /* Modal Styles */
@@ -597,8 +597,8 @@ include 'header.php';
 .loading-spinner {
     width: 50px;
     height: 50px;
-    border: 4px solid rgba(99, 102, 241, 0.2);
-    border-top-color: #6366f1;
+    border: 4px solid rgba(58, 93, 160, 0.2);
+    border-top-color: #264b8b;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -732,9 +732,9 @@ include 'header.php';
 }
 
 .role-badge.supervisor {
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(111, 139, 189, 0.2);
     color: #a78bfa;
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(111, 139, 189, 0.3);
 }
 
 .role-badge.manager {
@@ -744,9 +744,9 @@ include 'header.php';
 }
 
 .role-badge.hr {
-    background: rgba(59, 130, 246, 0.2);
-    color: #93c5fd;
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: rgba(38, 75, 139, 0.2);
+    color: #9db1d2;
+    border: 1px solid rgba(38, 75, 139, 0.3);
 }
 
 .role-badge.developer {
@@ -756,18 +756,18 @@ include 'header.php';
 }
 
 .theme-light .role-badge.supervisor {
-    background: rgba(139, 92, 246, 0.15);
-    color: #7c3aed;
+    background: rgba(111, 139, 189, 0.15);
+    color: #5e7cba;
 }
 
 .theme-light .role-badge.manager {
     background: rgba(236, 72, 153, 0.15);
-    color: #db2777;
+    color: #1f3f76;
 }
 
 .theme-light .role-badge.hr {
-    background: rgba(59, 130, 246, 0.15);
-    color: #2563eb;
+    background: rgba(38, 75, 139, 0.15);
+    color: #1f3f76;
 }
 
 .theme-light .role-badge.developer {
@@ -813,8 +813,8 @@ include 'header.php';
             $managerPunchTypes = [
                 ['slug' => 'ENTRY', 'label' => 'Entrada', 'icon' => 'fas fa-sign-in-alt', 'color_start' => '#10b981', 'color_end' => '#059669'],
                 ['slug' => 'BREAK', 'label' => 'Break', 'icon' => 'fas fa-coffee', 'color_start' => '#f59e0b', 'color_end' => '#d97706'],
-                ['slug' => 'LUNCH', 'label' => 'Almuerzo', 'icon' => 'fas fa-utensils', 'color_start' => '#3b82f6', 'color_end' => '#2563eb'],
-                ['slug' => 'BANO', 'label' => 'Baño', 'icon' => 'fas fa-restroom', 'color_start' => '#8b5cf6', 'color_end' => '#7c3aed'],
+                ['slug' => 'LUNCH', 'label' => 'Almuerzo', 'icon' => 'fas fa-utensils', 'color_start' => '#264b8b', 'color_end' => '#1f3f76'],
+                ['slug' => 'BANO', 'label' => 'Baño', 'icon' => 'fas fa-restroom', 'color_start' => '#6f8bbd', 'color_end' => '#5e7cba'],
                 ['slug' => 'EXIT', 'label' => 'Salida', 'icon' => 'fas fa-sign-out-alt', 'color_start' => '#ef4444', 'color_end' => '#dc2626'],
             ];
             

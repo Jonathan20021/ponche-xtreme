@@ -7,10 +7,12 @@ if (!function_exists('getQualityDbConnection')) {
             return $pdo;
         }
 
-        $host = '192.185.46.27';
-        $dbname = 'hhempeos_calidad';
-        $user = 'hhempeos_calidad';
-        $pass = 'Evallish.2026';
+        $__sec = @include __DIR__ . '/config/secrets.php';
+        if (!is_array($__sec)) { $__sec = []; }
+        $host = getenv('QUALITY_DB_HOST') ?: ($__sec['db_quality']['host'] ?? '');
+        $dbname = getenv('QUALITY_DB_NAME') ?: ($__sec['db_quality']['name'] ?? '');
+        $user = getenv('QUALITY_DB_USER') ?: ($__sec['db_quality']['user'] ?? '');
+        $pass = getenv('QUALITY_DB_PASS') ?: ($__sec['db_quality']['pass'] ?? '');
 
         try {
             $pdo = new PDO(

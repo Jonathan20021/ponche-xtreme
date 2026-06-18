@@ -24,23 +24,28 @@ $successMsg = null;
 $errorMsg = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vacation'])) {
-    $startDate = $_POST['start_date'];
-    $endDate = $_POST['end_date'];
-    $days = (int)$_POST['days_requested'];
-    $reason = trim($_POST['reason']);
-    
-    if ($days < 1) {
+    $startDate = trim($_POST['start_date'] ?? '');
+    $endDate = trim($_POST['end_date'] ?? '');
+    $days = (int) ($_POST['days_requested'] ?? 0);
+    $reason = trim($_POST['reason'] ?? '');
+
+    if ($startDate === '' || $endDate === '') {
+        $errorMsg = "Debes indicar la fecha de inicio y de fin.";
+    } elseif ($endDate < $startDate) {
+        $errorMsg = "La fecha de fin no puede ser anterior a la de inicio.";
+    } elseif ($days < 1) {
         $errorMsg = "Debes solicitar al menos 1 día de vacaciones.";
     } else {
         try {
             $insertStmt = $pdo->prepare("
-                INSERT INTO vacation_requests (employee_id, start_date, end_date, days_requested, reason, status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'PENDING', NOW())
+                INSERT INTO vacation_requests (employee_id, user_id, start_date, end_date, total_days, reason, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'PENDING', NOW())
             ");
-            $insertStmt->execute([$employeeId, $startDate, $endDate, $days, $reason]);
+            $insertStmt->execute([$employeeId, $user_id, $startDate, $endDate, $days, $reason]);
             $successMsg = "Solicitud de vacaciones enviada correctamente. Será revisada por Recursos Humanos.";
         } catch (Exception $e) {
-            $errorMsg = "Error al enviar la solicitud: " . $e->getMessage();
+            error_log('Vacation request insert failed: ' . $e->getMessage());
+            $errorMsg = "No se pudo enviar la solicitud. Intenta de nuevo o contacta a Recursos Humanos.";
         }
     }
 }
@@ -136,7 +141,7 @@ include '../header_agent.php';
                         <tr class="border-b border-slate-800 hover:bg-slate-800/50">
                             <td class="py-3 px-4">
                                 <span class="px-3 py-1 rounded-full text-sm font-bold bg-purple-500/20 text-purple-300">
-                                    <?= htmlspecialchars($req['days_requested']) ?> días
+                                    <?= htmlspecialchars($req['total_days']) ?> días
                                 </span>
                             </td>
                             <td class="py-3 px-4 text-sm">

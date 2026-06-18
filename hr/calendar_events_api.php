@@ -92,7 +92,7 @@ function createEvent() {
         $data['start_time'] ?? null,
         $data['end_time'] ?? null,
         $data['event_type'] ?? 'OTHER',
-        $data['color'] ?? '#6366f1',
+        $data['color'] ?? '#3a5da0',
         $data['location'] ?? null,
         isset($data['is_all_day']) ? (int)$data['is_all_day'] : 0,
         $_SESSION['user_id']
@@ -168,7 +168,7 @@ function updateEvent() {
         $data['start_time'] ?? null,
         $data['end_time'] ?? null,
         $data['event_type'] ?? 'OTHER',
-        $data['color'] ?? '#6366f1',
+        $data['color'] ?? '#3a5da0',
         $data['location'] ?? null,
         isset($data['is_all_day']) ? (int)$data['is_all_day'] : 0,
         $data['id']

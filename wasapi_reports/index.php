@@ -26,17 +26,17 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .text-gray-800 { color: #1f2937 !important; }
 .claude-ui .text-gray-900 { color: #111827 !important; }
 .claude-ui .text-slate-800 { color: #1e293b !important; }
-.claude-ui .text-indigo-400 { color: #818cf8 !important; }
-.claude-ui .text-indigo-500 { color: #6366f1 !important; }
-.claude-ui .text-indigo-600 { color: #4f46e5 !important; }
-.claude-ui .text-indigo-700 { color: #4338ca !important; }
+.claude-ui .text-indigo-400 { color: #5e7cba !important; }
+.claude-ui .text-indigo-500 { color: #3a5da0 !important; }
+.claude-ui .text-indigo-600 { color: #1f3f76 !important; }
+.claude-ui .text-indigo-700 { color: #152849 !important; }
 .claude-ui .text-indigo-800 { color: #3730a3 !important; }
 .claude-ui .text-indigo-900 { color: #312e81 !important; }
-.claude-ui .text-violet-500 { color: #8b5cf6 !important; }
-.claude-ui .text-violet-600 { color: #7c3aed !important; }
-.claude-ui .text-violet-700 { color: #6d28d9 !important; }
+.claude-ui .text-violet-500 { color: #6f8bbd !important; }
+.claude-ui .text-violet-600 { color: #5e7cba !important; }
+.claude-ui .text-violet-700 { color: #1f3f76 !important; }
 .claude-ui .text-fuchsia-400 { color: #e879f9 !important; }
-.claude-ui .text-fuchsia-500 { color: #d946ef !important; }
+.claude-ui .text-fuchsia-500 { color: #6f8bbd !important; }
 .claude-ui .text-fuchsia-600 { color: #c026d3 !important; }
 .claude-ui .text-emerald-400 { color: #34d399 !important; }
 .claude-ui .text-emerald-500 { color: #10b981 !important; }
@@ -44,7 +44,7 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .text-emerald-700 { color: #047857 !important; }
 .claude-ui .text-emerald-800 { color: #065f46 !important; }
 .claude-ui .text-emerald-900 { color: #064e3b !important; }
-.claude-ui .text-teal-500 { color: #14b8a6 !important; }
+.claude-ui .text-teal-500 { color: #1f3f76 !important; }
 .claude-ui .text-teal-600 { color: #0d9488 !important; }
 .claude-ui .text-amber-400 { color: #fbbf24 !important; }
 .claude-ui .text-amber-500 { color: #f59e0b !important; }
@@ -65,13 +65,13 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .text-red-500 { color: #ef4444 !important; }
 .claude-ui .text-red-600 { color: #dc2626 !important; }
 .claude-ui .text-red-700 { color: #b91c1c !important; }
-.claude-ui .text-blue-500 { color: #3b82f6 !important; }
-.claude-ui .text-blue-600 { color: #2563eb !important; }
-.claude-ui .text-blue-700 { color: #1d4ed8 !important; }
-.claude-ui .text-cyan-500 { color: #06b6d4 !important; }
-.claude-ui .text-cyan-600 { color: #0891b2 !important; }
-.claude-ui .text-purple-500 { color: #a855f7 !important; }
-.claude-ui .text-purple-600 { color: #9333ea !important; }
+.claude-ui .text-blue-500 { color: #264b8b !important; }
+.claude-ui .text-blue-600 { color: #1f3f76 !important; }
+.claude-ui .text-blue-700 { color: #152849 !important; }
+.claude-ui .text-cyan-500 { color: #3a5da0 !important; }
+.claude-ui .text-cyan-600 { color: #1f3f76 !important; }
+.claude-ui .text-purple-500 { color: #92a9da !important; }
+.claude-ui .text-purple-600 { color: #1f3f76 !important; }
 
 /* White-on-dark heroes inside the panel must stay white */
 .claude-ui .claude-hero,
@@ -90,7 +90,7 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .bg-gradient-to-br .text-fuchsia-400 { color: #e879f9 !important; }
 
 .claude-ui input, .claude-ui textarea, .claude-ui select { color: #1f2937 !important; }
-.claude-ui code, .claude-ui .font-mono { color: #4338ca !important; }
+.claude-ui code, .claude-ui .font-mono { color: #152849 !important; }
 
 /* Ensure soft-tinted card backgrounds remain themselves (theme.css forces bg-white/50/100 to lighter) */
 .claude-ui .bg-white { background-color: #ffffff !important; }
@@ -113,7 +113,7 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .bg-emerald-600 { background-color: #059669 !important; }
 .claude-ui .bg-teal-50 { background-color: #f0fdfa !important; }
 .claude-ui .bg-teal-100 { background-color: #ccfbf1 !important; }
-.claude-ui .bg-teal-500 { background-color: #14b8a6 !important; }
+.claude-ui .bg-teal-500 { background-color: #1f3f76 !important; }
 .claude-ui .bg-teal-600 { background-color: #0d9488 !important; }
 .claude-ui .bg-amber-50 { background-color: #fffbeb !important; }
 .claude-ui .bg-amber-100 { background-color: #fef3c7 !important; }
@@ -131,27 +131,27 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .bg-rose-800 { background-color: #9f1239 !important; }
 .claude-ui .bg-fuchsia-50 { background-color: #fdf4ff !important; }
 .claude-ui .bg-fuchsia-100 { background-color: #fae8ff !important; }
-.claude-ui .bg-fuchsia-500 { background-color: #d946ef !important; }
+.claude-ui .bg-fuchsia-500 { background-color: #6f8bbd !important; }
 .claude-ui .bg-fuchsia-600 { background-color: #c026d3 !important; }
 .claude-ui .bg-violet-50 { background-color: #f5f3ff !important; }
 .claude-ui .bg-violet-100 { background-color: #ede9fe !important; }
 .claude-ui .bg-violet-200 { background-color: #ddd6fe !important; }
-.claude-ui .bg-violet-500 { background-color: #8b5cf6 !important; }
-.claude-ui .bg-violet-600 { background-color: #7c3aed !important; }
-.claude-ui .bg-violet-700 { background-color: #6d28d9 !important; }
+.claude-ui .bg-violet-500 { background-color: #6f8bbd !important; }
+.claude-ui .bg-violet-600 { background-color: #5e7cba !important; }
+.claude-ui .bg-violet-700 { background-color: #1f3f76 !important; }
 .claude-ui .bg-cyan-50 { background-color: #ecfeff !important; }
-.claude-ui .bg-cyan-500 { background-color: #06b6d4 !important; }
-.claude-ui .bg-sky-500 { background-color: #0ea5e9 !important; }
+.claude-ui .bg-cyan-500 { background-color: #3a5da0 !important; }
+.claude-ui .bg-sky-500 { background-color: #264b8b !important; }
 .claude-ui .bg-indigo-50 { background-color: #eef2ff !important; }
 .claude-ui .bg-indigo-100 { background-color: #e0e7ff !important; }
-.claude-ui .bg-indigo-200 { background-color: #c7d2fe !important; }
-.claude-ui .bg-indigo-500 { background-color: #6366f1 !important; }
-.claude-ui .bg-indigo-600 { background-color: #4f46e5 !important; }
-.claude-ui .bg-indigo-700 { background-color: #4338ca !important; }
+.claude-ui .bg-indigo-200 { background-color: #dce4f4 !important; }
+.claude-ui .bg-indigo-500 { background-color: #3a5da0 !important; }
+.claude-ui .bg-indigo-600 { background-color: #1f3f76 !important; }
+.claude-ui .bg-indigo-700 { background-color: #152849 !important; }
 .claude-ui .bg-blue-50 { background-color: #eff6ff !important; }
 .claude-ui .bg-blue-100 { background-color: #dbeafe !important; }
-.claude-ui .bg-blue-500 { background-color: #3b82f6 !important; }
-.claude-ui .bg-blue-600 { background-color: #2563eb !important; }
+.claude-ui .bg-blue-500 { background-color: #264b8b !important; }
+.claude-ui .bg-blue-600 { background-color: #1f3f76 !important; }
 .claude-ui .bg-red-50 { background-color: #fef2f2 !important; }
 .claude-ui .bg-red-100 { background-color: #fee2e2 !important; }
 .claude-ui .bg-red-500 { background-color: #ef4444 !important; }
@@ -160,7 +160,7 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .bg-red-800 { background-color: #991b1b !important; }
 .claude-ui .bg-yellow-100 { background-color: #fef3c7 !important; }
 .claude-ui .bg-purple-100 { background-color: #ede9fe !important; }
-.claude-ui .bg-purple-600 { background-color: #9333ea !important; }
+.claude-ui .bg-purple-600 { background-color: #1f3f76 !important; }
 
 /* ---- borders ---- */
 .claude-ui .border-emerald-100 { border-color: #d1fae5 !important; }
@@ -176,8 +176,8 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui .border-rose-400 { border-color: #fb7185 !important; }
 .claude-ui .border-rose-500 { border-color: #f43f5e !important; }
 .claude-ui .border-indigo-100 { border-color: #e0e7ff !important; }
-.claude-ui .border-indigo-200 { border-color: #c7d2fe !important; }
-.claude-ui .border-indigo-300 { border-color: #a5b4fc !important; }
+.claude-ui .border-indigo-200 { border-color: #dce4f4 !important; }
+.claude-ui .border-indigo-300 { border-color: #92a9da !important; }
 .claude-ui .border-violet-100 { border-color: #ede9fe !important; }
 .claude-ui .border-violet-200 { border-color: #ddd6fe !important; }
 .claude-ui .border-violet-300 { border-color: #c4b5fd !important; }
@@ -199,13 +199,13 @@ if (!isset($_SESSION['user_id'])) {
  * unless the element also has a via-* class (handled below), otherwise the
  * gradient fades through transparent in the middle and creates a white flare. */
 .claude-ui [class*="from-emerald-500"] { --tw-gradient-from: #10b981 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(16, 185, 129, 0)) !important; }
-.claude-ui [class*="from-teal-500"]    { --tw-gradient-from: #14b8a6 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(20, 184, 166, 0)) !important; }
+.claude-ui [class*="from-teal-500"]    { --tw-gradient-from: #1f3f76 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(20, 184, 166, 0)) !important; }
 .claude-ui [class*="from-amber-500"]   { --tw-gradient-from: #f59e0b !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(245, 158, 11, 0)) !important; }
 .claude-ui [class*="from-rose-500"]    { --tw-gradient-from: #f43f5e !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(244, 63, 94, 0)) !important; }
-.claude-ui [class*="from-violet-600"]  { --tw-gradient-from: #7c3aed !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
-.claude-ui [class*="from-fuchsia-500"] { --tw-gradient-from: #d946ef !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(217, 70, 239, 0)) !important; }
-.claude-ui [class*="from-indigo-500"]  { --tw-gradient-from: #6366f1 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(99, 102, 241, 0)) !important; }
-.claude-ui [class*="from-indigo-600"]  { --tw-gradient-from: #4f46e5 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(79, 70, 229, 0)) !important; }
+.claude-ui [class*="from-violet-600"]  { --tw-gradient-from: #5e7cba !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
+.claude-ui [class*="from-fuchsia-500"] { --tw-gradient-from: #6f8bbd !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(217, 70, 239, 0)) !important; }
+.claude-ui [class*="from-indigo-500"]  { --tw-gradient-from: #3a5da0 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(58, 93, 160, 0)) !important; }
+.claude-ui [class*="from-indigo-600"]  { --tw-gradient-from: #1f3f76 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(79, 70, 229, 0)) !important; }
 .claude-ui [class*="from-red-600"]     { --tw-gradient-from: #dc2626 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(220, 38, 38, 0)) !important; }
 .claude-ui [class*="from-slate-900"]   { --tw-gradient-from: #0f172a !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(15, 23, 42, 0)) !important; }
 .claude-ui [class*="from-gray-50"]     { --tw-gradient-from: #f9fafb !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(249, 250, 251, 0)) !important; }
@@ -218,11 +218,11 @@ if (!isset($_SESSION['user_id'])) {
 
 /* via-* overrides the stops to 3-stop (from → via → to). Must come AFTER from-*
  * so it wins when both apply (via → violet → fuchsia gradients). */
-.claude-ui [class*="via-violet-600"]   { --tw-gradient-stops: var(--tw-gradient-from), #7c3aed, var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
+.claude-ui [class*="via-violet-600"]   { --tw-gradient-stops: var(--tw-gradient-from), #5e7cba, var(--tw-gradient-to, rgba(124, 58, 237, 0)) !important; }
 .claude-ui [class*="via-slate-900"]    { --tw-gradient-stops: var(--tw-gradient-from), #0f172a, var(--tw-gradient-to, rgba(15, 23, 42, 0)) !important; }
 
 .claude-ui [class*="to-teal-600"]      { --tw-gradient-to: #0d9488 !important; }
-.claude-ui [class*="to-teal-500"]      { --tw-gradient-to: #14b8a6 !important; }
+.claude-ui [class*="to-teal-500"]      { --tw-gradient-to: #1f3f76 !important; }
 .claude-ui [class*="to-orange-600"]    { --tw-gradient-to: #ea580c !important; }
 .claude-ui [class*="to-orange-500"]    { --tw-gradient-to: #f97316 !important; }
 .claude-ui [class*="to-red-600"]       { --tw-gradient-to: #dc2626 !important; }
@@ -231,11 +231,11 @@ if (!isset($_SESSION['user_id'])) {
 .claude-ui [class*="to-rose-500"]      { --tw-gradient-to: #f43f5e !important; }
 .claude-ui [class*="to-rose-600"]      { --tw-gradient-to: #e11d48 !important; }
 .claude-ui [class*="to-rose-800"]      { --tw-gradient-to: #9f1239 !important; }
-.claude-ui [class*="to-violet-600"]    { --tw-gradient-to: #7c3aed !important; }
-.claude-ui [class*="to-violet-700"]    { --tw-gradient-to: #6d28d9 !important; }
-.claude-ui [class*="to-indigo-600"]    { --tw-gradient-to: #4f46e5 !important; }
-.claude-ui [class*="to-indigo-700"]    { --tw-gradient-to: #4338ca !important; }
-.claude-ui [class*="to-fuchsia-500"]   { --tw-gradient-to: #d946ef !important; }
+.claude-ui [class*="to-violet-600"]    { --tw-gradient-to: #5e7cba !important; }
+.claude-ui [class*="to-violet-700"]    { --tw-gradient-to: #1f3f76 !important; }
+.claude-ui [class*="to-indigo-600"]    { --tw-gradient-to: #1f3f76 !important; }
+.claude-ui [class*="to-indigo-700"]    { --tw-gradient-to: #152849 !important; }
+.claude-ui [class*="to-fuchsia-500"]   { --tw-gradient-to: #6f8bbd !important; }
 .claude-ui [class*="to-fuchsia-600"]   { --tw-gradient-to: #c026d3 !important; }
 .claude-ui [class*="to-fuchsia-50"]    { --tw-gradient-to: #fdf4ff !important; }
 .claude-ui [class*="to-white"]         { --tw-gradient-to: #ffffff !important; }
@@ -703,15 +703,15 @@ if (!isset($_SESSION['user_id'])) {
                 <div class="bg-white rounded-xl shadow-lg p-5 relative overflow-hidden hover:shadow-xl transition-all cursor-pointer transform hover:scale-102"
                     @click="selectCampaign(campaign)">
                     <!-- Color stripe -->
-                    <div class="absolute top-0 left-0 right-0 h-1" :style="'background-color: ' + (campaign.color || '#3B82F6')"></div>
+                    <div class="absolute top-0 left-0 right-0 h-1" :style="'background-color: ' + (campaign.color || '#264b8b')"></div>
                     
                     <div class="flex items-start justify-between mb-4">
                         <div>
                             <h4 class="text-gray-800 font-semibold text-lg" x-text="campaign.name"></h4>
                             <p class="text-gray-500 text-sm" x-text="campaign.total_agents + ' agentes'"></p>
                         </div>
-                        <div class="h-10 w-10 rounded-lg flex items-center justify-center" :style="'background-color: ' + (campaign.color || '#3B82F6') + '20'">
-                            <i class="fas fa-bullhorn" :style="'color: ' + (campaign.color || '#3B82F6')"></i>
+                        <div class="h-10 w-10 rounded-lg flex items-center justify-center" :style="'background-color: ' + (campaign.color || '#264b8b') + '20'">
+                            <i class="fas fa-bullhorn" :style="'color: ' + (campaign.color || '#264b8b')"></i>
                         </div>
                     </div>
                     
@@ -969,7 +969,7 @@ if (!isset($_SESSION['user_id'])) {
     <template x-teleport="body">
     <div x-show="showAIPanel" class="claude-ui" style="position:fixed; inset:0; z-index:10000;">
         <div x-show="showAIPanel" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-            style="position:absolute; inset:0; background:rgba(15,23,42,0.72); backdrop-filter: blur(4px);"
+            style="position:absolute; inset:0; background: var(--surface-2); backdrop-filter: blur(4px);"
             @click="showAIPanel = false">
         </div>
         <div x-show="showAIPanel" x-transition:enter="transition ease-out duration-300 transform" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0" x-transition:leave="transition ease-in duration-200 transform" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
@@ -1555,7 +1555,7 @@ if (!isset($_SESSION['user_id'])) {
     <!-- AGENT DETAIL MODAL — Claude Coaching -->
     <!-- ============================================================ -->
     <template x-teleport="body">
-    <div x-show="showAgentModal" x-transition class="claude-ui" style="position:fixed; inset:0; z-index:10001; display:flex; align-items:center; justify-content:center; padding:1rem; background:rgba(15,23,42,0.72); backdrop-filter: blur(4px);" @click.self="showAgentModal = false">
+    <div x-show="showAgentModal" x-transition class="claude-ui" style="position:fixed; inset:0; z-index:10001; display:flex; align-items:center; justify-content:center; padding:1rem; background: var(--surface-2); backdrop-filter: blur(4px);" @click.self="showAgentModal = false">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" style="color:#1f2937;">
             <!-- Header -->
             <div class="bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 text-white p-6 rounded-t-2xl">
@@ -1873,7 +1873,7 @@ document.addEventListener('alpine:init', () => {
                     labels: ['En Espera', 'Activos', 'Sin Asignar'],
                     datasets: [{
                         data: [0, 0, 0],
-                        backgroundColor: ['#f59e0b', '#3b82f6', '#ef4444'],
+                        backgroundColor: ['#f59e0b', '#264b8b', '#ef4444'],
                         borderWidth: 0
                     }]
                 },
@@ -1906,7 +1906,7 @@ document.addEventListener('alpine:init', () => {
                         {
                             label: 'Respuestas',
                             data: [],
-                            backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                            backgroundColor: 'rgba(38, 75, 139, 0.8)',
                             borderRadius: 4
                         }
                     ]
@@ -1935,7 +1935,7 @@ document.addEventListener('alpine:init', () => {
                         {
                             label: 'Abiertos',
                             data: [],
-                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            backgroundColor: 'rgba(38, 75, 139, 0.7)',
                             borderRadius: 4
                         },
                         {

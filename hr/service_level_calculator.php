@@ -10,27 +10,39 @@ include __DIR__ . '/../header.php';
 
 <style>
     :root {
-        --slc-ink: #e2e8f0;
-        --slc-ink-muted: #94a3b8;
-        --slc-ink-dim: #64748b;
-        --slc-bg-1: #0b1220;
-        --slc-bg-2: #0f172a;
-        --slc-bg-3: #1e293b;
-        --slc-cyan: #06b6d4;
+        --slc-ink: var(--text);
+        --slc-ink-muted: var(--text-muted);
+        --slc-ink-dim: var(--text-subtle);
+        --slc-bg-1: var(--bg);
+        --slc-bg-2: var(--surface);
+        --slc-bg-3: var(--surface-2);
+        --slc-cyan: #3a5da0;
         --slc-cyan-soft: rgba(6, 182, 212, 0.18);
-        --slc-blue: #3b82f6;
+        --slc-blue: #264b8b;
         --slc-emerald: #10b981;
         --slc-amber: #f59e0b;
         --slc-rose: #f43f5e;
-        --slc-violet: #8b5cf6;
+        --slc-violet: #6f8bbd;
         --slc-border: rgba(148, 163, 184, 0.14);
         --slc-border-strong: rgba(148, 163, 184, 0.28);
         --slc-shadow: 0 12px 40px rgba(2, 6, 23, 0.55);
     }
 
-    .slc-scope { color: var(--slc-ink); }
+    .slc-scope { color: var(--text); }
     .slc-scope * { scroll-margin-top: 88px; }
     .slc-scope .tabular { font-variant-numeric: tabular-nums; }
+
+    /* Light-theme overrides — keep hero white, force Tailwind dark panels light */
+    .slc-hero h1 { color: #fff !important; }
+    .slc-hero p { color: rgba(255,255,255,.85) !important; }
+    .slc-scope [class*="bg-slate-9"],
+    .slc-scope [class*="bg-slate-8"] {
+        background: var(--surface-2) !important;
+        border-color: var(--border) !important;
+    }
+    /* Cyan text on now-light panels reads faint → navy for legibility */
+    .slc-scope .text-cyan-300,
+    .slc-scope .text-cyan-400 { color: var(--brand) !important; }
 
     /* ============ HERO BANNER ============ */
     .slc-hero {
@@ -40,8 +52,8 @@ include __DIR__ . '/../header.php';
         padding: 2rem;
         background:
             radial-gradient(1200px 400px at 90% -30%, rgba(6, 182, 212, 0.24), transparent 60%),
-            radial-gradient(900px 500px at -10% 130%, rgba(139, 92, 246, 0.22), transparent 65%),
-            linear-gradient(135deg, #0b1220 0%, #111c36 60%, #0b1220 100%);
+            radial-gradient(900px 500px at -10% 130%, rgba(111, 139, 189, 0.22), transparent 65%),
+            linear-gradient(135deg, #13326b 0%, #264b8b 55%, #2b5199 100%);
         border: 1px solid rgba(56, 189, 248, 0.18);
         box-shadow: var(--slc-shadow);
     }
@@ -49,7 +61,7 @@ include __DIR__ . '/../header.php';
         content: "";
         position: absolute;
         inset: -2px;
-        background: linear-gradient(135deg, rgba(6, 182, 212, 0.6), transparent 35%, rgba(139, 92, 246, 0.5) 100%);
+        background: linear-gradient(135deg, rgba(6, 182, 212, 0.6), transparent 35%, rgba(111, 139, 189, 0.5) 100%);
         filter: blur(22px);
         opacity: 0.25;
         z-index: 0;
@@ -59,7 +71,7 @@ include __DIR__ . '/../header.php';
     .slc-hero-orb {
         width: 68px; height: 68px;
         border-radius: 20px;
-        background: linear-gradient(135deg, #22d3ee, #3b82f6 60%, #8b5cf6);
+        background: linear-gradient(135deg, #5e7cba, #264b8b 60%, #6f8bbd);
         display: grid; place-items: center;
         color: #0b1220;
         font-size: 1.6rem;
@@ -70,13 +82,13 @@ include __DIR__ . '/../header.php';
         padding: .35rem .7rem;
         border-radius: 9999px;
         font-size: .75rem; font-weight: 600;
-        background: rgba(15, 23, 42, .55);
+        background: var(--surface-2);
         border: 1px solid var(--slc-border-strong);
-        color: var(--slc-ink-muted);
+        color: var(--text-muted);
         backdrop-filter: blur(8px);
     }
     .slc-chip.accent { background: rgba(6, 182, 212, .12); color: #67e8f9; border-color: rgba(6, 182, 212, .4); }
-    .slc-chip.violet { background: rgba(139, 92, 246, .12); color: #c4b5fd; border-color: rgba(139, 92, 246, .4); }
+    .slc-chip.violet { background: rgba(111, 139, 189, .12); color: #c4b5fd; border-color: rgba(111, 139, 189, .4); }
     .slc-chip.emerald { background: rgba(16, 185, 129, .12); color: #6ee7b7; border-color: rgba(16, 185, 129, .4); }
 
     /* ============ NAV PILLS ============ */
@@ -88,8 +100,8 @@ include __DIR__ . '/../header.php';
         gap: .5rem;
         padding: .4rem;
         border-radius: 14px;
-        background: rgba(11, 18, 32, .85);
-        border: 1px solid var(--slc-border);
+        background: var(--surface);
+        border: 1px solid var(--border);
         backdrop-filter: blur(14px);
         overflow-x: auto;
     }
@@ -98,19 +110,19 @@ include __DIR__ . '/../header.php';
         padding: .45rem .85rem;
         border-radius: 10px;
         font-size: .85rem; font-weight: 600;
-        color: var(--slc-ink-muted);
+        color: var(--text-muted);
         white-space: nowrap;
         transition: all .2s ease;
     }
-    .slc-nav a:hover { color: #e0f2fe; background: rgba(14, 165, 233, .08); }
-    .slc-nav a.is-active { background: linear-gradient(135deg, rgba(6,182,212,.25), rgba(59,130,246,.25)); color: #e0f7ff; border: 1px solid rgba(6, 182, 212, .4); }
+    .slc-nav a:hover { color: var(--brand); background: rgba(38, 75, 139, .08); }
+    .slc-nav a.is-active { background: linear-gradient(135deg, rgba(38, 75, 139,.16), rgba(38, 75, 139,.10)); color: var(--brand); border: 1px solid rgba(38, 75, 139, .35); }
 
     /* ============ SECTION CARDS ============ */
     .slc-card {
         position: relative;
         border-radius: 1.1rem;
-        background: linear-gradient(160deg, rgba(15, 23, 42, 0.92) 0%, rgba(17, 24, 39, 0.85) 100%);
-        border: 1px solid var(--slc-border);
+        background: var(--surface);
+        border: 1px solid var(--border);
         box-shadow: var(--slc-shadow);
         backdrop-filter: blur(16px);
     }
@@ -130,12 +142,12 @@ include __DIR__ . '/../header.php';
     .slc-card-body { padding: 1.25rem; }
     .slc-section-title {
         display: flex; align-items: center; gap: .65rem;
-        font-size: 1.05rem; font-weight: 700; color: #f8fafc;
+        font-size: 1.05rem; font-weight: 700; color: var(--text);
     }
     .slc-section-title .icon-wrap {
         width: 34px; height: 34px; border-radius: 10px;
         display: grid; place-items: center;
-        background: linear-gradient(135deg, rgba(6, 182, 212, .2), rgba(59, 130, 246, .2));
+        background: linear-gradient(135deg, rgba(6, 182, 212, .2), rgba(38, 75, 139, .2));
         border: 1px solid rgba(6, 182, 212, .35);
         color: #67e8f9;
         font-size: .9rem;
@@ -156,21 +168,21 @@ include __DIR__ . '/../header.php';
         position: relative;
         display: flex; align-items: stretch;
         border-radius: .7rem;
-        background: rgba(11, 18, 32, .8);
-        border: 1px solid var(--slc-border-strong);
+        background: var(--surface-2);
+        border: 1px solid var(--border-strong);
         transition: all .2s ease;
         overflow: hidden;
     }
     .slc-input-shell:focus-within {
-        border-color: rgba(6, 182, 212, .7);
-        box-shadow: 0 0 0 4px rgba(6, 182, 212, .12);
+        border-color: rgba(38, 75, 139, .7);
+        box-shadow: 0 0 0 4px rgba(38, 75, 139, .12);
     }
     .slc-input-shell .slc-input-icon {
         display: grid; place-items: center;
         width: 42px;
-        color: #7dd3fc;
-        background: rgba(6, 182, 212, .08);
-        border-right: 1px solid var(--slc-border);
+        color: var(--brand);
+        background: rgba(38, 75, 139, .07);
+        border-right: 1px solid var(--border);
         font-size: .9rem;
     }
     .slc-input-shell input,
@@ -180,7 +192,7 @@ include __DIR__ . '/../header.php';
         border: 0;
         outline: 0;
         padding: .7rem .9rem;
-        color: #f1f5f9;
+        color: var(--text);
         font-size: .95rem;
         font-variant-numeric: tabular-nums;
     }
@@ -198,9 +210,9 @@ include __DIR__ . '/../header.php';
         padding: .15rem .5rem;
         border-radius: 9999px;
         font-size: .65rem; font-weight: 700;
-        background: rgba(59, 130, 246, .15);
-        color: #93c5fd;
-        border: 1px solid rgba(59, 130, 246, .3);
+        background: rgba(38, 75, 139, .12);
+        color: var(--brand);
+        border: 1px solid rgba(38, 75, 139, .3);
         text-transform: uppercase;
         letter-spacing: .05em;
     }
@@ -210,9 +222,9 @@ include __DIR__ . '/../header.php';
         margin-top: .75rem;
         padding: .65rem .9rem;
         border-radius: .65rem;
-        background: linear-gradient(135deg, rgba(6, 182, 212, .12), rgba(59, 130, 246, .08));
-        border: 1px solid rgba(6, 182, 212, .25);
-        color: #cffafe;
+        background: linear-gradient(135deg, rgba(6, 182, 212, .10), rgba(38, 75, 139, .08));
+        border: 1px solid rgba(38, 75, 139, .25);
+        color: var(--brand);
         font-size: .8rem;
         display: flex; align-items: center; gap: .5rem;
     }
@@ -231,17 +243,17 @@ include __DIR__ . '/../header.php';
     }
     .slc-btn:active { transform: translateY(1px); }
     .slc-btn-primary {
-        background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+        background: linear-gradient(135deg, #3a5da0 0%, #264b8b 100%);
         color: #fff;
         box-shadow: 0 10px 24px rgba(6, 182, 212, .35);
     }
     .slc-btn-primary:hover { box-shadow: 0 14px 32px rgba(6, 182, 212, .5); transform: translateY(-1px); }
     .slc-btn-ghost {
-        background: rgba(30, 41, 59, .6);
-        color: #cbd5e1;
+        background: var(--surface);
+        color: var(--text);
         border-color: var(--slc-border-strong);
     }
-    .slc-btn-ghost:hover { background: rgba(30, 41, 59, .9); color: #f1f5f9; }
+    .slc-btn-ghost:hover { background: var(--surface); color: var(--text); }
     .slc-btn-emerald {
         background: linear-gradient(135deg, #10b981, #059669);
         color: #ecfdf5;
@@ -255,7 +267,7 @@ include __DIR__ . '/../header.php';
         position: relative;
         padding: 1rem 1.1rem;
         border-radius: .9rem;
-        background: linear-gradient(160deg, rgba(6, 182, 212, .08), rgba(59, 130, 246, .06));
+        background: linear-gradient(160deg, rgba(6, 182, 212, .08), rgba(38, 75, 139, .06));
         border: 1px solid rgba(6, 182, 212, .22);
         overflow: hidden;
     }
@@ -269,14 +281,14 @@ include __DIR__ . '/../header.php';
         font-size: .7rem; font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .08em;
-        color: #7dd3fc;
+        color: var(--brand);
     }
     .slc-tile-value {
         font-size: 2.4rem;
         font-weight: 800;
         font-variant-numeric: tabular-nums;
         line-height: 1.05;
-        background: linear-gradient(135deg, #a5f3fc, #60a5fa);
+        background: linear-gradient(135deg, #3a5da0, #264b8b);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
@@ -298,7 +310,7 @@ include __DIR__ . '/../header.php';
     }
     .slc-gauge .gauge-number {
         font-size: 1.6rem; font-weight: 800;
-        color: #f8fafc;
+        color: var(--text);
         font-variant-numeric: tabular-nums;
     }
     .slc-gauge .gauge-label {
@@ -323,7 +335,7 @@ include __DIR__ . '/../header.php';
     .slc-erlang-bar > span {
         display: block;
         height: 100%;
-        background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+        background: linear-gradient(90deg, #3a5da0, #6f8bbd);
         width: 0%;
         border-radius: 9999px;
         transition: width 1s ease;
@@ -339,7 +351,7 @@ include __DIR__ . '/../header.php';
         letter-spacing: .02em;
     }
     .metric-excellent { background: rgba(16, 185, 129, .14); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, .4); }
-    .metric-good { background: rgba(59, 130, 246, .14); color: #93c5fd; border: 1px solid rgba(59, 130, 246, .4); }
+    .metric-good { background: rgba(38, 75, 139, .14); color: #9db1d2; border: 1px solid rgba(38, 75, 139, .4); }
     .metric-warning { background: rgba(245, 158, 11, .14); color: #fcd34d; border: 1px solid rgba(245, 158, 11, .4); }
     .metric-poor { background: rgba(244, 63, 94, .14); color: #fda4af; border: 1px solid rgba(244, 63, 94, .4); }
 
@@ -348,7 +360,7 @@ include __DIR__ . '/../header.php';
         position: relative;
         padding: 1rem;
         border-radius: .9rem;
-        background: linear-gradient(160deg, rgba(30, 41, 59, .6), rgba(15, 23, 42, .6));
+        background: linear-gradient(160deg, var(--surface), var(--surface-2));
         border: 1px solid var(--slc-border-strong);
         cursor: pointer;
         text-align: left;
@@ -369,7 +381,7 @@ include __DIR__ . '/../header.php';
         width: 44px; height: 44px; border-radius: 12px;
         display: grid; place-items: center;
         font-size: 1.15rem;
-        background: rgba(15, 23, 42, .8);
+        background: var(--surface-2);
         color: var(--preset-color, #67e8f9);
         border: 1px solid var(--preset-border, rgba(6, 182, 212, .35));
         margin-bottom: .75rem;
@@ -380,12 +392,12 @@ include __DIR__ . '/../header.php';
         position: relative;
         border-radius: 1rem;
         border: 2px dashed rgba(148, 163, 184, .35);
-        background: linear-gradient(160deg, rgba(6, 182, 212, .04), rgba(59, 130, 246, .04));
+        background: linear-gradient(160deg, rgba(6, 182, 212, .04), rgba(38, 75, 139, .04));
         padding: 2rem;
         text-align: center;
         transition: all .2s ease;
     }
-    .slc-dropzone:hover { border-color: rgba(6, 182, 212, .6); background: linear-gradient(160deg, rgba(6, 182, 212, .08), rgba(59, 130, 246, .08)); }
+    .slc-dropzone:hover { border-color: rgba(6, 182, 212, .6); background: linear-gradient(160deg, rgba(6, 182, 212, .08), rgba(38, 75, 139, .08)); }
     .slc-dropzone.is-drag {
         border-color: var(--slc-emerald);
         background: linear-gradient(160deg, rgba(16, 185, 129, .12), rgba(6, 182, 212, .08));
@@ -396,7 +408,7 @@ include __DIR__ . '/../header.php';
         margin: 0 auto .75rem;
         border-radius: 20px;
         display: grid; place-items: center;
-        background: linear-gradient(135deg, #10b981, #06b6d4);
+        background: linear-gradient(135deg, #10b981, #3a5da0);
         color: #0b1220;
         font-size: 1.5rem;
         box-shadow: 0 10px 28px rgba(16, 185, 129, .35);
@@ -411,8 +423,8 @@ include __DIR__ . '/../header.php';
     }
     .slc-table thead th {
         position: sticky; top: 0;
-        background: rgba(11, 18, 32, .95);
-        color: #cbd5e1;
+        background: var(--surface-2);
+        color: var(--text);
         font-weight: 700;
         text-transform: uppercase;
         font-size: .68rem;
@@ -424,7 +436,7 @@ include __DIR__ . '/../header.php';
     .slc-table tbody tr:hover { background: rgba(6, 182, 212, .05); }
     .slc-table td {
         padding: .6rem .75rem;
-        border-bottom: 1px solid rgba(30, 41, 59, .6);
+        border-bottom: 1px solid var(--border);
         font-variant-numeric: tabular-nums;
     }
 
@@ -433,8 +445,8 @@ include __DIR__ . '/../header.php';
         position: relative;
         padding: 1rem;
         border-radius: .9rem;
-        background: linear-gradient(160deg, rgba(15, 23, 42, .7), rgba(11, 18, 32, .7));
-        border: 1px solid var(--slc-border);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
         overflow: hidden;
     }
     .slc-kpi .kpi-icon {
@@ -449,11 +461,12 @@ include __DIR__ . '/../header.php';
         padding: .3rem .65rem;
         border-radius: 9999px;
         font-size: .72rem; font-weight: 600;
-        background: rgba(15, 23, 42, .55);
+        background: var(--surface-2);
         border: 1px solid var(--slc-border-strong);
-        color: #cbd5e1;
+        color: var(--text-muted);
     }
-    .slc-chip-info i { color: #7dd3fc; }
+    .slc-chip-info i { color: var(--brand); }
+    .slc-chip-info .text-white { color: var(--text) !important; }
 
     /* toast */
     .slc-toast {
@@ -472,7 +485,7 @@ include __DIR__ . '/../header.php';
     .slc-toast.success { background: linear-gradient(135deg, #10b981, #059669); }
     .slc-toast.error { background: linear-gradient(135deg, #ef4444, #b91c1c); }
     .slc-toast.warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: #0b1220; }
-    .slc-toast.info { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+    .slc-toast.info { background: linear-gradient(135deg, #264b8b, #152849); }
 
     @keyframes slc-slide {
         from { opacity: 0; transform: translateX(30px); }
@@ -755,11 +768,11 @@ include __DIR__ . '/../header.php';
                                 <span class="slc-chip accent"><i class="fas fa-seat"></i> Seats</span>
                             </div>
                         </div>
-                        <div class="slc-tile" style="border-color: rgba(139,92,246,.3); background: linear-gradient(160deg, rgba(139,92,246,.08), rgba(59,130,246,.06));">
+                        <div class="slc-tile" style="border-color: rgba(111, 139, 189,.3); background: linear-gradient(160deg, rgba(111, 139, 189,.08), rgba(38, 75, 139,.06));">
                             <div class="flex items-start justify-between">
                                 <div>
-                                    <div class="slc-tile-label" style="color:#c4b5fd"><i class="fas fa-user-group mr-1"></i> Staff total</div>
-                                    <div class="slc-tile-value mt-1" id="resultStaff" style="background: linear-gradient(135deg,#e9d5ff,#a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">-</div>
+                                    <div class="slc-tile-label" style="color:#475f8f"><i class="fas fa-user-group mr-1"></i> Staff total</div>
+                                    <div class="slc-tile-value mt-1" id="resultStaff" style="background: linear-gradient(135deg,#5e7cba,#3f5fa0); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">-</div>
                                     <div class="slc-tile-hint">Incluye shrinkage</div>
                                 </div>
                                 <span class="slc-chip violet"><i class="fas fa-user-minus"></i> + Shrink</span>
@@ -854,21 +867,21 @@ include __DIR__ . '/../header.php';
         <div class="slc-card-body">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <button type="button" onclick="loadPreset('highVolume')" class="slc-preset"
-                        style="--preset-color:#22d3ee; --preset-border:rgba(34,211,238,.5); --preset-glow:rgba(34,211,238,.3)">
+                        style="--preset-color:#5e7cba; --preset-border:rgba(34,211,238,.5); --preset-glow:rgba(34,211,238,.3)">
                     <div class="preset-icon"><i class="fas fa-phone-volume"></i></div>
                     <div class="font-bold text-white mb-1">Alto volumen</div>
                     <div class="text-xs text-slate-400">200 calls · 15 min · AHT 180s</div>
                     <div class="text-[11px] text-cyan-300 mt-2 font-semibold">SL 80/20 · Occ 85%</div>
                 </button>
                 <button type="button" onclick="loadPreset('standard')" class="slc-preset"
-                        style="--preset-color:#60a5fa; --preset-border:rgba(96,165,250,.5); --preset-glow:rgba(96,165,250,.3)">
+                        style="--preset-color:#5e7cba; --preset-border:rgba(94, 124, 186,.5); --preset-glow:rgba(94, 124, 186,.3)">
                     <div class="preset-icon"><i class="fas fa-chart-bar"></i></div>
                     <div class="font-bold text-white mb-1">Estándar</div>
                     <div class="text-xs text-slate-400">100 calls · 30 min · AHT 240s</div>
                     <div class="text-[11px] text-blue-300 mt-2 font-semibold">SL 80/20 · Occ 85%</div>
                 </button>
                 <button type="button" onclick="loadPreset('lowVolume')" class="slc-preset"
-                        style="--preset-color:#c4b5fd; --preset-border:rgba(196,181,253,.5); --preset-glow:rgba(139,92,246,.3)">
+                        style="--preset-color:#c4b5fd; --preset-border:rgba(196,181,253,.5); --preset-glow:rgba(111, 139, 189,.3)">
                     <div class="preset-icon"><i class="fas fa-chart-line"></i></div>
                     <div class="font-bold text-white mb-1">Bajo volumen</div>
                     <div class="text-xs text-slate-400">50 calls · 60 min · AHT 300s</div>
@@ -955,7 +968,7 @@ include __DIR__ . '/../header.php';
                         <div class="text-2xl font-extrabold text-emerald-300 tabular" id="bulkTotalAgents">0</div>
                     </div>
                     <div class="slc-kpi">
-                        <div class="kpi-icon" style="background: rgba(59,130,246,.15); color:#93c5fd; border:1px solid rgba(59,130,246,.35);"><i class="fas fa-user-group"></i></div>
+                        <div class="kpi-icon" style="background: rgba(38, 75, 139,.15); color:#9db1d2; border:1px solid rgba(38, 75, 139,.35);"><i class="fas fa-user-group"></i></div>
                         <div class="text-[11px] text-slate-400 uppercase tracking-wider font-bold">Total staff</div>
                         <div class="text-2xl font-extrabold text-blue-300 tabular" id="bulkTotalStaff">0</div>
                     </div>

@@ -157,11 +157,11 @@ function getPunchColor($type) {
     $colors = [
         'Entry' => '#22c55e',
         'Exit' => '#ef4444',
-        'Break' => '#3b82f6',
+        'Break' => '#264b8b',
         'Lunch' => '#eab308',
-        'Meeting' => '#a855f7',
-        'Follow Up' => '#6366f1',
-        'Ready' => '#a855f7'
+        'Meeting' => '#92a9da',
+        'Follow Up' => '#3a5da0',
+        'Ready' => '#92a9da'
     ];
     return $colors[$type] ?? '#6b7280';
 }
@@ -196,7 +196,7 @@ if (isset($_COOKIE['savedUsername'])) {
     <title>Register Attendance</title>
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --primary-gradient: linear-gradient(135deg, #3a5da0 0%, #92a9da 100%);
             --success-gradient: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             --danger-gradient: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
         }
@@ -242,11 +242,11 @@ if (isset($_COOKIE['savedUsername'])) {
 
         .punch-button.entry { background: var(--success-gradient); }
         .punch-button.exit { background: var(--danger-gradient); }
-        .punch-button.break { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .punch-button.break { background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%); }
         .punch-button.lunch { background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%); }
-        .punch-button.meeting { background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%); }
-        .punch-button.follow-up { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); }
-        .punch-button.ready { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+        .punch-button.meeting { background: linear-gradient(135deg, #92a9da 0%, #1f3f76 100%); }
+        .punch-button.follow-up { background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%); }
+        .punch-button.ready { background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%); }
 
         .loading {
             position: relative;

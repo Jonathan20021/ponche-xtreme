@@ -181,8 +181,8 @@ $monthlyTrends = $pdo->query("
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
         .metric-card {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
             transition: all 0.3s ease;
@@ -196,20 +196,20 @@ $monthlyTrends = $pdo->query("
             left: 0;
             right: 0;
             height: 4px;
-            background: linear-gradient(90deg, var(--card-color, #3b82f6) 0%, var(--card-color-end, #2563eb) 100%);
+            background: linear-gradient(90deg, var(--card-color, #264b8b) 0%, var(--card-color-end, #1f3f76) 100%);
         }
         .metric-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-            border-color: rgba(59, 130, 246, 0.4);
+            border-color: rgba(38, 75, 139, 0.4);
         }
         .theme-light .metric-card {
             background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
             border-color: rgba(148, 163, 184, 0.3);
         }
         .chart-container {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
         }
@@ -262,9 +262,9 @@ $monthlyTrends = $pdo->query("
         <!-- Key Performance Indicators -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <!-- Total Employees -->
-            <div class="metric-card" style="--card-color: #3b82f6; --card-color-end: #2563eb;">
+            <div class="metric-card" style="--card-color: #264b8b; --card-color-end: #1f3f76;">
                 <div class="flex items-center justify-between mb-2">
-                    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <i class="fas fa-users text-white text-xl"></i>
                     </div>
                     <span class="text-2xl">👥</span>
@@ -319,9 +319,9 @@ $monthlyTrends = $pdo->query("
             </div>
 
             <!-- Pending Approvals -->
-            <div class="metric-card" style="--card-color: #8b5cf6; --card-color-end: #7c3aed;">
+            <div class="metric-card" style="--card-color: #6f8bbd; --card-color-end: #5e7cba;">
                 <div class="flex items-center justify-between mb-2">
-                    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-clipboard-check text-white text-xl"></i>
                     </div>
                     <?php if ($pendingApprovals > 10): ?>
@@ -344,9 +344,9 @@ $monthlyTrends = $pdo->query("
         <!-- Secondary Metrics Row -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <!-- Trial Period -->
-            <div class="metric-card" style="--card-color: #ec4899; --card-color-end: #db2777;">
+            <div class="metric-card" style="--card-color: #9db1d2; --card-color-end: #1f3f76;">
                 <div class="flex items-center justify-between mb-3">
-                    <i class="fas fa-user-clock text-3xl" style="color: #ec4899;"></i>
+                    <i class="fas fa-user-clock text-3xl" style="color: #9db1d2;"></i>
                     <?php if ($trialMetrics['overdue'] > 0): ?>
                         <span class="alert-badge text-lg">⏰</span>
                     <?php endif; ?>
@@ -359,9 +359,9 @@ $monthlyTrends = $pdo->query("
             </div>
 
             <!-- Active Campaigns -->
-            <div class="metric-card" style="--card-color: #a855f7; --card-color-end: #9333ea;">
+            <div class="metric-card" style="--card-color: #92a9da; --card-color-end: #1f3f76;">
                 <div class="flex items-center justify-between mb-3">
-                    <i class="fas fa-bullhorn text-3xl" style="color: #a855f7;"></i>
+                    <i class="fas fa-bullhorn text-3xl" style="color: #92a9da;"></i>
                 </div>
                 <p class="text-slate-400 text-xs mb-1">Campañas Activas</p>
                 <h4 class="text-2xl font-bold text-white mb-2"><?= $activeCampaigns ?></h4>
@@ -371,9 +371,9 @@ $monthlyTrends = $pdo->query("
             </div>
 
             <!-- Recruitment -->
-            <div class="metric-card" style="--card-color: #06b6d4; --card-color-end: #0891b2;">
+            <div class="metric-card" style="--card-color: #3a5da0; --card-color-end: #1f3f76;">
                 <div class="flex items-center justify-between mb-3">
-                    <i class="fas fa-user-plus text-3xl" style="color: #06b6d4;"></i>
+                    <i class="fas fa-user-plus text-3xl" style="color: #3a5da0;"></i>
                 </div>
                 <p class="text-slate-400 text-xs mb-1">Aplicaciones Activas</p>
                 <h4 class="text-2xl font-bold text-white mb-2"><?= $recruitment['total_applications'] ?? 0 ?></h4>
@@ -526,8 +526,8 @@ $monthlyTrends = $pdo->query("
                     datasets: [{
                         label: 'Headcount Total',
                         data: <?= json_encode(array_column($monthlyTrends, 'headcount')) ?>,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderColor: '#264b8b',
+                        backgroundColor: 'rgba(38, 75, 139, 0.1)',
                         borderWidth: 3,
                         fill: true,
                         tension: 0.4
@@ -582,8 +582,8 @@ $monthlyTrends = $pdo->query("
                     datasets: [{
                         data: <?= json_encode(array_column($departmentDistribution, 'count')) ?>,
                         backgroundColor: [
-                            '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', 
-                            '#10b981', '#06b6d4', '#ef4444', '#a855f7'
+                            '#264b8b', '#6f8bbd', '#9db1d2', '#f59e0b', 
+                            '#10b981', '#3a5da0', '#ef4444', '#92a9da'
                         ],
                         borderWidth: 2,
                         borderColor: 'rgba(30, 41, 59, 0.5)'

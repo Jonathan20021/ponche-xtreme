@@ -30,15 +30,15 @@ $tests = [
 
 echo "<h1>Test de Patrones Regex</h1>";
 echo "<style>
-    body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
-    h1 { color: #60a5fa; }
-    h3 { color: #818cf8; margin-top: 30px; }
+    body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: var(--surface); color: #e2e8f0; }
+    h1 { color: #5e7cba; }
+    h3 { color: #5e7cba; margin-top: 30px; }
     .query { color: #fbbf24; font-style: italic; }
     .pattern { color: #a78bfa; font-size: 14px; margin: 10px 0; }
     .result { padding: 15px; margin: 10px 0; border-radius: 8px; }
-    .success { background: #1e293b; color: #10b981; }
+    .success { background: var(--surface-2); color: #10b981; }
     .error { background: #7f1d1d; color: #fca5a5; }
-    .matches { color: #22d3ee; }
+    .matches { color: #5e7cba; }
 </style>";
 
 foreach ($tests as $i => $test) {

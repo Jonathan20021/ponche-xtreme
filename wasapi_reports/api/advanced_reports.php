@@ -27,7 +27,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-define('WASAPI_TOKEN', '338529|NeQrFHvdJ3lX6O2Hs26QPjc0IyrgzKFxQGwVcvCM0575a229');
+$__sec = @include __DIR__ . "/../../config/secrets.php";
+define("WASAPI_TOKEN", getenv("WASAPI_TOKEN") ?: (is_array($__sec) ? ($__sec["wasapi_token"] ?? "") : ""));
 define('WASAPI_BASE_URL', 'https://api.wasapi.io/prod/api/v1/');
 
 /**
@@ -259,7 +260,7 @@ try {
                     // Distribución
                     'distribution' => [
                         'by_status' => [
-                            ['status' => 'Abiertas', 'count' => $totalOpen, 'color' => '#3B82F6'],
+                            ['status' => 'Abiertas', 'count' => $totalOpen, 'color' => '#264b8b'],
                             ['status' => 'Cerradas', 'count' => $totalClosed, 'color' => '#10B981'],
                             ['status' => 'Pendientes', 'count' => $totalPending, 'color' => '#F59E0B'],
                             ['status' => 'En espera', 'count' => $totalHold, 'color' => '#6B7280']

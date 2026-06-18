@@ -68,11 +68,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             align-items: center;
             gap: 0.5rem;
             padding: 0.375rem 0.75rem;
-            background: rgba(99, 102, 241, 0.1);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: rgba(58, 93, 160, 0.1);
+            border: 1px solid rgba(58, 93, 160, 0.2);
             border-radius: 6px;
             font-size: 0.875rem;
-            color: #a5b4fc;
+            color: #92a9da;
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
         }
@@ -330,7 +330,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 <div class="form-group mb-4">
                     <label for="campaignColor">Color de Identificación</label>
                     <div class="flex gap-3 items-center">
-                        <input type="color" id="campaignColor" value="#6366f1" class="h-10 w-20">
+                        <input type="color" id="campaignColor" value="#3a5da0" class="h-10 w-20">
                         <span class="text-sm text-slate-400">Selecciona un color para identificar la campaña</span>
                     </div>
                 </div>
@@ -732,7 +732,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
             document.getElementById('campaignName').value = '';
             document.getElementById('campaignCode').value = '';
             document.getElementById('campaignDescription').value = '';
-            document.getElementById('campaignColor').value = '#6366f1';
+            document.getElementById('campaignColor').value = '#3a5da0';
             document.getElementById('campaignActive').checked = true;
             document.getElementById('formMessage').classList.add('hidden');
             document.getElementById('campaignModal').classList.add('active');

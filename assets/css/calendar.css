@@ -131,7 +131,7 @@
 .form-group textarea:focus,
 .form-group select:focus {
     outline: none;
-    border-color: #6366f1;
+    border-color: #264b8b;
     background: rgba(30, 41, 59, 0.7);
 }
 
@@ -227,12 +227,12 @@
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
     color: white;
 }
 
 .btn-primary:hover {
-    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    background: linear-gradient(135deg, #1f3f76 0%, #1f3f76 100%);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }
@@ -269,7 +269,7 @@
 }
 
 .event-detail-icon {
-    color: #6366f1;
+    color: #264b8b;
     width: 20px;
     text-align: center;
     margin-top: 2px;
@@ -331,7 +331,7 @@
 .theme-light .form-group input:focus,
 .theme-light .form-group textarea:focus,
 .theme-light .form-group select:focus {
-    border-color: #6366f1;
+    border-color: #264b8b;
     background: #ffffff;
 }
 
@@ -345,7 +345,7 @@
 }
 
 .theme-light .event-detail-icon {
-    color: #6366f1;
+    color: #264b8b;
 }
 
 .theme-light .event-detail-label {

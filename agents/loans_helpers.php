@@ -297,7 +297,7 @@ function sendLoanCreatedNotificationPHP(PDO $finanzasPdo, array $data): array {
     $freqLabel = $freqLabels[$data['installment_frequency']] ?? $data['installment_frequency'];
 
     $rows = [
-        ['Número',           '<strong style="font-family:monospace;color:#2563eb;">' . htmlspecialchars($data['loan_number']) . '</strong>'],
+        ['Número',           '<strong style="font-family:monospace;color:#1f3f76;">' . htmlspecialchars($data['loan_number']) . '</strong>'],
         ['Tipo',             htmlspecialchars($data['loan_type_name'])],
         ['Estado',           '<span style="display:inline-block;padding:3px 10px;border-radius:12px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;">' . $statusLabel . '</span>'],
         ['Prestatario',      htmlspecialchars($data['borrower_name']) . ($data['borrower_document'] ? ' <span style="color:#6b7280;">(' . htmlspecialchars($data['borrower_document']) . ')</span>' : '')],
@@ -354,7 +354,7 @@ function sendLoanCreatedNotificationPHP(PDO $finanzasPdo, array $data): array {
         . '<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;background:#f3f4f6;">'
         . '<table role="presentation" style="width:100%;border-collapse:collapse;background:#f3f4f6;"><tr><td align="center" style="padding:32px 16px;">'
         . '<table role="presentation" style="width:100%;max-width:640px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.06);">'
-        . '<tr><td style="background:linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%);padding:24px 32px;color:white;">'
+        . '<tr><td style="background:linear-gradient(135deg,#264b8b 0%,#6f8bbd 100%);padding:24px 32px;color:white;">'
         . '<p style="margin:0;font-size:11px;opacity:.85;letter-spacing:.1em;text-transform:uppercase;">' . htmlspecialchars($companyName) . '</p>'
         . '<h1 style="margin:6px 0 0 0;font-size:22px;font-weight:700;">Nuevo Préstamo Registrado</h1>'
         . '<p style="margin:6px 0 0 0;font-size:13px;opacity:.9;">' . htmlspecialchars($data['loan_number']) . ' · ' . $fmtMoney((float) $data['principal_amount'], $cur) . '</p>'

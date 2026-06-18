@@ -556,7 +556,7 @@ if (!function_exists('generateWasapiReportHTML')) {
             $items = '';
             foreach ($alerts as $a) {
                 $level = $a['level'] ?? 'info';
-                $color = $level === 'critical' ? '#991b1b' : ($level === 'warning' ? '#92400e' : '#1e40af');
+                $color = $level === 'critical' ? '#991b1b' : ($level === 'warning' ? '#92400e' : '#1f3f76');
                 $bg    = $level === 'critical' ? '#fee2e2' : ($level === 'warning' ? '#fef3c7' : '#dbeafe');
                 $items .= "<li style='padding:8px 12px;margin:4px 0;background:{$bg};color:{$color};border-radius:4px;font-size:13px;'>"
                     . htmlspecialchars((string) ($a['text'] ?? '')) . "</li>";
@@ -580,21 +580,21 @@ if (!function_exists('generateWasapiReportHTML')) {
 
         $row1 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
             . "<td style='{$statCard}border-top:4px solid #25d366;'><p style='{$statLabel}'>Conversaciones (día)</p><p style='{$statNum}'>" . (int) ($totals['total_conversations'] ?? 0) . "</p><p style='{$statSub}'>Cerradas: " . (int) $byStatus['closed'] . " · {$deltaClosed} vs. ayer</p></td>"
-            . "<td style='{$statCard}border-top:4px solid #0ea5e9;'><p style='{$statLabel}'>Tasa resolución equipo</p><p style='{$statNum}'>" . number_format((float) ($totals['team_resolution_rate'] ?? 0), 1) . "%</p><p style='{$statSub}'>Escaladas: " . (int) ($totals['total_escalations'] ?? 0) . "</p></td>"
-            . "<td style='{$statCard}border-top:4px solid #6366f1;'><p style='{$statLabel}'>1ª respuesta promedio</p><p style='{$statNum};font-size:20px;'>" . htmlspecialchars($totals['avg_first_response_formatted'] ?? '—') . "</p><p style='{$statSub}'>P90: " . htmlspecialchars(wasapiReportFmtSeconds($sla['first_response_p90'] ?? 0)) . "</p></td>"
-            . "<td style='{$statCard}border-top:4px solid #6366f1;'><p style='{$statLabel}'>Resolución promedio</p><p style='{$statNum};font-size:20px;'>" . htmlspecialchars($totals['avg_resolution_formatted'] ?? '—') . "</p><p style='{$statSub}'>P90: " . htmlspecialchars(wasapiReportFmtSeconds($sla['resolution_p90'] ?? 0)) . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #264b8b;'><p style='{$statLabel}'>Tasa resolución equipo</p><p style='{$statNum}'>" . number_format((float) ($totals['team_resolution_rate'] ?? 0), 1) . "%</p><p style='{$statSub}'>Escaladas: " . (int) ($totals['total_escalations'] ?? 0) . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #3a5da0;'><p style='{$statLabel}'>1ª respuesta promedio</p><p style='{$statNum};font-size:20px;'>" . htmlspecialchars($totals['avg_first_response_formatted'] ?? '—') . "</p><p style='{$statSub}'>P90: " . htmlspecialchars(wasapiReportFmtSeconds($sla['first_response_p90'] ?? 0)) . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #3a5da0;'><p style='{$statLabel}'>Resolución promedio</p><p style='{$statNum};font-size:20px;'>" . htmlspecialchars($totals['avg_resolution_formatted'] ?? '—') . "</p><p style='{$statSub}'>P90: " . htmlspecialchars(wasapiReportFmtSeconds($sla['resolution_p90'] ?? 0)) . "</p></td>"
             . "</tr></table>";
 
         $row2 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
             . "<td style='{$statCard}border-top:4px solid #16a34a;'><p style='{$statLabel}'>Abiertas</p><p style='{$statNum}'>" . (int) $byStatus['open'] . "</p></td>"
-            . "<td style='{$statCard}border-top:4px solid #06b6d4;'><p style='{$statLabel}'>Cerradas</p><p style='{$statNum}'>" . (int) $byStatus['closed'] . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #3a5da0;'><p style='{$statLabel}'>Cerradas</p><p style='{$statNum}'>" . (int) $byStatus['closed'] . "</p></td>"
             . "<td style='{$statCard}border-top:4px solid #f59e0b;'><p style='{$statLabel}'>Pendientes</p><p style='{$statNum}'>" . (int) $byStatus['pending'] . "</p></td>"
             . "<td style='{$statCard}border-top:4px solid #f97316;'><p style='{$statLabel}'>En espera (hold)</p><p style='{$statNum}'>" . (int) $byStatus['hold'] . "</p></td>"
             . "</tr></table>";
 
         $row3 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
             . "<td style='{$statCard}border-top:4px solid #25d366;'><p style='{$statLabel}'>Agentes en línea ahora</p><p style='{$statNum}'>" . (int) ($totals['agents_online'] ?? 0) . " / " . (int) ($totals['agents_total'] ?? 0) . "</p><p style='{$statSub}'>Disponibilidad " . number_format((float) ($totals['agents_availability_rate'] ?? 0), 1) . "%</p></td>"
-            . "<td style='{$statCard}border-top:4px solid #8b5cf6;'><p style='{$statLabel}'>Agentes con actividad (día)</p><p style='{$statNum}'>" . (int) ($totals['agents_with_activity'] ?? 0) . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #6f8bbd;'><p style='{$statLabel}'>Agentes con actividad (día)</p><p style='{$statNum}'>" . (int) ($totals['agents_with_activity'] ?? 0) . "</p></td>"
             . "<td style='{$statCard}border-top:4px solid #64748b;'><p style='{$statLabel}'>Campañas configuradas</p><p style='{$statNum}'>" . (int) ($totals['campaigns_count'] ?? 0) . "</p></td>"
             . "<td style='{$statCard}border-top:4px solid #f43f5e;'><p style='{$statLabel}'>Pendientes + hold</p><p style='{$statNum}'>" . ((int) $byStatus['pending'] + (int) $byStatus['hold']) . "</p><p style='{$statSub}'>umbral alerta: " . (int) ($reportData['pending_threshold'] ?? 0) . "</p></td>"
             . "</tr></table>";

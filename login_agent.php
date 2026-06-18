@@ -9,9 +9,9 @@ if (isset($_SESSION['user_id']) && in_array($_SESSION['role'] ?? '', ['AGENT', '
 
 $error = '';
 
-$theme = $_SESSION['theme'] ?? 'dark';
+$theme = $_SESSION['theme'] ?? 'light';
 if (!in_array($theme, ['dark', 'light'], true)) {
-    $theme = 'dark';
+    $theme = 'light';
 }
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
@@ -56,10 +56,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="assets/css/theme.css" rel="stylesheet">
+    <link href="assets/css/theme.css?v=<?= @filemtime(__DIR__ . '/assets/css/theme.css') ?>" rel="stylesheet">
     <title>Acceso de Agentes - Evallish BPO</title>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">

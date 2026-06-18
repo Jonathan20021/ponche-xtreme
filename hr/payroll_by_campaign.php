@@ -86,7 +86,7 @@ if ($selectedPeriod) {
             SELECT
                 COALESCE(d.id, 0) AS group_id,
                 COALESCE(d.name, 'Sin Departamento') AS group_name,
-                '#7c3aed' AS group_color,
+                '#5e7cba' AS group_color,
                 COUNT(DISTINCT pr.employee_id) AS employee_count,
                 SUM(pr.total_hours) AS total_hours,
                 SUM(pr.overtime_hours) AS overtime_hours,
@@ -131,7 +131,7 @@ if ($selectedPeriod) {
     if ($selectedGroupFilter !== null) {
         if ($selectedGroupFilter > 0) {
             if ($groupBy === 'department') {
-                $infoStmt = $pdo->prepare("SELECT id, name, description, '#7c3aed' AS color FROM departments WHERE id = ?");
+                $infoStmt = $pdo->prepare("SELECT id, name, description, '#5e7cba' AS color FROM departments WHERE id = ?");
             } else {
                 $infoStmt = $pdo->prepare("SELECT id, name, color, description FROM campaigns WHERE id = ?");
             }
@@ -240,15 +240,15 @@ $buildUrl = function (array $params) use ($selectedPeriodId, $groupBy) {
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
         .group-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.15);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 14px;
             padding: 1.25rem;
             transition: transform .12s ease, border-color .12s ease;
         }
         .group-card:hover {
             transform: translateY(-2px);
-            border-color: rgba(99, 102, 241, 0.5);
+            border-color: rgba(58, 93, 160, 0.5);
         }
         .theme-light .group-card {
             background: #ffffff;
@@ -266,18 +266,21 @@ $buildUrl = function (array $params) use ($selectedPeriodId, $groupBy) {
         .mode-pill {
             display: inline-flex; align-items: center; gap: 0.5rem;
             padding: 0.5rem 1rem; border-radius: 999px;
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: var(--surface);
+            border: 1px solid var(--border);
             color: #cbd5e1;
             font-weight: 500;
             transition: all .15s ease;
         }
-        .mode-pill:hover { border-color: rgba(99, 102, 241, 0.5); color: #fff; }
+        .mode-pill:hover { border-color: rgba(58, 93, 160, 0.5); color: #fff; }
         .mode-pill.active {
-            background: linear-gradient(135deg, #4338ca, #6366f1);
-            border-color: #6366f1;
+            background: linear-gradient(135deg, #152849, #3a5da0);
+            border-color: #3a5da0;
             color: #fff;
         }
+        .theme-light .mode-pill { color: var(--text-muted); }
+        .theme-light .mode-pill:hover { color: var(--text); }
+        .theme-light .mode-pill.active { color: #fff; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -316,7 +319,7 @@ $buildUrl = function (array $params) use ($selectedPeriodId, $groupBy) {
         </div>
 
         <!-- Aviso de limitación histórica -->
-        <div class="status-banner mb-6" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); color: #93c5fd; padding: 0.75rem 1rem; border-radius: 10px;">
+        <div class="status-banner mb-6" style="background: rgba(38, 75, 139, 0.08); border: 1px solid rgba(38, 75, 139, 0.25); color: var(--text-muted); padding: 0.75rem 1rem; border-radius: 10px;">
             <i class="fas fa-info-circle mr-2"></i>
             La agrupación usa <strong><?= strtolower($modeLabels['singular']) === 'campaña' ? 'la campaña' : 'el departamento' ?> actual</strong> del empleado.
             <?= htmlspecialchars($modeLabels['noteHistory']) ?>

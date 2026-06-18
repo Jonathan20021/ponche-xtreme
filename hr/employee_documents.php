@@ -56,7 +56,7 @@ $documentTypes = [
         }
         .document-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+            box-shadow: 0 8px 16px rgba(38, 75, 139, 0.3);
         }
         .file-icon {
             width: 48px;
@@ -72,8 +72,8 @@ $documentTypes = [
             transition: all 0.3s ease;
         }
         .upload-zone:hover, .upload-zone.dragover {
-            border-color: #3b82f6;
-            background: rgba(59, 130, 246, 0.1);
+            border-color: #264b8b;
+            background: rgba(38, 75, 139, 0.1);
         }
     </style>
 </head>
@@ -112,7 +112,7 @@ $documentTypes = [
                         <p class="text-slate-400 text-sm mb-1">Total Documentos</p>
                         <h3 class="text-3xl font-bold text-white" id="totalDocs">0</h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <i class="fas fa-file text-white text-xl"></i>
                     </div>
                 </div>
@@ -148,7 +148,7 @@ $documentTypes = [
                         <p class="text-slate-400 text-sm mb-1">Último Documento</p>
                         <h3 class="text-lg font-bold text-white" id="lastUpload">-</h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-clock text-white text-xl"></i>
                     </div>
                 </div>
@@ -440,13 +440,13 @@ $documentTypes = [
         function getFileColor(extension) {
             const colors = {
                 'pdf': 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                'doc': 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                'docx': 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                'doc': 'linear-gradient(135deg, #264b8b 0%, #1f3f76 100%)',
+                'docx': 'linear-gradient(135deg, #264b8b 0%, #1f3f76 100%)',
                 'xls': 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 'xlsx': 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                'jpg': 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                'jpeg': 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                'png': 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                'jpg': 'linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%)',
+                'jpeg': 'linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%)',
+                'png': 'linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%)',
                 'zip': 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 'rar': 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
             };

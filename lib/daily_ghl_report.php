@@ -799,7 +799,7 @@ if (!function_exists('generateGhlReportHTML')) {
             $items = '';
             foreach ($alerts as $a) {
                 $level = $a['level'] ?? 'info';
-                $color = $level === 'critical' ? '#991b1b' : ($level === 'warning' ? '#92400e' : '#1e40af');
+                $color = $level === 'critical' ? '#991b1b' : ($level === 'warning' ? '#92400e' : '#1f3f76');
                 $bg    = $level === 'critical' ? '#fee2e2' : ($level === 'warning' ? '#fef3c7' : '#dbeafe');
                 $items .= "<li style='padding:8px 12px;margin:4px 0;background:{$bg};color:{$color};border-radius:4px;font-size:13px;'>"
                     . htmlspecialchars((string) ($a['text'] ?? '')) . "</li>";
@@ -816,16 +816,16 @@ if (!function_exists('generateGhlReportHTML')) {
         $statSub   = 'font-size:12px;color:#666;margin:4px 0 0 0;';
 
         $row1 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
-            . "<td style='{$statCard}border-top:4px solid #4f46e5;'><p style='{$statLabel}'>Llamadas totales</p><p style='{$statNum}'>" . (int) ($totals['total_calls'] ?? 0) . "</p><p style='{$statSub}'>In: " . (int) ($totals['inbound_calls'] ?? 0) . " · Out: " . (int) ($totals['outbound_calls'] ?? 0) . "</p></td>"
-            . "<td style='{$statCard}border-top:4px solid #06b6d4;'><p style='{$statLabel}'>Duración promedio</p><p style='{$statNum};font-size:20px;'>" . htmlspecialchars($totals['avg_duration_formatted'] ?? '—') . "</p><p style='{$statSub}'>Total: " . htmlspecialchars($totals['total_duration_formatted'] ?? '—') . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #1f3f76;'><p style='{$statLabel}'>Llamadas totales</p><p style='{$statNum}'>" . (int) ($totals['total_calls'] ?? 0) . "</p><p style='{$statSub}'>In: " . (int) ($totals['inbound_calls'] ?? 0) . " · Out: " . (int) ($totals['outbound_calls'] ?? 0) . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #3a5da0;'><p style='{$statLabel}'>Duración promedio</p><p style='{$statNum};font-size:20px;'>" . htmlspecialchars($totals['avg_duration_formatted'] ?? '—') . "</p><p style='{$statSub}'>Total: " . htmlspecialchars($totals['total_duration_formatted'] ?? '—') . "</p></td>"
             . "<td style='{$statCard}border-top:4px solid #16a34a;'><p style='{$statLabel}'>Cobertura grabación</p><p style='{$statNum}'>" . number_format((float) ($totals['recording_coverage_pct'] ?? 0), 1) . "%</p><p style='{$statSub}'>" . (int) ($totals['with_recording'] ?? 0) . " grabadas</p></td>"
             . "<td style='{$statCard}border-top:4px solid #f97316;'><p style='{$statLabel}'>Cobertura transcripción</p><p style='{$statNum}'>" . number_format((float) ($totals['transcript_coverage_pct'] ?? 0), 1) . "%</p><p style='{$statSub}'>" . (int) ($totals['with_transcript'] ?? 0) . " transcritas</p></td>"
             . "</tr></table>";
 
         $row2 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
-            . "<td style='{$statCard}border-top:4px solid #8b5cf6;'><p style='{$statLabel}'>Cobertura resumen IA</p><p style='{$statNum}'>" . number_format((float) ($totals['summary_coverage_pct'] ?? 0), 1) . "%</p><p style='{$statSub}'>" . (int) ($totals['with_summary'] ?? 0) . " resúmenes</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #6f8bbd;'><p style='{$statLabel}'>Cobertura resumen IA</p><p style='{$statNum}'>" . number_format((float) ($totals['summary_coverage_pct'] ?? 0), 1) . "%</p><p style='{$statSub}'>" . (int) ($totals['with_summary'] ?? 0) . " resúmenes</p></td>"
             . "<td style='{$statCard}border-top:4px solid #64748b;'><p style='{$statLabel}'>Agentes únicos</p><p style='{$statNum}'>" . (int) ($totals['unique_agents'] ?? 0) . "</p></td>"
-            . "<td style='{$statCard}border-top:4px solid #14b8a6;'><p style='{$statLabel}'>Disposiciones únicas</p><p style='{$statNum}'>" . (int) ($totals['unique_dispositions'] ?? 0) . "</p></td>"
+            . "<td style='{$statCard}border-top:4px solid #1f3f76;'><p style='{$statLabel}'>Disposiciones únicas</p><p style='{$statNum}'>" . (int) ($totals['unique_dispositions'] ?? 0) . "</p></td>"
             . "<td style='{$statCard}border-top:4px solid #ef4444;'><p style='{$statLabel}'>Sin disposición</p><p style='{$statNum}'>" . (int) ($totals['no_disposition'] ?? 0) . "</p><p style='{$statSub}'>" . number_format((float) ($totals['no_disposition_pct'] ?? 0), 1) . "% del total</p></td>"
             . "</tr></table>";
 
@@ -983,7 +983,7 @@ if (!function_exists('generateGhlReportHTML')) {
 <style>
   body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; line-height: 1.5; }
   .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  .header { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
+  .header { background: linear-gradient(135deg, #1f3f76 0%, #3a5da0 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
   .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
   .header p { margin: 8px 0 0 0; font-size: 15px; opacity: 0.95; }
   .header .integ { display:inline-block;background:rgba(255,255,255,.18);padding:4px 12px;border-radius:14px;font-size:12px;margin-top:6px; }
@@ -994,11 +994,11 @@ if (!function_exists('generateGhlReportHTML')) {
   tbody tr:nth-child(even) { background-color: #fafafa; }
   td.num { font-family: 'Courier New', monospace; white-space: nowrap; text-align: right; }
   .muted { color: #888; font-size: 11px; }
-  .bar { background: linear-gradient(90deg, #06b6d4, #4f46e5); height: 14px; border-radius: 3px; min-width: 2px; }
+  .bar { background: linear-gradient(90deg, #3a5da0, #1f3f76); height: 14px; border-radius: 3px; min-width: 2px; }
   .pill { display: inline-block; background: #e2e8f0; color: #1e293b; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
   .footer { text-align: center; padding: 18px; color: #777; font-size: 12px; margin-top: 20px; }
   .card { background:#fff; margin:18px 0; padding:22px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.08); }
-  .card h2 { margin:0 0 14px 0; font-size:18px; border-bottom:2px solid #4f46e5; padding-bottom:8px; }
+  .card h2 { margin:0 0 14px 0; font-size:18px; border-bottom:2px solid #1f3f76; padding-bottom:8px; }
 </style>
 </head>
 <body>

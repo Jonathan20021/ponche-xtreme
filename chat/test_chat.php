@@ -34,7 +34,7 @@ if (session_status() === PHP_SESSION_NONE) {
         .success { color: #22c55e; }
         .error { color: #ef4444; }
         .warning { color: #f59e0b; }
-        h2 { margin-top: 0; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+        h2 { margin-top: 0; border-bottom: 2px solid #264b8b; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background: #f3f4f6; }
@@ -42,13 +42,13 @@ if (session_status() === PHP_SESSION_NONE) {
         .button { 
             display: inline-block;
             padding: 10px 20px;
-            background: #3b82f6;
+            background: #264b8b;
             color: white;
             text-decoration: none;
             border-radius: 4px;
             margin: 5px;
         }
-        .button:hover { background: #2563eb; }
+        .button:hover { background: #1f3f76; }
     </style>
 </head>
 <body>

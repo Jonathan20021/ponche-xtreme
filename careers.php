@@ -148,7 +148,7 @@ $employment_types = [
         .dropzone:hover, .dropzone.drag { background: #eef4ff; border-color: #3a63f5; }
 
         .ai-banner {
-            background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 50%, #6d28d9 100%);
+            background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 50%, #1f3f76 100%);
         }
         .pulse-dot { animation: pulse 1.5s infinite; }
         @keyframes pulse {

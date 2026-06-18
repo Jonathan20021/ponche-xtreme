@@ -72,15 +72,15 @@
 
 /* Primary Action Buttons */
 .pagination-btn.primary {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    border-color: #2563eb;
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
+    border-color: #1f3f76;
     color: #ffffff;
     font-weight: 600;
 }
 
 .pagination-btn.primary:hover {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-    border-color: #1d4ed8;
+    background: linear-gradient(135deg, #1f3f76 0%, #1f3f76 100%);
+    border-color: #1f3f76;
     color: #ffffff;
     box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
 }
@@ -117,8 +117,8 @@
 }
 
 .page-btn.active {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    border-color: #2563eb;
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
+    border-color: #1f3f76;
     color: #ffffff;
     font-weight: 600;
     box-shadow: 0 2px 4px 0 rgba(37, 99, 235, 0.3);
@@ -126,8 +126,8 @@
 }
 
 .page-btn.active:hover {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    border-color: #2563eb;
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
+    border-color: #1f3f76;
 }
 
 .page-ellipsis {
@@ -243,7 +243,7 @@
 /* Accessibility */
 .pagination-btn:focus,
 .page-btn:focus {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid #264b8b;
     outline-offset: 2px;
 }
 

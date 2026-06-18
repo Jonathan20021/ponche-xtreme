@@ -885,7 +885,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 <div class="form-group mb-4">
                     <label for="campaign_color">Color de Identificación</label>
                     <div class="flex gap-3 items-center">
-                        <input type="color" id="campaign_color" name="color" value="#6366f1"
+                        <input type="color" id="campaign_color" name="color" value="#3a5da0"
                             class="h-10 w-20 border-0 rounded cursor-pointer">
                         <span class="text-sm text-slate-400">Selecciona un color para identificar visualmente la
                             campaña</span>

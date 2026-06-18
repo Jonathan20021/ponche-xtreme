@@ -607,7 +607,7 @@ function sendInterviewNotificationEmail($data) {
                 {$notes}
             </div>
             
-            <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; border-left: 4px solid #2196f3; margin: 20px 0;">
+            <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; border-left: 4px solid #3a5da0; margin: 20px 0;">
                 <h4 style="margin-top: 0;">💡 Consejos para la Entrevista</h4>
                 <ul style="margin: 10px 0;">
                     <li>Llega 10 minutos antes (o conéctate con anticipación si es virtual)</li>
@@ -2173,11 +2173,11 @@ function sendWeeklyAuthorizationCodeEmail(array $codeData, array $recipients) {
     <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #0891b2 0%, #1e40af 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+        .header { background: linear-gradient(135deg, #1f3f76 0%, #1f3f76 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
         .content { padding: 30px; background: #f9f9f9; }
-        .code-box { background: white; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px dashed #0891b2; }
-        .code { font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1e40af; font-family: 'Courier New', monospace; }
-        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0891b2; }
+        .code-box { background: white; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: center; border: 2px dashed #1f3f76; }
+        .code { font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1f3f76; font-family: 'Courier New', monospace; }
+        .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1f3f76; }
         .warning { background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; margin: 20px 0; }
         .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
     </style>

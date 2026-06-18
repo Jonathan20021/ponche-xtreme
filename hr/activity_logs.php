@@ -243,7 +243,7 @@ include '../header.php';
 }
 
 .action-create { background: #4caf50; color: white; }
-.action-update { background: #2196f3; color: white; }
+.action-update { background: #3a5da0; color: white; }
 .action-delete { background: #f44336; color: white; }
 .action-generate { background: #9c27b0; color: white; }
 .action-approve { background: #00bcd4; color: white; }

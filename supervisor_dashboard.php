@@ -177,38 +177,38 @@ include 'header.php';
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --text-muted: #64748b;
-    --punch-status-bg: rgba(15, 23, 42, 0.6);
-    --stat-badge-bg: rgba(99, 102, 241, 0.1);
-    --stat-badge-border: rgba(99, 102, 241, 0.2);
-    --stat-badge-text: #a5b4fc;
-    --filter-btn-bg: rgba(30, 41, 59, 0.8);
+    --punch-status-bg: var(--surface);
+    --stat-badge-bg: rgba(58, 93, 160, 0.1);
+    --stat-badge-border: rgba(58, 93, 160, 0.2);
+    --stat-badge-text: #92a9da;
+    --filter-btn-bg: var(--surface-2);
     --filter-btn-border: rgba(148, 163, 184, 0.2);
     --filter-btn-text: #94a3b8;
-    --filter-btn-active-bg: rgba(99, 102, 241, 0.2);
-    --filter-btn-active-border: #6366f1;
-    --filter-btn-active-text: #a5b4fc;
+    --filter-btn-active-bg: rgba(58, 93, 160, 0.2);
+    --filter-btn-active-border: #264b8b;
+    --filter-btn-active-text: #92a9da;
     --summary-card-bg: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
-    --last-update-bg: rgba(15, 23, 42, 0.4);
+    --last-update-bg: var(--surface);
 }
 
 .theme-light {
     --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
     --border-color: rgba(203, 213, 225, 0.5);
-    --border-hover: rgba(99, 102, 241, 0.4);
+    --border-hover: rgba(58, 93, 160, 0.4);
     --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.1);
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --text-muted: #64748b;
     --punch-status-bg: rgba(248, 250, 252, 0.8);
-    --stat-badge-bg: rgba(99, 102, 241, 0.08);
-    --stat-badge-border: rgba(99, 102, 241, 0.2);
-    --stat-badge-text: #4f46e5;
+    --stat-badge-bg: rgba(58, 93, 160, 0.08);
+    --stat-badge-border: rgba(58, 93, 160, 0.2);
+    --stat-badge-text: #1f3f76;
     --filter-btn-bg: rgba(255, 255, 255, 0.9);
     --filter-btn-border: rgba(203, 213, 225, 0.5);
     --filter-btn-text: #475569;
-    --filter-btn-active-bg: rgba(99, 102, 241, 0.1);
-    --filter-btn-active-border: #6366f1;
-    --filter-btn-active-text: #4f46e5;
+    --filter-btn-active-bg: rgba(58, 93, 160, 0.1);
+    --filter-btn-active-border: #264b8b;
+    --filter-btn-active-text: #1f3f76;
     --summary-card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
     --last-update-bg: rgba(248, 250, 252, 0.6);
 }
@@ -224,7 +224,7 @@ include 'header.php';
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--punch-color-start, #6366f1), var(--punch-color-end, #4338ca));
+    background: linear-gradient(135deg, var(--punch-color-start, #264b8b), var(--punch-color-end, #152849));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -353,18 +353,18 @@ include 'header.php';
 }
 
 .theme-light .ninja-edit-btn {
-    background: rgba(99, 102, 241, 0.12);
-    border-color: rgba(99, 102, 241, 0.4);
-    color: #4338ca;
+    background: rgba(58, 93, 160, 0.12);
+    border-color: rgba(58, 93, 160, 0.4);
+    color: #152849;
 }
 
 .theme-light .ninja-edit-btn:hover {
-    background: rgba(99, 102, 241, 0.2);
+    background: rgba(58, 93, 160, 0.2);
 }
 
 .theme-light .punch-edit-controls {
-    background: rgba(99, 102, 241, 0.08);
-    border-color: rgba(99, 102, 241, 0.35);
+    background: rgba(58, 93, 160, 0.08);
+    border-color: rgba(58, 93, 160, 0.35);
 }
 
 .theme-light .punch-edit-row button {
@@ -378,8 +378,8 @@ include 'header.php';
 }
 
 .theme-light .punch-create-container {
-    background: rgba(99, 102, 241, 0.06);
-    border-color: rgba(99, 102, 241, 0.4);
+    background: rgba(58, 93, 160, 0.06);
+    border-color: rgba(58, 93, 160, 0.4);
 }
 
 .theme-light .ninja-add-btn {
@@ -407,7 +407,7 @@ include 'header.php';
 }
 
 .theme-light .summary-value.text-blue-400 {
-    color: #1e40af !important;
+    color: #1f3f76 !important;
 }
 
 .theme-light .summary-value.text-orange-400 {
@@ -430,8 +430,8 @@ include 'header.php';
 .loading-spinner {
     width: 50px;
     height: 50px;
-    border: 4px solid rgba(99, 102, 241, 0.2);
-    border-top-color: #6366f1;
+    border: 4px solid rgba(58, 93, 160, 0.2);
+    border-top-color: #264b8b;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -755,9 +755,9 @@ include 'header.php';
 .punch-create-container {
     margin-bottom: 1rem;
     padding: 1rem;
-    border: 2px dashed rgba(99, 102, 241, 0.4);
+    border: 2px dashed rgba(58, 93, 160, 0.4);
     border-radius: 12px;
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(58, 93, 160, 0.08);
 }
 
 .punch-create-header {
@@ -803,9 +803,9 @@ include 'header.php';
     gap: 0.4rem;
     padding: 0.4rem 0.7rem;
     border-radius: 7px;
-    border: 1px solid rgba(99, 102, 241, 0.4);
-    background: rgba(99, 102, 241, 0.15);
-    color: #c7d2fe;
+    border: 1px solid rgba(58, 93, 160, 0.4);
+    background: rgba(58, 93, 160, 0.15);
+    color: #dce4f4;
     font-size: 0.75rem;
     font-weight: 500;
     cursor: pointer;
@@ -813,8 +813,8 @@ include 'header.php';
 }
 
 .ninja-edit-btn:hover {
-    background: rgba(99, 102, 241, 0.25);
-    border-color: rgba(99, 102, 241, 0.6);
+    background: rgba(58, 93, 160, 0.25);
+    border-color: rgba(58, 93, 160, 0.6);
     transform: translateY(-1px);
 }
 
@@ -822,8 +822,8 @@ include 'header.php';
     margin-top: 0.75rem;
     padding: 1rem;
     border-radius: 10px;
-    border: 2px solid rgba(99, 102, 241, 0.3);
-    background: rgba(99, 102, 241, 0.1);
+    border: 2px solid rgba(58, 93, 160, 0.3);
+    background: rgba(58, 93, 160, 0.1);
     animation: slideDown 0.2s ease-out;
 }
 
@@ -871,8 +871,8 @@ include 'header.php';
 .punch-edit-row select:focus,
 .punch-edit-row input[type="time"]:focus {
     outline: none;
-    border-color: rgba(99, 102, 241, 0.5);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    border-color: rgba(58, 93, 160, 0.5);
+    box-shadow: 0 0 0 3px rgba(58, 93, 160, 0.1);
 }
 
 /* Estilos para el input de hora en tema claro */
@@ -945,11 +945,11 @@ include 'header.php';
     align-items: center;
     gap: 0.4rem;
     padding: 0.35rem 0.65rem;
-    background: rgba(99, 102, 241, 0.15);
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    background: rgba(58, 93, 160, 0.15);
+    border: 1px solid rgba(58, 93, 160, 0.3);
     border-radius: 6px;
     font-size: 0.7rem;
-    color: #a5b4fc;
+    color: #92a9da;
     z-index: 10;
 }
 
@@ -1085,8 +1085,8 @@ include 'header.php';
             $supervisorPunchTypes = [
                 ['slug' => 'ENTRY', 'label' => 'Entrada', 'icon' => 'fas fa-sign-in-alt', 'color_start' => '#10b981', 'color_end' => '#059669'],
                 ['slug' => 'BREAK', 'label' => 'Break', 'icon' => 'fas fa-coffee', 'color_start' => '#f59e0b', 'color_end' => '#d97706'],
-                ['slug' => 'LUNCH', 'label' => 'Almuerzo', 'icon' => 'fas fa-utensils', 'color_start' => '#3b82f6', 'color_end' => '#2563eb'],
-                ['slug' => 'BANO', 'label' => 'Baño', 'icon' => 'fas fa-restroom', 'color_start' => '#8b5cf6', 'color_end' => '#7c3aed'],
+                ['slug' => 'LUNCH', 'label' => 'Almuerzo', 'icon' => 'fas fa-utensils', 'color_start' => '#264b8b', 'color_end' => '#1f3f76'],
+                ['slug' => 'BANO', 'label' => 'Baño', 'icon' => 'fas fa-restroom', 'color_start' => '#6f8bbd', 'color_end' => '#5e7cba'],
                 ['slug' => 'EXIT', 'label' => 'Salida', 'icon' => 'fas fa-sign-out-alt', 'color_start' => '#ef4444', 'color_end' => '#dc2626'],
             ];
             

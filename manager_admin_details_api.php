@@ -56,8 +56,8 @@ try {
             'slug' => $slug,
             'label' => $type['label'],
             'icon' => $type['icon_class'] ?? 'fas fa-circle',
-            'color_start' => $type['color_start'] ?? '#6366f1',
-            'color_end' => $type['color_end'] ?? '#4338ca',
+            'color_start' => $type['color_start'] ?? '#3a5da0',
+            'color_end' => $type['color_end'] ?? '#152849',
             'is_paid' => isset($type['is_paid']) ? (int)$type['is_paid'] : 1,
             'is_unique_daily' => isset($type['is_unique_daily']) ? (int)$type['is_unique_daily'] : 0
         ];

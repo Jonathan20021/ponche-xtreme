@@ -43,10 +43,10 @@ if (!function_exists('renderDailyAttendanceErrorPage')) {
         $detailEsc = $detail !== '' ? htmlspecialchars($detail, ENT_QUOTES, 'UTF-8') : '';
 
         echo '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Error - Reporte de Asistencia</title>';
-        echo '<style>body{font-family:Segoe UI,Arial,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:40px;display:flex;justify-content:center;align-items:center;min-height:100vh}';
-        echo '.card{background:#1e293b;padding:36px;border-radius:16px;max-width:520px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.3);border-left:4px solid #ef4444}';
-        echo 'h2{margin:0 0 12px;color:#fca5a5;font-size:20px}p{margin:8px 0;line-height:1.5}.muted{color:#94a3b8;font-size:13px}';
-        echo '.btn{display:inline-block;margin-top:18px;padding:10px 18px;background:#6366f1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600}</style></head><body>';
+        echo '<style>body{font-family:Segoe UI,Arial,sans-serif;background:#eaeef6;color:#14223e;margin:0;padding:40px;display:flex;justify-content:center;align-items:center;min-height:100vh}';
+        echo '.card{background:#ffffff;padding:36px;border-radius:16px;max-width:520px;width:100%;box-shadow:0 10px 30px rgba(20,42,82,.12);border-left:4px solid #ef4444}';
+        echo 'h2{margin:0 0 12px;color:#b91c1c;font-size:20px}p{margin:8px 0;line-height:1.5}.muted{color:#586a87;font-size:13px}';
+        echo '.btn{display:inline-block;margin-top:18px;padding:10px 18px;background:#3a5da0;color:#fff;text-decoration:none;border-radius:8px;font-weight:600}</style></head><body>';
         echo '<div class="card"><h2>No se pudo generar el reporte</h2>';
         echo '<p>' . $titleEsc . '</p>';
         if ($detailEsc !== '') {
@@ -282,7 +282,7 @@ if (empty($raw_summary_rows)) {
     }
     echo '</table>';
     echo '</div>';
-    echo '<br><a href="records.php" style="display: inline-block; padding: 10px 20px; background: #3498db; color: white; text-decoration: none; border-radius: 5px;">← Volver a Records</a>';
+    echo '<br><a href="records.php" style="display: inline-block; padding: 10px 20px; background: #264b8b; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">← Volver a Records</a>';
     echo '</body></html>';
     exit;
 }
@@ -504,12 +504,8 @@ if (empty($work_summary)) {
     echo '<li>Paid Type Slugs: ' . implode(', ', $paidTypeSlugs) . '</li>';
     echo '<li>Raw Rows: ' . count($raw_summary_rows) . '</li>';
     echo '</ul>';
-    echo '<h3>Primeros 5 registros sin procesar:</h3>';
-    echo '<pre>';
-    print_r(array_slice($raw_summary_rows, 0, 5));
-    echo '</pre>';
     echo '</div>';
-    echo '<br><a href="records.php" style="display: inline-block; padding: 10px 20px; background: #3498db; color: white; text-decoration: none; border-radius: 5px;">← Volver a Records</a>';
+    echo '<br><a href="records.php" style="display: inline-block; padding: 10px 20px; background: #264b8b; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">← Volver a Records</a>';
     echo '</body></html>';
     exit;
 }

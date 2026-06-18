@@ -510,7 +510,7 @@ switch ($action) {
         $name = trim($_POST['name']);
         $description = trim($_POST['description']);
         $department = trim($_POST['department']);
-        $color = $_POST['color'] ?? '#6366f1';
+        $color = $_POST['color'] ?? '#3a5da0';
         $slaResponse = intval($_POST['sla_response_hours']);
         $slaResolution = intval($_POST['sla_resolution_hours']);
         
@@ -536,7 +536,7 @@ switch ($action) {
         $name = trim($_POST['name']);
         $description = trim($_POST['description']);
         $department = trim($_POST['department']);
-        $color = $_POST['color'] ?? '#6366f1';
+        $color = $_POST['color'] ?? '#3a5da0';
         $slaResponse = intval($_POST['sla_response_hours']);
         $slaResolution = intval($_POST['sla_resolution_hours']);
         

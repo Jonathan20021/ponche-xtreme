@@ -103,7 +103,7 @@ if (!$agentId) {
         <!-- Performance KPIs - Modern Glass Style -->
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <!-- Conversaciones Totales -->
-            <div class="relative overflow-hidden rounded-2xl p-5 text-white shadow-xl" style="background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);">
+            <div class="relative overflow-hidden rounded-2xl p-5 text-white shadow-xl" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                 <i class="fas fa-comments text-4xl absolute bottom-3 right-3" style="opacity: 0.2;"></i>
                 <p class="text-xs font-medium uppercase tracking-wider" style="color: rgba(255,255,255,0.8);">Conversaciones</p>
                 <p class="text-3xl font-bold mt-2" x-text="formatNumber(metrics?.total_conversations || 0)"></p>
@@ -117,7 +117,7 @@ if (!$agentId) {
             </div>
             
             <!-- Tiempo Resolución -->
-            <div class="relative overflow-hidden rounded-2xl p-5 text-white shadow-xl" style="background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);">
+            <div class="relative overflow-hidden rounded-2xl p-5 text-white shadow-xl" style="background: linear-gradient(135deg, #6f8bbd 0%, #3a5da0 100%);">
                 <i class="fas fa-clock text-4xl absolute bottom-3 right-3" style="opacity: 0.2;"></i>
                 <p class="text-xs font-medium uppercase tracking-wider" style="color: rgba(255,255,255,0.8);">T. Resolución</p>
                 <p class="text-3xl font-bold mt-2" x-text="metrics?.avg_resolution_formatted || '0m'"></p>
@@ -138,7 +138,7 @@ if (!$agentId) {
             </div>
             
             <!-- Eficiencia -->
-            <div class="relative overflow-hidden rounded-2xl p-5 text-white shadow-xl" style="background: linear-gradient(135deg, #06B6D4 0%, #0284C7 100%);">
+            <div class="relative overflow-hidden rounded-2xl p-5 text-white shadow-xl" style="background: linear-gradient(135deg, #3a5da0 0%, #0284C7 100%);">
                 <i class="fas fa-chart-pie text-4xl absolute bottom-3 right-3" style="opacity: 0.2;"></i>
                 <p class="text-xs font-medium uppercase tracking-wider" style="color: rgba(255,255,255,0.8);">Eficiencia</p>
                 <p class="text-3xl font-bold mt-2" x-text="(metrics?.efficiency_rate || 0) + '%'"></p>
@@ -319,13 +319,13 @@ if (!$agentId) {
                 Distribución de Asignaciones
             </h3>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div class="rounded-xl p-5 text-center border-2" style="background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border-color: #93C5FD;">
-                    <p class="text-sm font-semibold" style="color: #3B82F6;">Automáticas</p>
-                    <p class="text-4xl font-bold mt-2" style="color: #1D4ED8;" x-text="metrics?.automatic_assignments || 0"></p>
+                <div class="rounded-xl p-5 text-center border-2" style="background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border-color: #9db1d2;">
+                    <p class="text-sm font-semibold" style="color: #264b8b;">Automáticas</p>
+                    <p class="text-4xl font-bold mt-2" style="color: #152849;" x-text="metrics?.automatic_assignments || 0"></p>
                 </div>
                 <div class="rounded-xl p-5 text-center border-2" style="background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%); border-color: #C4B5FD;">
-                    <p class="text-sm font-semibold" style="color: #8B5CF6;">Manuales</p>
-                    <p class="text-4xl font-bold mt-2" style="color: #6D28D9;" x-text="metrics?.manual_assignments || 0"></p>
+                    <p class="text-sm font-semibold" style="color: #6f8bbd;">Manuales</p>
+                    <p class="text-4xl font-bold mt-2" style="color: #1f3f76;" x-text="metrics?.manual_assignments || 0"></p>
                 </div>
                 <div class="rounded-xl p-5 text-center border-2" style="background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); border-color: #6EE7B7;">
                     <p class="text-sm font-semibold" style="color: #10B981;">Por Bot</p>
@@ -444,7 +444,7 @@ document.addEventListener('alpine:init', () => {
                             {
                                 label: 'Abiertas',
                                 data: daily.map(d => d.open),
-                                backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                                backgroundColor: 'rgba(38, 75, 139, 0.8)',
                                 borderRadius: 6
                             },
                             {
@@ -489,8 +489,8 @@ document.addEventListener('alpine:init', () => {
                             {
                                 label: 'Resolución',
                                 data: daily.map(d => d.avg_resolution),
-                                borderColor: 'rgba(139, 92, 246, 1)',
-                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                borderColor: 'rgba(111, 139, 189, 1)',
+                                backgroundColor: 'rgba(111, 139, 189, 0.1)',
                                 fill: true,
                                 tension: 0.4
                             }

@@ -379,13 +379,13 @@ if (!function_exists('generateWorkforceReportHTML')) {
 <style>
   body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; line-height: 1.5; }
   .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  .header { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
+  .header { background: linear-gradient(135deg, #3a5da0 0%, #152849 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
   .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
   .header p { margin: 8px 0 0 0; font-size: 15px; opacity: 0.95; }
   .stats-grid { display: table; width: 100%; margin: 18px 0; border-spacing: 10px; }
   .stat-card { display: table-cell; background: #fff; padding: 18px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
   .stat-card.success { border-top: 4px solid #10b981; }
-  .stat-card.primary { border-top: 4px solid #6366f1; }
+  .stat-card.primary { border-top: 4px solid #3a5da0; }
   .stat-card.trial   { border-top: 4px solid #f59e0b; }
   .stat-card.danger  { border-top: 4px solid #ef4444; }
   .stat-card.muted   { border-top: 4px solid #64748b; }
@@ -396,12 +396,12 @@ if (!function_exists('generateWorkforceReportHTML')) {
   .ai-badge { display: inline-block; background: #f59e0b; color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 10px; }
   .ai-body { color: #333; font-size: 14px; white-space: pre-wrap; }
   .section { background: #fff; margin: 18px 0; padding: 22px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-  .section h2 { margin: 0 0 14px 0; font-size: 18px; border-bottom: 2px solid #6366f1; padding-bottom: 8px; }
+  .section h2 { margin: 0 0 14px 0; font-size: 18px; border-bottom: 2px solid #3a5da0; padding-bottom: 8px; }
   .section.alert-trial h2 { border-bottom-color: #f59e0b; }
   .two-col { display: table; width: 100%; border-spacing: 10px; }
   .two-col > .col { display: table-cell; width: 50%; vertical-align: top; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+  thead { background: linear-gradient(135deg, #3a5da0 0%, #152849 100%); }
   th { color: #fff; padding: 10px 8px; text-align: left; font-weight: 600; font-size: 12px; }
   td { padding: 10px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
   tbody tr:nth-child(even) { background-color: #fafafa; }

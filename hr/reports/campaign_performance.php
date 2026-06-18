@@ -132,8 +132,8 @@ $deptDistribution = $pdo->query("
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
         .report-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
         }
@@ -142,8 +142,8 @@ $deptDistribution = $pdo->query("
             border-color: rgba(148, 163, 184, 0.2);
         }
         .stat-box {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
-            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%);
+            border: 1px solid rgba(38, 75, 139, 0.2);
             border-radius: 12px;
             padding: 1.25rem;
         }

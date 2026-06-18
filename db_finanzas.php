@@ -23,11 +23,13 @@ if (!function_exists('getFinanzasPdo')) {
         if ($pdo === null) {
             // Credenciales del esquema de finanzas — mismas que usa la app Next.js
             // (configurables vía env vars si se desea sobreescribir).
-            $host     = getenv('FINANZAS_DB_HOST')     ?: '192.185.46.27';
-            $dbname   = getenv('FINANZAS_DB_NAME')     ?: 'hhempeos_financial_system';
-            $username = getenv('FINANZAS_DB_USER')     ?: 'hhempeos_finanzas';
-            $password = getenv('FINANZAS_DB_PASSWORD') ?: 'Hacker#2002';
-            $port     = getenv('FINANZAS_DB_PORT')     ?: '3306';
+            $__sec = @include __DIR__ . '/config/secrets.php';
+            if (!is_array($__sec)) { $__sec = []; }
+            $host     = getenv('FINANZAS_DB_HOST')     ?: ($__sec['db_finanzas']['host'] ?? '');
+            $dbname   = getenv('FINANZAS_DB_NAME')     ?: ($__sec['db_finanzas']['name'] ?? '');
+            $username = getenv('FINANZAS_DB_USER')     ?: ($__sec['db_finanzas']['user'] ?? '');
+            $password = getenv('FINANZAS_DB_PASSWORD') ?: ($__sec['db_finanzas']['pass'] ?? '');
+            $port     = getenv('FINANZAS_DB_PORT')     ?: ($__sec['db_finanzas']['port'] ?? '3306');
 
             try {
                 $pdo = new PDO(

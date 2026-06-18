@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const printButton = document.createElement('div');
         printButton.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 10px;';
         printButton.innerHTML = `
-            <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px;">
+            <button onclick="window.print()" style="background: #1f3f76; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px;">
                 <i class="fas fa-print"></i> Imprimir
             </button>
             <a href="?period_id=<?= $periodId ?>&employee_id=<?= $employeeId ?>&format=pdf" target="_blank" style="background: #dc2626; color: white; text-decoration: none; padding: 10px 15px; border-radius: 5px; font-size: 14px;">

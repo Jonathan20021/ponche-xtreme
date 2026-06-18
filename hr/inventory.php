@@ -45,24 +45,24 @@ $movementLabels = [
     'ENTRY'      => ['label' => 'Entrada',       'icon' => 'fa-arrow-down',           'grad' => 'linear-gradient(135deg,#10b981,#059669)'],
     'EXIT'       => ['label' => 'Salida',        'icon' => 'fa-arrow-up',             'grad' => 'linear-gradient(135deg,#ef4444,#dc2626)'],
     'ADJUSTMENT' => ['label' => 'Ajuste',        'icon' => 'fa-sliders',              'grad' => 'linear-gradient(135deg,#f59e0b,#d97706)'],
-    'ASSIGN'     => ['label' => 'Asignacion',    'icon' => 'fa-user-tag',             'grad' => 'linear-gradient(135deg,#3b82f6,#1d4ed8)'],
-    'RETURN'     => ['label' => 'Devolucion',    'icon' => 'fa-undo',                 'grad' => 'linear-gradient(135deg,#06b6d4,#0891b2)'],
+    'ASSIGN'     => ['label' => 'Asignacion',    'icon' => 'fa-user-tag',             'grad' => 'linear-gradient(135deg,#264b8b,#152849)'],
+    'RETURN'     => ['label' => 'Devolucion',    'icon' => 'fa-undo',                 'grad' => 'linear-gradient(135deg,#3a5da0,#1f3f76)'],
     'LOSS'       => ['label' => 'Perdida',       'icon' => 'fa-circle-xmark',         'grad' => 'linear-gradient(135deg,#ef4444,#991b1b)'],
     'DAMAGE'     => ['label' => 'Dano',          'icon' => 'fa-triangle-exclamation', 'grad' => 'linear-gradient(135deg,#f97316,#c2410c)'],
-    'TRANSFER'   => ['label' => 'Transferencia', 'icon' => 'fa-right-left',           'grad' => 'linear-gradient(135deg,#a855f7,#7e22ce)'],
+    'TRANSFER'   => ['label' => 'Transferencia', 'icon' => 'fa-right-left',           'grad' => 'linear-gradient(135deg,#92a9da,#7e22ce)'],
 ];
 
 // Per-category color → gradient map (for visual richness)
 $colorGrad = [
     'amber'   => ['from'=>'#f59e0b','to'=>'#d97706','glow'=>'rgba(245,158,11,.35)'],
-    'blue'    => ['from'=>'#3b82f6','to'=>'#1d4ed8','glow'=>'rgba(59,130,246,.35)'],
+    'blue'    => ['from'=>'#264b8b','to'=>'#152849','glow'=>'rgba(38, 75, 139,.35)'],
     'orange'  => ['from'=>'#f97316','to'=>'#c2410c','glow'=>'rgba(249,115,22,.35)'],
     'yellow'  => ['from'=>'#eab308','to'=>'#a16207','glow'=>'rgba(234,179,8,.35)'],
     'emerald' => ['from'=>'#10b981','to'=>'#047857','glow'=>'rgba(16,185,129,.35)'],
     'red'     => ['from'=>'#ef4444','to'=>'#991b1b','glow'=>'rgba(239,68,68,.35)'],
     'slate'   => ['from'=>'#64748b','to'=>'#334155','glow'=>'rgba(100,116,139,.35)'],
-    'cyan'    => ['from'=>'#06b6d4','to'=>'#0e7490','glow'=>'rgba(6,182,212,.35)'],
-    'purple'  => ['from'=>'#a855f7','to'=>'#7e22ce','glow'=>'rgba(168,85,247,.35)'],
+    'cyan'    => ['from'=>'#3a5da0','to'=>'#152849','glow'=>'rgba(6,182,212,.35)'],
+    'purple'  => ['from'=>'#92a9da','to'=>'#7e22ce','glow'=>'rgba(146, 169, 210,.35)'],
 ];
 ?>
 <!DOCTYPE html>
@@ -77,8 +77,8 @@ $colorGrad = [
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
         :root {
-            --bg-card: rgba(15, 23, 42, 0.55);
-            --bg-card-hover: rgba(15, 23, 42, 0.75);
+            --bg-card: var(--surface);
+            --bg-card-hover: var(--surface);
             --border-soft: rgba(148, 163, 184, 0.12);
             --border-strong: rgba(148, 163, 184, 0.25);
             --text-muted: #94a3b8;
@@ -92,14 +92,14 @@ $colorGrad = [
             background:
                 radial-gradient(ellipse 800px 400px at 10% -10%, rgba(124,58,237,.18), transparent 50%),
                 radial-gradient(ellipse 600px 500px at 95% 0%, rgba(8,145,178,.15), transparent 55%),
-                radial-gradient(ellipse 700px 400px at 50% 110%, rgba(168,85,247,.10), transparent 50%);
+                radial-gradient(ellipse 700px 400px at 50% 110%, rgba(146, 169, 210,.10), transparent 50%);
         }
 
         .num-mono { font-family: 'JetBrains Mono', monospace; letter-spacing: -0.02em; }
 
         /* ---------- HERO ---------- */
         .inv-hero {
-            background: linear-gradient(135deg, rgba(124,58,237,.22) 0%, rgba(15,23,42,.4) 40%, rgba(8,145,178,.22) 100%);
+            background: linear-gradient(135deg, #13326b 0%, #264b8b 55%, #2b5199 100%);
             border: 1px solid var(--border-strong);
             border-radius: 1.25rem;
             padding: 1.75rem 2rem;
@@ -143,9 +143,9 @@ $colorGrad = [
             gap: .5rem;
             padding: 1rem 1.1rem;
             border-radius: .9rem;
-            background: rgba(15, 23, 42, 0.65);
+            background: var(--surface-2);
             border: 1px solid var(--border-strong);
-            color: #e2e8f0;
+            color: var(--text);
             text-decoration: none;
             transition: all .2s ease;
             overflow: hidden;
@@ -169,7 +169,7 @@ $colorGrad = [
         .action-btn:hover::before { opacity: 1; }
         .action-btn .ico {
             width: 38px; height: 38px; border-radius: .65rem;
-            background: var(--btn-grad, linear-gradient(135deg, #0891b2, #7c3aed));
+            background: var(--btn-grad, linear-gradient(135deg, #1f3f76, #5e7cba));
             display: flex; align-items: center; justify-content: center;
             color: white; font-size: 1.05rem;
             box-shadow: 0 6px 18px -4px var(--btn-glow, rgba(8,145,178,.5));
@@ -181,15 +181,15 @@ $colorGrad = [
             background: linear-gradient(135deg, rgba(124,58,237,.25), rgba(8,145,178,.22));
             border-color: rgba(124,58,237,.5);
         }
-        .action-btn[data-variant="ai"] .ico { background: linear-gradient(135deg, #a855f7, #06b6d4); }
-        .action-btn[data-variant="ai"]:hover { border-color: rgba(168,85,247,.7); box-shadow: 0 12px 30px -10px rgba(168,85,247,.5); }
+        .action-btn[data-variant="ai"] .ico { background: linear-gradient(135deg, #92a9da, #3a5da0); }
+        .action-btn[data-variant="ai"]:hover { border-color: rgba(146, 169, 210,.7); box-shadow: 0 12px 30px -10px rgba(146, 169, 210,.5); }
 
         /* ---------- STAT CARDS ---------- */
         .stat-card {
             position: relative;
             padding: 1.25rem 1.25rem;
             border-radius: 1rem;
-            background: linear-gradient(135deg, rgba(15,23,42,.7), rgba(15,23,42,.45));
+            background: linear-gradient(135deg, var(--surface-2), var(--surface-2));
             border: 1px solid var(--border-soft);
             overflow: hidden;
             transition: all .25s ease;
@@ -198,7 +198,7 @@ $colorGrad = [
         .stat-card::before {
             content: ''; position: absolute;
             top: 0; left: 0; right: 0; height: 3px;
-            background: var(--accent, linear-gradient(90deg, #06b6d4, #7c3aed));
+            background: var(--accent, linear-gradient(90deg, #3a5da0, #5e7cba));
             opacity: .8;
         }
         .stat-card::after {
@@ -231,7 +231,7 @@ $colorGrad = [
             font-family: 'JetBrains Mono', monospace;
             font-size: 2rem; font-weight: 700;
             line-height: 1; letter-spacing: -0.04em;
-            color: white;
+            color: var(--text);
         }
         .stat-value.danger  { background: linear-gradient(135deg, #fca5a5, #ef4444); -webkit-background-clip: text; background-clip: text; color: transparent; }
         .stat-value.warning { background: linear-gradient(135deg, #fcd34d, #f59e0b); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -246,7 +246,7 @@ $colorGrad = [
         .cat-tile {
             position: relative; padding: 1.1rem;
             border-radius: .9rem;
-            background: linear-gradient(135deg, rgba(15,23,42,.7), rgba(15,23,42,.4));
+            background: linear-gradient(135deg, var(--surface-2), var(--surface-2));
             border: 1px solid var(--border-soft);
             text-decoration: none;
             transition: all .25s ease;
@@ -265,7 +265,7 @@ $colorGrad = [
         }
         .cat-tile:hover {
             transform: translateY(-3px);
-            background: linear-gradient(135deg, rgba(15,23,42,.85), rgba(15,23,42,.55));
+            background: linear-gradient(135deg, var(--surface-2), var(--surface-2));
             box-shadow: 0 14px 30px -12px var(--cat-glow);
         }
         .cat-tile:hover::before { opacity: 1; }
@@ -290,7 +290,7 @@ $colorGrad = [
 
         /* ---------- PANEL HEADERS ---------- */
         .panel {
-            background: linear-gradient(135deg, rgba(15,23,42,.7), rgba(15,23,42,.45));
+            background: linear-gradient(135deg, var(--surface-2), var(--surface-2));
             border: 1px solid var(--border-soft);
             border-radius: 1.1rem;
             padding: 1.5rem;
@@ -299,7 +299,7 @@ $colorGrad = [
         .panel-title { font-size: 1.05rem; font-weight: 700; color: white; display: flex; align-items: center; gap: .65rem; }
         .panel-title .dot {
             width: 6px; height: 24px; border-radius: 3px;
-            background: var(--title-accent, linear-gradient(180deg, #06b6d4, #7c3aed));
+            background: var(--title-accent, linear-gradient(180deg, #3a5da0, #5e7cba));
         }
 
         .progress-bar { height: 6px; border-radius: 4px; overflow: hidden; background: rgba(148,163,184,.12); }
@@ -326,10 +326,10 @@ $colorGrad = [
         .ai-panel {
             position: relative;
             background:
-                radial-gradient(ellipse 400px 200px at 10% 10%, rgba(168,85,247,.22), transparent 60%),
+                radial-gradient(ellipse 400px 200px at 10% 10%, rgba(146, 169, 210,.22), transparent 60%),
                 radial-gradient(ellipse 400px 250px at 95% 90%, rgba(6,182,212,.18), transparent 60%),
-                linear-gradient(135deg, rgba(15,23,42,.85), rgba(15,23,42,.55));
-            border: 1px solid rgba(168,85,247,.3);
+                linear-gradient(135deg, var(--surface-2), var(--surface-2));
+            border: 1px solid rgba(146, 169, 210,.3);
             border-radius: 1.1rem;
             padding: 1.5rem;
             overflow: hidden;
@@ -337,17 +337,17 @@ $colorGrad = [
         .ai-panel .robot-bg {
             position: absolute; right: -20px; bottom: -30px;
             font-size: 11rem;
-            color: rgba(168,85,247,.06);
+            color: rgba(146, 169, 210,.06);
             pointer-events: none;
             transform: rotate(-12deg);
         }
         .ai-suggestion {
             display: flex; align-items: center; gap: .7rem;
             padding: .7rem .9rem;
-            background: rgba(15,23,42,.6);
-            border: 1px solid rgba(148,163,184,.15);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
             border-radius: .7rem;
-            color: #cbd5e1;
+            color: var(--text);
             text-align: left;
             width: 100%;
             font-size: .87rem;
@@ -355,37 +355,37 @@ $colorGrad = [
             cursor: pointer;
         }
         .ai-suggestion:hover {
-            background: rgba(15,23,42,.85);
-            border-color: rgba(168,85,247,.45);
+            background: var(--surface-2);
+            border-color: rgba(146, 169, 210,.45);
             color: white;
             transform: translateX(3px);
         }
-        .ai-suggestion .chev { color: #a855f7; font-size: .75rem; transition: transform .2s; }
-        .ai-suggestion:hover .chev { transform: translateX(3px); color: #06b6d4; }
+        .ai-suggestion .chev { color: #92a9da; font-size: .75rem; transition: transform .2s; }
+        .ai-suggestion:hover .chev { transform: translateX(3px); color: #3a5da0; }
 
         .btn-ai {
-            background: linear-gradient(135deg, #a855f7, #06b6d4);
+            background: linear-gradient(135deg, #92a9da, #3a5da0);
             color: white; font-weight: 600;
             padding: .75rem 1.25rem;
             border-radius: .75rem;
             display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
             transition: all .2s ease;
-            box-shadow: 0 8px 24px -8px rgba(168,85,247,.45);
+            box-shadow: 0 8px 24px -8px rgba(146, 169, 210,.45);
             text-decoration: none;
         }
-        .btn-ai:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -8px rgba(168,85,247,.65); color: white; }
+        .btn-ai:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -8px rgba(146, 169, 210,.65); color: white; }
 
         .btn-ai-pill {
-            background: rgba(168,85,247,.15);
+            background: rgba(146, 169, 210,.15);
             color: #d8b4fe;
-            border: 1px solid rgba(168,85,247,.3);
+            border: 1px solid rgba(146, 169, 210,.3);
             font-size: .75rem; font-weight: 600;
             padding: .35rem .85rem;
             border-radius: 999px;
             transition: all .2s ease;
             cursor: pointer;
         }
-        .btn-ai-pill:hover { background: rgba(168,85,247,.3); color: white; }
+        .btn-ai-pill:hover { background: rgba(146, 169, 210,.3); color: white; }
 
         /* Alerts table rows */
         .alert-row {
@@ -435,7 +435,7 @@ $colorGrad = [
                 </div>
                 <div class="text-right">
                     <div class="text-xs uppercase tracking-widest text-slate-400 mb-1">Valor total</div>
-                    <div class="num-mono text-4xl font-bold" style="background: linear-gradient(135deg, #10b981, #06b6d4); -webkit-background-clip: text; background-clip: text; color: transparent;">
+                    <div class="num-mono text-4xl font-bold" style="background: linear-gradient(135deg, #10b981, #3a5da0); -webkit-background-clip: text; background-clip: text; color: transparent;">
                         $<?= number_format($summary['total_value'], 2) ?>
                     </div>
                     <div class="text-xs text-slate-400 mt-1"><?= number_format($summary['total_units'], 0) ?> unidades en stock</div>
@@ -445,7 +445,7 @@ $colorGrad = [
 
         <!-- ACTION BUTTONS -->
         <div class="action-grid mb-8">
-            <a href="inventory_stock.php" class="action-btn" style="--btn-grad: linear-gradient(135deg,#06b6d4,#0e7490); --btn-glow: rgba(6,182,212,.45); --btn-border: rgba(6,182,212,.6);">
+            <a href="inventory_stock.php" class="action-btn" style="--btn-grad: linear-gradient(135deg,#3a5da0,#152849); --btn-glow: rgba(6,182,212,.45); --btn-border: rgba(6,182,212,.6);">
                 <div class="flex items-start justify-between w-full">
                     <div class="ico"><i class="fas fa-boxes-stacked"></i></div>
                 </div>
@@ -454,7 +454,7 @@ $colorGrad = [
                     <div class="sub">Stock por item</div>
                 </div>
             </a>
-            <a href="inventory_movements.php" class="action-btn" style="--btn-grad: linear-gradient(135deg,#3b82f6,#1d4ed8); --btn-glow: rgba(59,130,246,.45); --btn-border: rgba(59,130,246,.6);">
+            <a href="inventory_movements.php" class="action-btn" style="--btn-grad: linear-gradient(135deg,#264b8b,#152849); --btn-glow: rgba(38, 75, 139,.45); --btn-border: rgba(38, 75, 139,.6);">
                 <div class="ico"><i class="fas fa-right-left"></i></div>
                 <div>
                     <div class="lbl">Movimientos</div>
@@ -468,7 +468,7 @@ $colorGrad = [
                     <div class="sub">Claude · pregunta</div>
                 </div>
             </a>
-            <a href="inventory_assignments.php" class="action-btn" style="--btn-grad: linear-gradient(135deg,#a855f7,#7e22ce); --btn-glow: rgba(168,85,247,.45); --btn-border: rgba(168,85,247,.6);">
+            <a href="inventory_assignments.php" class="action-btn" style="--btn-grad: linear-gradient(135deg,#92a9da,#7e22ce); --btn-glow: rgba(146, 169, 210,.45); --btn-border: rgba(146, 169, 210,.6);">
                 <div class="ico"><i class="fas fa-users"></i></div>
                 <div>
                     <div class="lbl">Asignaciones</div>
@@ -493,7 +493,7 @@ $colorGrad = [
 
         <!-- STAT CARDS -->
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-            <div class="stat-card" style="--accent: linear-gradient(90deg, #06b6d4, #0891b2); --accent-glow: radial-gradient(circle, rgba(6,182,212,.15), transparent 70%); --accent-border: rgba(6,182,212,.4); --accent-icon-bg: rgba(6,182,212,.15); --accent-icon: #67e8f9;">
+            <div class="stat-card" style="--accent: linear-gradient(90deg, #3a5da0, #1f3f76); --accent-glow: radial-gradient(circle, rgba(6,182,212,.15), transparent 70%); --accent-border: rgba(6,182,212,.4); --accent-icon-bg: rgba(6,182,212,.15); --accent-icon: #67e8f9;">
                 <div class="stat-icon"><i class="fas fa-cube"></i></div>
                 <div class="stat-label">Items activos</div>
                 <div class="stat-value"><?= number_format($summary['total_items']) ?></div>
@@ -669,7 +669,7 @@ $colorGrad = [
             <!-- Recent movements -->
             <div class="panel">
                 <div class="flex justify-between items-start mb-5">
-                    <h2 class="panel-title" style="--title-accent: linear-gradient(180deg, #06b6d4, #0891b2);">
+                    <h2 class="panel-title" style="--title-accent: linear-gradient(180deg, #3a5da0, #1f3f76);">
                         <span class="dot"></span> Movimientos
                     </h2>
                     <a href="inventory_movements.php" class="text-xs text-cyan-400 hover:text-cyan-300 font-semibold">
@@ -762,7 +762,7 @@ $colorGrad = [
                 <i class="fas fa-robot robot-bg"></i>
                 <div class="relative">
                     <div class="flex items-center gap-3 mb-1">
-                        <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg,#a855f7,#06b6d4); box-shadow: 0 8px 24px -6px rgba(168,85,247,.5);">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg,#92a9da,#3a5da0); box-shadow: 0 8px 24px -6px rgba(146, 169, 210,.5);">
                             <i class="fas fa-sparkles text-white"></i>
                         </div>
                         <div>

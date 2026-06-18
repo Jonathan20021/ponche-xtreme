@@ -8,7 +8,7 @@ body {
 
 /* Header */
 h1, h2, h3 {
-    color: #4CAF50;
+    color: #264b8b;
     font-weight: bold;
     margin-bottom: 20px;
 }
@@ -22,7 +22,7 @@ h1, h2, h3 {
 }
 
 .table th {
-    background-color: #4CAF50;
+    background-color: #264b8b;
     color: white;
 }
 
@@ -33,7 +33,7 @@ h1, h2, h3 {
 /* Custom Buttons */
 button, a {
     display: inline-block;
-    background-color: #4CAF50;
+    background-color: #264b8b;
     color: white;
     border: none;
     border-radius: 5px;
@@ -44,7 +44,7 @@ button, a {
 }
 
 button:hover, a:hover {
-    background-color: #3e8e41;
+    background-color: #1f3f76;
 }
 
 /* Centered Content */
@@ -67,9 +67,9 @@ button:hover, a:hover {
 }
 
 .text-blue-500 {
-    color: #2563EB;
+    color: #264b8b;
 }
 
 .text-blue-500:hover {
-    color: #1E40AF;
+    color: #1f3f76;
 }

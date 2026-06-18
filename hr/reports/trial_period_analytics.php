@@ -109,8 +109,8 @@ $trialDistribution = $pdo->query("
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
         .report-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
         }
@@ -119,8 +119,8 @@ $trialDistribution = $pdo->query("
             border-color: rgba(148, 163, 184, 0.2);
         }
         .stat-box {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
-            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%);
+            border: 1px solid rgba(38, 75, 139, 0.2);
             border-radius: 12px;
             padding: 1.25rem;
         }
@@ -313,7 +313,7 @@ $trialDistribution = $pdo->query("
                 datasets: [{
                     label: 'Empleados',
                     data: <?= json_encode(array_column($trialByDept, 'count')) ?>,
-                    backgroundColor: '#8b5cf6'
+                    backgroundColor: '#6f8bbd'
                 }]
             },
             options: {
@@ -340,7 +340,7 @@ $trialDistribution = $pdo->query("
                 labels: <?= json_encode(array_column($trialDistribution, 'period_range')) ?>,
                 datasets: [{
                     data: <?= json_encode(array_column($trialDistribution, 'count')) ?>,
-                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']
+                    backgroundColor: ['#264b8b', '#10b981', '#f59e0b', '#ef4444']
                 }]
             },
             options: {
@@ -361,8 +361,8 @@ $trialDistribution = $pdo->query("
                     {
                         label: 'Contratados en Prueba',
                         data: <?= json_encode(array_column($conversionData, 'hired_in_trial')) ?>,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderColor: '#264b8b',
+                        backgroundColor: 'rgba(38, 75, 139, 0.1)',
                         borderWidth: 2,
                         fill: true
                     },

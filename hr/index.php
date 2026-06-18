@@ -78,15 +78,15 @@ $recentVacations = $pdo->query("
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
         .stat-card {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(38, 75, 139, 0.1) 100%);
+            border: 1px solid rgba(38, 75, 139, 0.2);
             border-radius: 16px;
             padding: 1.5rem;
             transition: all 0.3s ease;
         }
         .stat-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 12px 24px rgba(99, 102, 241, 0.2);
+            box-shadow: 0 12px 24px rgba(38, 75, 139, 0.2);
         }
         .stat-icon {
             width: 48px;
@@ -98,36 +98,36 @@ $recentVacations = $pdo->query("
             font-size: 1.5rem;
         }
         .module-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
             transition: all 0.3s ease;
             cursor: pointer;
         }
         .module-card:hover {
-            background: rgba(30, 41, 59, 0.8);
-            border-color: rgba(99, 102, 241, 0.5);
+            background: var(--surface);
+            border-color: rgba(38, 75, 139, 0.5);
             transform: translateY(-2px);
         }
         .theme-light .module-card {
             background: rgba(255, 255, 255, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            border: 1px solid var(--border);
         }
         .theme-light .module-card:hover {
             background: rgba(255, 255, 255, 1);
         }
         .monitor-summary-card {
-            background: rgba(30, 41, 59, 0.7);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.25rem;
             backdrop-filter: blur(10px);
             transition: all 0.3s ease;
         }
         .monitor-summary-card:hover {
-            background: rgba(30, 41, 59, 0.9);
-            border-color: rgba(99, 102, 241, 0.3);
+            background: var(--surface);
+            border-color: rgba(38, 75, 139, 0.3);
             transform: translateY(-2px);
         }
         .summary-icon {
@@ -140,8 +140,8 @@ $recentVacations = $pdo->query("
             font-size: 1.2rem;
         }
         .employee-monitor-card {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1rem;
             transition: all 0.3s ease;
@@ -149,8 +149,8 @@ $recentVacations = $pdo->query("
             overflow: hidden;
         }
         .employee-monitor-card:hover {
-            background: rgba(30, 41, 59, 0.8);
-            border-color: rgba(99, 102, 241, 0.4);
+            background: var(--surface);
+            border-color: rgba(38, 75, 139, 0.4);
             transform: translateY(-4px);
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
         }
@@ -187,7 +187,7 @@ $recentVacations = $pdo->query("
         }
         .status-active { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
         .status-pause { background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
-        .status-offline { background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+        .status-offline { background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid var(--border); }
         .status-completed { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
         
         .theme-light .monitor-summary-card, 
@@ -230,7 +230,7 @@ $recentVacations = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">Total Empleados</p>
                         <h3 class="text-3xl font-bold text-white"><?= $totalEmployees ?></h3>
                     </div>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <i class="fas fa-users text-white"></i>
                     </div>
                 </div>
@@ -254,7 +254,7 @@ $recentVacations = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">Permisos Pendientes</p>
                         <h3 class="text-3xl font-bold text-white"><?= $pendingPermissions ?></h3>
                     </div>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-file-alt text-white"></i>
                     </div>
                 </div>
@@ -266,7 +266,7 @@ $recentVacations = $pdo->query("
                         <p class="text-slate-400 text-sm mb-1">Campañas Activas</p>
                         <h3 class="text-3xl font-bold text-white"><?= $activeCampaigns ?></h3>
                     </div>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #92a9da 0%, #1f3f76 100%);">
                         <i class="fas fa-bullhorn text-white"></i>
                     </div>
                 </div>
@@ -426,7 +426,7 @@ $recentVacations = $pdo->query("
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <div class="module-card" onclick="window.location.href='employees.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-id-card text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Empleados</h3>
@@ -446,7 +446,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='campaigns.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-bullhorn text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Gestión de Campañas</h3>
@@ -466,7 +466,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='birthdays.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #9db1d2 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-birthday-cake text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Cumpleaños</h3>
@@ -476,7 +476,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='permissions.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-clipboard-list text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Permisos</h3>
@@ -486,7 +486,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='vacations.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-plane-departure text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Vacaciones</h3>
@@ -506,7 +506,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='calendar.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #92a9da 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-calendar-alt text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Calendario HR</h3>
@@ -516,7 +516,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='contracts.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #1f3f76 0%, #0d9488 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-file-contract text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Contratos</h3>
@@ -526,7 +526,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='recruitment.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-user-plus text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Reclutamiento</h3>
@@ -546,7 +546,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='recruitment_ai_analysis.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-brain text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Análisis IA</h3>
@@ -556,7 +556,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='wfm_planning.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-calendar-check text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">WFM Planning</h3>
@@ -566,7 +566,7 @@ $recentVacations = $pdo->query("
 
             <div class="module-card" onclick="window.location.href='service_level_calculator.php'">
                 <div class="flex items-center mb-3">
-                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3a5da0 0%, #264b8b 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                         <i class="fas fa-calculator text-white"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white">Calculadora de Nivel de Servicio</h3>
@@ -578,7 +578,7 @@ $recentVacations = $pdo->query("
         <!-- HR Reports Section -->
         <div class="mt-12 mb-8">
             <div class="flex items-center mb-6">
-                <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); width: 48px; height: 48px;">
+                <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #264b8b 0%, #0284c7 100%); width: 48px; height: 48px;">
                     <i class="fas fa-chart-line text-white"></i>
                 </div>
                 <div>
@@ -591,7 +591,7 @@ $recentVacations = $pdo->query("
                 <!-- Employee Analytics Report -->
                 <div class="module-card" onclick="window.location.href='reports/employees_analytics.php'">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-users-line text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Análisis de Empleados</h3>
@@ -635,7 +635,7 @@ $recentVacations = $pdo->query("
                 <!-- Campaign Performance -->
                 <div class="module-card" onclick="window.location.href='reports/campaign_performance.php'">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-chart-bar text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Performance de Campañas</h3>
@@ -679,7 +679,7 @@ $recentVacations = $pdo->query("
                 <!-- Birthday & Events Calendar -->
                 <div class="module-card" onclick="window.location.href='reports/events_calendar_report.php'">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #9db1d2 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-calendar-star text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Calendario de Eventos</h3>
@@ -701,7 +701,7 @@ $recentVacations = $pdo->query("
                 <!-- Permissions & Absences Report -->
                 <div class="module-card" onclick="window.location.href='reports/permissions_analytics.php'">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-clipboard-check text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Permisos y Ausencias</h3>
@@ -723,7 +723,7 @@ $recentVacations = $pdo->query("
                 <!-- Vacation Management Report -->
                 <div class="module-card" onclick="window.location.href='reports/vacation_analytics.php'">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-umbrella-beach text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Gestión de Vacaciones</h3>
@@ -767,7 +767,7 @@ $recentVacations = $pdo->query("
                 <!-- Recruitment Funnel -->
                 <div class="module-card" onclick="window.location.href='reports/recruitment_funnel.php'">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #3a5da0 0%, #1f3f76 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-filter text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Embudo de Reclutamiento</h3>
@@ -809,9 +809,9 @@ $recentVacations = $pdo->query("
                 </div>
 
                 <!-- Executive Dashboard -->
-                <div class="module-card" onclick="window.location.href='reports/executive_dashboard.php'" style="border: 2px solid rgba(59, 130, 246, 0.5);">
+                <div class="module-card" onclick="window.location.href='reports/executive_dashboard.php'" style="border: 2px solid rgba(38, 75, 139, 0.5);">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #264b8b 0%, #0284c7 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-chart-mixed text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Dashboard Ejecutivo</h3>
@@ -836,7 +836,7 @@ $recentVacations = $pdo->query("
                 <!-- Compliance & Legal Report -->
                 <div class="module-card" onclick="window.location.href='reports/compliance_report.php'">
                     <div class="flex items-center mb-3">
-                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #1f3f76 0%, #0d9488 100%); width: 40px; height: 40px; font-size: 1.2rem;">
                             <i class="fas fa-gavel text-white"></i>
                         </div>
                         <h3 class="text-xl font-semibold text-white">Cumplimiento Legal</h3>
@@ -878,7 +878,7 @@ $recentVacations = $pdo->query("
                                     <p class="text-white font-medium"><?= htmlspecialchars($birthday['first_name'] . ' ' . $birthday['last_name']) ?></p>
                                     <p class="text-slate-400 text-sm"><?= date('d/m', strtotime($birthday['birth_date'])) ?></p>
                                 </div>
-                                <span class="tag-pill" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
+                                <span class="tag-pill" style="background: linear-gradient(135deg, #9db1d2 0%, #1f3f76 100%);">
                                     <?= $birthday['days_until'] == 0 ? '¡Hoy!' : 'En ' . $birthday['days_until'] . ' días' ?>
                                 </span>
                             </div>
@@ -1367,14 +1367,14 @@ $recentVacations = $pdo->query("
                          class="w-10 h-10 rounded-full object-cover border-2 border-slate-700"
                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                     <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
-                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); display: none;">
+                         style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%); display: none;">
                         ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
                     </div>
                 `;
             } else {
                 photoHTML = `
                     <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
-                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                         style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
                     </div>
                 `;
@@ -1466,14 +1466,14 @@ $recentVacations = $pdo->query("
                              class="w-10 h-10 rounded-full object-cover border-2 border-slate-700"
                              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                         <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
-                             style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); display: none;">
+                             style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%); display: none;">
                             ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
                         </div>
                     `;
                 } else {
                     photoHTML = `
                         <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white border-2 border-slate-700" 
-                             style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                             style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                             ${emp.first_name.charAt(0).toUpperCase()}${emp.last_name.charAt(0).toUpperCase()}
                         </div>
                     `;

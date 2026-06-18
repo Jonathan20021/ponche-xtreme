@@ -109,9 +109,9 @@ $approvalRate = $overview['total_requests'] > 0 ? ($overview['approved'] / $over
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
-        .report-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.1); border-radius: 16px; padding: 1.5rem; }
+        .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
         .theme-light .report-card { background: #ffffff; border-color: rgba(148, 163, 184, 0.2); }
-        .stat-box { background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 1.25rem; }
+        .stat-box { background: linear-gradient(135deg, rgba(38, 75, 139, 0.1) 0%, rgba(58, 93, 160, 0.1) 100%); border: 1px solid rgba(38, 75, 139, 0.2); border-radius: 12px; padding: 1.25rem; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($bodyClass) ?>">
@@ -232,21 +232,21 @@ $approvalRate = $overview['total_requests'] > 0 ? ($overview['approved'] / $over
         <?php if (!empty($byType)): ?>
         new Chart(document.getElementById('typeChart'), {
             type: 'doughnut',
-            data: { labels: <?= json_encode(array_column($byType, 'request_type')) ?>, datasets: [{ data: <?= json_encode(array_column($byType, 'count')) ?>, backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'] }] },
+            data: { labels: <?= json_encode(array_column($byType, 'request_type')) ?>, datasets: [{ data: <?= json_encode(array_column($byType, 'count')) ?>, backgroundColor: ['#264b8b', '#10b981', '#f59e0b', '#ef4444', '#6f8bbd', '#3a5da0'] }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } } }
         });
         <?php endif; ?>
         <?php if (!empty($byDept)): ?>
         new Chart(document.getElementById('deptChart'), {
             type: 'bar',
-            data: { labels: <?= json_encode(array_column($byDept, 'department')) ?>, datasets: [{ label: 'Total', data: <?= json_encode(array_column($byDept, 'count')) ?>, backgroundColor: '#8b5cf6' }] },
+            data: { labels: <?= json_encode(array_column($byDept, 'department')) ?>, datasets: [{ label: 'Total', data: <?= json_encode(array_column($byDept, 'count')) ?>, backgroundColor: '#6f8bbd' }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
         });
         <?php endif; ?>
         <?php if (!empty($trend)): ?>
         new Chart(document.getElementById('trendChart'), {
             type: 'line',
-            data: { labels: <?= json_encode(array_column($trend, 'month_label')) ?>, datasets: [{ label: 'Total', data: <?= json_encode(array_column($trend, 'total')) ?>, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true }, { label: 'Aprobados', data: <?= json_encode(array_column($trend, 'approved')) ?>, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }] },
+            data: { labels: <?= json_encode(array_column($trend, 'month_label')) ?>, datasets: [{ label: 'Total', data: <?= json_encode(array_column($trend, 'total')) ?>, borderColor: '#264b8b', backgroundColor: 'rgba(38, 75, 139, 0.1)', fill: true }, { label: 'Aprobados', data: <?= json_encode(array_column($trend, 'approved')) ?>, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1' } } }, scales: { y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(148, 163, 184, 0.1)' } }, x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.1)' } } } }
         });
         <?php endif; ?>

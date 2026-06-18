@@ -61,7 +61,7 @@ require_once __DIR__ . '/../header.php';
 }
 
 .theme-dark .form-control {
-    background: #0f172a;
+    background: var(--surface);
     border-color: #475569;
 }
 
@@ -72,7 +72,7 @@ require_once __DIR__ . '/../header.php';
 .form-control:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 4px rgba(38, 75, 139, 0.1);
 }
 
 .form-control.error {
@@ -122,11 +122,11 @@ textarea.form-control {
     border-color: var(--accent);
     background: linear-gradient(135deg, #dbeafe, #bfdbfe);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    box-shadow: 0 4px 12px rgba(38, 75, 139, 0.2);
 }
 
 .theme-dark .priority-label {
-    background: #1e293b;
+    background: var(--surface-2);
     border-color: #475569;
 }
 
@@ -136,12 +136,12 @@ textarea.form-control {
 .priority-label.critical { color: #991b1b; }
 
 .priority-option input[type="radio"]:checked + .priority-label.low {
-    background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+    background: linear-gradient(135deg, #e0e7ff, #dce4f4);
 }
 
 .theme-dark .priority-option input[type="radio"]:checked + .priority-label.low {
     background: linear-gradient(135deg, #312e81, #3730a3);
-    border-color: #4338ca;
+    border-color: #152849;
 }
 
 .priority-option input[type="radio"]:checked + .priority-label.medium {

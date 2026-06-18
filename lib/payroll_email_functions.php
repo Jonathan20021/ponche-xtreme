@@ -260,12 +260,12 @@ function generatePayrollSlipHTML(array $data): string {
             }
             .header {
                 text-align: center;
-                border-bottom: 3px solid #2563eb;
+                border-bottom: 3px solid #1f3f76;
                 padding-bottom: 20px;
                 margin-bottom: 30px;
             }
             .header h1 {
-                color: #1e40af;
+                color: #1f3f76;
                 margin: 0;
                 font-size: 24px;
             }
@@ -278,11 +278,11 @@ function generatePayrollSlipHTML(array $data): string {
                 padding: 20px;
                 border-radius: 8px;
                 margin-bottom: 25px;
-                border-left: 4px solid #2563eb;
+                border-left: 4px solid #1f3f76;
             }
             .employee-info h3 {
                 margin: 0 0 15px 0;
-                color: #1e40af;
+                color: #1f3f76;
             }
             .info-grid {
                 display: grid;
@@ -308,7 +308,7 @@ function generatePayrollSlipHTML(array $data): string {
                 background: white;
             }
             .payroll-table th {
-                background: #2563eb;
+                background: #1f3f76;
                 color: white;
                 padding: 12px;
                 text-align: left;
@@ -337,7 +337,7 @@ function generatePayrollSlipHTML(array $data): string {
                 font-size: 16px;
             }
             .total-row td {
-                border-top: 2px solid #2563eb;
+                border-top: 2px solid #1f3f76;
                 padding: 15px 12px;
             }
             .footer {

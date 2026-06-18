@@ -76,24 +76,24 @@ $monthNames = [
     <link href="../assets/css/theme.css" rel="stylesheet">
     <style>
         .birthday-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
             transition: all 0.3s ease;
         }
         .birthday-card:hover {
-            background: rgba(30, 41, 59, 0.8);
+            background: var(--surface);
             border-color: rgba(236, 72, 153, 0.5);
             transform: translateY(-2px);
         }
         .birthday-card.today {
-            border: 2px solid #ec4899;
+            border: 2px solid #9db1d2;
             background: linear-gradient(135deg, rgba(236, 72, 153, 0.1) 0%, rgba(219, 39, 119, 0.1) 100%);
         }
         .theme-light .birthday-card {
             background: rgba(255, 255, 255, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            border: 1px solid var(--border);
         }
         .theme-light .birthday-card:hover {
             background: rgba(255, 255, 255, 1);
@@ -106,21 +106,21 @@ $monthNames = [
         .month-btn {
             padding: 0.75rem;
             border-radius: 8px;
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.1);
+            background: var(--surface);
+            border: 1px solid var(--border);
             color: #94a3b8;
             transition: all 0.3s ease;
             cursor: pointer;
             text-align: center;
         }
         .month-btn:hover {
-            background: rgba(30, 41, 59, 0.8);
+            background: var(--surface);
             color: white;
         }
         .month-btn.active {
-            background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+            background: linear-gradient(135deg, #9db1d2 0%, #1f3f76 100%);
             color: white;
-            border-color: #ec4899;
+            border-color: #9db1d2;
         }
     </style>
 </head>
@@ -145,7 +145,7 @@ $monthNames = [
 
         <!-- Today's Birthdays -->
         <?php if (!empty($todayBirthdays)): ?>
-            <div class="glass-card mb-8" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.2) 0%, rgba(219, 39, 119, 0.2) 100%); border: 2px solid #ec4899;">
+            <div class="glass-card mb-8" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.2) 0%, rgba(219, 39, 119, 0.2) 100%); border: 2px solid #9db1d2;">
                 <h2 class="text-2xl font-bold text-white mb-4">
                     <i class="fas fa-gift text-pink-400 mr-2"></i>
                     ¡Cumpleaños de Hoy! 🎉
@@ -154,7 +154,7 @@ $monthNames = [
                     <?php foreach ($todayBirthdays as $birthday): ?>
                         <div class="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
                             <div class="w-20 h-20 mx-auto mb-3 rounded-full flex items-center justify-center text-3xl font-bold text-white" 
-                                 style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
+                                 style="background: linear-gradient(135deg, #9db1d2 0%, #1f3f76 100%);">
                                 <?= strtoupper(substr($birthday['first_name'], 0, 1) . substr($birthday['last_name'], 0, 1)) ?>
                             </div>
                             <h3 class="text-xl font-semibold text-white mb-1">
@@ -180,7 +180,7 @@ $monthNames = [
                         <div class="birthday-card">
                             <div class="flex items-center gap-3">
                                 <div class="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white" 
-                                     style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);">
+                                     style="background: linear-gradient(135deg, #92a9da 0%, #5e7cba 100%);">
                                     <?= strtoupper(substr($birthday['first_name'], 0, 1) . substr($birthday['last_name'], 0, 1)) ?>
                                 </div>
                                 <div>
@@ -228,7 +228,7 @@ $monthNames = [
                         <div class="birthday-card <?= $isToday ? 'today' : '' ?>">
                             <div class="flex items-start gap-4">
                                 <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0" 
-                                     style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
+                                     style="background: linear-gradient(135deg, #9db1d2 0%, #1f3f76 100%);">
                                     <?= strtoupper(substr($birthday['first_name'], 0, 1) . substr($birthday['last_name'], 0, 1)) ?>
                                 </div>
                                 <div class="flex-1">
@@ -275,7 +275,7 @@ $monthNames = [
                         <p class="text-slate-400 text-sm mb-1">Total Empleados</p>
                         <h3 class="text-3xl font-bold text-white"><?= count($allBirthdays) ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <i class="fas fa-users text-white text-xl"></i>
                     </div>
                 </div>
@@ -287,7 +287,7 @@ $monthNames = [
                         <p class="text-slate-400 text-sm mb-1">Cumpleaños Hoy</p>
                         <h3 class="text-3xl font-bold text-white"><?= count($todayBirthdays) ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #9db1d2 0%, #1f3f76 100%);">
                         <i class="fas fa-gift text-white text-xl"></i>
                     </div>
                 </div>
@@ -299,7 +299,7 @@ $monthNames = [
                         <p class="text-slate-400 text-sm mb-1">Esta Semana</p>
                         <h3 class="text-3xl font-bold text-white"><?= count($weekBirthdays) ?></h3>
                     </div>
-                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);">
+                    <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #6f8bbd 0%, #5e7cba 100%);">
                         <i class="fas fa-calendar-week text-white text-xl"></i>
                     </div>
                 </div>

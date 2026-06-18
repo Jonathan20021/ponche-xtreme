@@ -27,7 +27,7 @@ foreach ($testQueries as $query) {
     $sql = generateSQLFallback($query);
     
     if ($sql) {
-        echo "<pre style='background: #1e293b; color: #10b981; padding: 15px; border-radius: 8px;'>";
+        echo "<pre style='background: var(--surface-2); color: #10b981; padding: 15px; border-radius: 8px;'>";
         echo htmlspecialchars($sql);
         echo "</pre>";
     } else {
@@ -209,10 +209,10 @@ function generateSQLFallback($userQuery) {
     body { 
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
         padding: 20px; 
-        background: #0f172a; 
+        background: var(--surface); 
         color: #e2e8f0;
     }
-    h1 { color: #60a5fa; }
-    h3 { color: #818cf8; margin-top: 20px; }
+    h1 { color: #5e7cba; }
+    h3 { color: #5e7cba; margin-top: 20px; }
     em { color: #fbbf24; }
 </style>

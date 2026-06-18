@@ -212,7 +212,7 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             placeholder="Ej: 12345678901"
                             pattern="\d{11}"
                             title="Ingresa 11 dígitos">
-                        <small style="display: block; margin-top: 0.5rem; font-size: 0.75rem; color: #94a3b8;">
+                        <small style="display: block; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
                             <i class="fas fa-info-circle"></i>
                             Ingresa los 11 dígitos de tu cédula (sin guiones)
                         </small>
@@ -232,11 +232,11 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                 </form>
             <?php else: ?>
                 <!-- Step 2: Reset Password -->
-                <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
-                    <p style="font-size: 0.875rem; color: #93c5fd; margin: 0;">
+                <div style="background: rgba(38, 75, 139, 0.1); border: 1px solid rgba(38, 75, 139, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
+                    <p style="font-size: 0.875rem; color: var(--text); margin: 0;">
                         <i class="fas fa-user-check" style="margin-right: 0.5rem;"></i>
                         Identidad verificada: <strong><?= htmlspecialchars($_SESSION['reset_username'] ?? '') ?></strong>
-                        <span style="margin-left: 0.5rem; font-size: 0.75rem; background: rgba(59, 130, 246, 0.2); padding: 0.25rem 0.5rem; border-radius: 6px;"><?= htmlspecialchars($_SESSION['reset_role'] ?? '') ?></span>
+                        <span style="margin-left: 0.5rem; font-size: 0.75rem; background: rgba(38, 75, 139, 0.2); padding: 0.25rem 0.5rem; border-radius: 6px;"><?= htmlspecialchars($_SESSION['reset_role'] ?? '') ?></span>
                     </p>
                 </div>
                 
@@ -271,12 +271,12 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             autocomplete="new-password">
                     </div>
                     
-                    <div style="background: rgba(51, 65, 85, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
-                        <p style="font-size: 0.75rem; color: #cbd5e1; margin: 0 0 0.5rem 0;">
-                            <i class="fas fa-shield-alt" style="color: #60a5fa; margin-right: 0.5rem;"></i>
+                    <div style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
+                        <p style="font-size: 0.75rem; color: var(--text); margin: 0 0 0.5rem 0;">
+                            <i class="fas fa-shield-alt" style="color: #5e7cba; margin-right: 0.5rem;"></i>
                             <strong>Requisitos de contraseña:</strong>
                         </p>
-                        <ul style="font-size: 0.75rem; color: #94a3b8; margin: 0; padding-left: 1.5rem; line-height: 1.6;">
+                        <ul style="font-size: 0.75rem; color: var(--text-muted); margin: 0; padding-left: 1.5rem; line-height: 1.6;">
                             <li>Mínimo 6 caracteres</li>
                             <li>Evita usar información personal obvia</li>
                             <li>Combina letras y números para mayor seguridad</li>

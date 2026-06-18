@@ -23,11 +23,11 @@ require_once __DIR__ . '/header.php';
        ========================================================= */
     .va-shell {
         --va-bg:           rgba(2, 6, 23, 0.55);
-        --va-card:         rgba(15, 23, 42, 0.72);
-        --va-card-elev:    rgba(15, 23, 42, 0.88);
+        --va-card: var(--surface);
+        --va-card-elev: var(--surface);
         --va-border:       rgba(51, 65, 85, 0.65);
         --va-border-soft:  rgba(30, 41, 59, 0.85);
-        --va-accent:       #22d3ee;
+        --va-accent:       #5e7cba;
         --va-accent-soft:  rgba(34, 211, 238, 0.16);
         --va-text:         #e2e8f0;
         --va-muted:        #94a3b8;
@@ -61,7 +61,7 @@ require_once __DIR__ . '/header.php';
     .va-chip {
         display: inline-flex; align-items: center; gap: 0.5rem;
         padding: 0.4rem 0.85rem; border-radius: 9999px;
-        background: rgba(15, 23, 42, 0.8); border: 1px solid var(--va-border);
+        background: var(--surface-2); border: 1px solid var(--va-border);
         color: var(--va-muted); font-size: 0.75rem; font-weight: 500;
     }
     .va-chip-active {
@@ -73,23 +73,23 @@ require_once __DIR__ . '/header.php';
     }
     .va-section-title::before {
         content: ''; width: 3px; height: 1.25rem; border-radius: 9999px;
-        background: linear-gradient(180deg, #22d3ee, #0ea5e9);
+        background: linear-gradient(180deg, #5e7cba, #264b8b);
     }
     .va-table thead th {
         font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
         color: var(--va-muted); padding: 0.75rem 1rem;
-        background: rgba(2, 6, 23, 0.6); border-bottom: 1px solid var(--va-border-soft);
+        background: var(--bg); border-bottom: 1px solid var(--va-border-soft);
     }
     .va-table tbody td { padding: 0.75rem 1rem; font-size: 0.875rem; color: var(--va-text); }
     .va-table tbody tr { border-bottom: 1px solid rgba(30, 41, 59, 0.6); }
-    .va-table tbody tr:hover { background: rgba(30, 41, 59, 0.35); }
+    .va-table tbody tr:hover { background: var(--surface); }
 
     /* Tab rails for the mega section */
     .va-tab-rail { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .va-tab {
         display: inline-flex; align-items: center; gap: 0.5rem;
         padding: 0.55rem 1rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 600;
-        border: 1px solid var(--va-border); background: rgba(2, 6, 23, 0.6);
+        border: 1px solid var(--va-border); background: var(--bg);
         color: var(--va-text); cursor: pointer; transition: all .15s ease;
     }
     .va-tab:hover { border-color: rgba(34, 211, 238, 0.5); color: #f8fafc; }
@@ -103,7 +103,7 @@ require_once __DIR__ . '/header.php';
 
     .va-input, .va-select {
         width: 100%;
-        background: rgba(2, 6, 23, 0.85);
+        background: var(--bg);
         border: 1px solid var(--va-border);
         border-radius: 0.75rem; padding: 0.65rem 0.9rem;
         color: var(--va-text); font-size: 0.875rem;
@@ -130,7 +130,7 @@ require_once __DIR__ . '/header.php';
 <div class="va-shell max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" x-data="voiceAiReports()">
     <!-- Professional hero header -->
     <header class="mb-6 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden relative">
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,_rgba(34,211,238,0.12),_transparent_42%),radial-gradient(circle_at_100%_100%,_rgba(99,102,241,0.1),_transparent_40%)] pointer-events-none"></div>
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,_rgba(34,211,238,0.12),_transparent_42%),radial-gradient(circle_at_100%_100%,_rgba(58, 93, 160,0.1),_transparent_40%)] pointer-events-none"></div>
         <div class="relative px-6 md:px-8 py-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex items-center gap-4">
                 <div class="h-12 w-12 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
@@ -174,9 +174,9 @@ require_once __DIR__ . '/header.php';
                     :class="filters.integration_id === String(integration.integration_id) 
                         ? 'bg-cyan-500 text-slate-950 border-cyan-400' 
                         : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-cyan-500/50'"
-                    class="px-4 py-3 rounded-xl border transition-all text-left">
-                    <div class="font-medium text-sm" x-text="integration.integration_name"></div>
-                    <div class="text-xs opacity-75 mt-1" x-text="integration.location_id"></div>
+                    class="px-4 py-3 rounded-xl border transition-all text-left min-w-0 overflow-hidden">
+                    <div class="font-medium text-sm truncate" x-text="integration.integration_name"></div>
+                    <div class="text-xs opacity-75 mt-1 truncate" x-text="integration.location_id"></div>
                     <div class="text-xs mt-1" :class="integration.is_default ? 'text-cyan-300' : 'opacity-50'" x-show="integration.is_default">
                         <i class="fas fa-star mr-1"></i>Por defecto
                     </div>
@@ -3285,7 +3285,7 @@ require_once __DIR__ . '/header.php';
             },
 
             chartPalette(size) {
-                const palette = ['#22d3ee', '#10b981', '#f59e0b', '#38bdf8', '#f97316', '#818cf8', '#fb7185', '#facc15', '#4ade80', '#c084fc'];
+                const palette = ['#5e7cba', '#10b981', '#f59e0b', '#92a9da', '#f97316', '#5e7cba', '#fb7185', '#facc15', '#4ade80', '#92a9da'];
                 return Array.from({
                     length: size
                 }, (_, index) => palette[index % palette.length]);
@@ -3357,7 +3357,7 @@ require_once __DIR__ . '/header.php';
                     data: {
                         labels: stats.map(s => s.disposition),
                         datasets: [
-                            { label: 'Inbound',  data: stats.map(s => s.inbound),  backgroundColor: '#22d3ee' },
+                            { label: 'Inbound',  data: stats.map(s => s.inbound),  backgroundColor: '#5e7cba' },
                             { label: 'Outbound', data: stats.map(s => s.outbound), backgroundColor: '#f97316' }
                         ]
                     },
@@ -3391,7 +3391,7 @@ require_once __DIR__ . '/header.php';
                 const buckets = data.duration_buckets || {};
                 const labels = Object.keys(buckets).slice(0, 8);
                 const bucketKeys = ['0-30s', '31-120s', '2-5m', '5-15m', '15m+'];
-                const bucketPalette = ['#f97316', '#facc15', '#4ade80', '#22d3ee', '#818cf8'];
+                const bucketPalette = ['#f97316', '#facc15', '#4ade80', '#5e7cba', '#5e7cba'];
                 upsertChart('vaDispoDurationChart', {
                     type: 'bar',
                     data: {
@@ -3646,7 +3646,7 @@ require_once __DIR__ . '/header.php';
                         datasets: [{
                             label: 'Interacciones',
                             data: timelineValues,
-                            borderColor: '#22d3ee',
+                            borderColor: '#5e7cba',
                             backgroundColor: 'rgba(34, 211, 238, 0.18)',
                             fill: true,
                             tension: 0.35
@@ -3744,7 +3744,7 @@ require_once __DIR__ . '/header.php';
                         datasets: [{
                             label: 'Llamadas',
                             data: callDirectionEntries.map(([, value]) => value),
-                            backgroundColor: ['#22d3ee', '#f97316']
+                            backgroundColor: ['#5e7cba', '#f97316']
                         }]
                     },
                     options: {
@@ -3794,7 +3794,7 @@ require_once __DIR__ . '/header.php';
                         datasets: [{
                             label: 'Interacciones',
                             data: weekdayEntries.map(([, value]) => value),
-                            backgroundColor: '#818cf8'
+                            backgroundColor: '#5e7cba'
                         }]
                     },
                     options: {
@@ -3819,7 +3819,7 @@ require_once __DIR__ . '/header.php';
                         datasets: [{
                                 label: 'Inbound',
                                 data: hourInboundValues,
-                                borderColor: '#22d3ee',
+                                borderColor: '#5e7cba',
                                 backgroundColor: 'rgba(34, 211, 238, 0.14)',
                                 fill: true,
                                 tension: 0.3
@@ -3856,7 +3856,7 @@ require_once __DIR__ . '/header.php';
                         datasets: [{
                                 label: 'Inbound',
                                 data: channelDirectionEntries.map(([, values]) => values.inbound || 0),
-                                backgroundColor: '#22d3ee'
+                                backgroundColor: '#5e7cba'
                             },
                             {
                                 label: 'Outbound',

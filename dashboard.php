@@ -4,806 +4,482 @@ include 'db.php';
 
 ensurePermission('dashboard');
 
-// Consulta para estadisticas generales
-$total_users = $pdo->query("SELECT COUNT(*) FROM users WHERE is_active = 1")->fetchColumn();
-$entries_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND DATE(timestamp) = CURDATE()")->fetchColumn();
-$exits_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Exit' AND DATE(timestamp) = CURDATE()")->fetchColumn();
-$active_users = $pdo->query("
-    SELECT COUNT(DISTINCT user_id) 
-    FROM attendance 
-    WHERE DATE(timestamp) = CURDATE()
-")->fetchColumn();
+/* ============================================================
+   DATA QUERIES  (validated, division-by-zero guarded)
+   ============================================================ */
+$total_users         = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE is_active = 1")->fetchColumn();
+$entries_today       = (int) $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND DATE(timestamp) = CURDATE()")->fetchColumn();
+$exits_today         = (int) $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Exit' AND DATE(timestamp) = CURDATE()")->fetchColumn();
+$active_users        = (int) $pdo->query("SELECT COUNT(DISTINCT user_id) FROM attendance WHERE DATE(timestamp) = CURDATE()")->fetchColumn();
+$total_records_today = (int) $pdo->query("SELECT COUNT(*) FROM attendance WHERE DATE(timestamp) = CURDATE()")->fetchColumn();
+$entries_week        = (int) $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)")->fetchColumn();
+$entries_month       = (int) $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())")->fetchColumn();
+$active_users_week   = (int) $pdo->query("SELECT COUNT(DISTINCT user_id) FROM attendance WHERE DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)")->fetchColumn();
 
-$total_records_today = $pdo->query("SELECT COUNT(*) FROM attendance WHERE DATE(timestamp) = CURDATE()")->fetchColumn();
-$entries_week = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)")->fetchColumn();
-$entries_month = $pdo->query("SELECT COUNT(*) FROM attendance WHERE type = 'Entry' AND YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())")->fetchColumn();
-$active_users_week = $pdo->query("SELECT COUNT(DISTINCT user_id) FROM attendance WHERE DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)")->fetchColumn();
-
-$total_work_seconds_today = $pdo->query("
+$total_work_seconds_today = (int) $pdo->query("
     SELECT COALESCE(SUM(TIMESTAMPDIFF(SECOND, a.timestamp, (
-        SELECT MIN(b.timestamp)
-        FROM attendance b
-        WHERE b.user_id = a.user_id
-          AND b.type = 'Exit'
-          AND b.timestamp > a.timestamp
+        SELECT MIN(b.timestamp) FROM attendance b
+        WHERE b.user_id = a.user_id AND b.type = 'Exit' AND b.timestamp > a.timestamp
     ))), 0)
     FROM attendance a
-    WHERE a.type = 'Entry'
-      AND DATE(a.timestamp) = CURDATE()
+    WHERE a.type = 'Entry' AND DATE(a.timestamp) = CURDATE()
 ")->fetchColumn();
-
-$avg_hours_today = 0;
-if ($active_users > 0) {
-    $avg_hours_today = round(($total_work_seconds_today / 3600) / $active_users, 2);
-}
+$avg_hours_today = $active_users > 0 ? round(($total_work_seconds_today / 3600) / $active_users, 2) : 0;
 
 $peak_entry_hour = $pdo->query("
-    SELECT HOUR(timestamp) as hour
-    FROM attendance
-    WHERE type = 'Entry'
-      AND DATE(timestamp) = CURDATE()
-    GROUP BY HOUR(timestamp)
-    ORDER BY COUNT(*) DESC
-    LIMIT 1
+    SELECT HOUR(timestamp) AS hour FROM attendance
+    WHERE type = 'Entry' AND DATE(timestamp) = CURDATE()
+    GROUP BY HOUR(timestamp) ORDER BY COUNT(*) DESC LIMIT 1
 ")->fetchColumn();
 
-$late_entries_today = $pdo->query("
-    SELECT COUNT(*)
-    FROM attendance
-    WHERE type = 'Entry'
-      AND DATE(timestamp) = CURDATE()
-      AND TIME(timestamp) > '10:05:00'
+$late_entries_today = (int) $pdo->query("
+    SELECT COUNT(*) FROM attendance
+    WHERE type = 'Entry' AND DATE(timestamp) = CURDATE() AND TIME(timestamp) > '10:05:00'
 ")->fetchColumn();
+$late_rate_today = $entries_today > 0 ? round(($late_entries_today / $entries_today) * 100, 1) : 0;
+$ontime_today    = $entries_today > 0 ? round((($entries_today - $late_entries_today) / $entries_today) * 100, 1) : 0;
 
-$late_rate_today = 0;
-if ($entries_today > 0) {
-    $late_rate_today = round(($late_entries_today / $entries_today) * 100, 2);
-}
+// Attendance / adherence today (% of active staff that registered)
+$present_rate = $total_users > 0 ? min(100, round(($active_users / $total_users) * 100)) : 0;
 
-// Datos para grÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡ficos
-$category_data = $pdo->query("
-    SELECT type, COUNT(*) as count 
-    FROM attendance 
-    GROUP BY type
-")->fetchAll(PDO::FETCH_ASSOC);
+// Real month-over-month for entries (replaces previously hardcoded "+12%")
+$entries_last_month = (int) $pdo->query("
+    SELECT COUNT(*) FROM attendance
+    WHERE type = 'Entry'
+      AND timestamp >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m-01')
+      AND timestamp <  DATE_FORMAT(CURDATE(), '%Y-%m-01')
+")->fetchColumn();
+$entries_mom_pct = $entries_last_month > 0 ? round((($entries_month - $entries_last_month) / $entries_last_month) * 100, 1) : null;
+
+// All-time entry tardiness rate (late entries / total entries)
+$tardiness_entry_data = $pdo->query("
+    SELECT COUNT(CASE WHEN TIME(timestamp) > '10:05:00' THEN 1 END) AS late_entries, COUNT(*) AS total_entries
+    FROM attendance WHERE type = 'Entry'
+")->fetch(PDO::FETCH_ASSOC);
+$overall_tardiness_entry = ($tardiness_entry_data['total_entries'] ?? 0) > 0
+    ? round(($tardiness_entry_data['late_entries'] / $tardiness_entry_data['total_entries']) * 100, 1) : 0;
+
+/* ---- Chart datasets ---- */
+$category_data = $pdo->query("SELECT type, COUNT(*) AS count FROM attendance GROUP BY type ORDER BY count DESC")->fetchAll(PDO::FETCH_ASSOC);
 
 $work_time_data = $pdo->query("
     SELECT users.username, SUM(TIMESTAMPDIFF(SECOND, attendance.timestamp, (
-        SELECT MIN(a.timestamp) 
-        FROM attendance a 
-        WHERE a.user_id = attendance.user_id 
-        AND a.timestamp > attendance.timestamp 
-        AND a.type = 'Exit'
+        SELECT MIN(a.timestamp) FROM attendance a
+        WHERE a.user_id = attendance.user_id AND a.timestamp > attendance.timestamp AND a.type = 'Exit'
     ))) AS total_time
-    FROM attendance
-    JOIN users ON attendance.user_id = users.id
+    FROM attendance JOIN users ON attendance.user_id = users.id
     WHERE attendance.type = 'Entry'
     GROUP BY users.username
 ")->fetchAll(PDO::FETCH_ASSOC);
+usort($work_time_data, fn($a, $b) => (int) ($b['total_time'] ?? 0) <=> (int) ($a['total_time'] ?? 0));
+$wt_top    = array_slice($work_time_data, 0, 8);
+$wt_labels = array_map(fn($r) => $r['username'], $wt_top);
+$wt_hours  = array_map(fn($r) => round((int) ($r['total_time'] ?? 0) / 3600, 1), $wt_top);
 
 $trend_rows = $pdo->query("
-        SELECT DATE(timestamp) AS day,
-                     SUM(type = 'Entry') AS entries,
-                     SUM(type = 'Exit') AS exits
-        FROM attendance
-        WHERE DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)
-        GROUP BY day
-        ORDER BY day
+    SELECT DATE(timestamp) AS day, SUM(type = 'Entry') AS entries, SUM(type = 'Exit') AS exits
+    FROM attendance WHERE DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 13 DAY)
+    GROUP BY day ORDER BY day
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $hour_rows = $pdo->query("
-        SELECT HOUR(timestamp) AS hour, COUNT(*) AS count
-        FROM attendance
-        WHERE type = 'Entry'
-            AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-        GROUP BY hour
-        ORDER BY hour
+    SELECT HOUR(timestamp) AS hour, COUNT(*) AS count FROM attendance
+    WHERE type = 'Entry' AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+    GROUP BY hour ORDER BY hour
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $top_tardy_users = $pdo->query("
-        SELECT users.username, COUNT(*) AS late_entries
-        FROM attendance
-        JOIN users ON attendance.user_id = users.id
-        WHERE attendance.type = 'Entry'
-            AND attendance.timestamp >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-            AND TIME(attendance.timestamp) > '10:05:00'
-        GROUP BY users.username
-        ORDER BY late_entries DESC
-        LIMIT 5
+    SELECT users.username, COUNT(*) AS late_entries
+    FROM attendance JOIN users ON attendance.user_id = users.id
+    WHERE attendance.type = 'Entry' AND attendance.timestamp >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+      AND TIME(attendance.timestamp) > '10:05:00'
+    GROUP BY users.username ORDER BY late_entries DESC LIMIT 5
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $top_punctual_users = $pdo->query("
-        SELECT users.username, SUM(CASE WHEN TIME(timestamp) <= '10:05:00' THEN 1 ELSE 0 END) AS on_time
-        FROM attendance
-        JOIN users ON attendance.user_id = users.id
-        WHERE attendance.type = 'Entry'
-            AND attendance.timestamp >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-        GROUP BY users.username
-        ORDER BY on_time DESC
-        LIMIT 5
+    SELECT users.username, SUM(CASE WHEN TIME(timestamp) <= '10:05:00' THEN 1 ELSE 0 END) AS on_time
+    FROM attendance JOIN users ON attendance.user_id = users.id
+    WHERE attendance.type = 'Entry' AND attendance.timestamp >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+    GROUP BY users.username ORDER BY on_time DESC LIMIT 5
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// CÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡lculo del porcentaje total de tardanzas generales
-$tardiness_data = $pdo->query("
-    SELECT 
-        COUNT(CASE WHEN type = 'Entry' AND TIME(timestamp) > '10:05:00' THEN 1 END) AS late_entries,
-        COUNT(CASE WHEN type = 'Lunch' AND TIME(timestamp) > '14:00:00' THEN 1 END) AS late_lunches,
-        COUNT(CASE WHEN type = 'Break' AND TIME(timestamp) > '17:00:00' THEN 1 END) AS late_breaks,
-        COUNT(*) AS total_entries
-    FROM attendance
-")->fetch(PDO::FETCH_ASSOC);
-
-// Porcentaje total de tardanzas generales
-$total_tardiness = 0;
-$late_entries_percent = 0;
-$late_lunches_percent = 0;
-$late_breaks_percent = 0;
-
-if ($tardiness_data['total_entries'] > 0) {
-    $total_tardiness = round(
-        (($tardiness_data['late_entries'] + $tardiness_data['late_lunches'] + $tardiness_data['late_breaks']) 
-        / $tardiness_data['total_entries']) * 100, 2
-    );
-
-    $late_entries_percent = round(($tardiness_data['late_entries'] / $tardiness_data['total_entries']) * 100, 2);
-    $late_lunches_percent = round(($tardiness_data['late_lunches'] / $tardiness_data['total_entries']) * 100, 2);
-    $late_breaks_percent = round(($tardiness_data['late_breaks'] / $tardiness_data['total_entries']) * 100, 2);
-}
-
-// CÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡lculo del porcentaje de tardanzas solo para Entry
-$tardiness_entry_data = $pdo->query("
-    SELECT 
-        COUNT(CASE WHEN TIME(timestamp) > '10:05:00' THEN 1 END) AS late_entries,
-        COUNT(*) AS total_entries
-    FROM attendance
-    WHERE type = 'Entry'
-")->fetch(PDO::FETCH_ASSOC);
-
-$overall_tardiness_entry = 0;
-
-if ($tardiness_entry_data['total_entries'] > 0) {
-    $overall_tardiness_entry = round(($tardiness_entry_data['late_entries'] / $tardiness_entry_data['total_entries']) * 100, 2);
-}
-
+// 14-day trend series (fill gaps)
 $trend_map = [];
 foreach ($trend_rows as $row) {
-    $trend_map[$row['day']] = [
-        'entries' => (int)$row['entries'],
-        'exits' => (int)$row['exits']
-    ];
+    $trend_map[$row['day']] = ['entries' => (int) $row['entries'], 'exits' => (int) $row['exits']];
 }
-
-$trend_labels = [];
-$trend_entries = [];
-$trend_exits = [];
-$start = new DateTime('today -13 days');
+$trend_labels = $trend_entries = $trend_exits = [];
+$cursor = new DateTime('today -13 days');
 for ($i = 0; $i < 14; $i++) {
-    $day = $start->format('Y-m-d');
-    $trend_labels[] = $start->format('M d');
+    $day = $cursor->format('Y-m-d');
+    $trend_labels[]  = $cursor->format('d M');
     $trend_entries[] = $trend_map[$day]['entries'] ?? 0;
-    $trend_exits[] = $trend_map[$day]['exits'] ?? 0;
-    $start->modify('+1 day');
+    $trend_exits[]   = $trend_map[$day]['exits'] ?? 0;
+    $cursor->modify('+1 day');
 }
 
+// 24h entry distribution
 $hour_map = [];
 foreach ($hour_rows as $row) {
-    $hour_map[(int)$row['hour']] = (int)$row['count'];
+    $hour_map[(int) $row['hour']] = (int) $row['count'];
 }
-
-$hour_labels = [];
-$hour_counts = [];
-for ($h = 0; $h < 24; $h++) {
-    $hour_labels[] = str_pad((string)$h, 2, '0', STR_PAD_LEFT) . ':00';
+$hour_labels = $hour_counts = [];
+for ($h = 6; $h <= 22; $h++) { // business-hours window for a cleaner chart
+    $hour_labels[] = str_pad((string) $h, 2, '0', STR_PAD_LEFT) . ':00';
     $hour_counts[] = $hour_map[$h] ?? 0;
 }
-?>
+$peak_hour_idx = $hour_counts ? array_keys($hour_counts, max($hour_counts))[0] : -1;
 
+/* ---- Tardiness breakdown by period (VALIDATED: late-of-type / total-of-type) ---- */
+if (!function_exists('ev_tardiness_breakdown')) {
+    function ev_tardiness_breakdown(PDO $pdo, string $dateCond): array
+    {
+        $stmt = $pdo->query("
+            SELECT
+                SUM(type = 'Entry')                                          AS tot_entry,
+                SUM(type = 'Entry' AND TIME(timestamp) > '10:05:00')         AS le,
+                SUM(type = 'Lunch')                                          AS tot_lunch,
+                SUM(type = 'Lunch' AND TIME(timestamp) > '14:00:00')         AS ll,
+                SUM(type = 'Break')                                          AS tot_break,
+                SUM(type = 'Break' AND TIME(timestamp) > '17:00:00')         AS lb
+            FROM attendance WHERE 1=1 " . $dateCond . "
+        ");
+        $r = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $pct = function ($num, $den) {
+            $den = (int) $den;
+            return $den > 0 ? round(((int) $num / $den) * 100, 1) : 0;
+        };
+        return [
+            $pct($r['le'] ?? 0, $r['tot_entry'] ?? 0),
+            $pct($r['ll'] ?? 0, $r['tot_lunch'] ?? 0),
+            $pct($r['lb'] ?? 0, $r['tot_break'] ?? 0),
+        ];
+    }
+}
+$tardinessByPeriod = [
+    'dia'    => ev_tardiness_breakdown($pdo, "AND DATE(timestamp) = CURDATE()"),
+    'semana' => ev_tardiness_breakdown($pdo, "AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)"),
+    'mes'    => ev_tardiness_breakdown($pdo, "AND DATE(timestamp) >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)"),
+];
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Control Evallish BPO</title>
+    <title>Panel de Control · Evallish BPO</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <style>
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.1rem; }
+        .kpi-mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+        .charts-grid { display: grid; gap: 1.25rem; }
+        @media (min-width: 1100px) {
+            .charts-2col { grid-template-columns: 1.6fr 1fr; }
+            .charts-2col-even { grid-template-columns: 1fr 1fr; }
+        }
+        .kpi {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm); padding: 1.35rem 1.5rem;
+            transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+        }
+        .kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+        .kpi-icon { width: 46px; height: 46px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+        .kpi-label { color: var(--text-muted); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+        .kpi-value { color: var(--heading); font-size: 2.1rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; font-family: var(--font-display); }
+        .kpi-sub { color: var(--text-subtle); font-size: .8rem; margin-top: .25rem; }
+        .kpi-mini { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-xs); padding: 1rem 1.1rem; transition: transform .16s ease, box-shadow .16s ease; }
+        .kpi-mini:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+        .kpi-mini .v { font-size: 1.55rem; font-weight: 800; color: var(--heading); font-variant-numeric: tabular-nums; font-family: var(--font-display); }
+        .chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 1.4rem 1.5rem; }
+        .chart-box h3 { font-size: 1.05rem; font-weight: 700; color: var(--heading); margin: 0; }
+        .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.1rem; flex-wrap: wrap; }
+        .rank-row { display: flex; align-items: center; justify-content: space-between; padding: .6rem 0; border-bottom: 1px solid var(--border); }
+        .rank-row:last-child { border-bottom: none; }
+        .rank-badge { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 700; }
+        .trend-pill { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; font-weight: 700; padding: .15rem .5rem; border-radius: 999px; }
+        .animate-spin { animation: ev-spin 1s linear infinite; }
+        @keyframes ev-spin { to { transform: rotate(360deg); } }
+    </style>
 </head>
-<body class="bg-gray-100">
+<body class="theme-light bg-gray-100">
     <?php include 'header.php'; ?>
-    
-    <div class="container mx-auto px-4 py-8">
-        <!-- Dashboard Header -->
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-800">Panel de Control Evallish BPO</h1>
-                <p class="text-gray-600">Última actualización: <span id="lastUpdate"></span></p>
-            </div>
-            <button id="refreshData" class="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2">
-                <i class="fas fa-sync-alt mr-2"></i> Actualizar Datos
-            </button>
-        </div>
 
-        <!-- Main Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500 text-sm">Total de Usuarios</p>
-                        <h3 class="text-4xl font-bold text-gray-800"><?= $total_users ?></h3>
-                    </div>
-                    <div class="bg-blue-100 rounded-full p-3">
-                        <i class="fas fa-users text-blue-500 text-xl"></i>
-                    </div>
+    <div class="container mx-auto px-4 py-6" style="max-width: 1500px;">
+
+        <!-- HERO -->
+        <section class="page-hero" style="margin-bottom: 1.5rem;">
+            <div class="page-hero-content" style="flex-direction: row; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1.25rem;">
+                <div>
+                    <span class="tag-pill" style="background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.28);">
+                        <span class="live-dot" style="width:8px;height:8px;border-radius:50%;background:#5fe0a8;display:inline-block;box-shadow:0 0 0 0 rgba(95,224,168,.7);animation:ev-pulse 2s infinite;"></span>
+                        Panel en vivo
+                    </span>
+                    <h1 style="font-size: clamp(1.7rem,3vw,2.2rem); font-weight: 800; color: #fff; letter-spacing: -.02em; margin: .55rem 0 .3rem;">Panel de Control · Evallish BPO</h1>
+                    <p class="page-meta">Operación de fuerza laboral en tiempo real · <span id="lastUpdate"></span></p>
                 </div>
-                <div class="mt-4">
-                    <div class="flex items-center">
-                        <span class="text-green-500"><i class="fas fa-arrow-up"></i> 12%</span>
-                        <span class="text-gray-400 text-sm ml-2">vs mes anterior</span>
+                <div style="display:flex; flex-direction:column; gap:.75rem; align-items:flex-end;">
+                    <button id="refreshData" type="button" style="background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.32); color: #fff; backdrop-filter: blur(6px); padding: .7rem 1.3rem; border-radius: var(--radius-sm); font-weight: 600; display: inline-flex; align-items: center; gap: .55rem; cursor: pointer;">
+                        <i class="fas fa-sync-alt"></i> Actualizar Datos
+                    </button>
+                    <div class="hero-metric-grid" style="margin: 0; grid-template-columns: repeat(3, minmax(96px,1fr));">
+                        <div class="hero-metric" style="padding: .7rem .9rem;"><strong style="font-size:1.35rem;"><?= $active_users ?></strong><span>En operación</span></div>
+                        <div class="hero-metric" style="padding: .7rem .9rem;"><strong style="font-size:1.35rem;"><?= $total_records_today ?></strong><span>Marcajes hoy</span></div>
+                        <div class="hero-metric" style="padding: .7rem .9rem;"><strong style="font-size:1.35rem;"><?= $ontime_today ?>%</strong><span>Puntualidad</span></div>
                     </div>
                 </div>
             </div>
+        </section>
 
-            <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                <div class="flex items-center justify-between">
+        <!-- PRIMARY KPIs -->
+        <div class="kpi-grid" style="margin-bottom: 1.25rem;">
+            <div class="kpi">
+                <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">Entradas Hoy</p>
-                        <h3 class="text-4xl font-bold text-gray-800"><?= $entries_today ?></h3>
+                        <p class="kpi-label">Agentes Activos Hoy</p>
+                        <h3 class="kpi-value"><?= $active_users ?></h3>
                     </div>
-                    <div class="bg-green-100 rounded-full p-3">
-                        <i class="fas fa-door-open text-green-500 text-xl"></i>
-                    </div>
+                    <span class="kpi-icon" style="background: var(--navy-100); color: var(--brand);"><i class="fas fa-user-check"></i></span>
                 </div>
-                <div class="mt-4">
-                    <div id="entriesChart"></div>
-                </div>
+                <div class="hero-progress" style="background: var(--surface-3); margin-top: .9rem;"><span style="width: <?= $present_rate ?>%; background: linear-gradient(90deg, var(--brand-bright), var(--brand));"></span></div>
+                <p class="kpi-sub"><?= $present_rate ?>% de <?= $total_users ?> usuarios activos</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                <div class="flex items-center justify-between">
+            <div class="kpi">
+                <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">Usuarios Activos</p>
-                        <h3 class="text-4xl font-bold text-gray-800"><?= $active_users ?></h3>
+                        <p class="kpi-label">Marcajes Hoy</p>
+                        <h3 class="kpi-value"><?= number_format($total_records_today) ?></h3>
                     </div>
-                    <div class="bg-purple-100 rounded-full p-3">
-                        <i class="fas fa-user-clock text-purple-500 text-xl"></i>
-                    </div>
+                    <span class="kpi-icon" style="background: var(--navy-100); color: var(--brand);"><i class="fas fa-fingerprint"></i></span>
                 </div>
-                <div class="mt-4">
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-purple-500 rounded-full h-2" style="width: <?= ($active_users/$total_users)*100 ?>%"></div>
-                    </div>
-                    <p class="text-sm text-gray-500 mt-2"><?= round(($active_users/$total_users)*100) ?>% del total de usuarios</p>
-                </div>
+                <p class="kpi-sub"><i class="fas fa-door-open text-green-500"></i> <?= $entries_today ?> entradas · <i class="fas fa-door-closed" style="color:var(--text-subtle);"></i> <?= $exits_today ?> salidas</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
-                <div class="flex items-center justify-between">
+            <div class="kpi">
+                <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-gray-500 text-sm">Tasa de Tardanza</p>
-                        <h3 class="text-4xl font-bold <?= $overall_tardiness_entry > 50 ? 'text-red-500' : ($overall_tardiness_entry > 25 ? 'text-yellow-500' : 'text-green-500') ?>">
-                            <?= $overall_tardiness_entry ?>%
-                        </h3>
+                        <p class="kpi-label">Promedio Horas Hoy</p>
+                        <h3 class="kpi-value"><?= $avg_hours_today ?><span style="font-size:1.1rem;color:var(--text-muted);font-weight:700;">h</span></h3>
                     </div>
-                    <div class="bg-red-100 rounded-full p-3">
-                        <i class="fas fa-clock text-red-500 text-xl"></i>
+                    <span class="kpi-icon" style="background: var(--navy-100); color: var(--brand);"><i class="fas fa-business-time"></i></span>
+                </div>
+                <p class="kpi-sub">Por agente activo en el día</p>
+            </div>
+
+            <div class="kpi">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <p class="kpi-label">Puntualidad Hoy</p>
+                        <h3 class="kpi-value" style="color: <?= $ontime_today >= 80 ? 'var(--success)' : ($ontime_today >= 60 ? 'var(--warning)' : 'var(--danger)') ?>;"><?= $ontime_today ?>%</h3>
                     </div>
+                    <div style="width:64px;height:64px;flex-shrink:0;"><div id="ontimeGauge"></div></div>
                 </div>
-                <div class="mt-4">
-                    <div id="tardinessGauge"></div>
-                </div>
+                <p class="kpi-sub"><?= $late_entries_today ?> tardías de <?= $entries_today ?> entradas</p>
             </div>
         </div>
 
-        <!-- Additional KPI Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-lg p-5">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500 text-sm">Registros Hoy</p>
-                        <h3 class="text-3xl font-bold text-gray-800"><?= $total_records_today ?></h3>
-                    </div>
-                    <div class="bg-indigo-100 rounded-full p-3">
-                        <i class="fas fa-clipboard-list text-indigo-500 text-lg"></i>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">Entradas + Salidas + Breaks</p>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-lg p-5">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500 text-sm">Entradas (7 días)</p>
-                        <h3 class="text-3xl font-bold text-gray-800"><?= $entries_week ?></h3>
-                    </div>
-                    <div class="bg-green-100 rounded-full p-3">
-                        <i class="fas fa-calendar-week text-green-500 text-lg"></i>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">Últimos 7 días</p>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-lg p-5">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500 text-sm">Entradas (Mes)</p>
-                        <h3 class="text-3xl font-bold text-gray-800"><?= $entries_month ?></h3>
-                    </div>
-                    <div class="bg-blue-100 rounded-full p-3">
-                        <i class="fas fa-calendar-alt text-blue-500 text-lg"></i>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">Mes actual</p>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-lg p-5">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500 text-sm">Activos (7 días)</p>
-                        <h3 class="text-3xl font-bold text-gray-800"><?= $active_users_week ?></h3>
-                    </div>
-                    <div class="bg-purple-100 rounded-full p-3">
-                        <i class="fas fa-user-friends text-purple-500 text-lg"></i>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">Usuarios únicos</p>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-lg p-5">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500 text-sm">Prom. Horas Hoy</p>
-                        <h3 class="text-3xl font-bold text-gray-800"><?= $avg_hours_today ?></h3>
-                    </div>
-                    <div class="bg-yellow-100 rounded-full p-3">
-                        <i class="fas fa-hourglass-half text-yellow-500 text-lg"></i>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">Por usuario activo</p>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-lg p-5">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-500 text-sm">Tardanza Hoy</p>
-                        <h3 class="text-3xl font-bold <?= $late_rate_today > 50 ? 'text-red-500' : ($late_rate_today > 25 ? 'text-yellow-500' : 'text-green-500') ?>"><?= $late_rate_today ?>%</h3>
-                    </div>
-                    <div class="bg-red-100 rounded-full p-3">
-                        <i class="fas fa-exclamation-triangle text-red-500 text-lg"></i>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-400 mt-2">Entradas tardías hoy</p>
-            </div>
-        </div>
-
-        <!-- Charts Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Attendance Distribution -->
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Distribución de Asistencia</h3>
-                <div style="height: 400px; position: relative;">
-                    <canvas id="categoryChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Work Time Analysis -->
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Análisis de Tiempo de Trabajo</h3>
-                <div style="height: 400px; position: relative;">
-                    <canvas id="workTimeChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Advanced Analytics -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-xl font-semibold text-gray-800">Tendencia 14 Días</h3>
-                    <div class="text-xs text-gray-400">Entradas vs Salidas</div>
-                </div>
-                <div style="height: 360px; position: relative;">
-                    <canvas id="trendChart"></canvas>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-xl font-semibold text-gray-800">Distribución de Entradas por Hora</h3>
-                    <div class="text-xs text-gray-400">Últimos 7 días</div>
-                </div>
-                <div style="height: 360px; position: relative;">
-                    <canvas id="entryHourChart"></canvas>
-                </div>
-                <div class="mt-3 text-sm text-gray-500">
-                    Pico de entrada: <span class="font-semibold text-gray-700"><?= $peak_entry_hour !== false && $peak_entry_hour !== null ? str_pad($peak_entry_hour, 2, '0', STR_PAD_LEFT) . ':00' : 'N/A' ?></span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tardiness Breakdown -->
-        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-                <h3 class="text-xl font-semibold text-gray-800">Desglose de Tardanzas</h3>
-                <div class="flex flex-wrap gap-2">
-                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Diario</button>
-                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Semanal</button>
-                    <button class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm">Mensual</button>
-                </div>
-            </div>
-            <div style="height: 300px; position: relative;">
-                <canvas id="tardinessChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Rankings -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Top Tardanzas (30 días)</h3>
-                <div class="space-y-3">
-                    <?php if (count($top_tardy_users) > 0): ?>
-                        <?php foreach ($top_tardy_users as $row): ?>
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                                    <span class="text-gray-700"><?= htmlspecialchars($row['username']) ?></span>
-                                </div>
-                                <span class="text-sm text-gray-500"><?= (int)$row['late_entries'] ?> tardanzas</span>
-                            </div>
-                        <?php endforeach; ?>
+        <!-- SECONDARY KPIs -->
+        <div class="kpi-mini-grid" style="margin-bottom: 1.5rem;">
+            <div class="kpi-mini"><p class="kpi-label">Total Usuarios</p><div class="v"><?= number_format($total_users) ?></div><p class="kpi-sub">Cuentas activas</p></div>
+            <div class="kpi-mini"><p class="kpi-label">Entradas (7 días)</p><div class="v"><?= number_format($entries_week) ?></div><p class="kpi-sub">Últimos 7 días</p></div>
+            <div class="kpi-mini">
+                <p class="kpi-label">Entradas (Mes)</p><div class="v"><?= number_format($entries_month) ?></div>
+                <p class="kpi-sub">
+                    <?php if ($entries_mom_pct === null): ?>
+                        Mes actual
                     <?php else: ?>
-                        <p class="text-gray-500 text-sm">Sin datos recientes.</p>
+                        <span class="trend-pill" style="background: <?= $entries_mom_pct >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)' ?>; color: <?= $entries_mom_pct >= 0 ? 'var(--success-strong)' : 'var(--danger-strong)' ?>;">
+                            <i class="fas fa-arrow-<?= $entries_mom_pct >= 0 ? 'up' : 'down' ?>"></i> <?= abs($entries_mom_pct) ?>%
+                        </span> vs mes anterior
                     <?php endif; ?>
-                </div>
+                </p>
             </div>
+            <div class="kpi-mini"><p class="kpi-label">Activos (7 días)</p><div class="v"><?= number_format($active_users_week) ?></div><p class="kpi-sub">Usuarios únicos</p></div>
+            <div class="kpi-mini"><p class="kpi-label">Pico de Entrada</p><div class="v"><?= ($peak_entry_hour !== false && $peak_entry_hour !== null) ? str_pad((string)$peak_entry_hour, 2, '0', STR_PAD_LEFT) . ':00' : '—' ?></div><p class="kpi-sub">Hora más concurrida</p></div>
+            <div class="kpi-mini"><p class="kpi-label">Tardanza (histórico)</p><div class="v" style="color: <?= $overall_tardiness_entry > 40 ? 'var(--danger)' : ($overall_tardiness_entry > 20 ? 'var(--warning)' : 'var(--success)') ?>;"><?= $overall_tardiness_entry ?>%</div><p class="kpi-sub">Entradas tardías / total</p></div>
+        </div>
 
-            <div class="bg-white rounded-xl shadow-lg p-6">
-                <h3 class="text-xl font-semibold text-gray-800 mb-4">Top Puntuales (30 días)</h3>
-                <div class="space-y-3">
-                    <?php if (count($top_punctual_users) > 0): ?>
-                        <?php foreach ($top_punctual_users as $row): ?>
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                                    <span class="text-gray-700"><?= htmlspecialchars($row['username']) ?></span>
-                                </div>
-                                <span class="text-sm text-gray-500"><?= (int)$row['on_time'] ?> a tiempo</span>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <p class="text-gray-500 text-sm">Sin datos recientes.</p>
-                    <?php endif; ?>
+        <!-- CHARTS: trend + distribution -->
+        <div class="charts-grid charts-2col" style="margin-bottom: 1.25rem;">
+            <div class="chart-box">
+                <div class="chart-head">
+                    <h3><i class="fas fa-chart-area" style="color:var(--brand);margin-right:.5rem;"></i>Tendencia de Asistencia · 14 días</h3>
+                    <div class="pill-switch" data-trend-toggle>
+                        <button type="button" class="pill-option is-active" data-fill="area">Área</button>
+                        <button type="button" class="pill-option" data-fill="line">Línea</button>
+                    </div>
+                </div>
+                <div style="height: 320px; position: relative;"><canvas id="trendChart"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <div class="chart-head"><h3><i class="fas fa-chart-pie" style="color:var(--brand);margin-right:.5rem;"></i>Distribución por Tipo</h3></div>
+                <div style="height: 320px; position: relative;"><canvas id="categoryChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- CHARTS: hourly + tardiness -->
+        <div class="charts-grid charts-2col" style="margin-bottom: 1.25rem;">
+            <div class="chart-box">
+                <div class="chart-head">
+                    <h3><i class="fas fa-clock" style="color:var(--brand);margin-right:.5rem;"></i>Entradas por Hora</h3>
+                    <span class="chip"><i class="fas fa-bolt"></i> Pico: <?= ($peak_entry_hour !== false && $peak_entry_hour !== null) ? str_pad((string)$peak_entry_hour, 2, '0', STR_PAD_LEFT) . ':00' : 'N/A' ?></span>
+                </div>
+                <div style="height: 300px; position: relative;"><canvas id="hourChart"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <div class="chart-head">
+                    <h3><i class="fas fa-triangle-exclamation" style="color:var(--brand);margin-right:.5rem;"></i>Tardanzas por Categoría</h3>
+                    <div class="pill-switch" data-tardiness-period>
+                        <button type="button" class="pill-option is-active" data-period="dia">Diario</button>
+                        <button type="button" class="pill-option" data-period="semana">Semanal</button>
+                        <button type="button" class="pill-option" data-period="mes">Mensual</button>
+                    </div>
+                </div>
+                <div style="height: 300px; position: relative;"><canvas id="tardinessChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- CHARTS: work-time + rankings -->
+        <div class="charts-grid charts-2col" style="margin-bottom: 1.25rem;">
+            <div class="chart-box">
+                <div class="chart-head"><h3><i class="fas fa-ranking-star" style="color:var(--brand);margin-right:.5rem;"></i>Horas Trabajadas · Top Agentes</h3></div>
+                <div style="height: 340px; position: relative;"><canvas id="workTimeChart"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <div class="chart-head"><h3><i class="fas fa-award" style="color:var(--brand);margin-right:.5rem;"></i>Rankings · 30 días</h3></div>
+                <p class="kpi-label" style="margin-bottom:.3rem;"><i class="fas fa-circle text-red-500" style="font-size:.5rem;vertical-align:middle;"></i> Más tardanzas</p>
+                <div style="margin-bottom: 1.1rem;">
+                    <?php if ($top_tardy_users): foreach ($top_tardy_users as $i => $row): ?>
+                        <div class="rank-row">
+                            <span class="flex items-center gap-2"><span class="rank-badge" style="background:var(--danger-bg);color:var(--danger-strong);"><?= $i + 1 ?></span><span style="color:var(--text);"><?= htmlspecialchars($row['username']) ?></span></span>
+                            <span class="badge badge--danger"><?= (int) $row['late_entries'] ?> tardanzas</span>
+                        </div>
+                    <?php endforeach; else: ?><p class="kpi-sub">Sin datos recientes.</p><?php endif; ?>
+                </div>
+                <p class="kpi-label" style="margin-bottom:.3rem;"><i class="fas fa-circle text-green-500" style="font-size:.5rem;vertical-align:middle;"></i> Más puntuales</p>
+                <div>
+                    <?php if ($top_punctual_users): foreach ($top_punctual_users as $i => $row): ?>
+                        <div class="rank-row">
+                            <span class="flex items-center gap-2"><span class="rank-badge" style="background:var(--success-bg);color:var(--success-strong);"><?= $i + 1 ?></span><span style="color:var(--text);"><?= htmlspecialchars($row['username']) ?></span></span>
+                            <span class="badge badge--success"><?= (int) $row['on_time'] ?> a tiempo</span>
+                        </div>
+                    <?php endforeach; else: ?><p class="kpi-sub">Sin datos recientes.</p><?php endif; ?>
                 </div>
             </div>
         </div>
+
     </div>
 
-    <style>
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-        
-        .animate-spin {
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        canvas {
-            max-width: 100%;
-            max-height: 100%;
-        }
-
-        #categoryChart, #workTimeChart, #tardinessChart {
-            width: 100% !important;
-            height: 100% !important;
-        }
-    </style>
+    <style>@keyframes ev-pulse { 0% { box-shadow: 0 0 0 0 rgba(95,224,168,.7); } 70% { box-shadow: 0 0 0 8px rgba(95,224,168,0); } 100% { box-shadow: 0 0 0 0 rgba(95,224,168,0); } }</style>
 
     <script>
-        // Update timestamp
-        function updateTimestamp() {
-            document.getElementById('lastUpdate').textContent = moment().format('MMMM D, YYYY HH:mm:ss');
+        // ---- Live timestamp (native, no moment.js) ----
+        function evUpdateClock() {
+            var el = document.getElementById('lastUpdate');
+            if (el) el.textContent = new Date().toLocaleString('es-DO', { dateStyle: 'medium', timeStyle: 'medium' });
         }
-        updateTimestamp();
-        setInterval(updateTimestamp, 1000);
+        evUpdateClock();
+        setInterval(evUpdateClock, 1000);
 
-        // Existing chart data
+        document.getElementById('refreshData').addEventListener('click', function () {
+            this.classList.add('animate-spin');
+            setTimeout(function () { location.reload(); }, 700);
+        });
+
+        // ---- Data from PHP ----
+        const E = window.EvallishCharts || { palette: ['#264b8b', '#3a5da0', '#6f8bbd', '#9db1d2', '#c3d0e6'], brand: '#264b8b', gradient: null, fade: function (h, a) { return h; } };
         const categoryLabels = <?= json_encode(array_column($category_data, 'type')) ?>;
-        const categoryCounts = <?= json_encode(array_column($category_data, 'count')) ?>;
-        const workTimeLabels = <?= json_encode(array_column($work_time_data, 'username')) ?>;
-        const workTimeData = <?= json_encode(array_map(fn($row) => round($row['total_time'] / 3600, 2), $work_time_data)) ?>;
-        const tardinessLabels = ['Entradas Tardías', 'Almuerzos Tardíos', 'Descansos Tardíos'];
-        const tardinessData = [<?= $late_entries_percent ?>, <?= $late_lunches_percent ?>, <?= $late_breaks_percent ?>];
-        const trendLabels = <?= json_encode($trend_labels) ?>;
+        const categoryCounts = <?= json_encode(array_map('intval', array_column($category_data, 'count'))) ?>;
+        const trendLabels  = <?= json_encode($trend_labels) ?>;
         const trendEntries = <?= json_encode($trend_entries) ?>;
-        const trendExits = <?= json_encode($trend_exits) ?>;
-        const entryHourLabels = <?= json_encode($hour_labels) ?>;
-        const entryHourCounts = <?= json_encode($hour_counts) ?>;
+        const trendExits   = <?= json_encode($trend_exits) ?>;
+        const hourLabels   = <?= json_encode($hour_labels) ?>;
+        const hourCounts   = <?= json_encode($hour_counts) ?>;
+        const peakHourIdx  = <?= (int) $peak_hour_idx ?>;
+        const wtLabels     = <?= json_encode($wt_labels) ?>;
+        const wtHours      = <?= json_encode(array_map('floatval', $wt_hours)) ?>;
+        const tardinessByPeriod = <?= json_encode($tardinessByPeriod) ?>;
+        const tardinessLabels = ['Entradas', 'Almuerzos', 'Descansos'];
 
-        // ConfiguraciÃƒÆ’Ã†a€™Ãƒa€šÃ‚a³n comÃƒÆ’Ã†a€™Ãƒa€šÃ‚aºn para todos los grÃƒÆ’Ã†a€™Ãƒa€šÃ‚a¡ficos
-        Chart.defaults.font.size = 12;
-        Chart.defaults.responsive = true;
-        Chart.defaults.maintainAspectRatio = false;
+        function grad(ctx, h, c1, c2) { var g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, c1); g.addColorStop(1, c2); return g; }
 
-        // Enhanced Category Chart
-        new Chart(document.getElementById('categoryChart').getContext('2d'), {
-            type: 'doughnut',
-            data: {
-                labels: categoryLabels,
-                datasets: [{
-                    data: categoryCounts,
-                    backgroundColor: ['#4CAF50', '#2196F3', '#FFC107', '#FF5722', '#9C27B0'],
-                    borderWidth: 2,
-                    borderColor: '#ffffff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
-                            padding: 20,
-                            usePointStyle: true,
-                            font: {
-                                size: 12
-                            }
-                        }
-                    }
-                },
-                layout: {
-                    padding: {
-                        left: 10,
-                        right: 10,
-                        top: 0,
-                        bottom: 0
-                    }
-                }
-            }
-        });
-
-        // Enhanced Work Time Chart
-        new Chart(document.getElementById('workTimeChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: workTimeLabels,
-                datasets: [{
-                    label: 'Horas de Trabajo',
-                    data: workTimeData,
-                    backgroundColor: '#4CAF50',
-                    borderRadius: 6,
-                    maxBarThickness: 50
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            drawBorder: false
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                },
-                layout: {
-                    padding: {
-                        left: 10,
-                        right: 10,
-                        top: 10,
-                        bottom: 10
-                    }
-                }
-            }
-        });
-
-        // Enhanced Tardiness Chart
-        new Chart(document.getElementById('tardinessChart').getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: tardinessLabels,
-                datasets: [{
-                    label: 'Tardanza %',
-                    data: tardinessData,
-                    borderColor: '#FF5722',
-                    backgroundColor: 'rgba(255, 87, 34, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        ticks: {
-                            callback: value => value + '%'
-                        }
-                    }
-                },
-                layout: {
-                    padding: {
-                        left: 10,
-                        right: 10,
-                        top: 10,
-                        bottom: 10
-                    }
-                }
-            }
-        });
-
-        // Trend Chart (14 days)
-        new Chart(document.getElementById('trendChart').getContext('2d'), {
+        // ---- Trend (gradient area, entries vs exits) ----
+        const trCtx = document.getElementById('trendChart').getContext('2d');
+        const trendChart = new Chart(trCtx, {
             type: 'line',
             data: {
                 labels: trendLabels,
                 datasets: [
-                    {
-                        label: 'Entradas',
-                        data: trendEntries,
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.15)',
-                        fill: true,
-                        tension: 0.35
-                    },
-                    {
-                        label: 'Salidas',
-                        data: trendExits,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.12)',
-                        fill: true,
-                        tension: 0.35
-                    }
+                    { label: 'Entradas', data: trendEntries, borderColor: '#16895c', backgroundColor: grad(trCtx, 320, 'rgba(22,137,92,.30)', 'rgba(22,137,92,.01)'), fill: true, tension: .4, pointBackgroundColor: '#16895c' },
+                    { label: 'Salidas', data: trendExits, borderColor: '#264b8b', backgroundColor: grad(trCtx, 320, 'rgba(38,75,139,.30)', 'rgba(38,75,139,.01)'), fill: true, tension: .4, pointBackgroundColor: '#264b8b' }
                 ]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top'
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            drawBorder: false
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                }
-            }
+            options: { plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+        });
+        document.querySelectorAll('[data-trend-toggle] .pill-option').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('[data-trend-toggle] .pill-option').forEach(b => b.classList.remove('is-active'));
+                btn.classList.add('is-active');
+                var fill = btn.getAttribute('data-fill') === 'area';
+                trendChart.data.datasets.forEach(d => d.fill = fill);
+                trendChart.update();
+            });
         });
 
-        // Entry Hour Distribution
-        new Chart(document.getElementById('entryHourChart').getContext('2d'), {
+        // ---- Distribution doughnut ----
+        new Chart(document.getElementById('categoryChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: categoryLabels, datasets: [{ data: categoryCounts, backgroundColor: E.palette, borderWidth: 2, borderColor: '#ffffff' }] },
+            options: { cutout: '62%', plugins: { legend: { position: 'right' } } }
+        });
+
+        // ---- Entradas por hora (peak highlighted) ----
+        const hCtx = document.getElementById('hourChart').getContext('2d');
+        new Chart(hCtx, {
             type: 'bar',
-            data: {
-                labels: entryHourLabels,
-                datasets: [{
-                    label: 'Entradas',
-                    data: entryHourCounts,
-                    backgroundColor: '#6366f1',
-                    borderRadius: 4,
-                    maxBarThickness: 18
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            drawBorder: false
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            maxRotation: 0,
-                            autoSkip: true,
-                            maxTicksLimit: 12
-                        },
-                        grid: {
-                            display: false
-                        }
-                    }
-                }
-            }
+            data: { labels: hourLabels, datasets: [{ label: 'Entradas', data: hourCounts, backgroundColor: hourCounts.map((_, i) => i === peakHourIdx ? '#264b8b' : 'rgba(58,93,160,.45)'), hoverBackgroundColor: '#1f3f76', borderRadius: 6, maxBarThickness: 26 }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } }
         });
 
-        // Entries mini chart
-        const entriesOptions = {
-            series: [{
-                data: [25, 30, 28, 32, 29, 30, <?= $entries_today ?>]
-            }],
-            chart: {
-                type: 'area',
-                height: 60,
-                sparkline: {
-                    enabled: true
-                }
-            },
-            stroke: {
-                curve: 'smooth'
-            },
-            fill: {
-                opacity: 0.3
-            },
-            colors: ['#4CAF50']
-        };
-        new ApexCharts(document.getElementById('entriesChart'), entriesOptions).render();
-
-        // Tardiness gauge
-        const gaugeOptions = {
-            series: [<?= $overall_tardiness_entry ?>],
-            chart: {
-                type: 'radialBar',
-                height: 100,
-                sparkline: {
-                    enabled: true
-                }
-            },
-            colors: ['<?= $overall_tardiness_entry > 50 ? "#ef4444" : ($overall_tardiness_entry > 25 ? "#f59e0b" : "#22c55e") ?>'],
-            plotOptions: {
-                radialBar: {
-                    hollow: {
-                        size: '60%'
-                    },
-                    track: {
-                        background: '#e2e8f0'
-                    },
-                    dataLabels: {
-                        show: false
-                    }
-                }
-            }
-        };
-        new ApexCharts(document.getElementById('tardinessGauge'), gaugeOptions).render();
-
-        // Refresh data button functionality
-        document.getElementById('refreshData').addEventListener('click', function() {
-            this.classList.add('animate-spin');
-            setTimeout(() => {
-                location.reload();
-            }, 1000);
+        // ---- Tardiness by period (interactive, validated %) ----
+        const tCtx = document.getElementById('tardinessChart').getContext('2d');
+        const tardinessChart = new Chart(tCtx, {
+            type: 'bar',
+            data: { labels: tardinessLabels, datasets: [{ label: '% tardías', data: tardinessByPeriod['dia'], backgroundColor: grad(tCtx, 300, 'rgba(58,93,160,.95)', 'rgba(38,75,139,.45)'), hoverBackgroundColor: '#1f3f76', borderRadius: 10, maxBarThickness: 80 }] },
+            options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + c.parsed.y + '% tardías' } } }, scales: { y: { beginAtZero: true, suggestedMax: 100, ticks: { callback: v => v + '%' } }, x: { grid: { display: false } } } }
         });
+        document.querySelectorAll('[data-tardiness-period] .pill-option').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('[data-tardiness-period] .pill-option').forEach(b => b.classList.remove('is-active'));
+                btn.classList.add('is-active');
+                var p = btn.getAttribute('data-period');
+                if (tardinessByPeriod[p]) { tardinessChart.data.datasets[0].data = tardinessByPeriod[p]; tardinessChart.update(); }
+            });
+        });
+
+        // ---- Horas trabajadas top agentes (horizontal bar) ----
+        if (wtLabels.length) {
+            const wCtx = document.getElementById('workTimeChart').getContext('2d');
+            new Chart(wCtx, {
+                type: 'bar',
+                data: { labels: wtLabels, datasets: [{ label: 'Horas', data: wtHours, backgroundColor: (function () { var w = wCtx.canvas.width || 600; var g = wCtx.createLinearGradient(0, 0, w, 0); g.addColorStop(0, '#264b8b'); g.addColorStop(1, '#6f8bbd'); return g; })(), hoverBackgroundColor: '#1f3f76', borderRadius: 6, maxBarThickness: 22 }] },
+                options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + c.parsed.x + ' h' } } }, scales: { x: { beginAtZero: true }, y: { grid: { display: false } } } }
+            });
+        }
+
+        // ---- Puntualidad gauge (ApexCharts radial) ----
+        if (window.ApexCharts) {
+            var gaugeColor = <?= json_encode($ontime_today >= 80 ? '#16895c' : ($ontime_today >= 60 ? '#b07614' : '#cf3a35')) ?>;
+            new ApexCharts(document.getElementById('ontimeGauge'), {
+                series: [<?= $ontime_today ?>], chart: { type: 'radialBar', height: 64, width: 64, sparkline: { enabled: true } },
+                colors: [gaugeColor],
+                plotOptions: { radialBar: { hollow: { size: '52%' }, track: { background: 'rgba(38,75,139,.12)' }, dataLabels: { show: false } } },
+                stroke: { lineCap: 'round' }
+            }).render();
+        }
     </script>
 </body>
 </html>
-

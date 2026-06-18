@@ -17,7 +17,8 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../../db.php';
 
-define('WASAPI_TOKEN', '338529|NeQrFHvdJ3lX6O2Hs26QPjc0IyrgzKFxQGwVcvCM0575a229');
+$__sec = @include __DIR__ . "/../../config/secrets.php";
+define("WASAPI_TOKEN", getenv("WASAPI_TOKEN") ?: (is_array($__sec) ? ($__sec["wasapi_token"] ?? "") : ""));
 define('WASAPI_BASE_URL', 'https://api.wasapi.io/prod/api/v1/');
 
 /**
@@ -122,7 +123,7 @@ try {
                         'id'    => trim($idMatch[1] ?? ''),
                         'name'  => trim($nameMatch[1] ?? ''),
                         'phone' => trim($phoneMatch[1] ?? ''),
-                        'color' => trim($colorMatch[1] ?? '#3B82F6'),
+                        'color' => trim($colorMatch[1] ?? '#264b8b'),
                     ];
                 }
                 if (is_array($phone)) {
@@ -130,7 +131,7 @@ try {
                         'id'    => (string) ($phone['id'] ?? ''),
                         'name'  => (string) ($phone['display_name'] ?? ''),
                         'phone' => (string) ($phone['phone_number'] ?? ''),
-                        'color' => (string) ($phone['color'] ?? '#3B82F6'),
+                        'color' => (string) ($phone['color'] ?? '#264b8b'),
                     ];
                 }
                 return null;
@@ -157,7 +158,7 @@ try {
                             'id'             => $pid,
                             'name'           => $p['name'],
                             'phone'          => $p['phone'],
-                            'color'          => $p['color'] ?: '#3B82F6',
+                            'color'          => $p['color'] ?: '#264b8b',
                             'transactions'   => 0.0,
                             'sales'          => 0.0,
                             'calls_handled'  => 0.0,

@@ -623,8 +623,8 @@ if (!function_exists('generateExecutiveDashboardReportHTML')) {
 
         $statsRow1 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
             . "<td style='{$statCardStyle}border-top:4px solid #10b981;'><p style='{$statLabelStyle}'>Asistencia del día</p><p style='{$statNumberStyle}'>{$totals['worked_today']} / {$totals['eligible']}</p><p style='{$statSubStyle}'>{$totals['attendance_rate_pct']}%</p></td>"
-            . "<td style='{$statCardStyle}border-top:4px solid #0ea5e9;'><p style='{$statLabelStyle}'>Horas pagadas</p><p style='{$statNumberStyle}'>" . execDashFormatHours((float) $totals['hours_total']) . "</p><p style='{$statSubStyle}'>promedio " . execDashFormatHours((float) $totals['hours_avg_per_worker']) . "/persona</p></td>"
-            . "<td style='{$statCardStyle}border-top:4px solid #6366f1;'><p style='{$statLabelStyle}'>Costo del día</p><p style='{$statNumberStyle};font-size:18px;'>" . execDashFormatMoney((float) $totals['earnings_combined_usd'], 'USD') . "</p><p style='{$statSubStyle}'>" . execDashFormatMoney((float) $totals['earnings_combined_dop'], 'DOP') . " · tasa {$rateLabel}</p></td>"
+            . "<td style='{$statCardStyle}border-top:4px solid #264b8b;'><p style='{$statLabelStyle}'>Horas pagadas</p><p style='{$statNumberStyle}'>" . execDashFormatHours((float) $totals['hours_total']) . "</p><p style='{$statSubStyle}'>promedio " . execDashFormatHours((float) $totals['hours_avg_per_worker']) . "/persona</p></td>"
+            . "<td style='{$statCardStyle}border-top:4px solid #3a5da0;'><p style='{$statLabelStyle}'>Costo del día</p><p style='{$statNumberStyle};font-size:18px;'>" . execDashFormatMoney((float) $totals['earnings_combined_usd'], 'USD') . "</p><p style='{$statSubStyle}'>" . execDashFormatMoney((float) $totals['earnings_combined_dop'], 'DOP') . " · tasa {$rateLabel}</p></td>"
             . "<td style='{$statCardStyle}border-top:4px solid #f59e0b;'><p style='{$statLabelStyle}'>Campañas activas</p><p style='{$statNumberStyle}'>" . count($campaigns) . "</p><p style='{$statSubStyle}'>con empleados hoy</p></td>"
             . "</tr></table>";
 
@@ -708,7 +708,7 @@ if (!function_exists('generateExecutiveDashboardReportHTML')) {
 <style>
   body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; line-height: 1.5; }
   .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  .header { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
+  .header { background: linear-gradient(135deg, #1e3a8a 0%, #264b8b 100%); color: #fff; padding: 28px; text-align: center; border-radius: 10px; }
   .header h1 { margin: 0; font-size: 26px; font-weight: 600; }
   .header p { margin: 8px 0 0 0; font-size: 15px; opacity: 0.95; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }

@@ -3,9 +3,9 @@
  * API para Monitoreo de Conversaciones de Chat
  */
 
-// Enable error reporting for debugging
+// Producción: registrar errores, no mostrarlos al usuario (config central en db.php)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../db.php';
 

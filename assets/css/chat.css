@@ -25,7 +25,7 @@ body > .chat-widget {
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
     color: white;
     border: none;
     cursor: pointer;
@@ -160,7 +160,7 @@ body > .chat-widget {
 }
 
 .chat-tab.active {
-    color: var(--accent-cyan, #06b6d4);
+    color: var(--accent-cyan, #264b8b);
 }
 
 .chat-tab.active::after {
@@ -170,7 +170,7 @@ body > .chat-widget {
     left: 0;
     right: 0;
     height: 2px;
-    background: var(--accent-cyan, #06b6d4);
+    background: var(--accent-cyan, #264b8b);
 }
 
 /* Lista de conversaciones */
@@ -206,7 +206,7 @@ body > .chat-widget {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -257,7 +257,7 @@ body > .chat-widget {
 }
 
 .chat-conversation-unread {
-    background: #06b6d4;
+    background: #264b8b;
     color: white;
     border-radius: 50%;
     width: 20px;
@@ -366,7 +366,7 @@ body > .chat-widget {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    background: linear-gradient(135deg, #3a5da0 0%, #264b8b 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -377,7 +377,7 @@ body > .chat-widget {
 }
 
 .chat-message.own .chat-message-avatar {
-    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);
 }
 
 .chat-message-content {
@@ -402,7 +402,7 @@ body > .chat-widget {
 }
 
 .chat-message.own .chat-message-bubble {
-    background: linear-gradient(135deg, var(--accent-cyan, #06b6d4) 0%, #0891b2 100%);
+    background: linear-gradient(135deg, var(--accent-cyan, #264b8b) 0%, #1f3f76 100%);
 }
 
 .chat-message-meta {
@@ -460,7 +460,7 @@ body > .chat-widget {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--accent-cyan, #06b6d4);
+    color: var(--accent-cyan, #264b8b);
     font-size: 18px;
 }
 
@@ -509,8 +509,8 @@ body > .chat-widget {
 }
 
 .chat-reaction.own {
-    background: var(--accent-cyan, #06b6d4);
-    border-color: #0891b2;
+    background: var(--accent-cyan, #264b8b);
+    border-color: #1f3f76;
 }
 
 /* Indicador de escritura */
@@ -557,7 +557,7 @@ body > .chat-widget {
 
 .chat-input:focus {
     outline: none;
-    border-color: var(--accent-cyan, #06b6d4);
+    border-color: var(--accent-cyan, #264b8b);
 }
 
 .chat-input-btn {
@@ -584,7 +584,7 @@ body > .chat-widget {
 }
 
 .chat-send-btn {
-    background: linear-gradient(135deg, var(--accent-cyan, #06b6d4) 0%, #0891b2 100%);
+    background: linear-gradient(135deg, var(--accent-cyan, #264b8b) 0%, #1f3f76 100%);
     color: white;
 }
 
@@ -675,7 +675,7 @@ body > .chat-widget {
 
 .chat-search-input:focus {
     outline: none;
-    border-color: var(--accent-cyan, #06b6d4);
+    border-color: var(--accent-cyan, #264b8b);
 }
 
 .chat-user-list {
@@ -699,7 +699,7 @@ body > .chat-widget {
 }
 
 .chat-user-item.selected {
-    background: var(--accent-cyan, #06b6d4);
+    background: var(--accent-cyan, #264b8b);
 }
 
 .chat-user-info {
@@ -736,7 +736,7 @@ body > .chat-widget {
 }
 
 .chat-modal-btn-primary {
-    background: linear-gradient(135deg, var(--accent-cyan, #06b6d4) 0%, #0891b2 100%);
+    background: linear-gradient(135deg, var(--accent-cyan, #264b8b) 0%, #1f3f76 100%);
     color: white;
 }
 
@@ -1333,11 +1333,11 @@ body > .chat-widget {
 
 .emoji-tab.active {
     background: linear-gradient(180deg, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0.05) 100%);
-    color: #818cf8;
+    color: #5e7cba;
 }
 
 .emoji-tab.active::after {
-    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(90deg, #264b8b 0%, #3a5da0 100%);
 }
 
 .emoji-picker-content {
@@ -1452,8 +1452,8 @@ body > .chat-widget {
     --chat-border: rgba(148, 163, 184, 0.2);
     --chat-text: #f8fafc;
     --chat-muted: #9aa7b8;
-    --chat-accent: #2dd4bf;
-    --chat-accent-2: #38bdf8;
+    --chat-accent: #264b8b;
+    --chat-accent-2: #5e7cba;
     --chat-success: #34d399;
     --chat-warning: #f59e0b;
     --chat-danger: #fb7185;
@@ -1606,7 +1606,7 @@ body > .chat-widget {
 #chat-portal .chat-avatar {
     width: 42px;
     height: 42px;
-    background: linear-gradient(135deg, #14b8a6, #38bdf8);
+    background: linear-gradient(135deg, #1f3f76, #5e7cba);
     color: #06111f;
     font-size: 15px;
     font-weight: 800;

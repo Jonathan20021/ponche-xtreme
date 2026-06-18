@@ -464,8 +464,8 @@ if (!function_exists('generateLoginLogsReportHTML')) {
         $statSubStyle = 'font-size:12px;color:#666;margin:4px 0 0 0;';
 
         $statsRow1 = "<table role='presentation' width='100%' cellspacing='10' cellpadding='0' border='0' style='margin:18px 0;border-collapse:separate;'><tr>"
-            . "<td style='{$statCardStyle}border-top:4px solid #0ea5e9;'><p style='{$statLabelStyle}'>Total accesos</p><p style='{$statNumberStyle}'>{$totals['total_logins']}</p></td>"
-            . "<td style='{$statCardStyle}border-top:4px solid #0ea5e9;'><p style='{$statLabelStyle}'>Usuarios únicos</p><p style='{$statNumberStyle}'>{$totals['unique_users']}</p></td>"
+            . "<td style='{$statCardStyle}border-top:4px solid #264b8b;'><p style='{$statLabelStyle}'>Total accesos</p><p style='{$statNumberStyle}'>{$totals['total_logins']}</p></td>"
+            . "<td style='{$statCardStyle}border-top:4px solid #264b8b;'><p style='{$statLabelStyle}'>Usuarios únicos</p><p style='{$statNumberStyle}'>{$totals['unique_users']}</p></td>"
             . "<td style='{$statCardStyle}border-top:4px solid #64748b;'><p style='{$statLabelStyle}'>IPs únicas</p><p style='{$statNumberStyle}'>{$totals['unique_ips']}</p></td>"
             . "<td style='{$statCardStyle}border-top:4px solid #f59e0b;'><p style='{$statLabelStyle}'>Hora pico</p><p style='{$statNumberStyle};font-size:18px;'>{$peakHourLabel}</p></td>"
             . "</tr></table>";
@@ -489,7 +489,7 @@ if (!function_exists('generateLoginLogsReportHTML')) {
   .header p { margin: 8px 0 0 0; font-size: 15px; opacity: 0.95; }
   .stats-grid { display: table; width: 100%; margin: 18px 0; border-spacing: 10px; }
   .stat-card { display: table-cell; background: #fff; padding: 18px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-  .stat-card.primary { border-top: 4px solid #0ea5e9; }
+  .stat-card.primary { border-top: 4px solid #264b8b; }
   .stat-card.danger  { border-top: 4px solid #ef4444; }
   .stat-card.warning { border-top: 4px solid #f59e0b; }
   .stat-card.muted   { border-top: 4px solid #64748b; }
@@ -511,7 +511,7 @@ if (!function_exists('generateLoginLogsReportHTML')) {
   tbody tr:nth-child(even) { background-color: #fafafa; }
   td.num { font-family: 'Courier New', monospace; white-space: nowrap; text-align: right; }
   .muted { color: #888; font-size: 11px; }
-  .bar { background: linear-gradient(90deg, #0ea5e9, #6366f1); height: 16px; border-radius: 3px; min-width: 2px; }
+  .bar { background: linear-gradient(90deg, #264b8b, #3a5da0); height: 16px; border-radius: 3px; min-width: 2px; }
   .empty-card { background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 8px; padding: 24px; text-align: center; color: #075985; }
   .footer { text-align: center; padding: 18px; color: #777; font-size: 12px; margin-top: 20px; }
 </style>

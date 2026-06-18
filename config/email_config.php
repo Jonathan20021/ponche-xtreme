@@ -6,6 +6,9 @@
  * Update these values with your actual cPanel email credentials.
  */
 
+$__sec = @include __DIR__ . '/secrets.php';
+if (!is_array($__sec)) { $__sec = []; }
+
 return [
     // SMTP Server Settings
     'smtp_host' => 'mail.evallishbpo.com', // Your cPanel mail server
@@ -14,7 +17,7 @@ return [
     
     // Email Account Credentials
     'smtp_username' => 'notificaciones@evallishbpo.com', // Your cPanel email address
-    'smtp_password' => 'Admin#2025#', // Your email password
+    'smtp_password' => getenv('SMTP_PASS') ?: ($__sec['smtp']['pass'] ?? ''), // externalizado → config/secrets.php
     
     // Sender Information
     'from_email' => 'notificaciones@evallishbpo.com',

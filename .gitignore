@@ -5,3 +5,9 @@
 /cache/voice_ai_insights/
 /cache/rate_limit/
 /cache/**/*.json
+
+# Secretos reales — NUNCA versionar. Usar config/secrets.example.php como plantilla.
+/config/secrets.php
+
+# Backups de trabajo (originales + snapshots) — no versionar
+/_design_backup_2026-06-18/

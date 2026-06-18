@@ -6,16 +6,16 @@ echo "<html><head>";
 echo "<meta charset='UTF-8'>";
 echo "<title>Validación de Estructura DB</title>";
 echo "<style>";
-echo "body { font-family: monospace; padding: 20px; background: #1e293b; color: #e2e8f0; }";
-echo "h2 { color: #60a5fa; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }";
+echo "body { font-family: monospace; padding: 20px; background: var(--surface-2); color: #e2e8f0; }";
+echo "h2 { color: #5e7cba; border-bottom: 2px solid #264b8b; padding-bottom: 10px; }";
 echo "h3 { color: #34d399; margin-top: 20px; }";
 echo "table { border-collapse: collapse; width: 100%; margin: 10px 0; background: #334155; }";
 echo "th, td { border: 1px solid #475569; padding: 8px; text-align: left; }";
-echo "th { background: #1e40af; color: white; }";
+echo "th { background: #1f3f76; color: white; }";
 echo ".success { color: #4ade80; }";
 echo ".error { color: #f87171; }";
 echo ".warning { color: #fbbf24; }";
-echo ".info { color: #60a5fa; }";
+echo ".info { color: #5e7cba; }";
 echo "</style>";
 echo "</head><body>";
 
@@ -159,7 +159,7 @@ try {
 
 echo "<h2>📝 Recomendaciones para Consultas</h2>";
 
-echo "<div style='background: #334155; padding: 15px; border-left: 4px solid #3b82f6; margin: 15px 0;'>";
+echo "<div style='background: #334155; padding: 15px; border-left: 4px solid #264b8b; margin: 15px 0;'>";
 echo "<p><strong>Para obtener hourly_rate:</strong></p>";
 echo "<pre style='color: #4ade80;'>
 SELECT e.*, u.hourly_rate, u.hourly_rate_dop
@@ -169,7 +169,7 @@ WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
 </pre>";
 echo "</div>";
 
-echo "<div style='background: #334155; padding: 15px; border-left: 4px solid #8b5cf6; margin: 15px 0;'>";
+echo "<div style='background: #334155; padding: 15px; border-left: 4px solid #6f8bbd; margin: 15px 0;'>";
 echo "<p><strong>Para obtener department:</strong></p>";
 echo "<pre style='color: #4ade80;'>
 SELECT e.*, d.name as department_name

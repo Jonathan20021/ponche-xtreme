@@ -126,7 +126,7 @@ $documentCount = $docCount->fetchColumn();
                          class="w-32 h-32 rounded-full object-cover border-4 border-blue-500 shadow-lg">
                 <?php else: ?>
                     <div class="w-32 h-32 rounded-full flex items-center justify-center text-4xl font-bold text-white" 
-                         style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                         style="background: linear-gradient(135deg, #264b8b 0%, #1f3f76 100%);">
                         <?= strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)) ?>
                     </div>
                 <?php endif; ?>

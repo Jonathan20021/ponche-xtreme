@@ -89,8 +89,8 @@ $exportParams = ['start_date' => $startDate, 'end_date' => $endDate];
     <link href="../../assets/css/theme.css" rel="stylesheet">
     <style>
         .kpi-card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(148, 163, 184, 0.15);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 14px;
             padding: 1.25rem;
         }
@@ -104,9 +104,12 @@ $exportParams = ['start_date' => $startDate, 'end_date' => $endDate];
             padding: 0.125rem 0.5rem; border-radius: 999px;
             font-size: 0.7rem; font-weight: 600;
         }
-        .role-chip.agent      { background: rgba(59, 130, 246, 0.18); color: #93c5fd; }
+        .role-chip.agent      { background: rgba(38, 75, 139, 0.18); color: #9db1d2; }
         .role-chip.supervisor { background: rgba(124, 58, 237, 0.18); color: #c4b5fd; }
         .role-chip.otros      { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+        .theme-light .role-chip.agent      { color: var(--brand); }
+        .theme-light .role-chip.supervisor { color: #6d28d9; }
+        .theme-light .role-chip.otros      { color: var(--text-muted); }
         .no-data {
             color: #64748b; font-style: italic; font-size: 0.85rem;
         }
