@@ -8,19 +8,39 @@ $dbname = 'hhempeos_ponche';
 $username = 'hhempeos_ponche';
 $password = 'Hugo##2025#';
 
-try {
-    // Usar conexión persistente para reducir overhead de conexiones
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password, [
-        PDO::ATTR_PERSISTENT => true,
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false
-    ]);
-    $pdo->exec("SET NAMES utf8mb4");
-    // Configurar zona horaria de MySQL para coincidir con PHP
-    $pdo->exec("SET time_zone = '-04:00'");
-} catch (PDOException $e) {
-    die("Error de conexión a la base de datos: " . $e->getMessage());
+// Conexión NO persistente a propósito: la DB está en HostGator (remota para la
+// app de oficina). Con PDO::ATTR_PERSISTENT la conexión quedaba "pegada" en cada
+// worker de PHP y el servidor la cerraba por inactividad (wait_timeout). Al volver
+// el agente tras unos minutos, PHP reusaba una conexión MUERTA y la página fallaba
+// -> el agente "era sacado" y tenía que volver a entrar. Una conexión fresca por
+// request lo elimina (costo: ~1 handshake por página). Reintento simple para
+// absorber blips de red/throttle sin tumbar la página al primer fallo.
+$pdoOptions = [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_EMULATE_PREPARES => false,
+    PDO::ATTR_TIMEOUT => 5, // no dejar la página colgada si la DB no responde
+];
+
+$pdo = null;
+$lastError = null;
+for ($attempt = 1; $attempt <= 2; $attempt++) {
+    try {
+        $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password, $pdoOptions);
+        $pdo->exec("SET NAMES utf8mb4");
+        // Configurar zona horaria de MySQL para coincidir con PHP
+        $pdo->exec("SET time_zone = '-04:00'");
+        break;
+    } catch (PDOException $e) {
+        $lastError = $e;
+        $pdo = null;
+        if ($attempt < 2) {
+            usleep(200000); // 200 ms antes del único reintento
+        }
+    }
+}
+if ($pdo === null) {
+    die("Error de conexión a la base de datos: " . ($lastError ? $lastError->getMessage() : 'desconocido'));
 }
 
 // MySQLi connection - Lazy loaded
