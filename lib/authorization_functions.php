@@ -635,19 +635,57 @@ function validateEntryExitSequence(PDO $pdo, int $userId, string $typeSlug): arr
 }
 
 /**
+ * Determina si un tipo de marcación está sujeto a la autorización por "entrada temprana".
+ *
+ * La autorización por entrada temprana solo tiene sentido para el INICIO de la jornada
+ * (marcar ENTRADA) o para iniciar trabajo PAGADO antes del horario. Los estados NO pagados
+ * —BREAK, LUNCH, PAUSA, BA_NO, etc.— y la SALIDA (EXIT) quedan EXENTOS: tomar un break o
+ * salir antes del horario no representa "entrar/trabajar antes de tiempo".
+ *
+ * @return bool true si el tipo debe validarse contra entrada temprana.
+ */
+function isEarlyPunchRelevantType(PDO $pdo, string $typeSlug): bool {
+    $typeSlug = sanitizeAttendanceTypeSlug($typeSlug);
+    if ($typeSlug === '') {
+        return false;
+    }
+
+    // La marcación de ENTRADA siempre aplica (es el clock-in de la jornada).
+    if ($typeSlug === 'ENTRY') {
+        return true;
+    }
+
+    // Cualquier tipo PAGADO (trabajo efectivo) también aplica, para no permitir que se evite
+    // el código iniciando trabajo temprano con DISPONIBLE/WASAPI/etc. en lugar de ENTRY.
+    require_once __DIR__ . '/work_hours_calculator.php';
+    $paidTypes = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', getPaidAttendanceTypeSlugs($pdo))));
+    return in_array($typeSlug, $paidTypes, true);
+}
+
+/**
  * Verifica si el usuario está intentando hacer punch antes de su hora de entrada programada
- * 
+ *
  * @param PDO $pdo Conexión a la base de datos
  * @param int $userId ID del usuario
+ * @param string|null $typeSlug Tipo de marcación (ENTRY, BREAK, etc.). Si se indica, los tipos
+ *                              exentos (break/lunch/pausas/salida) nunca se consideran early punch.
  * @param string|null $currentTime Hora actual en formato H:i:s (opcional, usa hora actual si no se proporciona)
  * @param int $graceMinutes Minutos de tolerancia antes de considerar early punch (default: 0)
  * @return bool True si está intentando entrar antes de su hora programada
  */
-function isEarlyPunchAttempt(PDO $pdo, int $userId, ?string $currentTime = null, int $graceMinutes = 0): bool {
+function isEarlyPunchAttempt(PDO $pdo, int $userId, ?string $typeSlug = null, ?string $currentTime = null, int $graceMinutes = 0): bool {
     try {
         error_log("=== Early Punch Detection START ===");
         error_log("User ID: $userId");
-        
+
+        // Exención por tipo: el código de "entrada temprana" solo aplica a la ENTRADA o al
+        // inicio de trabajo pagado. Breaks, lunch, pausas y salida nunca piden este código.
+        if ($typeSlug !== null && !isEarlyPunchRelevantType($pdo, $typeSlug)) {
+            error_log("Early Punch: tipo '$typeSlug' EXENTO de autorización de entrada temprana");
+            error_log("=== Early Punch Detection END ===");
+            return false;
+        }
+
         // Usar hora actual si no se proporciona
         if ($currentTime === null) {
             $currentTime = date('H:i:s');

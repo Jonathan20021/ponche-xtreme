@@ -190,9 +190,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    // Check early punch authorization
+                    // Check early punch authorization (solo aplica a ENTRADA / inicio de trabajo
+                    // pagado; breaks, lunch, pausas y salida quedan exentos vía isEarlyPunchAttempt)
                     if (!$error && $authSystemEnabled && $authRequiredForEarlyPunch) {
-                        $isEarly = isEarlyPunchAttempt($pdo, $user_id);
+                        $isEarly = isEarlyPunchAttempt($pdo, $user_id, $typeSlug);
                         
                         if ($isEarly) {
                             $authCode = trim($_POST['authorization_code'] ?? '');
