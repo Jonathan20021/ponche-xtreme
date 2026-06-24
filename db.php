@@ -18,7 +18,14 @@ $password = 'Hugo##2025#';
 $pdoOptions = [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES => false,
+    // Emulación ACTIVADA (default de MySQL). Con prepares nativos (false) PDO NO
+    // permite reutilizar un placeholder con nombre más de una vez y lanza
+    // "SQLSTATE[HY093] Invalid parameter number". Varias búsquedas del sistema
+    // reutilizan :search en muchas columnas (recruitment.php, export_applications.php,
+    // activity_logs.php...) -> el buscador daba HTTP 500. Sigue siendo seguro contra
+    // inyección porque el DSN declara charset=utf8mb4. NO volver a poner false sin
+    // primero renombrar todos los placeholders repetidos.
+    PDO::ATTR_EMULATE_PREPARES => true,
     PDO::ATTR_TIMEOUT => 5, // no dejar la página colgada si la DB no responde
 ];
 
