@@ -192,11 +192,11 @@ if ($groupHeaderLabel !== null) {
     $headerTitle .= ' — ' . $groupHeaderLabel;
 }
 $sheet->setCellValue('B1', $headerTitle);
-$sheet->mergeCells('B1:T1');
-$sheet->getStyle('B1:T1')->getFont()->setBold(true)->setSize(16);
-$sheet->getStyle('B1:T1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle('A1:T1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
-$sheet->getStyle('B1:T1')->getFont()->getColor()->setRGB('FFFFFF');
+$sheet->mergeCells('B1:W1');
+$sheet->getStyle('B1:W1')->getFont()->setBold(true)->setSize(16);
+$sheet->getStyle('B1:W1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$sheet->getStyle('A1:W1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
+$sheet->getStyle('B1:W1')->getFont()->getColor()->setRGB('FFFFFF');
 
 // Period info
 $periodLabel = 'Período: ' . $period['name'];
@@ -208,7 +208,7 @@ $sheet->mergeCells('A2:F2');
 $sheet->setCellValue('G2', 'Fechas: ' . date('d/m/Y', strtotime($period['start_date'])) . ' - ' . date('d/m/Y', strtotime($period['end_date'])));
 $sheet->mergeCells('G2:L2');
 $sheet->setCellValue('M2', 'Pago: ' . date('d/m/Y', strtotime($period['payment_date'])));
-$sheet->mergeCells('M2:U2');
+$sheet->mergeCells('M2:W2');
 
 // Cargar cuotas de préstamo por empleado en una sola query batched
 $loanDeductionsByEmployee = [];
@@ -223,6 +223,8 @@ if (!empty($records)) {
 
 // Column headers
 $row = 4;
+// Multiplicador de horas extra vigente (para rotular la columna de recargo).
+$overtimeMultiplierLabel = number_format((float) (getScheduleConfig($pdo)['overtime_multiplier'] ?? 1.35), 2);
 $headers = [
     'A' => 'Código',
     'B' => 'Empleado',
@@ -230,21 +232,23 @@ $headers = [
     'D' => 'Departamento',
     'E' => 'Tipo Comp.',
     'F' => 'Salario Base',
-    'G' => 'Horas',
-    'H' => 'Inc. Ventas',
-    'I' => 'Inc. Nocturno',
-    'J' => 'Salario Bruto',
-    'K' => 'AFP (' . number_format($deductionRates['AFP']['employee_percentage'], 2) . '%)',
-    'L' => 'SFS (' . number_format($deductionRates['SFS']['employee_percentage'], 2) . '%)',
-    'M' => 'ISR',
-    'N' => 'Cooperativa',
-    'O' => 'Descuento',
-    'P' => 'Préstamos',
-    'Q' => 'Otros Desc.',
-    'R' => 'Total Desc.',
-    'S' => 'Salario Neto',
-    'T' => 'AFP Patronal (' . number_format($deductionRates['AFP']['employer_percentage'], 2) . '%)',
-    'U' => 'SFS Patronal (' . number_format($deductionRates['SFS']['employer_percentage'], 2) . '%)'
+    'G' => 'Horas Reg.',
+    'H' => 'Horas Extra',
+    'I' => 'Pago H. Extra (' . $overtimeMultiplierLabel . 'x)',
+    'J' => 'Inc. Ventas',
+    'K' => 'Inc. Nocturno',
+    'L' => 'Salario Bruto',
+    'M' => 'AFP (' . number_format($deductionRates['AFP']['employee_percentage'], 2) . '%)',
+    'N' => 'SFS (' . number_format($deductionRates['SFS']['employee_percentage'], 2) . '%)',
+    'O' => 'ISR',
+    'P' => 'Cooperativa',
+    'Q' => 'Descuento',
+    'R' => 'Préstamos',
+    'S' => 'Otros Desc.',
+    'T' => 'Total Desc.',
+    'U' => 'Salario Neto',
+    'V' => 'AFP Patronal (' . number_format($deductionRates['AFP']['employer_percentage'], 2) . '%)',
+    'W' => 'SFS Patronal (' . number_format($deductionRates['SFS']['employer_percentage'], 2) . '%)'
 ];
 
 foreach ($headers as $col => $header) {
@@ -257,11 +261,11 @@ $headerStyle = [
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
 ];
-$sheet->getStyle('A' . $row . ':U' . $row)->applyFromArray($headerStyle);
+$sheet->getStyle('A' . $row . ':W' . $row)->applyFromArray($headerStyle);
 
 // Data rows
 $row++;
-$totals = ['sales' => 0, 'night' => 0, 'gross' => 0, 'afp_emp' => 0, 'sfs_emp' => 0, 'isr' => 0, 'coop' => 0, 'add' => 0, 'loans' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0, 'afp_pat' => 0, 'sfs_pat' => 0];
+$totals = ['reg_hours' => 0, 'ot_hours' => 0, 'ot_pay' => 0, 'sales' => 0, 'night' => 0, 'gross' => 0, 'afp_emp' => 0, 'sfs_emp' => 0, 'isr' => 0, 'coop' => 0, 'add' => 0, 'loans' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0, 'afp_pat' => 0, 'sfs_pat' => 0];
 
 foreach ($records as $record) {
     $base = $resolveBaseRate($record);
@@ -278,27 +282,37 @@ foreach ($records as $record) {
     $sheet->setCellValue('D' . $row, $record['department_name'] ?: 'N/A');
     $sheet->setCellValue('E' . $row, $base['label']);
     $sheet->setCellValue('F' . $row, $base['rate']);
-    $sheet->setCellValue('G' . $row, number_format($record['total_hours'], 2));
-    $sheet->setCellValue('H' . $row, $record['sales_incentive']);
-    $sheet->setCellValue('I' . $row, $record['night_incentive']);
-    $sheet->setCellValue('J' . $row, $record['gross_salary']);
-    $sheet->setCellValue('K' . $row, $record['afp_employee']);
-    $sheet->setCellValue('L' . $row, $record['sfs_employee']);
-    $sheet->setCellValue('M' . $row, $record['isr']);
-    $sheet->setCellValue('N' . $row, $coopAmt);
-    $sheet->setCellValue('O' . $row, $addAmt);
-    $sheet->setCellValue('P' . $row, $loanAmt);
-    $sheet->setCellValue('Q' . $row, $othersOnly);
-    $sheet->setCellValue('R' . $row, $record['total_deductions']);
-    $sheet->setCellValue('S' . $row, $record['net_salary']);
-    $sheet->setCellValue('T' . $row, $record['afp_employer']);
-    $sheet->setCellValue('U' . $row, $record['sfs_employer']);
+    // Horas con 4 decimales: el bruto se calcula con las horas exactas, así que
+    // mostrarlas redondeadas a 2 hacía que "tarifa × horas" no cuadrara por centavos.
+    $sheet->setCellValue('G' . $row, round((float)$record['regular_hours'], 4));
+    $sheet->setCellValue('H' . $row, round((float)$record['overtime_hours'], 4));
+    $sheet->setCellValue('I' . $row, $record['overtime_amount']);
+    $sheet->setCellValue('J' . $row, $record['sales_incentive']);
+    $sheet->setCellValue('K' . $row, $record['night_incentive']);
+    $sheet->setCellValue('L' . $row, $record['gross_salary']);
+    $sheet->setCellValue('M' . $row, $record['afp_employee']);
+    $sheet->setCellValue('N' . $row, $record['sfs_employee']);
+    $sheet->setCellValue('O' . $row, $record['isr']);
+    $sheet->setCellValue('P' . $row, $coopAmt);
+    $sheet->setCellValue('Q' . $row, $addAmt);
+    $sheet->setCellValue('R' . $row, $loanAmt);
+    $sheet->setCellValue('S' . $row, $othersOnly);
+    $sheet->setCellValue('T' . $row, $record['total_deductions']);
+    $sheet->setCellValue('U' . $row, $record['net_salary']);
+    $sheet->setCellValue('V' . $row, $record['afp_employer']);
+    $sheet->setCellValue('W' . $row, $record['sfs_employer']);
 
-    // Format currency
-    foreach (['F', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'] as $col) {
+    // Format currency (montos; las horas G/H quedan como número simple)
+    foreach (['F', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'] as $col) {
         $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
     }
+    foreach (['G', 'H'] as $col) {
+        $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.0000');
+    }
 
+    $totals['reg_hours'] += (float)$record['regular_hours'];
+    $totals['ot_hours'] += (float)$record['overtime_hours'];
+    $totals['ot_pay'] += (float)$record['overtime_amount'];
     $totals['sales'] += $record['sales_incentive'];
     $totals['night'] += $record['night_incentive'];
     $totals['gross'] += $record['gross_salary'];
@@ -319,24 +333,30 @@ foreach ($records as $record) {
 
 // Totals row (Salario Base column F left blank — base rates are per-employee and not summable across hourly/fixed/daily)
 $sheet->setCellValue('A' . $row, 'TOTALES');
-$sheet->mergeCells('A' . $row . ':G' . $row);
-$sheet->setCellValue('H' . $row, $totals['sales']);
-$sheet->setCellValue('I' . $row, $totals['night']);
-$sheet->setCellValue('J' . $row, $totals['gross']);
-$sheet->setCellValue('K' . $row, $totals['afp_emp']);
-$sheet->setCellValue('L' . $row, $totals['sfs_emp']);
-$sheet->setCellValue('M' . $row, $totals['isr']);
-$sheet->setCellValue('N' . $row, $totals['coop']);
-$sheet->setCellValue('O' . $row, $totals['add']);
-$sheet->setCellValue('P' . $row, $totals['loans']);
-$sheet->setCellValue('Q' . $row, $totals['other']);
-$sheet->setCellValue('R' . $row, $totals['deductions']);
-$sheet->setCellValue('S' . $row, $totals['net']);
-$sheet->setCellValue('T' . $row, $totals['afp_pat']);
-$sheet->setCellValue('U' . $row, $totals['sfs_pat']);
+$sheet->mergeCells('A' . $row . ':F' . $row);
+$sheet->setCellValue('G' . $row, round($totals['reg_hours'], 4));
+$sheet->setCellValue('H' . $row, round($totals['ot_hours'], 4));
+$sheet->setCellValue('I' . $row, $totals['ot_pay']);
+$sheet->setCellValue('J' . $row, $totals['sales']);
+$sheet->setCellValue('K' . $row, $totals['night']);
+$sheet->setCellValue('L' . $row, $totals['gross']);
+$sheet->setCellValue('M' . $row, $totals['afp_emp']);
+$sheet->setCellValue('N' . $row, $totals['sfs_emp']);
+$sheet->setCellValue('O' . $row, $totals['isr']);
+$sheet->setCellValue('P' . $row, $totals['coop']);
+$sheet->setCellValue('Q' . $row, $totals['add']);
+$sheet->setCellValue('R' . $row, $totals['loans']);
+$sheet->setCellValue('S' . $row, $totals['other']);
+$sheet->setCellValue('T' . $row, $totals['deductions']);
+$sheet->setCellValue('U' . $row, $totals['net']);
+$sheet->setCellValue('V' . $row, $totals['afp_pat']);
+$sheet->setCellValue('W' . $row, $totals['sfs_pat']);
 
-foreach (['H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'] as $col) {
+foreach (['I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'] as $col) {
     $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
+}
+foreach (['G', 'H'] as $col) {
+    $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.0000');
 }
 
 $totalsStyle = [
@@ -344,10 +364,10 @@ $totalsStyle = [
     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
 ];
-$sheet->getStyle('A' . $row . ':U' . $row)->applyFromArray($totalsStyle);
+$sheet->getStyle('A' . $row . ':W' . $row)->applyFromArray($totalsStyle);
 
 // Auto-size columns
-foreach (range('A', 'U') as $col) {
+foreach (range('A', 'W') as $col) {
     $sheet->getColumnDimension($col)->setAutoSize(true);
 }
 

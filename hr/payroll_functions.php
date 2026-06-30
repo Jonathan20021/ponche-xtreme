@@ -567,7 +567,22 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
             $dailySalary = convertCurrency($pdo, $dailySalaryDop, 'DOP', 'USD');
         }
     }
-    $overtimeMultiplier = (float) ($employee['overtime_multiplier'] ?? 1.5);
+    // Multiplicador de horas extra: prioridad al valor por empleado
+    // (users.overtime_multiplier) si está definido; si no, se usa el multiplicador
+    // GLOBAL configurado en settings.php (schedule_config.overtime_multiplier), el
+    // mismo que ya usan los reportes diarios (records.php, download_daily_attendance_report.php).
+    // En RD el recargo legal de horas extra (44–68 h/sem) es 35% => 1.35x
+    // (Código de Trabajo, art. 203). Antes este default estaba hardcodeado en 1.5x,
+    // por lo que la nómina pagaba el recargo más alto que el resto del sistema y el
+    // bruto no cuadraba con "tarifa × horas" (pagaba de más en quienes tenían extras).
+    $defaultOvertimeMultiplier = (float) (getScheduleConfig($pdo)['overtime_multiplier'] ?? 1.35);
+    if ($defaultOvertimeMultiplier <= 0) {
+        $defaultOvertimeMultiplier = 1.35;
+    }
+    $empOvertimeMultiplier = $employee['overtime_multiplier'];
+    $overtimeMultiplier = ($empOvertimeMultiplier !== null && (float) $empOvertimeMultiplier > 0)
+        ? (float) $empOvertimeMultiplier
+        : $defaultOvertimeMultiplier;
     $compensationType = strtolower(trim($employee['compensation_type'] ?? 'hourly'));
     $role = strtoupper(trim($employee['role'] ?? ''));
     if ($compensationType === '' || $compensationType === 'hourly') {
