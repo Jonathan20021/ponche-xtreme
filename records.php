@@ -8,6 +8,20 @@ ensurePermission('records');
 
 require_once __DIR__ . '/lib/authorization_functions.php';
 
+// Formatea segundos a HH:MM:SS permitiendo horas mayores a 24.
+// No usar gmdate('H:i:s', ...) en filas de totales: gmdate formatea una hora
+// del día y las horas dan la vuelta cada 24h (muestra horas % 24).
+if (!function_exists('formatSecondsToHms')) {
+    function formatSecondsToHms($seconds): string
+    {
+        $seconds = max(0, (int) $seconds);
+        $h = intdiv($seconds, 3600);
+        $m = intdiv($seconds % 3600, 60);
+        $s = $seconds % 60;
+        return sprintf('%02d:%02d:%02d', $h, $m, $s);
+    }
+}
+
 // Acceso a Modificaciones (editar/eliminar registros): restringido a los
 // usuarios configurados en Configuración > Códigos de Autorización.
 $canModifyRecords = canUserModifyRecords($pdo);
@@ -1218,8 +1232,8 @@ $tardinessTotal = count($tardiness_data);
                 <tfoot>
                     <tr style="background: rgba(99, 102, 241, 0.1); font-weight: 600;">
                         <td colspan="3" class="text-right"><strong>Totales:</strong></td>
-                        <td><?= gmdate('H:i:s', max(0, (int) ($paymentTotals['USD']['work_seconds'] + $paymentTotals['DOP']['work_seconds']))) ?></td>
-                        <td><?= gmdate('H:i:s', max(0, (int) ($paymentTotals['USD']['overtime_seconds'] + $paymentTotals['DOP']['overtime_seconds']))) ?></td>
+                        <td><?= formatSecondsToHms($paymentTotals['USD']['work_seconds'] + $paymentTotals['DOP']['work_seconds']) ?></td>
+                        <td><?= formatSecondsToHms($paymentTotals['USD']['overtime_seconds'] + $paymentTotals['DOP']['overtime_seconds']) ?></td>
                         <td>
                             <?php if ($paymentTotals['USD']['count'] > 0): ?>
                                 $<?= number_format($paymentTotals['USD']['overtime_payment'], 2) ?> USD

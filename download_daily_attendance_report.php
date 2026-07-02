@@ -17,6 +17,20 @@ include 'db.php';
 require_once __DIR__ . '/lib/work_hours_calculator.php';
 date_default_timezone_set('America/Santo_Domingo');
 
+// Formatea segundos a HH:MM:SS permitiendo horas mayores a 24.
+// No usar gmdate('H:i:s', ...): gmdate formatea una hora del día y las horas
+// dan la vuelta cada 24h (muestra horas % 24), rompiendo la sumatoria del total.
+if (!function_exists('formatSecondsToHms')) {
+    function formatSecondsToHms($seconds): string
+    {
+        $seconds = max(0, (int) $seconds);
+        $h = intdiv($seconds, 3600);
+        $m = intdiv($seconds % 3600, 60);
+        $s = $seconds % 60;
+        return sprintf('%02d:%02d:%02d', $h, $m, $s);
+    }
+}
+
 // Verificar permisos usando el mismo control que records.php
 ensurePermission('records');
 
@@ -665,7 +679,7 @@ foreach ($work_summary as $summary) {
     foreach ($durationTypes as $typeRow) {
         $seconds = (int) ($summary['durations'][$typeRow['slug']] ?? 0);
         $totals['duration_' . $typeRow['slug']] += $seconds;
-        $sheet->setCellValue($col++ . $row, gmdate('H:i:s', max(0, $seconds)));
+        $sheet->setCellValue($col++ . $row, formatSecondsToHms($seconds));
     }
     
     // Tiempos totales
@@ -673,9 +687,9 @@ foreach ($work_summary as $summary) {
     $breakSeconds = (int) $summary['break_seconds'];
     $overtimeSeconds = (int) $summary['overtime_seconds'];
     
-    $sheet->setCellValue($col++ . $row, gmdate('H:i:s', $workSeconds));
-    $sheet->setCellValue($col++ . $row, gmdate('H:i:s', $breakSeconds));
-    $sheet->setCellValue($col++ . $row, gmdate('H:i:s', $overtimeSeconds));
+    $sheet->setCellValue($col++ . $row, formatSecondsToHms($workSeconds));
+    $sheet->setCellValue($col++ . $row, formatSecondsToHms($breakSeconds));
+    $sheet->setCellValue($col++ . $row, formatSecondsToHms($overtimeSeconds));
     
     // Pagos
     $sheet->setCellValue($col++ . $row, $currencySymbol . number_format($summary['hourly_rate'], 2) . ' ' . $currency);
@@ -719,13 +733,13 @@ $sheet->setCellValue($col++ . $row, count($work_summary) . ' registros');
 
 // Totales de duraciones por tipo
 foreach ($durationTypes as $typeRow) {
-    $sheet->setCellValue($col++ . $row, gmdate('H:i:s', max(0, $totals['duration_' . $typeRow['slug']])));
+    $sheet->setCellValue($col++ . $row, formatSecondsToHms($totals['duration_' . $typeRow['slug']]));
 }
 
 // Totales generales
-$sheet->setCellValue($col++ . $row, gmdate('H:i:s', $totals['work_seconds']));
-$sheet->setCellValue($col++ . $row, gmdate('H:i:s', $totals['break_seconds']));
-$sheet->setCellValue($col++ . $row, gmdate('H:i:s', $totals['overtime_seconds']));
+$sheet->setCellValue($col++ . $row, formatSecondsToHms($totals['work_seconds']));
+$sheet->setCellValue($col++ . $row, formatSecondsToHms($totals['break_seconds']));
+$sheet->setCellValue($col++ . $row, formatSecondsToHms($totals['overtime_seconds']));
 $sheet->setCellValue($col++ . $row, '-');
 
 // Pagos totales
@@ -801,9 +815,9 @@ $summaryData = [
     ['Total de registros', count($work_summary)],
     ['Total de agentes', count(array_unique(array_column($work_summary, 'username')))],
     [''],
-    ['Total Horas Trabajadas', gmdate('H:i:s', $totals['work_seconds'])],
-    ['Total Horas de Pausa', gmdate('H:i:s', $totals['break_seconds'])],
-    ['Total Horas Extra', gmdate('H:i:s', $totals['overtime_seconds'])],
+    ['Total Horas Trabajadas', formatSecondsToHms($totals['work_seconds'])],
+    ['Total Horas de Pausa', formatSecondsToHms($totals['break_seconds'])],
+    ['Total Horas Extra', formatSecondsToHms($totals['overtime_seconds'])],
     [''],
 ];
 

@@ -8,6 +8,20 @@ if (!isset($_SESSION['user_id'])) {
 
 include 'db.php';
 
+// Formatea segundos a HH:MM:SS permitiendo horas mayores a 24.
+// No usar gmdate('H:i:s', ...): las horas dan la vuelta cada 24h (horas % 24),
+// lo que recorta valores cuando un punch sin cerrar abarca más de un día.
+if (!function_exists('formatSecondsToHms')) {
+    function formatSecondsToHms($seconds): string
+    {
+        $seconds = max(0, (int) $seconds);
+        $h = intdiv($seconds, 3600);
+        $m = intdiv($seconds % 3600, 60);
+        $s = $seconds % 60;
+        return sprintf('%02d:%02d:%02d', $h, $m, $s);
+    }
+}
+
 // Filtros
 $date_filter = $_GET['month'] ?? date('Y-m');
 $start_date = $date_filter . '-01';
@@ -111,10 +125,10 @@ foreach ($data as $row) {
     $xml .= '<Cell><Data ss:Type="String">' . htmlspecialchars($row['work_date']) . '</Data></Cell>';
     $xml .= '<Cell><Data ss:Type="String">' . htmlspecialchars($row['first_entry'] ?: 'N/A') . '</Data></Cell>';
     $xml .= '<Cell><Data ss:Type="String">' . htmlspecialchars($row['last_exit'] ?: 'N/A') . '</Data></Cell>';
-    $xml .= '<Cell><Data ss:Type="String">' . gmdate('H:i:s', $row['total_lunch'] ?: 0) . '</Data></Cell>';
-    $xml .= '<Cell><Data ss:Type="String">' . gmdate('H:i:s', $row['total_break'] ?: 0) . '</Data></Cell>';
-    $xml .= '<Cell><Data ss:Type="String">' . gmdate('H:i:s', $row['total_meeting_coaching'] ?: 0) . '</Data></Cell>';
-    $xml .= '<Cell><Data ss:Type="String">' . gmdate('H:i:s', $row['total_work_time'] ?: 0) . '</Data></Cell>';
+    $xml .= '<Cell><Data ss:Type="String">' . formatSecondsToHms($row['total_lunch'] ?: 0) . '</Data></Cell>';
+    $xml .= '<Cell><Data ss:Type="String">' . formatSecondsToHms($row['total_break'] ?: 0) . '</Data></Cell>';
+    $xml .= '<Cell><Data ss:Type="String">' . formatSecondsToHms($row['total_meeting_coaching'] ?: 0) . '</Data></Cell>';
+    $xml .= '<Cell><Data ss:Type="String">' . formatSecondsToHms($row['total_work_time'] ?: 0) . '</Data></Cell>';
     $xml .= '</Row>' . "\n";
 }
 
