@@ -1474,12 +1474,12 @@ $tardinessTotal = count($tardiness_data);
                             <td><span class="<?= $breakBadge ?>"><?= number_format($breakPercent, 2) ?>%</span></td>
                         </tr>
                     <?php endforeach; ?>
-                    <?php if (empty($tardiness_data)): ?>
-                        <tr><td colspan="6" class="data-table-empty">Sin incidencias registradas en el periodo seleccionado.</td></tr>
-                    <?php endif; ?>
                 </tbody>
             </table>
         </div>
+        <?php if (empty($tardiness_data)): ?>
+            <div class="data-table-empty">Sin incidencias registradas en el periodo seleccionado.</div>
+        <?php endif; ?>
     </div>
 </section>
 
