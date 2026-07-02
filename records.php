@@ -835,19 +835,18 @@ $missing_entry_query = "
     FROM attendance
     JOIN users ON attendance.user_id = users.id
     LEFT JOIN employees e ON e.user_id = users.id
-    WHERE DATE(attendance.timestamp) = ? 
+    WHERE DATE(attendance.timestamp) = ?
     AND attendance.user_id NOT IN (
-        SELECT DISTINCT user_id 
-        FROM attendance 
+        SELECT DISTINCT user_id
+        FROM attendance
         WHERE DATE(timestamp) = ? AND UPPER(type) = 'ENTRY'
     )
-    GROUP BY users.id
-    ORDER BY first_time ASC
 ";
 
 $missingEntryParams = [$referenceDate, $referenceDate];
 $applyCampaignFilter($missing_entry_query, $missingEntryParams);
 $applySupervisorFilter($missing_entry_query, $missingEntryParams);
+$missing_entry_query .= " GROUP BY users.id ORDER BY first_time ASC";
 $stmt = $pdo->prepare($missing_entry_query);
 $stmt->execute($missingEntryParams);
 $missing_entry_data = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -869,20 +868,19 @@ $missing_exit_query = "
     FROM attendance
     JOIN users ON attendance.user_id = users.id
     LEFT JOIN employees e ON e.user_id = users.id
-    WHERE DATE(attendance.timestamp) = ? 
+    WHERE DATE(attendance.timestamp) = ?
     AND attendance.user_id NOT IN (
-        SELECT DISTINCT user_id 
-        FROM attendance 
+        SELECT DISTINCT user_id
+        FROM attendance
         WHERE DATE(timestamp) = ? AND UPPER(type) = 'EXIT'
     )
-    GROUP BY users.id
-    ORDER BY first_time ASC
 ";
 
 // Ejecutar la consulta con el filtro de fecha
 $missingExitParams = [$referenceDate, $referenceDate];
 $applyCampaignFilter($missing_exit_query, $missingExitParams);
 $applySupervisorFilter($missing_exit_query, $missingExitParams);
+$missing_exit_query .= " GROUP BY users.id ORDER BY first_time ASC";
 $stmt_missing_exit = $pdo->prepare($missing_exit_query);
 $stmt_missing_exit->execute($missingExitParams);
 $missing_exit_data = $stmt_missing_exit->fetchAll(PDO::FETCH_ASSOC) ?: [];
