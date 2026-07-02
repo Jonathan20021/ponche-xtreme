@@ -301,6 +301,7 @@ $user_filter = trim($_GET['user'] ?? '');
 $date_filter = $_GET['dates'] ?? '';
 $type_filter_input = $_GET['type'] ?? '';
 $type_filter = $type_filter_input !== '' ? sanitizeAttendanceTypeSlug($type_filter_input) : '';
+$campaign_filter = (int) ($_GET['campaign'] ?? 0);
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = (int)($_GET['per_page'] ?? 200);
 if ($perPage <= 0) {
@@ -352,6 +353,7 @@ $currentUserId = (int) ($_SESSION['user_id'] ?? 0);
 $currentUserRole = $_SESSION['role'] ?? '';
 $supervisorFilterSql = '';
 $supervisorFilterParams = [];
+$supervisorCampaigns = [];
 
 if ($currentUserRole === 'Supervisor' && $currentUserId > 0) {
     $campaignStmt = $pdo->prepare("SELECT campaign_id FROM supervisor_campaigns WHERE supervisor_id = ?");
@@ -377,6 +379,44 @@ $applySupervisorFilter = function (string &$sql, array &$params) use ($superviso
     if ($supervisorFilterSql !== '') {
         $sql .= $supervisorFilterSql;
         $params = array_merge($params, $supervisorFilterParams);
+    }
+};
+
+// Lista de campañas para el filtro (solo activas; para supervisores, solo las suyas)
+$campaignsListQuery = "SELECT id, name, code FROM campaigns WHERE is_active = 1";
+$campaignsListParams = [];
+if ($currentUserRole === 'Supervisor' && !empty($supervisorCampaigns)) {
+    $campaignPlaceholders = implode(',', array_fill(0, count($supervisorCampaigns), '?'));
+    $campaignsListQuery .= " AND id IN ($campaignPlaceholders)";
+    $campaignsListParams = $supervisorCampaigns;
+}
+$campaignsListQuery .= " ORDER BY name";
+try {
+    $campaignsStmt = $pdo->prepare($campaignsListQuery);
+    $campaignsStmt->execute($campaignsListParams);
+    $campaignsList = $campaignsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $campaignsError) {
+    // Si el módulo de campañas no está instalado, el filtro simplemente no aparece.
+    $campaignsList = [];
+}
+
+// Validar el filtro contra las campañas disponibles para el usuario actual
+$validCampaignIds = array_map('intval', array_column($campaignsList, 'id'));
+if ($campaign_filter > 0 && !in_array($campaign_filter, $validCampaignIds, true)) {
+    $campaign_filter = 0;
+}
+
+// Filtro de campaña reutilizable (mismo patrón que el filtro de supervisor)
+$campaignFilterSql = '';
+$campaignFilterParams = [];
+if ($campaign_filter > 0) {
+    $campaignFilterSql = ' AND e.campaign_id = ?';
+    $campaignFilterParams = [$campaign_filter];
+}
+$applyCampaignFilter = function (string &$sql, array &$params) use ($campaignFilterSql, $campaignFilterParams): void {
+    if ($campaignFilterSql !== '') {
+        $sql .= $campaignFilterSql;
+        $params = array_merge($params, $campaignFilterParams);
     }
 };
 
@@ -430,6 +470,7 @@ if ($type_filter !== '') {
     $params[] = $type_filter;
 }
 
+$applyCampaignFilter($query, $params);
 $applySupervisorFilter($query, $params);
 
 $query .= " ORDER BY attendance.timestamp DESC LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
@@ -531,6 +572,7 @@ if ($type_filter !== '') {
     $summary_params[] = $type_filter;
 }
 
+$applyCampaignFilter($summary_query, $summary_params);
 $applySupervisorFilter($summary_query, $summary_params);
 
 $summary_query .= " ORDER BY users.username COLLATE {$collation}, record_date, attendance.timestamp";
@@ -774,6 +816,7 @@ if (!empty($dateValues)) {
     $tardiness_params = array_merge($tardiness_params, $dateValues);
 }
 
+$applyCampaignFilter($tardiness_query, $tardiness_params);
 $applySupervisorFilter($tardiness_query, $tardiness_params);
 
 $tardiness_query .= " GROUP BY users.full_name, users.username, record_date ORDER BY record_date DESC";
@@ -803,6 +846,7 @@ $missing_entry_query = "
 ";
 
 $missingEntryParams = [$referenceDate, $referenceDate];
+$applyCampaignFilter($missing_entry_query, $missingEntryParams);
 $applySupervisorFilter($missing_entry_query, $missingEntryParams);
 $stmt = $pdo->prepare($missing_entry_query);
 $stmt->execute($missingEntryParams);
@@ -837,6 +881,7 @@ $missing_exit_query = "
 
 // Ejecutar la consulta con el filtro de fecha
 $missingExitParams = [$referenceDate, $referenceDate];
+$applyCampaignFilter($missing_exit_query, $missingExitParams);
 $applySupervisorFilter($missing_exit_query, $missingExitParams);
 $stmt_missing_exit = $pdo->prepare($missing_exit_query);
 $stmt_missing_exit->execute($missingExitParams);
@@ -877,6 +922,7 @@ if (!empty($dateValues)) {
     $with_exit_params[] = $referenceDate;
 }
 
+$applyCampaignFilter($with_exit_query, $with_exit_params);
 $applySupervisorFilter($with_exit_query, $with_exit_params);
 
 $with_exit_query .= " ORDER BY attendance.timestamp DESC";
@@ -984,7 +1030,7 @@ $tardinessTotal = count($tardiness_data);
         <div class="panel-heading">
             <div>
                 <h2>Filtros inteligentes</h2>
-                <p class="text-muted text-sm">Refina la búsqueda por usuario, rango de fechas y tipo de evento.</p>
+                <p class="text-muted text-sm">Refina la búsqueda por usuario, campaña, rango de fechas y tipo de evento.</p>
             </div>
             <button type="button" id="reload-button" class="btn-secondary w-full sm:w-auto">
                 <i class="fas fa-sync-alt"></i>
@@ -1009,6 +1055,19 @@ $tardinessTotal = count($tardiness_data);
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php if (!empty($campaignsList)): ?>
+                <div class="form-group">
+                    <label class="form-label" for="campaign-filter">Campaña</label>
+                    <select id="campaign-filter" name="campaign" class="select-control">
+                        <option value="">Todas las campañas</option>
+                        <?php foreach ($campaignsList as $campaign): ?>
+                            <option value="<?= (int) $campaign['id'] ?>" <?= $campaign_filter === (int) $campaign['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($campaign['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
                 <div class="form-group">
                     <label class="form-label" for="daterange">Rango de fechas</label>
                     <input type="text" id="daterange" name="dates" class="input-control" value="<?= htmlspecialchars($date_filter) ?>" autocomplete="off">
@@ -1554,7 +1613,13 @@ $(document).ready(function() {
             dateRange = today + ' - ' + today;
         }
         params.append('dates', dateRange);
-        
+
+        // Filtro de campaña (si el selector existe y hay una campaña elegida)
+        const campaignFilter = $('#campaign-filter').val();
+        if (campaignFilter) {
+            params.append('campaign', campaignFilter);
+        }
+
         const userFilter = $('#user-filter').val();
         if (userFilter) {
             params.append('user', userFilter);

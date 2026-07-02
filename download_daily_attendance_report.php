@@ -129,6 +129,7 @@ function getSupervisorAccessClause(PDO $pdo): array
 // Obtener filtros desde la URL (pasados desde records.php)
 $date_filter = $_GET['dates'] ?? date('Y-m-d');
 $user_filter = trim($_GET['user'] ?? '');
+$campaign_filter = (int) ($_GET['campaign'] ?? 0);
 
 // Lista opcional de usuarios visibles en el buscador client-side del Resumen de tiempo trabajado.
 // Solo se usa cuando no hay un filtro individual ($user_filter vacio).
@@ -227,6 +228,12 @@ if ($user_filter !== '') {
     $userPlaceholders = implode(',', array_fill(0, count($users_filter), '?'));
     $summary_query .= " AND users.username IN ($userPlaceholders)";
     $summary_params = array_merge($summary_params, $users_filter);
+}
+
+// Filtro por campaña (pasado desde records.php)
+if ($campaign_filter > 0) {
+    $summary_query .= " AND e.campaign_id = ?";
+    $summary_params[] = $campaign_filter;
 }
 
 [$supervisorClause, $supervisorParams] = getSupervisorAccessClause($pdo);
