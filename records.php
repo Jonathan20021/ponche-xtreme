@@ -1095,6 +1095,26 @@ $tardinessTotal = count($tardiness_data);
         </form>
     </div>
 
+    <?php
+        $vToggleQs = http_build_query(array_filter([
+            'search'   => $search,
+            'user'     => $user_filter,
+            'campaign' => $campaign_filter > 0 ? $campaign_filter : '',
+            'dates'    => $date_filter,
+        ], static fn($v) => $v !== '' && $v !== 0));
+    ?>
+    <div class="mb-5 flex items-center gap-2">
+        <span class="text-sm text-slate-400 mr-1">Fuente:</span>
+        <a href="records.php<?= $vToggleQs ? '?' . htmlspecialchars($vToggleQs) : '' ?>"
+           class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white">
+            <i class="fas fa-fingerprint"></i> Ponche
+        </a>
+        <a href="records_vicidial.php<?= $vToggleQs ? '?' . htmlspecialchars($vToggleQs) : '' ?>"
+           class="px-4 py-2 rounded-lg text-sm font-medium bg-slate-700/60 text-slate-300 hover:bg-slate-600/60">
+            <i class="fas fa-headset"></i> Vicidial
+        </a>
+    </div>
+
     <div class="glass-card space-y-6">
         <div class="panel-heading">
             <div>

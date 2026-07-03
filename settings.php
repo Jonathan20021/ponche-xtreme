@@ -1051,6 +1051,62 @@ try {
                 }
                 break;
 
+            case 'update_vicidial_sync_config':
+                // Integración Vicidial (Fase 1 - sincronización de nómina en modo sombra).
+                // Todo editable desde aquí (URL, credenciales, offset de zona horaria, filtros).
+                $vsEnabled   = isset($_POST['vicidial_sync_enabled']) ? '1' : '0';
+                $vsBaseUrl   = rtrim(trim($_POST['vicidial_api_base_url'] ?? ''), '/');
+                $vsUser      = trim($_POST['vicidial_api_user'] ?? '');
+                $vsPassRaw   = (string) ($_POST['vicidial_api_pass'] ?? '');
+                $vsSource    = trim($_POST['vicidial_api_source'] ?? 'ponche');
+                $vsTzOffset  = (int) ($_POST['vicidial_tz_offset_minutes'] ?? 60);
+                $vsGroups    = trim($_POST['vicidial_sync_user_groups'] ?? '');
+                $vsMinTime   = max(0, (int) ($_POST['vicidial_sync_min_time_seconds'] ?? 60));
+                $vsSslVerify = isset($_POST['vicidial_ssl_verify']) ? '1' : '0';
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, ?, 'vicidial')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    $stmt->execute(['vicidial_sync_enabled',          $vsEnabled,            'boolean']);
+                    $stmt->execute(['vicidial_api_base_url',          $vsBaseUrl,            'text']);
+                    $stmt->execute(['vicidial_api_user',              $vsUser,               'text']);
+                    $stmt->execute(['vicidial_api_source',            $vsSource,             'text']);
+                    $stmt->execute(['vicidial_tz_offset_minutes',     (string) $vsTzOffset,  'number']);
+                    $stmt->execute(['vicidial_sync_user_groups',      $vsGroups,             'text']);
+                    $stmt->execute(['vicidial_sync_min_time_seconds', (string) $vsMinTime,   'number']);
+                    $stmt->execute(['vicidial_ssl_verify',            $vsSslVerify,          'boolean']);
+                    $stmt->execute(['vicidial_live_enabled',          isset($_POST['vicidial_live_enabled']) ? '1' : '0', 'boolean']);
+                    $stmt->execute(['vicidial_live_ttl_seconds',      (string) max(5, (int) ($_POST['vicidial_live_ttl_seconds'] ?? 25)), 'number']);
+                    // Nómina desde Vicidial: códigos de pausa pagados + tope de cordura
+                    $vsPaidCodes = array_values(array_filter(array_map('trim', preg_split('/[,;\n]+/', (string) ($_POST['vicidial_paid_pause_codes'] ?? '')))));
+                    $stmt->execute(['vicidial_paid_pause_codes',      json_encode($vsPaidCodes, JSON_UNESCAPED_UNICODE), 'json']);
+                    $stmt->execute(['vicidial_payroll_daily_cap_hours', (string) max(1, min(24, (int) ($_POST['vicidial_payroll_daily_cap_hours'] ?? 14))), 'number']);
+                    // La contraseña solo se actualiza si se escribió algo (dejar en blanco = conservar la actual).
+                    if (trim($vsPassRaw) !== '') {
+                        $stmt->execute(['vicidial_api_pass', $vsPassRaw, 'text']);
+                    }
+
+                    $successMessages[] = 'Configuración de Vicidial guardada.';
+
+                    // Prueba de conexión inmediata para confirmar credenciales y mostrar la TZ del server.
+                    require_once __DIR__ . '/lib/vicidial_api_client.php';
+                    $vTest = vicidialTestConnection(getVicidialSyncConfig($pdo));
+                    if ($vTest['ok']) {
+                        $successMessages[] = 'Conexión Vicidial OK · Versión ' . htmlspecialchars($vTest['version'] ?? '')
+                            . ' · Zona horaria del server: ' . htmlspecialchars($vTest['tz'] ?? '')
+                            . ' (offset aplicado: +' . $vsTzOffset . ' min a hora RD).';
+                    } else {
+                        $errorMessages[] = 'Configuración guardada, pero la prueba de conexión falló: '
+                            . htmlspecialchars($vTest['error'] ?? 'desconocido');
+                    }
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al guardar la configuración de Vicidial.';
+                }
+                break;
+
             case 'update_login_logs_report_config':
                 $llRecipients       = trim($_POST['login_logs_report_recipients'] ?? '');
                 $llEnabled          = isset($_POST['login_logs_report_enabled']) ? 1 : 0;
@@ -3831,6 +3887,211 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         servidor confirma que el registro existe; si falla, reintenta y, si no lo logra, avisa.</li>
                     <li><i class="fas fa-check text-green-400"></i> La ventana anti-duplicado elimina los registros
                         triples por doble clic o reintentos.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Vicidial Payroll Sync Configuration (Fase 1 - modo sombra) -->
+        <section id="vicidial-sync-config" class="glass-card space-y-6">
+            <?php
+                require_once __DIR__ . '/lib/vicidial_api_client.php';
+                $vCfg = getVicidialSyncConfig($pdo);
+                $vEnabled = ($vCfg['vicidial_sync_enabled'] ?? '0') === '1';
+                $vSslVerify = ($vCfg['vicidial_ssl_verify'] ?? '1') === '1';
+                $vHasPass = trim((string) ($vCfg['vicidial_api_pass'] ?? '')) !== '';
+            ?>
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-phone-volume text-indigo-400"></i>
+                        Integración Vicidial · Sincronización de Nómina (Fase 1)
+                    </h2>
+                    <p class="text-muted text-sm">Importa automáticamente por la API de Vicidial el
+                        <strong>login/logout y actividad</strong> de cada agente para <strong>conciliarlos contra la
+                        marcación manual</strong> de ponche. <strong>Modo sombra</strong>: no altera la nómina; solo
+                        recopila datos para comparar. La vista de comparación está en
+                        <a href="vicidial_sync.php" class="text-indigo-300 underline">Conciliación Vicidial</a>.</p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $vEnabled ? 'check-circle text-green-400' : 'times-circle text-amber-400' ?>"></i>
+                    <?= $vEnabled ? 'Sincronización activa' : 'Sincronización inactiva' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_vicidial_sync_config">
+
+                <div class="space-y-4">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="vicidial_sync_enabled" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $vEnabled ? 'checked' : '' ?>>
+                        <span class="font-semibold">Activar la sincronización nocturna (cron)</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Cuando está activa, el cron
+                        <code>cron_vicidial_sync.php</code> importa el día anterior. Debe registrarse en cPanel:
+                        <code>30 1 * * * php /home/hhempeos/public_html/cron_vicidial_sync.php</code></p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="form-label"><i class="fas fa-link"></i> URL base de Vicidial</label>
+                        <input type="text" name="vicidial_api_base_url"
+                            value="<?= htmlspecialchars($vCfg['vicidial_api_base_url'] ?? '') ?>"
+                            class="input-control" placeholder="https://servidor/vicidial" required>
+                        <p class="text-xs text-muted mt-1">Sin barra final. Ej:
+                            <code>https://evallish-bpo-services.rex-tek.com/vicidial</code></p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-user"></i> Usuario API</label>
+                        <input type="text" name="vicidial_api_user"
+                            value="<?= htmlspecialchars($vCfg['vicidial_api_user'] ?? '') ?>"
+                            class="input-control" autocomplete="off" required>
+                        <p class="text-xs text-muted mt-1">Usuario Vicidial con <code>user_level ≥ 8</code> y tu IP en la
+                            lista de API allowed IPs.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-key"></i> Contraseña API</label>
+                        <input type="password" name="vicidial_api_pass" value=""
+                            class="input-control" autocomplete="new-password"
+                            placeholder="<?= $vHasPass ? '•••••••• (guardada — dejar en blanco para conservar)' : 'Escribe la contraseña' ?>">
+                        <p class="text-xs text-muted mt-1">Déjala en blanco para <strong>no cambiar</strong> la actual.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Ajuste de zona horaria (minutos)</label>
+                        <input type="number" name="vicidial_tz_offset_minutes" min="-720" max="720"
+                            value="<?= (int) ($vCfg['vicidial_tz_offset_minutes'] ?? 0) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Minutos que se <strong>suman</strong> a los timestamps de
+                            Vicidial para llevarlos a hora RD. <strong>NO te guíes por la "TZ" que reporta la API</strong>
+                            — su reloj real puede diferir. Para este server el valor correcto es <strong>0</strong> (su
+                            reloj ya está en hora RD, verificado). Compruébalo en
+                            <a href="vicidial_sync.php" class="text-indigo-300 underline">Conciliación</a>: si el Δ de
+                            entrada sale sistemáticamente ~+60, corrige el offset aquí.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-layer-group"></i> Grupos/campañas a sincronizar</label>
+                        <input type="text" name="vicidial_sync_user_groups"
+                            value="<?= htmlspecialchars($vCfg['vicidial_sync_user_groups'] ?? '') ?>"
+                            class="input-control" placeholder="ADMIN, Medalliance, KMPR2 (vacío = todos)">
+                        <p class="text-xs text-muted mt-1">Separados por coma. En blanco = todos los grupos.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-filter"></i> Tiempo mínimo logueado (segundos)</label>
+                        <input type="number" name="vicidial_sync_min_time_seconds" min="0" max="86400"
+                            value="<?= (int) ($vCfg['vicidial_sync_min_time_seconds'] ?? 60) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">No pide la hoja de tiempo a agentes con menos de X segundos
+                            conectados (evita ruido y peticiones de más).</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-tag"></i> Source (API)</label>
+                        <input type="text" name="vicidial_api_source"
+                            value="<?= htmlspecialchars($vCfg['vicidial_api_source'] ?? 'ponche') ?>"
+                            class="input-control">
+                        <p class="text-xs text-muted mt-1">Etiqueta de origen para la API de Vicidial. Default:
+                            <code>ponche</code>.</p>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="inline-flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="vicidial_ssl_verify" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $vSslVerify ? 'checked' : '' ?>>
+                        <span class="font-semibold">Verificar el certificado SSL del servidor (recomendado)</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Se usa el bundle <code>lib/cacert_vicidial.pem</code> incluido en el
+                        proyecto (el server de Vicidial no envía su cadena completa). Desactívalo solo si el proveedor
+                        rompe su cadena y la conexión falla por SSL.</p>
+                </div>
+
+                <?php
+                    $vLiveEnabled = ($vCfg['vicidial_live_enabled'] ?? '1') === '1';
+                    $vLiveTtl = (int) ($vCfg['vicidial_live_ttl_seconds'] ?? 25);
+                ?>
+                <div class="pt-4 border-t border-slate-700/40 space-y-3">
+                    <h3 class="text-primary font-semibold flex items-center gap-2">
+                        <i class="fas fa-headset text-indigo-400"></i> Monitor en tiempo real
+                    </h3>
+                    <label class="inline-flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="vicidial_live_enabled" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $vLiveEnabled ? 'checked' : '' ?>>
+                        <span class="font-semibold">Mostrar el estado EN VIVO de Vicidial en el Monitor del Supervisor</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Agrega a cada agente su estado real de Vicidial (en llamada / pausa /
+                        disponible + tiempo + llamadas), junto al estado de ponche. Si se desactiva o Vicidial no responde,
+                        el monitor sigue funcionando igual con la marcación.</p>
+                    <div class="md:w-1/2">
+                        <label class="form-label"><i class="fas fa-rotate"></i> Refresco del estado en vivo (segundos)</label>
+                        <input type="number" name="vicidial_live_ttl_seconds" min="5" max="120"
+                            value="<?= $vLiveTtl ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Cada cuánto se consulta a Vicidial como máximo (caché
+                            compartida: aunque haya varios supervisores, se consulta una sola vez por ventana). Recomendado:
+                            20-30s.</p>
+                    </div>
+                </div>
+
+                <?php
+                    $vPaidCodesCfg = $vCfg['vicidial_paid_pause_codes'] ?? '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi"]';
+                    $vPaidCodesArr = is_array($vPaidCodesCfg) ? $vPaidCodesCfg : (json_decode((string) $vPaidCodesCfg, true) ?: ['Coachi', 'ITRes', 'LAGGED', 'LOGIN', 'Digita', 'wasapi']);
+                    $vCapHours = (int) ($vCfg['vicidial_payroll_daily_cap_hours'] ?? 14);
+                ?>
+                <div class="pt-4 border-t border-slate-700/40 space-y-3">
+                    <h3 class="text-primary font-semibold flex items-center gap-2">
+                        <i class="fas fa-hand-holding-dollar text-green-400"></i> Nómina desde Vicidial
+                    </h3>
+                    <p class="text-sm text-muted">Las horas pagables = <strong>NONPAUSE</strong> (tiempo trabajando) +
+                        los <strong>códigos de pausa pagados</strong> de abajo. El resto (Break, Bao, NXDIAL…) no se paga.
+                        Cambiar esto recalcula las horas pagables al instante (no hay que re-importar).</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-check-double"></i> Códigos de pausa PAGADOS</label>
+                            <input type="text" name="vicidial_paid_pause_codes"
+                                value="<?= htmlspecialchars(implode(', ', $vPaidCodesArr)) ?>" class="input-control"
+                                placeholder="Coachi, ITRes, LAGGED, LOGIN, Digita, wasapi">
+                            <p class="text-xs text-muted mt-1">Separados por coma. Detectados en el reporte:
+                                <code>Bao, Break, Coachi, Digita, ITRes, LAGGED, LOGIN, NXDIAL, wasapi</code>. Solo los que
+                                pongas aquí se pagan (además de NONPAUSE).</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-shield-halved"></i> Tope de cordura (horas/día)</label>
+                            <input type="number" name="vicidial_payroll_daily_cap_hours" min="1" max="24"
+                                value="<?= $vCapHours ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Los días que superen este tope se marcan para revisión (⚠️)
+                                antes de pagar — atrapa sesiones dejadas abiertas. Recomendado: 12-14 h.</p>
+                        </div>
+                    </div>
+                    <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-200">
+                        <i class="fas fa-triangle-exclamation mr-1"></i>
+                        Esto define QUÉ se paga, pero <strong>aún no conecta al pago real</strong>. Primero verifica las horas
+                        en <a href="records_vicidial.php" class="underline">Registros → Vicidial</a> (columna
+                        <strong>Pagables</strong>). El cambio de la nómina al modo Vicidial es el último paso, tras tu visto bueno.
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar y Probar Conexión
+                    </button>
+                    <a href="vicidial_sync.php" class="btn-secondary">
+                        <i class="fas fa-scale-balanced"></i>
+                        Ir a Conciliación
+                    </a>
+                </div>
+            </form>
+
+            <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4">
+                <h3 class="text-indigo-300 font-semibold mb-2 flex items-center gap-2">
+                    <i class="fas fa-info-circle"></i>
+                    ¿Cómo funciona la Fase 1?
+                </h3>
+                <ul class="text-sm text-indigo-200 space-y-2">
+                    <li><i class="fas fa-check text-green-400"></i> Cada noche importa <strong>FIRST LOGIN / LAST
+                        ACTIVITY / TOTAL LOGGED-IN TIME</strong> y actividad de cada agente vía API (sin acceso a la BD de
+                        Vicidial).</li>
+                    <li><i class="fas fa-check text-green-400"></i> Los timestamps se convierten a hora RD y se comparan
+                        con la marcación manual (ENTRY/EXIT) en <a href="vicidial_sync.php"
+                        class="underline">Conciliación</a>.</li>
+                    <li><i class="fas fa-check text-green-400"></i> <strong>No toca la nómina.</strong> Es solo para medir
+                        el desfase 2 semanas y decidir si la Fase 2 reemplaza la marcación de los agentes de call.</li>
                 </ul>
             </div>
         </section>
@@ -6864,6 +7125,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Confiabilidad de Marcación (Ponche)',
                 icon: 'fas fa-fingerprint',
                 selectors: ['#punch-config']
+            },
+            {
+                key: 'vicidial_sync',
+                label: 'Integración Vicidial (Sync Nómina)',
+                icon: 'fas fa-phone-volume',
+                selectors: ['#vicidial-sync-config']
             },
             {
                 key: 'absence_report',

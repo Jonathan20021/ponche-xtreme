@@ -12,6 +12,7 @@ require_once __DIR__ . '/lib/rate_limiter.php';
 enforceRateLimit(120, 60); // 120 requests por minuto máximo
 
 require_once 'db.php';
+require_once __DIR__ . '/lib/vicidial_live.php';
 
 // Verificar permisos
 if (!isset($_SESSION['user_id'])) {
@@ -125,7 +126,16 @@ try {
     }
     
     $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
+    // Estado EN VIVO de Vicidial (caché anti-throttle con lock compartido).
+    // Nunca lanza; si Vicidial no responde, el monitor sigue con datos de ponche.
+    $vicidialLive = ['by_user' => [], 'meta' => ['fresh' => false, 'source_ok' => false, 'counts' => [], 'age_seconds' => null, 'fetched_at' => null], 'enabled' => false];
+    try {
+        $vicidialLive = vicidialGetLiveStatus($pdo);
+    } catch (Throwable $e) {
+        error_log('supervisor_realtime vicidial live: ' . $e->getMessage());
+    }
+
     // Procesar datos
     $result = [];
     foreach ($agents as $agent) {
@@ -185,16 +195,26 @@ try {
                 'duration_formatted' => $durationFormatted
             ],
             'punches_today' => (int)$agent['punches_today'],
-            'status' => $status
+            'status' => $status,
+            // Estado en vivo de Vicidial para este agente (o null si no está logueado/mapeado)
+            'vicidial' => $vicidialLive['by_user'][(int)$agent['user_id']] ?? null
         ];
     }
-    
+
     echo json_encode([
         'success' => true,
         'timestamp' => date('Y-m-d H:i:s'),
         'agents' => $result,
         'total_agents' => count($result),
-        'types_available' => array_values($typesMap)
+        'types_available' => array_values($typesMap),
+        'vicidial_live' => [
+            'enabled'     => $vicidialLive['enabled'],
+            'source_ok'   => $vicidialLive['meta']['source_ok'] ?? false,
+            'fresh'       => $vicidialLive['meta']['fresh'] ?? false,
+            'age_seconds' => $vicidialLive['meta']['age_seconds'] ?? null,
+            'fetched_at'  => $vicidialLive['meta']['fetched_at'] ?? null,
+            'counts'      => $vicidialLive['meta']['counts'] ?? []
+        ]
     ]);
     
 } catch (Exception $e) {

@@ -1133,47 +1133,47 @@ include 'header.php';
     <!-- Stats Summary -->
     <div class="stats-summary" id="statsSummary">
         <div class="summary-card">
-            <div class="summary-value" id="totalAgents">-</div>
+            <div class="summary-value text-cyan-400" id="totalAgents">-</div>
             <div class="summary-label">
-                <i class="fas fa-users"></i> Total Agentes
+                <i class="fas fa-headset"></i> Conectados a Vicidial
             </div>
         </div>
         <div class="summary-card">
             <div class="summary-value text-green-400" id="activeAgents">-</div>
             <div class="summary-label">
-                <i class="fas fa-check-circle"></i> Activos Hoy
+                <i class="fas fa-phone-volume"></i> En Llamada
             </div>
         </div>
         <div class="summary-card">
             <div class="summary-value text-blue-400" id="paidPunches">-</div>
             <div class="summary-label">
-                <i class="fas fa-dollar-sign"></i> En Punch Pagado
+                <i class="fas fa-circle-check"></i> Disponibles
             </div>
         </div>
         <div class="summary-card">
             <div class="summary-value text-orange-400" id="unpaidPunches">-</div>
             <div class="summary-label">
-                <i class="fas fa-pause-circle"></i> En Pausa/Break
+                <i class="fas fa-pause-circle"></i> En Pausa
             </div>
         </div>
     </div>
 
-    <!-- Filters -->
+    <!-- Filters (Vicidial) -->
     <div class="filter-bar">
         <button class="filter-btn active" data-filter="all" onclick="filterAgents('all')">
             <i class="fas fa-users"></i> Todos
         </button>
-        <button class="filter-btn" data-filter="active" onclick="filterAgents('active')">
-            <i class="fas fa-check-circle"></i> Activos
+        <button class="filter-btn" data-filter="oncall" onclick="filterAgents('oncall')">
+            <i class="fas fa-phone-volume"></i> En Llamada
         </button>
-        <button class="filter-btn" data-filter="paid" onclick="filterAgents('paid')">
-            <i class="fas fa-dollar-sign"></i> Punch Pagado
+        <button class="filter-btn" data-filter="paused" onclick="filterAgents('paused')">
+            <i class="fas fa-pause-circle"></i> En Pausa
         </button>
-        <button class="filter-btn" data-filter="unpaid" onclick="filterAgents('unpaid')">
-            <i class="fas fa-pause-circle"></i> Pausas/Breaks
+        <button class="filter-btn" data-filter="available" onclick="filterAgents('available')">
+            <i class="fas fa-circle-check"></i> Disponible
         </button>
-        <button class="filter-btn" data-filter="offline" onclick="filterAgents('offline')">
-            <i class="fas fa-times-circle"></i> Sin Registro Hoy
+        <button class="filter-btn" data-filter="disconnected" onclick="filterAgents('disconnected')">
+            <i class="fas fa-plug-circle-xmark"></i> Sin Vicidial
         </button>
     </div>
 
@@ -1345,7 +1345,7 @@ async function refreshData() {
             // Aplicar el filtro actual en lugar de mostrar todos
             filterAgents(currentFilter);
             
-            updateLastUpdateTime(data.timestamp);
+            updateLastUpdateTime(data.timestamp, data.vicidial_live);
         } else {
             console.error('Error:', data.error);
         }
@@ -1357,14 +1357,16 @@ async function refreshData() {
 }
 
 function updateStats(data) {
-    const activeCount = data.agents.filter(a => a.status === 'active').length;
-    const paidCount = data.agents.filter(a => a.status === 'active' && a.current_punch.is_paid === 1).length;
-    const unpaidCount = data.agents.filter(a => a.status === 'active' && a.current_punch.is_paid === 0).length;
-    
-    document.getElementById('totalAgents').textContent = data.total_agents;
-    document.getElementById('activeAgents').textContent = activeCount;
-    document.getElementById('paidPunches').textContent = paidCount;
-    document.getElementById('unpaidPunches').textContent = unpaidCount;
+    // Contadores de Vicidial calculados sobre los agentes MOSTRADOS, para que el
+    // resumen coincida exactamente con las tarjetas visibles.
+    const withV = (data.agents || []).filter(a => a.vicidial);
+    const onCall = withV.filter(a => a.vicidial.status === 'EN_LLAMADA').length;
+    const paused = withV.filter(a => a.vicidial.status === 'PAUSADO').length;
+    const available = withV.filter(a => a.vicidial.status === 'DISPONIBLE' || a.vicidial.status === 'CONECTADO').length;
+    document.getElementById('totalAgents').textContent = withV.length;
+    document.getElementById('activeAgents').textContent = onCall;
+    document.getElementById('paidPunches').textContent = available;
+    document.getElementById('unpaidPunches').textContent = paused;
 }
 
 function renderAgents(agents) {
@@ -1384,28 +1386,42 @@ function renderAgents(agents) {
 }
 
 function createAgentCard(agent) {
+    // ===== Vista SOLO VICIDIAL: la tarjeta muestra el estado en vivo de Vicidial.
+    // El ponche NO se muestra aquí (los datos de ponche siguen intactos en la DB
+    // y en las demás páginas). Si el agente no tiene sesión en Vicidial -> "Sin sesión".
     const initials = agent.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-    const statusClass = `status-${agent.status}`;
-    const paidBadge = agent.current_punch.is_paid === 1 ? 'paid' : 'unpaid';
-    const paidLabel = agent.current_punch.is_paid === 1 ? 'Pagado' : 'No Pagado';
-    
-    // Badge de campaña si existe
-    const campaignBadge = agent.campaign && agent.campaign.code ? `
-        <div class="stat-badge" style="background: ${agent.campaign.color}15; border-color: ${agent.campaign.color}40; color: ${agent.campaign.color};">
-            <i class="fas fa-bullhorn"></i>
-            ${agent.campaign.code}
+    const v = agent.vicidial; // null si no está logueado/mapeado en Vicidial
+
+    const vColor = v ? (v.color || '#38bdf8') : '#64748b';
+    const vLabel = v ? v.label : 'Sin sesión en Vicidial';
+    const vStatus = v ? v.status : 'DESCONECTADO';
+    const vs = v ? (v.seconds_in_status || 0) : 0;
+    const vsFmt = vs >= 3600 ? (Math.floor(vs/3600) + 'h ' + Math.floor((vs%3600)/60) + 'm')
+                : (vs >= 60 ? (Math.floor(vs/60) + 'm') : (vs + 's'));
+    const cardClass = v ? '' : 'agent-offline';
+
+    // Campaña (preferir la de Vicidial en vivo; si no, la de ponche)
+    const campName = (v && v.campaign) ? v.campaign : (agent.campaign && agent.campaign.code ? agent.campaign.code : '');
+    const campaignBadge = campName ? `
+        <div class="stat-badge">
+            <i class="fas fa-bullhorn"></i> ${campName}
         </div>
     ` : '';
-    
+
+    const callsBadge = v ? `
+        <div class="stat-badge">
+            <i class="fas fa-phone"></i> ${v.calls} llamada${v.calls === 1 ? '' : 's'}
+        </div>
+    ` : '';
+
     return `
-        <div class="agent-card ${statusClass}" 
-             data-status="${agent.status}" 
-             data-paid="${agent.current_punch.is_paid}"
+        <div class="agent-card ${cardClass}"
+             data-vstatus="${vStatus}"
              data-user-id="${agent.user_id}"
-             data-campaign="${agent.campaign ? agent.campaign.code : ''}"
-             onclick="openAgentModal(${agent.user_id}, '${agent.full_name}')"
-             style="--punch-gradient: linear-gradient(90deg, ${agent.current_punch.color_start}, ${agent.current_punch.color_end}); --punch-color-start: ${agent.current_punch.color_start}; --punch-color-end: ${agent.current_punch.color_end};">
-            
+             data-campaign="${campName}"
+             onclick="openAgentModal(${agent.user_id}, '${agent.full_name.replace(/'/g, "\\'")}')"
+             style="--punch-gradient: linear-gradient(90deg, ${vColor}, ${vColor}); --punch-color-start: ${vColor}; --punch-color-end: ${vColor}; ${v ? '' : 'opacity:.6;'}">
+
             <div class="agent-header">
                 <div class="agent-avatar">${initials}</div>
                 <div class="agent-info">
@@ -1415,28 +1431,21 @@ function createAgentCard(agent) {
                     </div>
                 </div>
             </div>
-            
+
             <div class="punch-status">
-                <div class="punch-icon">
-                    <i class="${agent.current_punch.icon}"></i>
+                <div class="punch-icon" style="background:${vColor}22;color:${vColor};">
+                    <i class="fas fa-headset"></i>
                 </div>
                 <div class="punch-details">
-                    <div class="punch-type">${agent.current_punch.label}</div>
+                    <div class="punch-type" style="color:${vColor};">${vLabel}</div>
                     <div class="punch-duration">
-                        <i class="fas fa-clock text-xs"></i> ${agent.current_punch.duration_formatted}
+                        <i class="fas fa-clock text-xs"></i> ${v ? ('en este estado ' + vsFmt) : '—'}
                     </div>
                 </div>
             </div>
-            
+
             <div class="agent-stats">
-                <div class="stat-badge">
-                    <i class="fas fa-fingerprint"></i>
-                    ${agent.punches_today} punches hoy
-                </div>
-                <div class="stat-badge ${paidBadge}">
-                    <i class="fas ${agent.current_punch.is_paid === 1 ? 'fa-dollar-sign' : 'fa-pause-circle'}"></i>
-                    ${paidLabel}
-                </div>
+                ${callsBadge}
                 ${campaignBadge}
             </div>
         </div>
@@ -1452,37 +1461,56 @@ function filterAgents(filter) {
     });
     document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
     
-    // Filter agents
+    // Filtrar por estado EN VIVO de Vicidial
     let filtered = agentsData;
-    
+
     switch(filter) {
-        case 'active':
-            filtered = agentsData.filter(a => a.status === 'active');
+        case 'oncall':
+            filtered = agentsData.filter(a => a.vicidial && a.vicidial.status === 'EN_LLAMADA');
             break;
-        case 'paid':
-            filtered = agentsData.filter(a => a.status === 'active' && a.current_punch.is_paid === 1);
+        case 'paused':
+            filtered = agentsData.filter(a => a.vicidial && a.vicidial.status === 'PAUSADO');
             break;
-        case 'unpaid':
-            filtered = agentsData.filter(a => a.status === 'active' && a.current_punch.is_paid === 0);
+        case 'available':
+            filtered = agentsData.filter(a => a.vicidial && (a.vicidial.status === 'DISPONIBLE' || a.vicidial.status === 'CONECTADO'));
             break;
-        case 'offline':
-            filtered = agentsData.filter(a => a.status !== 'active');
+        case 'disconnected':
+            filtered = agentsData.filter(a => !a.vicidial);
             break;
     }
-    
+
+    // Mostrar primero a los que están en Vicidial (los desconectados al final)
+    filtered = filtered.slice().sort((a, b) => (b.vicidial ? 1 : 0) - (a.vicidial ? 1 : 0));
+
     renderAgents(filtered);
 }
 
-function updateLastUpdateTime(timestamp) {
+function updateLastUpdateTime(timestamp, vlive) {
     const date = new Date(timestamp);
     const formatted = date.toLocaleString('es-DO', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
     });
+    let vHtml = '';
+    if (vlive && vlive.enabled) {
+        if (vlive.source_ok && vlive.fresh) {
+            const c = vlive.counts || {};
+            const age = (vlive.age_seconds != null) ? ` · hace ${vlive.age_seconds}s` : '';
+            vHtml = `<span style="margin-left:14px;color:#38bdf8;">
+                <i class="fas fa-headset"></i> Vicidial en vivo:
+                ${c.logged_in||0} conectados · ${c.on_call||0} en llamada · ${c.paused||0} en pausa${age}
+            </span>`;
+        } else {
+            vHtml = `<span style="margin-left:14px;color:#f59e0b;" title="No se pudo consultar el estado en vivo de Vicidial (¿discador caído o IP no autorizada?). Reintentando automáticamente.">
+                <i class="fas fa-headset"></i> Vicidial: sin conexión en vivo (reintentando)
+            </span>`;
+        }
+    }
     document.getElementById('lastUpdate').innerHTML = `
         <span class="pulse-dot"></span>
         Última actualización: ${formatted} - Actualización automática cada 5 segundos
+        ${vHtml}
     `;
 }
 

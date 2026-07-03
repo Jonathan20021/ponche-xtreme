@@ -1,0 +1,6 @@
+# Insumos de la sincronización Vicidial — evitar sorpresas de fin de línea al desplegar
+# en el Windows Server (el repo tiene core.autocrlf=true).
+# El certificado se parsea tal cual: NO convertir saltos de línea.
+lib/cacert_vicidial.pem -text
+# Los .cmd de Windows deben conservar CRLF.
+run_vicidial_sync.cmd   text eol=crlf
