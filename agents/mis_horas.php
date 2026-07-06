@@ -9,12 +9,26 @@ if (!isset($_SESSION['user_id'])) {
 require_once '../db.php';
 require_once '../lib/work_hours_calculator.php';
 require_once '../hr/payroll_functions.php';
+require_once '../lib/vicidial_api_client.php';
 
 ensurePayrollPeriodsVisibilityColumn($pdo);
 ensurePayrollHolidaysTable($pdo);
+ensureUserPayrollSourceColumn($pdo);
 
 $userId = (int)$_SESSION['user_id'];
 $fullName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Agente';
+
+// Fuente de horas del agente: 'vicidial' o 'manual' (ponche). Se respeta el mismo
+// flag que usa la nómina (hr/payroll.php) para que Mis Horas coincida EXACTO con
+// lo que se paga.
+$payrollSource = 'manual';
+try {
+    $psStmt = $pdo->prepare("SELECT COALESCE(payroll_source, 'manual') FROM users WHERE id = ?");
+    $psStmt->execute([$userId]);
+    $payrollSource = $psStmt->fetchColumn() ?: 'manual';
+} catch (Throwable $e) {
+    $payrollSource = 'manual';
+}
 
 $weeklyOvertimeThresholdHours = 44.00;
 
@@ -83,7 +97,7 @@ if (!$selectedPeriod && !empty($periods)) {
  * se multiplican por el multiplicador del feriado (típicamente 2x), igual
  * que en el cálculo de nómina, para que el agente vea cifras consistentes.
  */
-function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, string $endDate, array $paidTypeSlugs, float $weeklyThresholdHours = 44.0, bool $applyHolidayDouble = false): array
+function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, string $endDate, array $paidTypeSlugs, float $weeklyThresholdHours = 44.0, bool $applyHolidayDouble = false, string $payrollSource = 'manual'): array
 {
     $today = date('Y-m-d');
     $effectiveEnd = ($endDate > $today) ? $today : $endDate;
@@ -102,18 +116,26 @@ function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, str
         return $result;
     }
 
-    $stmt = $pdo->prepare("
-        SELECT id, type, timestamp, DATE(timestamp) AS work_date
-        FROM attendance
-        WHERE user_id = ?
-          AND DATE(timestamp) BETWEEN ? AND ?
-        ORDER BY timestamp ASC
-    ");
-    $stmt->execute([$userId, $contextStart, $effectiveEnd]);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
     $holidaysMap = getPayrollHolidaysMap($pdo, $startDate, $effectiveEnd);
-    $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($rows, $paidTypeSlugs);
+
+    // Fuente de segundos trabajados por día. Para agentes de Vicidial se usa la
+    // MISMA función de horas pagables que la nómina (vicidialGetPaidSecondsByDate),
+    // para que Mis Horas coincida EXACTO con el pago. Para 'manual' se mantiene el ponche.
+    if ($payrollSource === 'vicidial') {
+        $vd = vicidialGetPaidSecondsByDate($pdo, $userId, $contextStart, $effectiveEnd);
+        $dailyWorkSeconds = $vd['by_date'];
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT id, type, timestamp, DATE(timestamp) AS work_date
+            FROM attendance
+            WHERE user_id = ?
+              AND DATE(timestamp) BETWEEN ? AND ?
+            ORDER BY timestamp ASC
+        ");
+        $stmt->execute([$userId, $contextStart, $effectiveEnd]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($rows, $paidTypeSlugs);
+    }
     $weeklySplit = splitWeeklyRegularOvertimeSeconds($dailyWorkSeconds, (int) round($weeklyThresholdHours * 3600));
 
     foreach ($weeklySplit['by_day'] as $date => $daySplit) {
@@ -184,7 +206,8 @@ foreach ($periods as $p) {
         $p['end_date'],
         $paidTypeSlugs,
         $weeklyOvertimeThresholdHours,
-        $userQualifiesForHolidayDouble
+        $userQualifiesForHolidayDouble,
+        $payrollSource
     );
     $periodSummaries[(int)$p['id']] = $summary;
 }
@@ -198,198 +221,131 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 ?>
 <?php include '../header_agent.php'; ?>
 
-<div class="max-w-6xl mx-auto px-4 py-8">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-3">
+<div class="agent-dashboard">
+    <div class="ag-pagehead">
         <div>
-            <h1 class="text-2xl md:text-3xl font-bold text-white mb-1">
-                <i class="fas fa-business-time text-emerald-400 mr-2"></i>
-                Mis Horas por Quincena
-            </h1>
-            <p class="text-slate-400 text-sm">Horas acumuladas calculadas en vivo a partir de tus marcaciones.</p>
+            <h1><i class="fas fa-business-time" style="color:var(--ag-brand);"></i> Mis Horas por Quincena</h1>
+            <p>Horas acumuladas <?= $payrollSource === 'vicidial' ? 'desde Vicidial' : 'a partir de tus marcaciones' ?>, iguales a las de tu nómina.</p>
         </div>
-        <div class="text-xs text-slate-500">
-            <i class="fas fa-sync-alt mr-1"></i>
-            Última actualización: <?= date('d/m/Y H:i') ?>
+        <div class="ag-head-actions">
+            <span class="ag-chip"><i class="fas fa-rotate"></i> Actualizado <?= date('d/m · H:i') ?></span>
         </div>
     </div>
 
     <?php if (empty($periods)): ?>
-        <div class="glass-card text-center py-10">
-            <i class="fas fa-calendar-times text-slate-500 text-4xl mb-3"></i>
-            <h2 class="text-lg font-semibold text-white mb-1">No hay quincenas disponibles</h2>
-            <p class="text-slate-400 text-sm">Tu supervisor aún no ha habilitado períodos para que los veas.</p>
+        <div class="ag-card ag-sec">
+            <div class="ag-empty-state"><i class="fas fa-calendar-xmark"></i><p>No hay quincenas disponibles. Tu supervisor aún no ha habilitado períodos para que los veas.</p></div>
         </div>
     <?php else: ?>
+        <?php
+            $tagStyles = [
+                'DRAFT' => 'background:#EEF1F6;color:#64748B',
+                'CALCULATED' => 'background:#E8F1FE;color:#1D5DB8',
+                'APPROVED' => 'background:#EDEBFB;color:#5347CE',
+                'PAID' => 'background:var(--ag-green-bg);color:#0B7A4B',
+                'CLOSED' => 'background:#E5E8EE;color:#475569',
+            ];
+        ?>
 
         <?php if ($selectedPeriod && $selectedSummary): ?>
-            <?php
-                $statusColors = [
-                    'DRAFT' => 'bg-gray-500',
-                    'CALCULATED' => 'bg-blue-500',
-                    'APPROVED' => 'bg-purple-500',
-                    'PAID' => 'bg-green-500',
-                    'CLOSED' => 'bg-gray-600',
-                ];
-                $statusColor = $statusColors[$selectedPeriod['status']] ?? 'bg-gray-500';
-                $isCurrent = $todayISO >= $selectedPeriod['start_date'] && $todayISO <= $selectedPeriod['end_date'];
-            ?>
-            <div class="glass-card mb-6">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <?php $isCurrent = $todayISO >= $selectedPeriod['start_date'] && $todayISO <= $selectedPeriod['end_date']; ?>
+            <div class="ag-card ag-sec">
+                <div class="ag-sec-head">
                     <div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <h2 class="text-xl font-semibold text-white"><?= htmlspecialchars($selectedPeriod['name']) ?></h2>
-                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold text-white <?= $statusColor ?>">
-                                <?= htmlspecialchars($selectedPeriod['status']) ?>
-                            </span>
-                            <?php if ($isCurrent): ?>
-                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                                    <i class="fas fa-bolt"></i> Actual
-                                </span>
-                            <?php endif; ?>
+                        <div class="ttl" style="flex-wrap:wrap; gap:10px;">
+                            <?= htmlspecialchars($selectedPeriod['name']) ?>
+                            <span class="ag-tag" style="<?= $tagStyles[$selectedPeriod['status']] ?? 'background:#EEF1F6;color:#64748B' ?>"><?= htmlspecialchars($selectedPeriod['status']) ?></span>
+                            <?php if ($isCurrent): ?><span class="ag-tag" style="background:var(--ag-green-bg);color:#0B7A4B;"><i class="fas fa-bolt"></i> Actual</span><?php endif; ?>
                         </div>
-                        <p class="text-sm text-slate-400 mt-1">
-                            <i class="fas fa-calendar-alt mr-1"></i>
-                            <?= formatDateShort($selectedPeriod['start_date']) ?> – <?= formatDateShort($selectedPeriod['end_date']) ?>
-                        </p>
+                        <div class="sub"><i class="fas fa-calendar" style="margin-right:5px;"></i><?= formatDateShort($selectedPeriod['start_date']) ?> – <?= formatDateShort($selectedPeriod['end_date']) ?></div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-4">
-                        <p class="text-xs text-slate-400 uppercase">Horas Totales</p>
-                        <p class="text-2xl font-bold text-emerald-400"><?= formatDecimalHours($selectedSummary['total_seconds']) ?></p>
-                        <p class="text-xs text-slate-500"><?= formatHoursHM($selectedSummary['total_seconds']) ?></p>
+                <div class="ag-grid ag-kpis" style="gap:12px;">
+                    <div class="ag-statcard">
+                        <div class="sc-top"><div class="sc-ico" style="background:var(--ag-brand);"><i class="fas fa-clock"></i></div><div class="sc-lbl">Horas totales</div></div>
+                        <div class="sc-val"><?= formatDecimalHours($selectedSummary['total_seconds']) ?></div>
+                        <div class="sc-sub"><?= formatHoursHM($selectedSummary['total_seconds']) ?></div>
                     </div>
-                    <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-4">
-                        <p class="text-xs text-slate-400 uppercase">Horas Regulares</p>
-                        <p class="text-2xl font-bold text-sky-400"><?= formatDecimalHours($selectedSummary['regular_seconds']) ?></p>
-                        <p class="text-xs text-slate-500"><?= formatHoursHM($selectedSummary['regular_seconds']) ?></p>
+                    <div class="ag-statcard">
+                        <div class="sc-top"><div class="sc-ico" style="background:var(--ag-blue);"><i class="fas fa-briefcase"></i></div><div class="sc-lbl">Regulares</div></div>
+                        <div class="sc-val"><?= formatDecimalHours($selectedSummary['regular_seconds']) ?></div>
+                        <div class="sc-sub"><?= formatHoursHM($selectedSummary['regular_seconds']) ?></div>
                     </div>
-                    <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-4">
-                        <p class="text-xs text-slate-400 uppercase">Horas Extra</p>
-                        <p class="text-2xl font-bold text-amber-400"><?= formatDecimalHours($selectedSummary['overtime_seconds']) ?></p>
-                        <p class="text-xs text-slate-500"><?= formatHoursHM($selectedSummary['overtime_seconds']) ?></p>
+                    <div class="ag-statcard">
+                        <div class="sc-top"><div class="sc-ico" style="background:var(--ag-amber);"><i class="fas fa-bolt"></i></div><div class="sc-lbl">Extra</div></div>
+                        <div class="sc-val"><?= formatDecimalHours($selectedSummary['overtime_seconds']) ?></div>
+                        <div class="sc-sub"><?= formatHoursHM($selectedSummary['overtime_seconds']) ?></div>
                     </div>
-                    <div class="bg-slate-800/60 border border-slate-700 rounded-lg p-4">
-                        <p class="text-xs text-slate-400 uppercase">Días Trabajados</p>
-                        <p class="text-2xl font-bold text-indigo-400"><?= (int)$selectedSummary['days_worked'] ?></p>
-                        <p class="text-xs text-slate-500">base semanal: <?= number_format($weeklyOvertimeThresholdHours, 2) ?>h</p>
+                    <div class="ag-statcard">
+                        <div class="sc-top"><div class="sc-ico" style="background:var(--ag-purple);"><i class="fas fa-calendar-check"></i></div><div class="sc-lbl">Días trabajados</div></div>
+                        <div class="sc-val"><?= (int) $selectedSummary['days_worked'] ?></div>
+                        <div class="sc-sub">base semanal: <?= number_format($weeklyOvertimeThresholdHours, 0) ?>h</div>
                     </div>
                 </div>
 
                 <?php if (!empty($selectedSummary['by_day'])): ?>
-                    <div class="mt-6">
-                        <h3 class="text-sm font-semibold text-slate-300 mb-2">Detalle diario</h3>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b border-slate-700 text-slate-400">
-                                        <th class="text-left py-2 px-3">Fecha</th>
-                                        <th class="text-right py-2 px-3">Horas trabajadas</th>
-                                        <th class="text-right py-2 px-3">Equivalente</th>
-                                    </tr>
-                                </thead>
+                    <div style="margin-top:20px;">
+                        <div style="font-size:13.5px; font-weight:700; color:var(--ag-text); display:flex; align-items:center; gap:8px; margin-bottom:10px;"><i class="fas fa-calendar-day" style="color:var(--ag-brand);"></i> Detalle diario</div>
+                        <div style="overflow-x:auto;">
+                            <table class="ag-table">
+                                <thead><tr><th>Fecha</th><th style="text-align:right;">Horas</th><th style="text-align:right;">Equivalente</th></tr></thead>
                                 <tbody>
                                     <?php foreach ($selectedSummary['by_day'] as $date => $secs): ?>
                                         <?php $holidayInfo = $selectedSummary['holiday_days'][$date] ?? null; ?>
-                                        <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 <?= $holidayInfo ? 'bg-yellow-500/5' : '' ?>">
-                                            <td class="py-2 px-3">
+                                        <tr>
+                                            <td>
                                                 <?= formatDateShort($date) ?>
                                                 <?php if ($holidayInfo): ?>
                                                     <?php if (!empty($holidayInfo['applied'])): ?>
-                                                        <span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/20 text-yellow-300 border border-yellow-500/40" title="<?= htmlspecialchars($holidayInfo['name']) ?>">
-                                                            <i class="fas fa-star mr-1"></i>
-                                                            Pago <?= number_format($holidayInfo['multiplier'], 2) ?>x · <?= htmlspecialchars($holidayInfo['name']) ?>
-                                                        </span>
+                                                        <span class="ag-tag" style="background:var(--ag-amber-bg);color:#B54708;margin-left:8px;" title="<?= htmlspecialchars($holidayInfo['name']) ?>"><i class="fas fa-star"></i> <?= number_format($holidayInfo['multiplier'], 2) ?>x</span>
                                                     <?php else: ?>
-                                                        <span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-600/40 text-slate-300 border border-slate-500/40" title="<?= htmlspecialchars($holidayInfo['name']) ?>">
-                                                            <i class="fas fa-star mr-1"></i>
-                                                            Festivo (no aplica a salario fijo)
-                                                        </span>
+                                                        <span class="ag-tag" style="background:#EEF1F6;color:var(--ag-muted);margin-left:8px;" title="<?= htmlspecialchars($holidayInfo['name']) ?>"><i class="fas fa-star"></i> Festivo</span>
                                                     <?php endif; ?>
                                                 <?php endif; ?>
                                             </td>
-                                            <td class="py-2 px-3 text-right font-mono text-slate-200">
+                                            <td style="text-align:right; font-weight:700;">
                                                 <?= formatDecimalHours($secs) ?>
-                                                <?php if ($holidayInfo && !empty($holidayInfo['applied'])): ?>
-                                                    <div class="text-[10px] text-yellow-300/80 font-normal">
-                                                        Real: <?= formatDecimalHours($holidayInfo['raw_seconds']) ?> × <?= number_format($holidayInfo['multiplier'], 2) ?>
-                                                    </div>
-                                                <?php endif; ?>
+                                                <?php if ($holidayInfo && !empty($holidayInfo['applied'])): ?><div class="ag-tsub" style="color:#B54708;">Real: <?= formatDecimalHours($holidayInfo['raw_seconds']) ?> × <?= number_format($holidayInfo['multiplier'], 2) ?></div><?php endif; ?>
                                             </td>
-                                            <td class="py-2 px-3 text-right text-slate-400 text-xs"><?= formatHoursHM($secs) ?></td>
+                                            <td style="text-align:right;" class="ag-tsub"><?= formatHoursHM($secs) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
                         <?php if (!empty($selectedSummary['holiday_days'])): ?>
-                            <p class="mt-3 text-xs text-yellow-300/80">
-                                <i class="fas fa-info-circle mr-1"></i>
-                                <?php if ($userQualifiesForHolidayDouble): ?>
-                                    Las horas de los días marcados como festivo se pagan al doble.
-                                <?php else: ?>
-                                    Los días festivos no aplican a empleados con salario fijo.
-                                <?php endif; ?>
-                            </p>
+                            <p class="ag-hint" style="margin-top:12px;"><i class="fas fa-circle-info" style="margin-right:5px;"></i><?= $userQualifiesForHolidayDouble ? 'Las horas de días festivos se pagan al doble.' : 'Los días festivos no aplican a empleados con salario fijo.' ?></p>
                         <?php endif; ?>
                     </div>
                 <?php else: ?>
-                    <div class="mt-6 text-slate-400 text-sm text-center py-4">
-                        <i class="fas fa-info-circle mr-1"></i>
-                        Aún no tienes horas registradas en este período.
-                    </div>
+                    <div class="ag-empty-state" style="min-height:110px;"><i class="fas fa-clock"></i><p>Aún no tienes horas registradas en este período.</p></div>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
 
-        <div class="glass-card">
-            <h2 class="text-lg font-semibold text-white mb-4">
-                <i class="fas fa-list text-slate-400 mr-2"></i>
-                Todas las quincenas disponibles
-            </h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-slate-700 text-slate-400">
-                            <th class="text-left py-2 px-3">Período</th>
-                            <th class="text-left py-2 px-3">Rango</th>
-                            <th class="text-center py-2 px-3">Estado</th>
-                            <th class="text-right py-2 px-3">Horas totales</th>
-                            <th class="text-right py-2 px-3">Días</th>
-                            <th class="text-center py-2 px-3"></th>
-                        </tr>
-                    </thead>
+        <div class="ag-card ag-sec ag-mt">
+            <div class="ag-sec-head"><div class="ttl"><i class="fas fa-list-ul"></i> Todas las quincenas</div><span class="ag-chip"><?= count($periods) ?> períodos</span></div>
+            <div style="overflow-x:auto;">
+                <table class="ag-table">
+                    <thead><tr><th>Período</th><th>Rango</th><th style="text-align:center;">Estado</th><th style="text-align:right;">Horas</th><th style="text-align:right;">Días</th><th></th></tr></thead>
                     <tbody>
                         <?php foreach ($periods as $p): ?>
                             <?php
                                 $sum = $periodSummaries[(int)$p['id']] ?? ['total_seconds' => 0, 'days_worked' => 0];
                                 $isActive = $selectedPeriod && (int)$selectedPeriod['id'] === (int)$p['id'];
-                                $isCurrent = $todayISO >= $p['start_date'] && $todayISO <= $p['end_date'];
-                                $rowClass = $isActive ? 'bg-slate-800/60' : 'hover:bg-slate-800/40';
+                                $isCur = $todayISO >= $p['start_date'] && $todayISO <= $p['end_date'];
                             ?>
-                            <tr class="border-b border-slate-800/60 <?= $rowClass ?>">
-                                <td class="py-2 px-3">
-                                    <div class="font-medium text-white"><?= htmlspecialchars($p['name']) ?></div>
-                                    <?php if ($isCurrent): ?>
-                                        <span class="text-xs text-emerald-300"><i class="fas fa-circle text-[6px] mr-1"></i>En curso</span>
-                                    <?php endif; ?>
+                            <tr<?= $isActive ? ' style="background:#F5F9FF;"' : '' ?>>
+                                <td>
+                                    <b><?= htmlspecialchars($p['name']) ?></b>
+                                    <?php if ($isCur): ?><div class="ag-tsub" style="color:var(--ag-green);"><i class="fas fa-circle" style="font-size:6px;"></i> En curso</div><?php endif; ?>
                                 </td>
-                                <td class="py-2 px-3 text-slate-300">
-                                    <?= formatDateShort($p['start_date']) ?> – <?= formatDateShort($p['end_date']) ?>
-                                </td>
-                                <td class="py-2 px-3 text-center">
-                                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold text-white <?= $statusColors[$p['status']] ?? 'bg-gray-500' ?>">
-                                        <?= htmlspecialchars($p['status']) ?>
-                                    </span>
-                                </td>
-                                <td class="py-2 px-3 text-right font-mono"><?= formatDecimalHours($sum['total_seconds']) ?></td>
-                                <td class="py-2 px-3 text-right"><?= (int)$sum['days_worked'] ?></td>
-                                <td class="py-2 px-3 text-center">
-                                    <a href="?period_id=<?= (int)$p['id'] ?>" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
-                                        <i class="fas fa-eye"></i> Ver
-                                    </a>
-                                </td>
+                                <td class="ag-tsub"><?= formatDateShort($p['start_date']) ?> – <?= formatDateShort($p['end_date']) ?></td>
+                                <td style="text-align:center;"><span class="ag-tag" style="<?= $tagStyles[$p['status']] ?? 'background:#EEF1F6;color:#64748B' ?>"><?= htmlspecialchars($p['status']) ?></span></td>
+                                <td style="text-align:right; font-weight:700;"><?= formatDecimalHours($sum['total_seconds']) ?></td>
+                                <td style="text-align:right;"><?= (int)$sum['days_worked'] ?></td>
+                                <td style="text-align:right;"><a href="?period_id=<?= (int)$p['id'] ?>" class="ag-chip" style="text-decoration:none;"><i class="fas fa-eye"></i> Ver</a></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -399,5 +355,6 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
 
     <?php endif; ?>
 </div>
+
 </body>
 </html>

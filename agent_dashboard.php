@@ -629,32 +629,73 @@ if ($employeeId) {
     $pendingVacations = $vacStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+// ---- Datos de HOY desde Vicidial (la marcación manual del ponche se retiró del
+// portal; la asistencia/actividad del agente proviene de Vicidial) ----
+require_once __DIR__ . '/lib/vicidial_api_client.php';
+
+$vicidialToday = null;
+try {
+    $vtStmt = $pdo->prepare("
+        SELECT report_date, user_group, first_login, last_activity,
+               total_logged_seconds, nonpause_seconds, pause_breakdown,
+               calls, talk_seconds
+        FROM vicidial_agent_timesheet
+        WHERE user_id = ? AND report_date = ?
+        ORDER BY imported_at DESC LIMIT 1
+    ");
+    $vtStmt->execute([$user_id, $date_filter]);
+    $vicidialToday = $vtStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (Throwable $e) {
+    $vicidialToday = null;
+}
+
+$vicidialHasData = false;
+$vicidialPaidSeconds = 0;
+$vicidialProductivity = 0;
+$vicidialDist = [];   // [label => segundos] para el donut de distribución
+
+if ($vicidialToday) {
+    $vicidialHasData = true;
+    $pauseCodes = $vicidialToday['pause_breakdown'] ? json_decode($vicidialToday['pause_breakdown'], true) : [];
+    if (!is_array($pauseCodes)) { $pauseCodes = []; }
+    $paidCodesList = vicidialGetPaidPauseCodes($pdo);
+    $capSec = (int) round((float) getSystemSetting($pdo, 'vicidial_payroll_daily_cap_hours', 14) * 3600);
+    $calcPaid = vicidialComputePaidSeconds((int) $vicidialToday['nonpause_seconds'], $pauseCodes, $paidCodesList, $capSec);
+    $vicidialPaidSeconds = $calcPaid['paid_seconds'];
+
+    $vNonpause = max(0, (int) $vicidialToday['nonpause_seconds']);
+    $vTotalLogged = max(0, (int) $vicidialToday['total_logged_seconds']);
+    $vSumPauses = 0;
+    foreach ($pauseCodes as $sec) { $vSumPauses += max(0, (int) $sec); }
+    $vDenom = $vTotalLogged > 0 ? $vTotalLogged : ($vNonpause + $vSumPauses);
+    $vicidialProductivity = $vDenom > 0 ? round($vNonpause / $vDenom * 100, 1) : 0;
+
+    $vicidialDist['Productivo'] = $vNonpause;
+    foreach ($pauseCodes as $code => $sec) {
+        $sec = max(0, (int) $sec);
+        if ($sec > 0) { $vicidialDist[(string) $code] = $sec; }
+    }
+}
+
+// Donut "Distribución del día" alimentado desde Vicidial (reusa el script del pie)
+$distColors = [
+    'Productivo' => '#244886', 'Break' => '#F79009', 'Bao' => '#EF4444',
+    'Coachi' => '#16C8C7', 'Digita' => '#5347CE', 'ITRes' => '#4896FE',
+    'LAGGED' => '#887CFD', 'LOGIN' => '#12B76A', 'wasapi' => '#0EA5E9', 'NXDIAL' => '#94A3B8',
+];
+$fallbackColors = ['#4896FE', '#5347CE', '#16C8C7', '#F79009', '#887CFD', '#EF4444', '#0EA5E9'];
 $chartLabels = [];
 $chartData = [];
 $chartColors = [];
 $chartTotal = 0;
-
-if ($workSeconds > 0) {
-    $chartLabels[] = 'Productivo';
-    $chartData[] = $workSeconds;
-    $chartColors[] = '#38BDF8';
-    $chartTotal += $workSeconds;
+$fi = 0;
+foreach ($vicidialDist as $label => $sec) {
+    if ($sec <= 0) { continue; }
+    $chartLabels[] = $label;
+    $chartData[] = $sec;
+    $chartColors[] = $distColors[$label] ?? $fallbackColors[$fi++ % count($fallbackColors)];
+    $chartTotal += $sec;
 }
-
-foreach ($durationTypes as $typeMeta) {
-    $slug = $typeMeta['slug'];
-    $value = $durations[$slug] ?? 0;
-    if ($value <= 0) {
-        continue;
-    }
-    $meta = $attendanceTypeMap[$slug] ?? null;
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#6366F1', '#6366F1');
-    $chartLabels[] = $typeMeta['label'];
-    $chartData[] = $value;
-    $chartColors[] = $colorStart;
-    $chartTotal += $value;
-}
-
 $chartLabelsJson = json_encode($chartLabels, JSON_UNESCAPED_UNICODE);
 $chartDataJson = json_encode($chartData);
 $chartColorsJson = json_encode($chartColors);
@@ -662,535 +703,224 @@ $chartColorsJson = json_encode($chartColors);
 
 <?php include 'header_agent.php'; ?>
 <div class="agent-dashboard">
-    <!-- Quick Punch Section -->
-    <section class="glass-card mb-6">
-        <div class="flex items-center justify-between mb-4">
-            <div>
-                <h2 class="text-xl font-semibold text-primary flex items-center gap-2">
-                    <i class="fas fa-fingerprint text-emerald-400"></i>
-                    Registro Rápido de Asistencia
-                </h2>
-                <p class="text-sm text-muted mt-1">Marca tu asistencia directamente desde aquí</p>
+
+    <!-- Page head -->
+    <div class="ag-pagehead">
+        <div>
+            <h1>Hola, <?= htmlspecialchars(strtok($full_name, ' ')) ?> 👋</h1>
+            <p>Tu resumen de <?= htmlspecialchars(date('d \d\e M \d\e Y', strtotime($date_filter))) ?>.</p>
+        </div>
+        <div class="ag-head-actions">
+            <span class="ag-chip"><i class="fas fa-shield-halved" style="color:var(--ag-green)"></i> Conectado a Vicidial</span>
+            <form method="get" style="margin:0;">
+                <input type="date" name="dates" id="dates" value="<?= htmlspecialchars($date_filter) ?>" class="ag-input" style="padding:9px 12px;">
+            </form>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="ag-grid ag-kpis">
+        <div class="ag-card ag-kpi">
+            <div class="top"><div class="ico" style="background:var(--ag-brand-tint);color:var(--ag-brand)"><i class="fas fa-briefcase"></i></div></div>
+            <div class="val"><?= gmdate('H:i:s', max(0, (int) $vicidialPaidSeconds)) ?></div>
+            <div class="lbl">Horas productivas hoy</div>
+        </div>
+        <div class="ag-card ag-kpi">
+            <div class="top"><div class="ico" style="background:#EDEBFB;color:var(--ag-purple)"><i class="fas fa-bolt"></i></div></div>
+            <div class="val"><?= $vicidialProductivity ?>%</div>
+            <div class="lbl">Productividad</div>
+        </div>
+        <div class="ag-card ag-kpi">
+            <div class="top"><div class="ico" style="background:#E4F6F6;color:#0FA8A7"><i class="fas fa-star"></i></div></div>
+            <div class="val"><?= number_format((float) $qualityMetrics['avg_percentage'], 1) ?>%</div>
+            <div class="lbl">Calidad promedio</div>
+        </div>
+        <div class="ag-card ag-kpi">
+            <div class="top"><div class="ico" style="background:#E8F1FE;color:var(--ag-blue)"><i class="fas fa-headphones"></i></div></div>
+            <div class="val"><?= (int) $qualityMetrics['audited_calls'] ?></div>
+            <div class="lbl">Llamadas auditadas</div>
+        </div>
+    </div>
+
+    <!-- Row: Jornada de hoy (Vicidial) + Distribución del día -->
+    <div class="ag-grid ag-mt" style="grid-template-columns:1.15fr 1fr;">
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head">
+                <div>
+                    <div class="ttl"><i class="fas fa-headset"></i> Jornada de hoy</div>
+                    <div class="sub">Actividad en tiempo real desde Vicidial</div>
+                </div>
+                <span class="ag-chip"><i class="fas fa-tower-broadcast" style="color:var(--ag-teal)"></i> <?= $vicidialToday && $vicidialToday['user_group'] ? htmlspecialchars($vicidialToday['user_group']) : 'Vicidial' ?></span>
+            </div>
+            <?php if ($vicidialHasData): ?>
+                <div class="ag-sched" style="grid-template-columns:repeat(3,1fr);">
+                    <div class="b"><div class="k"><i class="fas fa-right-to-bracket"></i> Primer login</div><div class="v"><?= $vicidialToday['first_login'] ? htmlspecialchars(date('g:i A', strtotime($vicidialToday['first_login']))) : '—' ?></div></div>
+                    <div class="b"><div class="k"><i class="fas fa-wave-square"></i> Última actividad</div><div class="v"><?= $vicidialToday['last_activity'] ? htmlspecialchars(date('g:i A', strtotime($vicidialToday['last_activity']))) : '—' ?></div></div>
+                    <div class="b"><div class="k"><i class="fas fa-clock"></i> Total logueado</div><div class="v"><?= gmdate('G:i', max(0,(int)$vicidialToday['total_logged_seconds'])) ?> h</div></div>
+                    <div class="b"><div class="k"><i class="fas fa-phone-volume"></i> Llamadas</div><div class="v"><?= (int) $vicidialToday['calls'] ?></div></div>
+                    <div class="b"><div class="k"><i class="fas fa-headphones-simple"></i> En llamada</div><div class="v"><?= gmdate('G:i', max(0,(int)$vicidialToday['talk_seconds'])) ?> h</div></div>
+                    <div class="b"><div class="k"><i class="fas fa-bolt"></i> Productivo</div><div class="v"><?= gmdate('G:i', max(0,(int)$vicidialToday['nonpause_seconds'])) ?> h</div></div>
+                </div>
+            <?php else: ?>
+                <div class="ag-empty-state" style="min-height:120px;">
+                    <i class="fas fa-satellite-dish"></i>
+                    <p>Sin datos de Vicidial para esta fecha. Se sincronizan automáticamente cada noche.</p>
+                </div>
+            <?php endif; ?>
+            <div class="ag-seg" style="margin-top:14px;">
+                <div>
+                    <div class="nm"><i class="fas fa-calendar-day" style="color:var(--ag-muted);margin-right:6px;"></i> Horario asignado · <?= htmlspecialchars($scheduleName) ?></div>
+                    <div class="mt">Entrada <?= htmlspecialchars($scheduleEntry ?? '—') ?> · Salida <?= htmlspecialchars($scheduleExit ?? '—') ?></div>
+                </div>
+                <span class="hh"><?= htmlspecialchars($scheduleHours) ?> h</span>
             </div>
         </div>
-        
-        <?php if ($punch_success): ?>
-            <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
-                <div class="flex items-center gap-2">
-                    <i class="fas fa-check-circle text-green-400"></i>
-                    <p class="text-green-300 text-sm"><?= htmlspecialchars($punch_success) ?></p>
-                </div>
-            </div>
-        <?php endif; ?>
-        
-        <?php if ($logout_error): ?>
-            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
-                <div class="flex items-center gap-2">
-                    <i class="fas fa-exclamation-triangle text-red-400"></i>
-                    <p class="text-red-300 text-sm"><?= htmlspecialchars($logout_error) ?></p>
-                </div>
-            </div>
-        <?php endif; ?>
-        
-        <?php if ($punch_error): ?>
-            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
-                <div class="flex items-center gap-2">
-                    <i class="fas fa-exclamation-circle text-red-400"></i>
-                    <p class="text-red-300 text-sm"><?= htmlspecialchars($punch_error) ?></p>
-                </div>
-            </div>
-        <?php endif; ?>
 
-        <div id="agentPunchStatus" class="hidden mb-4"></div>
-
-        <form method="POST" id="agentPunchForm" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            <div class="col-span-2 sm:col-span-3 md:col-span-4 lg:col-span-7">
-                <label for="authorization_code" class="block text-xs font-semibold text-slate-200 uppercase tracking-wide mb-2">
-                    Código de autorización (si aplica)
-                </label>
-                <input
-                    type="text"
-                    id="authorization_code"
-                    name="authorization_code"
-                    placeholder="Ingresa el código para horas extras o entrada temprana"
-                    class="input-control w-full"
-                    autocomplete="off"
-                >
-                <p class="text-xs text-slate-400 mt-2">Solo es necesario cuando el sistema lo solicita (hora extra o entrada antes de horario).</p>
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head">
+                <div class="ttl"><i class="fas fa-chart-pie"></i> Distribución del día</div>
+                <span class="ag-chip"><?= htmlspecialchars(date('d/m', strtotime($date_filter))) ?></span>
             </div>
-            <?php foreach ($activeAttendanceTypes as $type): ?>
-                <?php
-                    $buttonSlug = htmlspecialchars($type['slug'], ENT_QUOTES, 'UTF-8');
-                    $buttonLabel = htmlspecialchars($type['label'], ENT_QUOTES, 'UTF-8');
-                    $iconClass = htmlspecialchars($type['icon_class'] ?? 'fas fa-circle', ENT_QUOTES, 'UTF-8');
-                    $colorStart = htmlspecialchars($type['color_start'] ?? '#6366F1', ENT_QUOTES, 'UTF-8');
-                    $colorEnd = htmlspecialchars($type['color_end'] ?? $colorStart, ENT_QUOTES, 'UTF-8');
-                ?>
-                <button type="submit" 
-                        name="punch_type" 
-                        value="<?= $buttonSlug ?>" 
-                        class="punch-btn group relative overflow-hidden rounded-xl p-4 transition-all duration-300 hover:scale-105 hover:shadow-lg"
-                        style="background: linear-gradient(135deg, <?= $colorStart ?> 0%, <?= $colorEnd ?> 100%);">
-                    <div class="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300"></div>
-                    <div class="relative flex flex-col items-center gap-2">
-                        <i class="<?= $iconClass ?> text-2xl text-white"></i>
-                        <span class="text-xs font-semibold text-white text-center"><?= $buttonLabel ?></span>
+            <?php if ($chartTotal > 0): ?>
+            <div class="ag-donut-wrap">
+                <div class="ag-donut-box">
+                    <canvas id="timeBreakdownChart" aria-label="Distribución de tiempo" role="img"></canvas>
+                    <div class="ag-donut-center">
+                        <span class="dc-v"><?= gmdate('G:i', (int) $chartTotal) ?></span>
+                        <span class="dc-l">horas totales</span>
                     </div>
-                </button>
-            <?php endforeach; ?>
-        </form>
-    </section>
-    <section class="glass-card mb-6">
-        <div class="flex items-center justify-between mb-4">
-            <div>
-                <h2 class="text-xl font-semibold text-primary flex items-center gap-2">
-                    <i class="fas fa-clock text-sky-400"></i>
-                    Horario de Trabajo
-                </h2>
-                <p class="text-sm text-muted mt-1">Horario aplicado para <?= htmlspecialchars(date('d/m/Y', strtotime($date_filter))) ?></p>
-            </div>
-            <span class="badge badge--info"><?= htmlspecialchars($scheduleName) ?></span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div class="bg-slate-800/60 rounded-lg p-3">
-                <p class="text-xs text-slate-400 uppercase tracking-wide">Entrada</p>
-                <p class="text-lg font-semibold text-white"><?= htmlspecialchars($scheduleEntry ?? 'No definida') ?></p>
-            </div>
-            <div class="bg-slate-800/60 rounded-lg p-3">
-                <p class="text-xs text-slate-400 uppercase tracking-wide">Salida</p>
-                <p class="text-lg font-semibold text-white"><?= htmlspecialchars($scheduleExit ?? 'No definida') ?></p>
-            </div>
-            <div class="bg-slate-800/60 rounded-lg p-3">
-                <p class="text-xs text-slate-400 uppercase tracking-wide">Horas</p>
-                <p class="text-lg font-semibold text-white"><?= htmlspecialchars($scheduleHours) ?> hrs</p>
-            </div>
-        </div>
-        <?php if (!empty($scheduleSegments)): ?>
-            <div class="space-y-2">
-                <?php foreach ($scheduleSegments as $segment): ?>
-                    <?php
-                        $segmentEntry = formatScheduleTimeLabel($segment['entry_time'] ?? null) ?? 'No definida';
-                        $segmentExit = formatScheduleTimeLabel($segment['exit_time'] ?? null) ?? 'No definida';
-                        $segmentDays = formatScheduleDaysLabel($segment['days_of_week'] ?? null);
-                        $segmentEffective = $segment['effective_date'] ?? null;
-                        $segmentEnd = $segment['end_date'] ?? null;
-                        $segmentRange = $segmentEffective
-                            ? $segmentEffective . ($segmentEnd ? ' → ' . $segmentEnd : '')
-                            : 'Sin fecha';
-                        $segmentHours = number_format((float) ($segment['scheduled_hours'] ?? 0), 2);
-                    ?>
-                    <div class="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg p-3">
-                        <div>
-                            <p class="text-slate-200 font-medium"><?= htmlspecialchars($segment['schedule_name'] ?? 'Horario') ?></p>
-                            <p class="text-xs text-slate-400">
-                                <?= htmlspecialchars($segmentEntry) ?> - <?= htmlspecialchars($segmentExit) ?> · <?= htmlspecialchars($segmentRange) ?> · <?= htmlspecialchars($segmentDays) ?>
-                            </p>
+                </div>
+                <div class="ag-donut-legend">
+                    <?php for ($di = 0, $dn = count($chartLabels); $di < $dn; $di++): ?>
+                        <?php $lsec = (int) $chartData[$di]; $lpct = $chartTotal > 0 ? round($lsec / $chartTotal * 100) : 0; ?>
+                        <div class="lg">
+                            <span class="l"><span class="dt" style="background:<?= htmlspecialchars($chartColors[$di]) ?>"></span><?= htmlspecialchars($chartLabels[$di]) ?></span>
+                            <span class="vv"><?= gmdate('G:i', $lsec) ?><span class="pc"><?= $lpct ?>%</span></span>
                         </div>
-                        <span class="text-xs text-slate-300 font-semibold"><?= htmlspecialchars($segmentHours) ?> hrs</span>
+                    <?php endfor; ?>
+                </div>
+            </div>
+            <?php else: ?>
+            <div class="ag-empty-state" data-chart-empty>
+                <i class="fas fa-chart-pie"></i>
+                <p>Sin datos de distribución para esta fecha. Se sincronizan desde Vicidial cada noche.</p>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Calidad del agente -->
+    <div class="ag-card ag-sec ag-mt">
+        <div class="ag-sec-head">
+            <div>
+                <div class="ttl"><i class="fas fa-award"></i> Calidad del agente</div>
+                <div class="sub">Métricas y auditorías del sistema de calidad</div>
+            </div>
+            <a href="agent_quality.php" class="ag-chip">Ver todo <i class="fas fa-arrow-right"></i></a>
+        </div>
+        <?php if ($qualityError): ?>
+            <div class="ag-alert warn"><i class="fas fa-exclamation-triangle"></i><span><?= htmlspecialchars($qualityError) ?></span></div>
+        <?php else: ?>
+            <div class="ag-qgrid">
+                <div class="ag-qc"><div class="qh"><i style="background:var(--ag-blue)"><i class="fas fa-clipboard-check"></i></i> Evaluaciones</div><div class="qv"><?= (int) $qualityMetrics['total_evaluations'] ?></div></div>
+                <div class="ag-qc"><div class="qh"><i style="background:var(--ag-green)"><i class="fas fa-chart-line"></i></i> Promedio</div><div class="qv"><?= number_format((float) $qualityMetrics['avg_percentage'], 1) ?>%</div></div>
+                <div class="ag-qc"><div class="qh"><i style="background:var(--ag-amber)"><i class="fas fa-headphones"></i></i> Auditadas</div><div class="qv"><?= (int) $qualityMetrics['audited_calls'] ?></div></div>
+                <div class="ag-qc"><div class="qh"><i style="background:var(--ag-purple)"><i class="fas fa-star"></i></i> Mejor / Peor</div><div class="qv"><?= number_format((float) $qualityMetrics['max_percentage'], 0) ?> / <?= number_format((float) $qualityMetrics['min_percentage'], 0) ?></div></div>
+                <div class="ag-qc"><div class="qh"><i style="background:var(--ag-teal)"><i class="fas fa-robot"></i></i> Score IA</div><div class="qv"><?= number_format((float) $qualityMetrics['avg_ai_score'], 1) ?></div></div>
+                <div class="ag-qc"><div class="qh"><i style="background:#64748B"><i class="fas fa-calendar"></i></i> Última</div><div class="qv" style="font-size:15px;padding-top:5px;"><?= $qualityMetrics['last_eval_date'] ? htmlspecialchars(date('d/m/Y', strtotime($qualityMetrics['last_eval_date']))) : 'N/A' ?></div></div>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Row: Llamadas auditadas + Desglose Vicidial -->
+    <div class="ag-grid ag-mt" style="grid-template-columns:1.55fr .9fr;">
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head">
+                <div class="ttl"><i class="fas fa-phone-volume"></i> Llamadas auditadas</div>
+                <a href="agent_quality.php" class="ag-chip" style="text-decoration:none;">Ver todo en Calidad <i class="fas fa-arrow-right"></i></a>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="ag-table" id="auditTable">
+                    <thead><tr><th>Fecha</th><th>Campaña</th><th>Score</th><th>QA IA</th><th>Resumen</th><th>Audio</th></tr></thead>
+                    <tbody>
+                        <?php if (!empty($qualityAudits)): ?>
+                            <?php foreach ($qualityAudits as $audit): ?>
+                                <?php
+                                    $audioUrl = resolveQualityRecordingUrl($audit['recording_path'] ?? null);
+                                    $pct = $audit['percentage'] !== null ? (float) $audit['percentage'] : null;
+                                    $scoreValue = $pct !== null ? number_format($pct, 1) . '%' : 'N/A';
+                                    $scoreClass = $pct === null ? '' : ($pct >= 85 ? 'good' : ($pct >= 70 ? 'mid' : 'bad'));
+                                    $aiScoreValue = $audit['ai_score'] !== null ? number_format((float) $audit['ai_score'], 1) : 'N/A';
+                                    $summaryText = $audit['ai_summary'] ?: ($audit['general_comments'] ?? '');
+                                    $campName = $audit['campaign_name'] ?? 'Sin campaña';
+                                    $campInitials = strtoupper(mb_substr($campName, 0, 2));
+                                    $campColors = ['#244886','#16C8C7','#5347CE','#4896FE','#F79009'];
+                                    $campColor = $campColors[abs(crc32($campName)) % count($campColors)];
+                                ?>
+                                <tr data-audit-row>
+                                    <td><b><?= htmlspecialchars(date('d/m', strtotime($audit['call_date'] ?: $audit['created_at']))) ?></b><div class="ag-tsub"><?= htmlspecialchars(date('H:i', strtotime($audit['call_datetime'] ?: $audit['created_at']))) ?></div></td>
+                                    <td>
+                                        <div class="ag-tg">
+                                            <span class="ci" style="background:<?= $campColor ?>"><?= htmlspecialchars($campInitials) ?></span>
+                                            <div><b><?= htmlspecialchars($campName) ?></b><?php if (!empty($audit['call_type'])): ?><div class="ag-tsub"><?= htmlspecialchars($audit['call_type']) ?></div><?php endif; ?></div>
+                                        </div>
+                                    </td>
+                                    <td><span class="ag-score <?= $scoreClass ?>"><?= $scoreValue ?></span></td>
+                                    <td><span class="ag-score"><?= htmlspecialchars($aiScoreValue) ?></span></td>
+                                    <td style="color:var(--ag-muted);max-width:230px;"><?= htmlspecialchars(mb_strimwidth((string) $summaryText, 0, 120, '…')) ?></td>
+                                    <td>
+                                        <?php if ($audioUrl): ?>
+                                            <audio controls preload="none" style="height:34px;max-width:200px;"><source src="<?= htmlspecialchars($audioUrl) ?>" type="audio/mpeg"></audio>
+                                        <?php else: ?>
+                                            <span class="ag-tsub">Sin audio</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr><td colspan="6" class="ag-empty">No hay llamadas auditadas disponibles.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="ag-pager" id="auditPager" style="display:none;">
+                <button type="button" class="ag-pager-btn" data-page="prev" aria-label="Página anterior"><i class="fas fa-chevron-left"></i></button>
+                <span class="ag-pager-info">Página <b id="auditPageNow">1</b> de <span id="auditPageTot">1</span></span>
+                <button type="button" class="ag-pager-btn" data-page="next" aria-label="Página siguiente"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
+
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head">
+                <div class="ttl"><i class="fas fa-list-check"></i> Desglose de hoy</div>
+                <span class="ag-chip">Vicidial</span>
+            </div>
+            <?php if (!empty($vicidialDist) && $chartTotal > 0): ?>
+                <?php foreach ($vicidialDist as $label => $sec): ?>
+                    <?php if ($sec <= 0) continue; $pctBar = $chartTotal > 0 ? round($sec / $chartTotal * 100) : 0; $barColor = $distColors[$label] ?? '#4896FE'; ?>
+                    <div style="margin-bottom:14px;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:6px;">
+                            <span style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ag-text);">
+                                <span style="width:9px;height:9px;border-radius:3px;background:<?= $barColor ?>;"></span><?= htmlspecialchars($label) ?>
+                            </span>
+                            <span style="font-weight:700;color:var(--ag-text);"><?= gmdate('G:i', (int) $sec) ?> h</span>
+                        </div>
+                        <div style="height:7px;border-radius:6px;background:#EDF1F7;overflow:hidden;">
+                            <span style="display:block;height:100%;width:<?= $pctBar ?>%;background:<?= $barColor ?>;border-radius:6px;"></span>
+                        </div>
                     </div>
                 <?php endforeach; ?>
-            </div>
-        <?php else: ?>
-            <p class="text-sm text-slate-400">Usando el horario global del sistema.</p>
-        <?php endif; ?>
-    </section>
-    <section class="dashboard-hero glass-card">
-        <div class="hero-main">
-            <div class="space-y-2">
-                <span class="badge badge--info">Sesión agente</span>
-                <h1 class="text-2xl font-semibold text-primary">Hola, <?= htmlspecialchars($full_name) ?></h1>
-                <p class="text-muted text-sm">Resumen de productividad para <?= htmlspecialchars(date('d \d\e M \d\e Y', strtotime($date_filter))) ?></p>
-            </div>
-            <div class="hero-progress">
-                <span class="text-sm text-muted uppercase tracking-[0.18em]">Productividad</span>
-                <div class="progress-circle" style="--progress: <?= min($productivity_score, 100) ?>%;">
-                    <span><?= $productivity_score ?>%</span>
-                </div>
-            </div>
-        </div>
-        <div class="hero-metric-grid">
-            <?php foreach ($heroMetrics as $metric): ?>
-                <div class="hero-metric">
-                    <p class="text-xs text-muted uppercase tracking-[0.18em]"><?= htmlspecialchars($metric['label']) ?></p>
-                    <p class="text-xl font-semibold text-primary"><?= htmlspecialchars($metric['value']) ?></p>
-                    <p class="text-xs text-muted"><?= htmlspecialchars($metric['note']) ?></p>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <form method="get" class="hero-range-filter">
-            <label>
-                <span>Detalle del día</span>
-                <input type="date" name="dates" id="dates" value="<?= htmlspecialchars($date_filter) ?>" class="input-control">
-            </label>
-            <button type="submit" class="btn-primary">Actualizar</button>
-        </form>
-    </section>
-
-    <section class="metric-grid">
-        <?php foreach ($insightCards as $card): ?>
-            <article class="metric-card" style="--metric-start: <?= htmlspecialchars($card['color_start'], ENT_QUOTES, 'UTF-8') ?>; --metric-end: <?= htmlspecialchars($card['color_end'], ENT_QUOTES, 'UTF-8') ?>;">
-                <div class="metric-icon"><i class="<?= htmlspecialchars($card['icon']) ?>"></i></div>
-                <p class="metric-label"><?= htmlspecialchars($card['label']) ?></p>
-                <p class="metric-value"><?= htmlspecialchars($card['value']) ?></p>
-                <p class="metric-sub"><?= htmlspecialchars($card['description']) ?></p>
-            </article>
-        <?php endforeach; ?>
-    </section>
-
-    <section class="glass-card mb-6">
-        <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div>
-                <h2 class="text-lg font-semibold text-primary">Calidad del agente</h2>
-                <p class="text-sm text-muted">Métricas y auditorías desde el sistema de calidad.</p>
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="badge badge--info">Auditorías</span>
-                <a href="agent_quality.php" class="btn-secondary">
-                    <i class="fas fa-star"></i>
-                    Ver todo
-                </a>
-            </div>
-        </header>
-
-        <?php if ($qualityError): ?>
-            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-                <div class="flex items-center gap-2">
-                    <i class="fas fa-exclamation-triangle text-amber-400"></i>
-                    <p class="text-amber-200 text-sm"><?= htmlspecialchars($qualityError) ?></p>
-                </div>
-            </div>
-        <?php else: ?>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div class="metric-card" style="--metric-start: #0ea5e9; --metric-end: #2563eb;">
-                    <div class="metric-icon"><i class="fas fa-clipboard-check"></i></div>
-                    <p class="metric-label">Evaluaciones</p>
-                    <p class="metric-value"><?= (int) $qualityMetrics['total_evaluations'] ?></p>
-                    <p class="metric-sub">Total registradas</p>
-                </div>
-                <div class="metric-card" style="--metric-start: #22c55e; --metric-end: #16a34a;">
-                    <div class="metric-icon"><i class="fas fa-chart-line"></i></div>
-                    <p class="metric-label">Promedio de calidad</p>
-                    <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_percentage'], 2) ?>%</p>
-                    <p class="metric-sub">Score promedio</p>
-                </div>
-                <div class="metric-card" style="--metric-start: #f97316; --metric-end: #ea580c;">
-                    <div class="metric-icon"><i class="fas fa-headphones"></i></div>
-                    <p class="metric-label">Llamadas auditadas</p>
-                    <p class="metric-value"><?= (int) $qualityMetrics['audited_calls'] ?></p>
-                    <p class="metric-sub">Con evaluación</p>
-                </div>
-                <div class="metric-card" style="--metric-start: #a855f7; --metric-end: #7c3aed;">
-                    <div class="metric-icon"><i class="fas fa-star"></i></div>
-                    <p class="metric-label">Mejor / Peor</p>
-                    <p class="metric-value">
-                        <?= number_format((float) $qualityMetrics['max_percentage'], 2) ?>% / <?= number_format((float) $qualityMetrics['min_percentage'], 2) ?>%
-                    </p>
-                    <p class="metric-sub">Rango de desempeño</p>
-                </div>
-                <div class="metric-card" style="--metric-start: #14b8a6; --metric-end: #0f766e;">
-                    <div class="metric-icon"><i class="fas fa-chart-bar"></i></div>
-                    <p class="metric-label">Score Analítico</p>
-                    <p class="metric-value"><?= number_format((float) $qualityMetrics['avg_ai_score'], 2) ?></p>
-                    <p class="metric-sub">Promedio QA</p>
-                </div>
-                <div class="metric-card" style="--metric-start: #64748b; --metric-end: #334155;">
-                    <div class="metric-icon"><i class="fas fa-calendar-alt"></i></div>
-                    <p class="metric-label">Última evaluación</p>
-                    <p class="metric-value">
-                        <?= $qualityMetrics['last_eval_date'] ? htmlspecialchars(date('d/m/Y', strtotime($qualityMetrics['last_eval_date']))) : 'N/A' ?>
-                    </p>
-                    <p class="metric-sub">Fecha más reciente</p>
-                </div>
-            </div>
-        <?php endif; ?>
-    </section>
-
-    <article class="glass-card table-card">
-        <header>
-            <h2>Llamadas auditadas</h2>
-            <span><?= count($qualityAudits) ?> registros</span>
-        </header>
-        <div class="responsive-scroll">
-            <table class="data-table" data-skip-responsive="true">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Campaña</th>
-                        <th>Score</th>
-                        <th>Score QA</th>
-                        <th>Resumen</th>
-                        <th>Audio</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (!empty($qualityAudits)): ?>
-                        <?php foreach ($qualityAudits as $audit): ?>
-                            <?php
-                                $audioUrl = resolveQualityRecordingUrl($audit['recording_path'] ?? null);
-                                $scoreValue = $audit['percentage'] !== null ? number_format((float) $audit['percentage'], 2) . '%' : 'N/A';
-                                $aiScoreValue = $audit['ai_score'] !== null ? number_format((float) $audit['ai_score'], 2) : 'N/A';
-                                $summaryText = $audit['ai_summary'] ?: ($audit['general_comments'] ?? '');
-                            ?>
-                            <tr>
-                                <td>
-                                    <?= htmlspecialchars(date('d/m/Y', strtotime($audit['call_date'] ?: $audit['created_at']))) ?><br>
-                                    <span class="text-xs text-slate-400">
-                                        <?= htmlspecialchars(date('H:i', strtotime($audit['call_datetime'] ?: $audit['created_at']))) ?>
-                                    </span>
-                                </td>
-                                <td>
-                                    <?= htmlspecialchars($audit['campaign_name'] ?? 'Sin campaña') ?>
-                                    <?php if (!empty($audit['call_type'])): ?>
-                                        <div class="text-xs text-slate-400"><?= htmlspecialchars($audit['call_type']) ?></div>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?= $scoreValue ?></td>
-                                <td><?= htmlspecialchars($aiScoreValue) ?></td>
-                                <td class="text-sm">
-                                    <?= htmlspecialchars(mb_strimwidth((string) $summaryText, 0, 140, '...')) ?>
-                                </td>
-                                <td>
-                                    <?php if ($audioUrl): ?>
-                                        <audio controls preload="none" style="min-width: 220px;">
-                                            <source src="<?= htmlspecialchars($audioUrl) ?>" type="audio/mpeg">
-                                        </audio>
-                                    <?php else: ?>
-                                        <span class="text-xs text-slate-400">Sin audio</span>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr><td colspan="6" class="data-table-empty">No hay llamadas auditadas disponibles.</td></tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </article>
-
-    <div class="insight-grid">
-        <article class="glass-card chart-card <?= $chartTotal <= 0 ? 'is-empty' : '' ?>">
-            <header class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-primary">Distribución de tiempo</h2>
-            </header>
-            <canvas id="timeBreakdownChart" aria-label="Distribución de tiempo" role="img"></canvas>
-            <p class="chart-empty <?= $chartTotal > 0 ? 'hidden' : '' ?>" data-chart-empty>Sin datos suficientes para graficar en esta fecha.</p>
-        </article>
-
-        <article class="glass-card timeline-card">
-            <header>
-                <h2 class="text-lg font-semibold text-primary">Timeline de actividades</h2>
-                <p class="text-sm text-muted">Historial cronológico de tus marcaciones.</p>
-            </header>
-            <?php if (!empty($records)): ?>
-                <ol class="timeline">
-                    <?php foreach ($records as $record): ?>
-                        <li class="timeline-item">
-                            <span class="timeline-dot" style="--dot-color: <?= htmlspecialchars($record['color'], ENT_QUOTES, 'UTF-8') ?>;"></span>
-                            <div class="timeline-content">
-                                <div class="timeline-title">
-                                    <i class="<?= htmlspecialchars($record['icon']) ?>"></i>
-                                    <span><?= htmlspecialchars($record['label']) ?></span>
-                                </div>
-                                <div class="timeline-time"><?= htmlspecialchars($record['time']) ?> &ndash; <?= htmlspecialchars($record['ip']) ?></div>
-                            </div>
-                        </li>
-                    <?php endforeach; ?>
-                </ol>
             <?php else: ?>
-                <p class="timeline-empty">Aún no hay eventos registrados para esta fecha.</p>
+                <div class="ag-empty-state">
+                    <i class="fas fa-chart-simple"></i>
+                    <p>Aún no hay actividad de Vicidial para esta fecha.</p>
+                </div>
             <?php endif; ?>
-        </article>
-    </div>
-
-    <article class="glass-card table-card">
-        <header>
-            <h2>Detalle de eventos</h2>
-            <span><?= count($records) ?> eventos</span>
-        </header>
-        <div class="responsive-scroll">
-            <table class="data-table" data-skip-responsive="true">
-                <thead>
-                    <tr>
-                        <th>Evento</th>
-                        <th>Hora</th>
-                        <th>IP</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (!empty($records)): ?>
-                        <?php foreach ($records as $record): ?>
-                            <tr>
-                                <td><?= htmlspecialchars($record['label']) ?></td>
-                                <td><?= htmlspecialchars($record['time']) ?></td>
-                                <td><?= htmlspecialchars($record['ip']) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr><td colspan="3" class="data-table-empty">No se encontraron registros.</td></tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
         </div>
-    </article>
-
-    <?php if ($employeeId): ?>
-    <!-- HR Requests Section -->
-    <div class="insight-grid">
-        <article class="glass-card">
-            <header class="mb-6">
-                <h2 class="text-lg font-semibold text-primary flex items-center gap-2">
-                    <i class="fas fa-calendar-check text-blue-400"></i>
-                    Solicitar Permiso
-                </h2>
-                <p class="text-sm text-muted">Envía una solicitud de permiso a Recursos Humanos</p>
-            </header>
-            
-            <?php if ($permission_success): ?>
-                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-check-circle text-green-400"></i>
-                        <p class="text-green-300 text-sm"><?= htmlspecialchars($permission_success) ?></p>
-                    </div>
-                </div>
-            <?php endif; ?>
-            
-            <?php if ($permission_error): ?>
-                <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-exclamation-circle text-red-400"></i>
-                        <p class="text-red-300 text-sm"><?= htmlspecialchars($permission_error) ?></p>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-            <form method="POST" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Tipo de Permiso</label>
-                    <select name="permission_type" required class="input-control w-full">
-                        <option value="MEDICAL">Médico</option>
-                        <option value="PERSONAL">Personal</option>
-                        <option value="STUDY">Estudio</option>
-                        <option value="FAMILY">Familiar</option>
-                        <option value="OTHER">Otro</option>
-                    </select>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Fecha Inicio</label>
-                        <input type="date" name="permission_start_date" required class="input-control w-full">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Fecha Fin</label>
-                        <input type="date" name="permission_end_date" required class="input-control w-full">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Motivo</label>
-                    <textarea name="permission_reason" rows="3" required class="input-control w-full" placeholder="Describe el motivo de tu solicitud..."></textarea>
-                </div>
-                <button type="submit" name="submit_permission" class="btn-primary w-full">
-                    <i class="fas fa-paper-plane"></i>
-                    Enviar Solicitud de Permiso
-                </button>
-            </form>
-
-            <?php if (!empty($pendingPermissions)): ?>
-                <div class="mt-6 pt-6 border-t border-slate-700">
-                    <h3 class="text-sm font-semibold mb-3">Mis Solicitudes de Permisos</h3>
-                    <div class="space-y-2">
-                        <?php foreach ($pendingPermissions as $perm): ?>
-                            <div class="bg-slate-800/50 rounded-lg p-3">
-                                <div class="flex justify-between items-start mb-1">
-                                    <span class="text-sm font-medium"><?= htmlspecialchars($perm['request_type']) ?></span>
-                                    <span class="px-2 py-1 rounded text-xs <?= $perm['status'] === 'APPROVED' ? 'bg-green-500/20 text-green-300' : ($perm['status'] === 'REJECTED' ? 'bg-red-500/20 text-red-300' : 'bg-yellow-500/20 text-yellow-300') ?>">
-                                        <?= htmlspecialchars($perm['status']) ?>
-                                    </span>
-                                </div>
-                                <p class="text-xs text-muted"><?= htmlspecialchars($perm['start_date']) ?> - <?= htmlspecialchars($perm['end_date']) ?></p>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            <?php endif; ?>
-        </article>
-
-        <article class="glass-card">
-            <header class="mb-6">
-                <h2 class="text-lg font-semibold text-primary flex items-center gap-2">
-                    <i class="fas fa-umbrella-beach text-purple-400"></i>
-                    Solicitar Vacaciones
-                </h2>
-                <p class="text-sm text-muted">Envía una solicitud de vacaciones a Recursos Humanos</p>
-            </header>
-
-            <?php if ($vacation_success): ?>
-                <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-4 animate-fade-in">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-check-circle text-green-400"></i>
-                        <p class="text-green-300 text-sm"><?= htmlspecialchars($vacation_success) ?></p>
-                    </div>
-                </div>
-            <?php endif; ?>
-            
-            <?php if ($vacation_error): ?>
-                <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4 animate-fade-in">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-exclamation-circle text-red-400"></i>
-                        <p class="text-red-300 text-sm"><?= htmlspecialchars($vacation_error) ?></p>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-            <form method="POST" class="space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Fecha Inicio</label>
-                        <input type="date" name="vacation_start_date" required class="input-control w-full">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-2">Fecha Fin</label>
-                        <input type="date" name="vacation_end_date" required class="input-control w-full">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Días Solicitados</label>
-                    <input type="number" name="vacation_days" min="1" required class="input-control w-full" placeholder="Número de días">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Motivo (Opcional)</label>
-                    <textarea name="vacation_reason" rows="3" class="input-control w-full" placeholder="Describe el motivo de tus vacaciones..."></textarea>
-                </div>
-                <button type="submit" name="submit_vacation" class="btn-primary w-full">
-                    <i class="fas fa-paper-plane"></i>
-                    Enviar Solicitud de Vacaciones
-                </button>
-            </form>
-
-            <?php if (!empty($pendingVacations)): ?>
-                <div class="mt-6 pt-6 border-t border-slate-700">
-                    <h3 class="text-sm font-semibold mb-3">Mis Solicitudes de Vacaciones</h3>
-                    <div class="space-y-2">
-                        <?php foreach ($pendingVacations as $vac): ?>
-                            <div class="bg-slate-800/50 rounded-lg p-3">
-                                <div class="flex justify-between items-start mb-1">
-                                    <span class="text-sm font-medium"><?= htmlspecialchars($vac['total_days']) ?> días</span>
-                                    <span class="px-2 py-1 rounded text-xs <?= $vac['status'] === 'APPROVED' ? 'bg-green-500/20 text-green-300' : ($vac['status'] === 'REJECTED' ? 'bg-red-500/20 text-red-300' : 'bg-yellow-500/20 text-yellow-300') ?>">
-                                        <?= htmlspecialchars($vac['status']) ?>
-                                    </span>
-                                </div>
-                                <p class="text-xs text-muted"><?= htmlspecialchars($vac['start_date']) ?> - <?= htmlspecialchars($vac['end_date']) ?></p>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            <?php endif; ?>
-        </article>
     </div>
-    <?php endif; ?>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 (function () {
     const ctx = document.getElementById('timeBreakdownChart');
@@ -1212,19 +942,59 @@ $chartColorsJson = json_encode($chartColors);
             },
             options: {
                 responsive: true,
-                cutout: '70%',
+                maintainAspectRatio: false,
+                cutout: '72%',
                 plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: {
-                            color: '#E2E8F0',
-                            font: { size: 12 }
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#16213E',
+                        padding: 10,
+                        cornerRadius: 8,
+                        titleFont: { size: 12, weight: '700' },
+                        bodyFont: { size: 12 },
+                        callbacks: {
+                            label: function (c) {
+                                var s = c.parsed || 0;
+                                var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+                                var hhmm = (h > 0 ? h + 'h ' : '') + m + 'm';
+                                var pct = total > 0 ? Math.round(s / total * 100) : 0;
+                                return ' ' + hhmm + ' · ' + pct + '%';
+                            }
                         }
                     }
                 }
             }
         });
     }
+})();
+
+// Paginación del historial de llamadas (client-side; el detalle completo vive en Calidad)
+(function () {
+    var table = document.getElementById('auditTable');
+    var pager = document.getElementById('auditPager');
+    if (!table || !pager) { return; }
+    var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr[data-audit-row]'));
+    var per = 6, page = 1, pages = Math.ceil(rows.length / per);
+    if (pages <= 1) { return; } // no hace falta paginar
+    var nowEl = document.getElementById('auditPageNow'),
+        totEl = document.getElementById('auditPageTot'),
+        prev = pager.querySelector('[data-page="prev"]'),
+        next = pager.querySelector('[data-page="next"]');
+    totEl.textContent = pages;
+    pager.style.display = 'flex';
+    function render() {
+        rows.forEach(function (r, i) {
+            var vis = (i >= (page - 1) * per && i < page * per);
+            r.style.display = vis ? '' : 'none';
+            if (!vis) { var a = r.querySelector('audio'); if (a && !a.paused) { a.pause(); } }
+        });
+        nowEl.textContent = page;
+        prev.disabled = (page === 1);
+        next.disabled = (page === pages);
+    }
+    prev.addEventListener('click', function () { if (page > 1) { page--; render(); } });
+    next.addEventListener('click', function () { if (page < pages) { page++; render(); } });
+    render();
 })();
 
 document.getElementById('dates')?.addEventListener('change', function () {

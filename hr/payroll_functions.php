@@ -465,6 +465,29 @@ function ensurePayrollPeriodsVisibilityColumn(PDO $pdo): void
 }
 
 /**
+ * Garantiza la columna users.payroll_source (manual|vicidial). La nómina la lee
+ * para decidir si las horas de un empleado vienen del ponche o de Vicidial. Se
+ * asegura aquí (no depende de una migración manual) para que un deploy a otra
+ * base NO rompa TODA la nómina con "Unknown column payroll_source".
+ */
+function ensureUserPayrollSourceColumn(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM users")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('payroll_source', $columns, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN payroll_source VARCHAR(10) NOT NULL DEFAULT 'manual'");
+        }
+    } catch (PDOException $e) {
+        // Si users no existe aún, no hay nada que asegurar.
+    }
+    $ensured = true;
+}
+
+/**
  * Obtiene incentivos manuales por empleado dentro de un periodo.
  */
 function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array

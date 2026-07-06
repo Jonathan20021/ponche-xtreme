@@ -5,12 +5,14 @@ require_once 'payroll_functions.php';
 require_once 'loans_payroll_bridge.php';
 require_once '../lib/logging_functions.php';
 require_once '../lib/work_hours_calculator.php';
+require_once '../lib/vicidial_api_client.php';
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
 ensurePayrollManualIncentivesTable($pdo);
 ensurePayrollPeriodsVisibilityColumn($pdo);
 ensurePayrollHolidaysTable($pdo);
+ensureUserPayrollSourceColumn($pdo);
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
@@ -132,7 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         $empStmt = $pdo->prepare("
             SELECT e.id, e.employment_status,
                    u.id as user_id, u.hourly_rate, u.monthly_salary, u.monthly_salary_dop, u.overtime_multiplier,
-                   u.compensation_type, u.role
+                   u.compensation_type, u.role,
+                   COALESCE(u.payroll_source, 'manual') AS payroll_source
             FROM employees e
             JOIN users u ON u.id = e.user_id
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
@@ -151,7 +154,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         
         // Get paid attendance type slugs for payroll calculation
         $paidTypes = getPaidAttendanceTypeSlugs($pdo);
-        
+
+        // Alertas de la fuente Vicidial (días con tope / sin datos) para revisar
+        // antes de aprobar. NO bloquean el cálculo; solo se muestran.
+        $vicidialPayrollFlags = ['capped' => [], 'no_data' => []];
+
         foreach ($employees as $emp) {
             $userId = $emp['user_id'];
             $employeeId = $emp['id'];
@@ -197,6 +204,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             );
 
             $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($punches, $paidTypeSlugs);
+
+            // === FUENTE VICIDIAL (Fase 3) ===
+            // Para agentes marcados payroll_source='vicidial', las horas pagables
+            // vienen del desglose de Vicidial (NONPAUSE + códigos de pausa pagados,
+            // con tope de cordura), NO del ponche manual. TODO lo demás — la
+            // división semanal 44h, el multiplicador de extra y las deducciones
+            // AFP/SFS/ISR — queda EXACTAMENTE igual. Solo cambia la fuente de horas.
+            if (($emp['payroll_source'] ?? 'manual') === 'vicidial') {
+                $vd = vicidialGetPaidSecondsByDate($pdo, (int) $userId, $attendanceContextStart, $period['end_date']);
+                if ($vd['days'] > 0) {
+                    // Hay datos de Vicidial: son la fuente de horas de este agente.
+                    $dailyWorkSeconds = $vd['by_date'];
+                    if (!empty($vd['capped_days'])) {
+                        $vicidialPayrollFlags['capped'][] = ['user_id' => (int) $userId, 'days' => $vd['capped_days']];
+                    }
+                } else {
+                    // Sin NINGÚN dato de Vicidial en el período: NO pagar 0. Se conserva
+                    // el ponche manual como respaldo (ya calculado arriba) y se marca
+                    // fuerte para revisión — puede ser un agente que no se logueó o el
+                    // discador caído. Nunca dejar a un trabajador en cero por un hueco de datos.
+                    $vicidialPayrollFlags['no_data'][] = (int) $userId;
+                }
+            }
+
             $weeklySplit = splitWeeklyRegularOvertimeSeconds(
                 $dailyWorkSeconds,
                 (int) round($weeklyOvertimeThresholdHours * 3600)
@@ -347,6 +378,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         
         $pdo->commit();
         $successMsg = "Nómina calculada correctamente para " . count($employees) . " empleados.";
+
+        // Alertas de la fuente Vicidial: días con tope (posible sesión abierta) o
+        // agentes sin datos de Vicidial (no se loguearon / discador caído). No
+        // bloquean, pero conviene revisarlos ANTES de aprobar.
+        if (!empty($vicidialPayrollFlags['capped']) || !empty($vicidialPayrollFlags['no_data'])) {
+            $nCapped = count($vicidialPayrollFlags['capped']);
+            $nNoData = count($vicidialPayrollFlags['no_data']);
+            $successMsg .= " ⚠️ Vicidial:";
+            if ($nCapped > 0) {
+                $successMsg .= " $nCapped empleado(s) con día(s) sobre el tope (revisar sesiones dejadas abiertas).";
+            }
+            if ($nNoData > 0) {
+                $successMsg .= " $nNoData agente(s) Vicidial SIN datos en el período (no se loguearon o discador caído) — se les dejó el PONCHE como respaldo (no cobran 0); revísalos.";
+            }
+            $successMsg .= " Revísalos antes de aprobar.";
+        }
         if (!empty($loanSync)) {
             if (!$loanSync['ok']) {
                 $successMsg .= " ⚠️ Préstamos: no se pudo sincronizar con finanzas (" . implode('; ', $loanSync['errors']) . ").";

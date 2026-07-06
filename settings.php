@@ -30,6 +30,7 @@ $sections = [
     'wfm_report' => ['label' => 'Reporte WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-chart-area', 'description' => 'Reporte de WFM (Punch vs Payroll)'],
     'wfm_planning' => ['label' => 'Planificacion WFM', 'category' => 'Registros y Reportes', 'icon' => 'fa-calendar-check', 'description' => 'Pronostico, dimensionamiento y alertas intradia'],
     'vicidial_reports' => ['label' => 'Reportes Vicidial', 'category' => 'Registros y Reportes', 'icon' => 'fa-phone-volume', 'description' => 'Estadísticas de Login y Actividad de Agentes Vicidial'],
+    'vicidial_sync' => ['label' => 'Conciliación Vicidial', 'category' => 'Registros y Reportes', 'icon' => 'fa-scale-balanced', 'description' => 'Conciliación ponche vs Vicidial, mapeo de agentes y control de nómina desde Vicidial'],
 
     'voice_ai_reports' => ['label' => 'Comms GHL Reports', 'category' => 'Registros y Reportes', 'icon' => 'fa-robot', 'description' => 'Dashboard integral de llamadas, mensajes, usuarios y Voice AI en GoHighLevel'],
 
@@ -1084,6 +1085,8 @@ try {
                     $vsPaidCodes = array_values(array_filter(array_map('trim', preg_split('/[,;\n]+/', (string) ($_POST['vicidial_paid_pause_codes'] ?? '')))));
                     $stmt->execute(['vicidial_paid_pause_codes',      json_encode($vsPaidCodes, JSON_UNESCAPED_UNICODE), 'json']);
                     $stmt->execute(['vicidial_payroll_daily_cap_hours', (string) max(1, min(24, (int) ($_POST['vicidial_payroll_daily_cap_hours'] ?? 14))), 'number']);
+                    // Reportes admin (Tardanzas/Ausencias) alimentados desde Vicidial (kill-switch global).
+                    $stmt->execute(['reports_use_vicidial_source', isset($_POST['reports_use_vicidial_source']) ? '1' : '0', 'boolean']);
                     // La contraseña solo se actualiza si se escribió algo (dejar en blanco = conservar la actual).
                     if (trim($vsPassRaw) !== '') {
                         $stmt->execute(['vicidial_api_pass', $vsPassRaw, 'text']);
@@ -4064,6 +4067,24 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         en <a href="records_vicidial.php" class="underline">Registros → Vicidial</a> (columna
                         <strong>Pagables</strong>). El cambio de la nómina al modo Vicidial es el último paso, tras tu visto bueno.
                     </div>
+                </div>
+
+                <?php $vReportsSrc = (string) getSystemSetting($pdo, 'reports_use_vicidial_source', '1') === '1'; ?>
+                <div class="pt-4 border-t border-slate-700/40 space-y-3">
+                    <h3 class="text-primary font-semibold flex items-center gap-2">
+                        <i class="fas fa-chart-column text-indigo-400"></i> Reportes desde Vicidial
+                    </h3>
+                    <label class="inline-flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="reports_use_vicidial_source" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $vReportsSrc ? 'checked' : '' ?>>
+                        <span class="font-semibold">Usar el login de Vicidial en los reportes (Tardanzas, Ausencias, Fuerza Laboral y Horas de Login)</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Para los agentes marcados <strong>pago = Vicidial</strong> (en
+                        <a href="vicidial_sync.php" class="underline">Conciliación → Nómina</a>), la hora de llegada y la
+                        presencia se toman del <strong>login de Vicidial</strong> (automático e inmutable) en vez del ponche;
+                        así el reporte atrapa a quien poncha a tiempo pero entra al discador tarde. El resto del personal — y
+                        como respaldo si un agente no tiene login ese día — sigue con la marcación. Apágalo para volver 100%
+                        al ponche sin redesplegar.</p>
                 </div>
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-200">

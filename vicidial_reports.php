@@ -2,14 +2,32 @@
 session_start();
 require_once 'db.php';
 require_once 'lib/authorization_functions.php';
+require_once 'lib/vicidial_report_adapter.php';
 
 ensurePermission('vicidial_reports');
 
-// Default date bounds querying if no dates are explicitly provided in GET
-$defaultDatesQuery = $pdo->query("SELECT MIN(min_date) as min_dt, MAX(max_date) as max_dt FROM vicidial_uploads");
-$defaultDatesRow = $defaultDatesQuery->fetch(PDO::FETCH_ASSOC);
-$overallMinDate = $defaultDatesRow['min_dt'] ?? date('Y-m-01');
-$overallMaxDate = $defaultDatesRow['max_dt'] ?? date('Y-m-t');
+// Cambio de fuente desde el selector de la página (se guarda para que persista y
+// para que los endpoints AJAX de KPIs/gráficos lean la misma fuente).
+if (isset($_GET['source']) && in_array($_GET['source'], ['sync', 'csv'], true)) {
+    try {
+        $pdo->prepare("
+            INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+            VALUES ('vicidial_reports_source', ?, 'text', 'vicidial')
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ")->execute([$_GET['source']]);
+    } catch (Throwable $e) {
+        error_log('vicidial_reports_source save: ' . $e->getMessage());
+    }
+}
+
+// Fuente de datos: 'sync' (timesheet automático) o 'csv' (subida manual).
+$reportSource   = vicidialReportsSource($pdo);
+$reportUsingSync = $reportSource === 'sync';
+
+// Default date bounds — de la fuente activa (sync o csv), no del historial de subidas.
+$reportBounds  = vicidialReportsDateBounds($pdo);
+$overallMinDate = $reportBounds['min'];
+$overallMaxDate = $reportBounds['max'];
 
 // Get filter parameters
 $startDate = $_GET['start_date'] ?? $overallMinDate;
@@ -23,39 +41,8 @@ if ($dailyDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dailyDate)) {
     $endDate = $dailyDate;
 }
 
-// Fetch data for the report
-$campaignFilter = $campaign ? "AND current_user_group = :campaign" : "";
-$stmt = $pdo->prepare("
-    SELECT 
-        user_name,
-        user_id,
-        current_user_group,
-        SUM(calls) as total_calls,
-        SUM(time_total) as time_total,
-        SUM(pause_time) as pause_time,
-        SUM(wait_time) as wait_time,
-        SUM(talk_time) as talk_time,
-        SUM(dispo_time) as dispo_time,
-        SUM(dead_time) as dead_time,
-        SUM(customer_time) as customer_time,
-        SUM(sale) as sale,
-        SUM(pedido) as pedido,
-        SUM(orden) as orden,
-        SUM(active + a + b + callbk + colgo + cortad + dair + dc + `dec` + deposi + dnc + duplic + n + ni + nocal + nocon + notie + np + numeq + pregun + promo + ptrans + pu + quejas + reserv + seguim + silenc + wasapi + xfer) as other_dispositions
-    FROM vicidial_login_stats
-    WHERE upload_date BETWEEN :start_date AND :end_date
-    $campaignFilter
-    GROUP BY user_name, user_id, current_user_group
-    ORDER BY total_calls DESC
-");
-
-$params = ['start_date' => $startDate, 'end_date' => $endDate];
-if ($campaign) {
-    $params['campaign'] = $campaign;
-}
-
-$stmt->execute($params);
-$stats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Fetch data for the report — vía el adaptador (sync automático o CSV según la fuente).
+$stats = vicidialReportsAgentStats($pdo, $startDate, $endDate, $campaign);
 
 // Helper function to format seconds to HH:MM:SS
 function formatTime($seconds)
@@ -92,7 +79,48 @@ include 'header.php';
         <p class="text-slate-400">Analytics avanzados y métricas de rendimiento</p>
     </div>
 
-    <!-- Upload Section -->
+    <!-- Selector de fuente de datos -->
+    <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h2 class="text-lg font-semibold text-slate-100">
+                <i class="fas fa-database text-cyan-400 mr-2"></i>Fuente de datos
+            </h2>
+            <p class="text-sm text-slate-400 mt-1">
+                <?php if ($reportUsingSync): ?>
+                    <i class="fas fa-bolt text-emerald-400 mr-1"></i>
+                    <strong class="text-emerald-300">Sincronización automática</strong> — datos de Vicidial importados cada noche (sin subir CSV).
+                <?php else: ?>
+                    <i class="fas fa-file-csv text-amber-400 mr-1"></i>
+                    <strong class="text-amber-300">Subida manual de CSV</strong> — datos de los archivos que subes abajo.
+                <?php endif; ?>
+            </p>
+        </div>
+        <form method="get" class="flex items-center gap-2">
+            <?php foreach (['start_date' => $startDate, 'end_date' => $endDate, 'campaign' => $campaign] as $k => $v): ?>
+                <?php if ($v !== ''): ?><input type="hidden" name="<?= htmlspecialchars($k) ?>" value="<?= htmlspecialchars($v) ?>"><?php endif; ?>
+            <?php endforeach; ?>
+            <label class="text-sm text-slate-300">Ver:</label>
+            <select name="source" onchange="this.form.submit()"
+                class="px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-slate-200 text-sm focus:ring-2 focus:ring-cyan-500">
+                <option value="sync" <?= $reportUsingSync ? 'selected' : '' ?>>Automático (Vicidial)</option>
+                <option value="csv" <?= !$reportUsingSync ? 'selected' : '' ?>>Manual (CSV)</option>
+            </select>
+        </form>
+    </div>
+
+    <?php if ($reportUsingSync): ?>
+    <!-- Aviso: modo automático, sin subida -->
+    <div class="bg-blue-500/10 border border-blue-500/40 rounded-xl p-5 mb-6 flex items-start gap-3">
+        <i class="fas fa-circle-info text-blue-300 text-lg mt-0.5"></i>
+        <div class="text-sm text-blue-100">
+            Los datos se <strong>sincronizan solos desde Vicidial cada noche</strong> — ya no hace falta subir CSV.
+            Las métricas de tiempo/actividad (llamadas, logueo, talk, pausa, ocupación, eficiencia, productividad, AHT)
+            son exactas. <strong>Nota:</strong> las métricas de <em>conversión</em> (ventas/pedidos por disposición) aún
+            no vienen en la sincronización automática; para verlas, cambia a <em>Manual (CSV)</em> arriba.
+        </div>
+    </div>
+    <?php else: ?>
+    <!-- Upload Section (solo en modo CSV manual) -->
     <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 mb-6">
         <h2 class="text-xl font-semibold text-slate-100 mb-4">
             <i class="fas fa-upload text-cyan-400 mr-2"></i>
@@ -130,6 +158,7 @@ include 'header.php';
             </div>
         </form>
     </div>
+    <?php endif; ?>
 
     <!-- Filters -->
     <div class="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 mb-6">

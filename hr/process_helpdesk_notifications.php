@@ -4,12 +4,15 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../lib/email_functions.php';
 
-// Get pending notifications
+$conn = getMysqli(); // db.php provee PDO; estos scripts usan mysqli ($conn)
+
+// Get pending notifications (el email vive en employees, users no tiene esa columna)
 $query = "SELECT n.*, t.ticket_number, t.subject, t.priority, t.status,
-          u.email, u.full_name, u.username
+          e.email, u.full_name, u.username
           FROM helpdesk_notifications n
           JOIN helpdesk_tickets t ON n.ticket_id = t.id
           JOIN users u ON n.user_id = u.id
+          LEFT JOIN employees e ON e.user_id = u.id
           WHERE n.email_sent = 0
           ORDER BY n.created_at ASC
           LIMIT 50";

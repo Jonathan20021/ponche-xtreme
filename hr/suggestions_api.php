@@ -3,6 +3,11 @@ session_start();
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../lib/logging_functions.php';
 
+// Este endpoint está escrito en mysqli ($conn->prepare/bind_param/get_result),
+// pero db.php provee PDO ($pdo). getMysqli() da una conexión mysqli con las
+// mismas credenciales. Sin esto, $conn era null -> fatal "prepare() on null".
+$conn = getMysqli();
+
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {
@@ -44,7 +49,7 @@ switch ($action) {
         break;
         
     case 'get_suggestions':
-        $query = "SELECT s.*, u.full_name as user_name, u.email as user_email,
+        $query = "SELECT s.*, u.full_name as user_name, '' as user_email,
                   r.full_name as reviewed_by_name
                   FROM helpdesk_suggestions s
                   LEFT JOIN users u ON s.user_id = u.id
@@ -110,7 +115,7 @@ switch ($action) {
     case 'get_suggestion':
         $suggestionId = intval($_GET['suggestion_id']);
         
-        $query = "SELECT s.*, u.full_name as user_name, u.email as user_email,
+        $query = "SELECT s.*, u.full_name as user_name, '' as user_email,
                   r.full_name as reviewed_by_name
                   FROM helpdesk_suggestions s
                   LEFT JOIN users u ON s.user_id = u.id

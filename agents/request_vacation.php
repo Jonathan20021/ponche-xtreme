@@ -28,8 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vacation'])) {
     $endDate = $_POST['end_date'];
     $days = (int)$_POST['days_requested'];
     $reason = trim($_POST['reason']);
-    
-    if ($days < 1) {
+
+    if (empty($startDate) || empty($endDate)) {
+        $errorMsg = "Debes indicar la fecha de inicio y de fin.";
+    } elseif ($endDate < $startDate) {
+        $errorMsg = "La fecha de fin no puede ser anterior a la de inicio.";
+    } elseif ($days < 1) {
         $errorMsg = "Debes solicitar al menos 1 día de vacaciones.";
     } else {
         try {
@@ -47,128 +51,120 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vacation'])) {
 
 // Get pending requests
 $requestsStmt = $pdo->prepare("
-    SELECT * FROM vacation_requests 
-    WHERE employee_id = ? 
-    ORDER BY created_at DESC 
+    SELECT * FROM vacation_requests
+    WHERE employee_id = ?
+    ORDER BY created_at DESC
     LIMIT 10
 ");
 $requestsStmt->execute([$employeeId]);
 $requests = $requestsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 include '../header_agent.php';
+
+$statusLabels = ['PENDING' => 'Pendiente', 'APPROVED' => 'Aprobada', 'REJECTED' => 'Rechazada'];
 ?>
 
-<div class="max-w-4xl mx-auto px-4 py-8">
-    <div class="glass-card mb-6">
-        <div class="flex items-center gap-3 mb-6">
-            <div class="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <i class="fas fa-umbrella-beach text-purple-400 text-xl"></i>
-            </div>
-            <div>
-                <h1 class="text-2xl font-bold">Solicitar Vacaciones</h1>
-                <p class="text-slate-400 text-sm">Envía una solicitud de vacaciones a Recursos Humanos</p>
-            </div>
+<div class="agent-dashboard">
+    <div class="ag-pagehead">
+        <div>
+            <h1><i class="fas fa-umbrella-beach" style="color:var(--ag-brand);"></i> Solicitar Vacaciones</h1>
+            <p>Envía una solicitud de vacaciones a Recursos Humanos y da seguimiento a su estado.</p>
         </div>
-
-        <?php if ($successMsg): ?>
-            <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-6">
-                <p class="text-green-300"><i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($successMsg) ?></p>
-            </div>
-        <?php endif; ?>
-
-        <?php if ($errorMsg): ?>
-            <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
-                <p class="text-red-300"><i class="fas fa-exclamation-circle mr-2"></i><?= htmlspecialchars($errorMsg) ?></p>
-            </div>
-        <?php endif; ?>
-
-        <form method="POST" class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Fecha Inicio *</label>
-                    <input type="date" name="start_date" required class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Fecha Fin *</label>
-                    <input type="date" name="end_date" required class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
-                </div>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-2">Días Solicitados *</label>
-                <input type="number" name="days_requested" min="1" required class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Número de días">
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-2">Motivo (Opcional)</label>
-                <textarea name="reason" rows="4" class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Describe el motivo de tus vacaciones..."></textarea>
-            </div>
-
-            <div class="flex gap-3">
-                <button type="submit" name="submit_vacation" class="flex-1 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
-                    <i class="fas fa-paper-plane mr-2"></i>
-                    Enviar Solicitud
-                </button>
-                <a href="../agent_dashboard.php" class="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors">
-                    <i class="fas fa-arrow-left mr-2"></i>
-                    Volver
-                </a>
-            </div>
-        </form>
-    </div>
-
-    <?php if (!empty($requests)): ?>
-    <div class="glass-card">
-        <h2 class="text-xl font-bold mb-4">Mis Solicitudes de Vacaciones</h2>
-        <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b border-slate-700">
-                        <th class="text-left py-3 px-4">Días</th>
-                        <th class="text-left py-3 px-4">Fechas</th>
-                        <th class="text-left py-3 px-4">Motivo</th>
-                        <th class="text-center py-3 px-4">Estado</th>
-                        <th class="text-left py-3 px-4">Solicitado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($requests as $req): ?>
-                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
-                            <td class="py-3 px-4">
-                                <span class="px-3 py-1 rounded-full text-sm font-bold bg-purple-500/20 text-purple-300">
-                                    <?= htmlspecialchars($req['days_requested']) ?> días
-                                </span>
-                            </td>
-                            <td class="py-3 px-4 text-sm">
-                                <?= htmlspecialchars(date('d/m/Y', strtotime($req['start_date']))) ?> - 
-                                <?= htmlspecialchars(date('d/m/Y', strtotime($req['end_date']))) ?>
-                            </td>
-                            <td class="py-3 px-4 text-sm text-slate-400">
-                                <?= $req['reason'] ? htmlspecialchars(substr($req['reason'], 0, 50)) . (strlen($req['reason']) > 50 ? '...' : '') : 'Sin motivo especificado' ?>
-                            </td>
-                            <td class="py-3 px-4 text-center">
-                                <?php
-                                $statusColors = [
-                                    'PENDING' => 'bg-yellow-500/20 text-yellow-300',
-                                    'APPROVED' => 'bg-green-500/20 text-green-300',
-                                    'REJECTED' => 'bg-red-500/20 text-red-300'
-                                ];
-                                $statusColor = $statusColors[$req['status']] ?? 'bg-gray-500/20 text-gray-300';
-                                ?>
-                                <span class="px-3 py-1 rounded-full text-xs font-semibold <?= $statusColor ?>">
-                                    <?= htmlspecialchars($req['status']) ?>
-                                </span>
-                            </td>
-                            <td class="py-3 px-4 text-sm text-slate-400">
-                                <?= htmlspecialchars(date('d/m/Y H:i', strtotime($req['created_at']))) ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+        <div class="ag-head-actions">
+            <a href="../agent_dashboard.php" class="ag-chip" style="text-decoration:none;"><i class="fas fa-arrow-left"></i> Volver al panel</a>
         </div>
     </div>
+
+    <?php if ($successMsg): ?>
+        <div class="ag-alert ok"><i class="fas fa-circle-check"></i> <?= htmlspecialchars($successMsg) ?></div>
     <?php endif; ?>
+    <?php if ($errorMsg): ?>
+        <div class="ag-alert err"><i class="fas fa-circle-exclamation"></i> <?= htmlspecialchars($errorMsg) ?></div>
+    <?php endif; ?>
+
+    <div class="ag-req-layout">
+        <!-- Formulario -->
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head"><div class="ttl"><i class="fas fa-paper-plane"></i> Nueva solicitud</div></div>
+            <form method="POST" autocomplete="off">
+                <div class="ag-row2">
+                    <div class="ag-field">
+                        <label for="start_date">Fecha inicio <span class="req">*</span></label>
+                        <input type="date" name="start_date" id="start_date" required>
+                    </div>
+                    <div class="ag-field">
+                        <label for="end_date">Fecha fin <span class="req">*</span></label>
+                        <input type="date" name="end_date" id="end_date" required>
+                    </div>
+                </div>
+                <div class="ag-field">
+                    <label for="days_requested">Días solicitados <span class="req">*</span></label>
+                    <input type="number" name="days_requested" id="days_requested" min="1" required placeholder="Número de días">
+                    <div class="hint">Se calcula automáticamente al elegir las fechas; puedes ajustarlo si excluyes fines de semana.</div>
+                </div>
+                <div class="ag-field">
+                    <label for="reason">Motivo <span style="color:var(--ag-faint); font-weight:600;">(opcional)</span></label>
+                    <textarea name="reason" id="reason" rows="4" placeholder="Describe el motivo de tus vacaciones…"></textarea>
+                </div>
+                <div class="ag-form-actions">
+                    <button type="submit" name="submit_vacation" class="ag-btn ag-btn-primary"><i class="fas fa-paper-plane"></i> Enviar solicitud</button>
+                    <a href="../agent_dashboard.php" class="ag-btn ag-btn-ghost"><i class="fas fa-xmark"></i> Cancelar</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Historial -->
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head">
+                <div class="ttl"><i class="fas fa-clock-rotate-left"></i> Mis solicitudes</div>
+                <?php if (!empty($requests)): ?><span class="ag-chip"><?= count($requests) ?> recientes</span><?php endif; ?>
+            </div>
+            <?php if (empty($requests)): ?>
+                <div class="ag-empty-state"><i class="fas fa-umbrella-beach"></i><p>Aún no has enviado solicitudes de vacaciones.</p></div>
+            <?php else: ?>
+                <div style="overflow-x:auto;">
+                    <table class="ag-table">
+                        <thead>
+                            <tr><th>Días</th><th>Fechas</th><th>Motivo</th><th style="text-align:center;">Estado</th><th style="text-align:right;">Solicitado</th></tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($requests as $req): ?>
+                            <?php $reason = (string) ($req['reason'] ?? ''); ?>
+                            <tr>
+                                <td><span class="ag-tag" style="background:var(--ag-brand-tint); color:var(--ag-brand);"><?= (int) $req['days_requested'] ?> días</span></td>
+                                <td class="ag-tsub"><?= htmlspecialchars(date('d/m/Y', strtotime($req['start_date']))) ?> – <?= htmlspecialchars(date('d/m/Y', strtotime($req['end_date']))) ?></td>
+                                <td class="ag-tsub" title="<?= htmlspecialchars($reason) ?>"><?= $reason !== '' ? htmlspecialchars(mb_substr($reason, 0, 46)) . (mb_strlen($reason) > 46 ? '…' : '') : '<span style="opacity:.6;">Sin motivo</span>' ?></td>
+                                <td style="text-align:center;"><span class="ag-status <?= htmlspecialchars($req['status']) ?>"><?= htmlspecialchars($statusLabels[$req['status']] ?? $req['status']) ?></span></td>
+                                <td style="text-align:right;" class="ag-tsub"><?= htmlspecialchars(date('d/m/Y H:i', strtotime($req['created_at']))) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
 </div>
+
+<script>
+// Auto-calcular días al elegir fechas (el usuario puede sobreescribir).
+(function () {
+    var s = document.getElementById('start_date'),
+        e = document.getElementById('end_date'),
+        d = document.getElementById('days_requested');
+    if (!s || !e || !d) { return; }
+    var userTouched = false;
+    d.addEventListener('input', function () { userTouched = true; });
+    function calc() {
+        if (!s.value || !e.value) { return; }
+        var a = new Date(s.value + 'T00:00:00'), b = new Date(e.value + 'T00:00:00');
+        if (isNaN(a) || isNaN(b) || b < a) { return; }
+        var days = Math.round((b - a) / 86400000) + 1;
+        if (!userTouched || d.value === '' || parseInt(d.value, 10) < 1) { d.value = days; }
+    }
+    s.addEventListener('change', calc);
+    e.addEventListener('change', calc);
+})();
+</script>
 
 <?php include '../footer.php'; ?>

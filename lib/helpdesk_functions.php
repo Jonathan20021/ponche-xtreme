@@ -78,12 +78,14 @@ function createTicket($userId, $categoryId, $subject, $description, $priority = 
     $stmt->execute();
     $result = $stmt->get_result();
     $category = $result->fetch_assoc();
-    
+    if (!$category) { $category = ['sla_response_hours' => 24, 'sla_resolution_hours' => 72]; }
+
     $responseDeadline = date('Y-m-d H:i:s', strtotime("+{$category['sla_response_hours']} hours"));
     $resolutionDeadline = date('Y-m-d H:i:s', strtotime("+{$category['sla_resolution_hours']} hours"));
-    
-    // AI Analysis
-    $aiAnalysis = analyzeTicketWithAI($subject, $description);
+
+    // Análisis con IA (best-effort: una falla de la API no debe impedir crear el ticket)
+    $aiAnalysis = null;
+    try { $aiAnalysis = analyzeTicketWithAI($subject, $description); } catch (Throwable $e) { $aiAnalysis = null; }
     $aiAnalysisJson = json_encode($aiAnalysis);
     
     $query = "INSERT INTO helpdesk_tickets 
@@ -97,20 +99,14 @@ function createTicket($userId, $categoryId, $subject, $description, $priority = 
     
     if ($stmt->execute()) {
         $ticketId = $conn->insert_id;
-        
-        // Log AI interaction
-        logAIInteraction($ticketId, 'analysis', 
-            "Analyze ticket: $subject", 
-            json_encode($aiAnalysis));
-        
-        // Create notification for admins/HR
-        notifyTicketCreated($ticketId, $userId);
-        
-        // Send email notification
-        sendTicketCreatedEmail($ticketId);
-        
-        logActivity($userId, 'ticket_created', "Created ticket #$ticketNumber");
-        
+
+        // Efectos secundarios best-effort: ninguna falla (IA, notificación, correo,
+        // log) debe romper la creación del ticket ni devolver error al agente.
+        try { logAIInteraction($ticketId, 'analysis', "Analyze ticket: $subject", json_encode($aiAnalysis)); } catch (Throwable $e) {}
+        try { notifyTicketCreated($ticketId, $userId); } catch (Throwable $e) {}
+        try { sendTicketCreatedEmail($ticketId); } catch (Throwable $e) {}
+        try { logActivity($userId, 'ticket_created', "Created ticket #$ticketNumber"); } catch (Throwable $e) {}
+
         return ['success' => true, 'ticket_id' => $ticketId, 'ticket_number' => $ticketNumber];
     }
     
@@ -297,11 +293,10 @@ function addTicketComment($ticketId, $userId, $comment, $isInternal = false) {
         $stmt->bind_param("i", $ticketId);
         $stmt->execute();
         
-        // Notify ticket creator
-        notifyCommentAdded($ticketId, $userId, $commentId);
-        
-        logActivity($userId, 'ticket_comment_added', "Added comment to ticket #$ticketId");
-        
+        // Efectos secundarios best-effort (no deben romper el comentario)
+        try { notifyCommentAdded($ticketId, $userId, $commentId); } catch (Throwable $e) {}
+        try { logActivity($userId, 'ticket_comment_added', "Added comment to ticket #$ticketId"); } catch (Throwable $e) {}
+
         return ['success' => true, 'comment_id' => $commentId];
     }
     
@@ -411,9 +406,11 @@ function createNotification($ticketId, $userId, $type, $title, $message) {
 function sendTicketCreatedEmail($ticketId) {
     global $conn;
     
-    $query = "SELECT t.*, u.email, u.full_name, c.name as category_name
+    // El email vive en la tabla employees (users no tiene columna email).
+    $query = "SELECT t.*, e.email, u.full_name, c.name as category_name
               FROM helpdesk_tickets t
               JOIN users u ON t.user_id = u.id
+              LEFT JOIN employees e ON e.user_id = u.id
               JOIN helpdesk_categories c ON t.category_id = c.id
               WHERE t.id = ?";
     $stmt = $conn->prepare($query);
@@ -421,7 +418,9 @@ function sendTicketCreatedEmail($ticketId) {
     $stmt->execute();
     $result = $stmt->get_result();
     $ticket = $result->fetch_assoc();
-    
+
+    if (empty($ticket['email'])) { return false; } // sin email no hay nada que enviar
+
     $subject = "Ticket Created: {$ticket['ticket_number']}";
     $body = "
         <h2>Your Support Ticket Has Been Created</h2>
@@ -445,9 +444,11 @@ function sendTicketCreatedEmail($ticketId) {
 function sendTicketAssignedEmail($ticketId, $assignedTo) {
     global $conn;
     
-    $query = "SELECT t.*, u.email, u.full_name, c.name as category_name
+    // El email vive en la tabla employees (users no tiene columna email).
+    $query = "SELECT t.*, e.email, u.full_name, c.name as category_name
               FROM helpdesk_tickets t
               JOIN users u ON u.id = ?
+              LEFT JOIN employees e ON e.user_id = u.id
               JOIN helpdesk_categories c ON t.category_id = c.id
               WHERE t.id = ?";
     $stmt = $conn->prepare($query);
@@ -455,7 +456,9 @@ function sendTicketAssignedEmail($ticketId, $assignedTo) {
     $stmt->execute();
     $result = $stmt->get_result();
     $ticket = $result->fetch_assoc();
-    
+
+    if (empty($ticket['email'])) { return false; } // sin email no hay nada que enviar
+
     $subject = "Ticket Assigned: {$ticket['ticket_number']}";
     $body = "
         <h2>New Ticket Assignment</h2>

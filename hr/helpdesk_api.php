@@ -8,7 +8,12 @@ ob_start();
 try {
     session_start();
     require_once __DIR__ . '/../db.php';
-    
+
+    // helpdesk_functions.php usa `global $conn` (mysqli). db.php provee PDO ($pdo);
+    // getMysqli() da la conexión mysqli con las mismas credenciales. Sin esto,
+    // $conn era null -> fatal "prepare() on null" -> HTTP 500 vacío.
+    $conn = getMysqli();
+
     // Limpiar cualquier salida previa
     ob_clean();
     
@@ -171,7 +176,7 @@ switch ($action) {
             $ticket = $result->fetch_assoc();
             
             // Get comments
-            $query = "SELECT c.*, u.full_name as user_name, u.email as user_email
+            $query = "SELECT c.*, u.full_name as user_name, '' as user_email
                       FROM helpdesk_comments c
                       JOIN users u ON c.user_id = u.id
                       WHERE c.ticket_id = ?";

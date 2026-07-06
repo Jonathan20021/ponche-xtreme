@@ -16,6 +16,7 @@
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/claude_api_client.php';
+require_once __DIR__ . '/vicidial_report_source.php';
 
 if (!function_exists('getTardinessReportSettings')) {
     function getTardinessReportSettings(PDO $pdo): array
@@ -89,37 +90,24 @@ if (!function_exists('generateDailyTardinessReport')) {
         $tolerance = max(0, (int) ($settings['tardiness_report_tolerance_minutes'] ?? 10));
         $toleranceSeconds = $tolerance * 60;
 
-        // --- Step 1: fetch today's first ENTRY per user ---
-        $stmt = $pdo->prepare("
-            SELECT
-                a.user_id,
-                MIN(a.timestamp) AS first_entry,
-                u.username,
-                u.full_name,
-                e.first_name,
-                e.last_name,
-                e.employee_code,
-                d.name AS department_name
-            FROM attendance a
-            INNER JOIN users u      ON u.id = a.user_id
-            LEFT JOIN employees e   ON e.user_id = u.id
-            LEFT JOIN departments d ON d.id = e.department_id
-            WHERE DATE(a.timestamp) = ?
-              AND UPPER(a.type) = 'ENTRY'
-            GROUP BY a.user_id, u.username, u.full_name, e.first_name, e.last_name, e.employee_code, d.name
-            ORDER BY u.full_name
-        ");
-        $stmt->execute([$date]);
-        $entries = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // --- Step 1: fetch today's arrivals (Vicidial-aware) ---
+        // Para agentes payroll_source='vicidial' la hora de llegada es el login de
+        // Vicidial (automático e inmutable); para el resto — y como respaldo si un
+        // agente Vicidial no tiene login ese día — el primer ENTRY del ponche.
+        $useVicidial = reportsVicidialSourceEnabled($pdo);
+        $entries = buildArrivalsForRange($pdo, $date, $date, $useVicidial);
 
-        $totalEntries = count($entries);
-        $tardies      = [];
-        $onTime       = 0;
-        $byDepartment = [];
+        $totalEntries  = count($entries);
+        $tardies       = [];
+        $onTime        = 0;
+        $byDepartment  = [];
+        $vicidialCount = 0;
 
         foreach ($entries as $row) {
             $uid = (int) $row['user_id'];
-            $firstEntry = $row['first_entry'];
+            $firstEntry = $row['arrival'];
+            $source = $row['source'] ?? 'ponche';
+            if ($source === 'vicidial') { $vicidialCount++; }
             $fullName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
             if ($fullName === '') $fullName = $row['full_name'] ?: $row['username'];
             $dept = $row['department_name'] ?? 'Sin departamento';
@@ -154,6 +142,7 @@ if (!function_exists('generateDailyTardinessReport')) {
                     'scheduled_entry' => $scheduledEntry,
                     'actual_entry'    => $firstEntry,
                     'late_minutes'    => $lateMinutes,
+                    'source'          => $source,
                 ];
                 if (!isset($byDepartment[$dept])) {
                     $byDepartment[$dept] = ['name' => $dept, 'count' => 0, 'total_minutes' => 0];
@@ -178,7 +167,7 @@ if (!function_exists('generateDailyTardinessReport')) {
 
         // --- Step 2: month-to-date rate + recurring offenders ---
         $monthStart = date('Y-m-01', strtotime($date));
-        $monthStats = computeMonthTardinessStats($pdo, $monthStart, $date, $tolerance);
+        $monthStats = computeMonthTardinessStats($pdo, $monthStart, $date, $tolerance, $useVicidial);
 
         return [
             'date'              => $date,
@@ -194,6 +183,8 @@ if (!function_exists('generateDailyTardinessReport')) {
                 'month_late_entries'  => $monthStats['late_entries'],
                 'month_total_entries' => $monthStats['total_entries'],
                 'month_start'         => $monthStart,
+                'vicidial_enabled'    => $useVicidial,
+                'vicidial_arrivals'   => $vicidialCount,
             ],
             'tardies'           => $tardies,
             'by_department'     => $byDepartment,
@@ -211,27 +202,12 @@ if (!function_exists('computeMonthTardinessStats')) {
      * there's no employee_schedule — this matches the behavior of dashboard.php but
      * respects custom schedules via a fallback check.
      */
-    function computeMonthTardinessStats(PDO $pdo, string $startDate, string $endDate, int $toleranceMinutes): array
+    function computeMonthTardinessStats(PDO $pdo, string $startDate, string $endDate, int $toleranceMinutes, bool $useVicidial = false): array
     {
         $toleranceSeconds = max(0, $toleranceMinutes) * 60;
 
-        // Fetch all first-ENTRY per user-day within the month
-        $stmt = $pdo->prepare("
-            SELECT
-                a.user_id,
-                DATE(a.timestamp) AS work_date,
-                MIN(a.timestamp) AS first_entry,
-                u.username,
-                u.full_name
-            FROM attendance a
-            INNER JOIN users u ON u.id = a.user_id
-            WHERE DATE(a.timestamp) BETWEEN ? AND ?
-              AND UPPER(a.type) = 'ENTRY'
-            GROUP BY a.user_id, DATE(a.timestamp), u.username, u.full_name
-            ORDER BY a.user_id, work_date
-        ");
-        $stmt->execute([$startDate, $endDate]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        // Llegadas del mes (Vicidial-aware, misma fuente que el día para consistencia)
+        $rows = buildArrivalsForRange($pdo, $startDate, $endDate, $useVicidial);
 
         $total = count($rows);
         $late  = 0;
@@ -250,7 +226,7 @@ if (!function_exists('computeMonthTardinessStats')) {
             if (!$scheduledEntry) continue;
 
             $scheduledTs = strtotime($row['work_date'] . ' ' . $scheduledEntry);
-            $actualTs    = strtotime($row['first_entry']);
+            $actualTs    = strtotime($row['arrival']);
             if ($scheduledTs === false || $actualTs === false) continue;
 
             if (($actualTs - $scheduledTs) > $toleranceSeconds) {
@@ -258,8 +234,8 @@ if (!function_exists('computeMonthTardinessStats')) {
                 if (!isset($offenderCounts[$uid])) {
                     $offenderCounts[$uid] = [
                         'user_id'   => $uid,
-                        'username'  => $row['username'],
-                        'full_name' => $row['full_name'],
+                        'username'  => $row['username'] ?? '',
+                        'full_name' => ($row['full_name'] ?: trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''))),
                         'count'     => 0,
                     ];
                 }
@@ -308,6 +284,7 @@ if (!function_exists('generateAITardinessSummary')) {
                 'horario_prog'   => $t['scheduled_entry'],
                 'entrada_real'   => date('H:i:s', strtotime($t['actual_entry'])),
                 'minutos_tarde'  => $t['late_minutes'],
+                'fuente'         => $t['source'] ?? 'ponche',
             ], $reportData['tardies']),
             'por_departamento' => $reportData['by_department'],
             'recurrentes_mes'  => $reportData['recurring'],
@@ -344,6 +321,13 @@ if (!function_exists('generateTardinessReportHTML')) {
         $byDept     = $reportData['by_department'];
         $recurring  = $reportData['recurring'];
 
+        // Nota de fuente: solo si Vicidial está activo y aportó llegadas hoy.
+        $srcNote = '';
+        if (!empty($totals['vicidial_enabled']) && (int) ($totals['vicidial_arrivals'] ?? 0) > 0) {
+            $vc = (int) $totals['vicidial_arrivals'];
+            $srcNote = "<div class='src-note'>Para agentes de discador, la hora de llegada proviene del <strong>login de Vicidial</strong> (automático e inmutable); el resto usa el ponche. Hoy <strong>{$vc}</strong> llegada(s) se evaluaron con Vicidial.</div>";
+        }
+
         $aiBlock = '';
         if (trim($aiSummary) !== '') {
             $safe = nl2br(htmlspecialchars($aiSummary), false);
@@ -379,11 +363,15 @@ if (!function_exists('generateTardinessReportHTML')) {
                     $sevLabel = 'Leve';
                 }
 
+                $srcBadge = (($t['source'] ?? 'ponche') === 'vicidial')
+                    ? "<span class='src src-vici' title='Hora del login de Vicidial (automatica)'>Vicidial</span>"
+                    : "<span class='src src-pon' title='Hora del ponche'>Ponche</span>";
+
                 $tardyRows .= "<tr>"
                     . "<td><strong>{$name}</strong><br><span class='muted'>{$code}</span></td>"
                     . "<td>{$dept}</td>"
                     . "<td class='num'>{$scheduled}</td>"
-                    . "<td class='num'>{$actual}</td>"
+                    . "<td class='num'>{$actual}<br>{$srcBadge}</td>"
                     . "<td class='num'><strong>+{$minutes} min</strong></td>"
                     . "<td><span class='badge {$sev}'>{$sevLabel}</span></td>"
                     . "</tr>";
@@ -479,6 +467,10 @@ if (!function_exists('generateTardinessReportHTML')) {
   .badge-danger   { background: #ef4444; }
   .badge-warning  { background: #f59e0b; }
   .badge-light    { background: #fcd34d; color: #78350f; }
+  .src { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .3px; margin-top: 4px; }
+  .src-vici { background: #e0f2fe; color: #075985; }
+  .src-pon  { background: #f1f5f9; color: #475569; }
+  .src-note { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; color: #1e3a8a; padding: 12px 16px; border-radius: 8px; margin: 0 0 18px 0; font-size: 13px; }
   .success-card { background: #d1fae5; border: 1px solid #6ee7b7; border-radius: 8px; padding: 24px; text-align: center; color: #065f46; }
   .footer { text-align: center; padding: 18px; color: #777; font-size: 12px; margin-top: 20px; }
 </style>
@@ -512,6 +504,7 @@ if (!function_exists('generateTardinessReportHTML')) {
     </div>
   </div>
 
+  {$srcNote}
   {$aiBlock}
   {$successBlock}
 

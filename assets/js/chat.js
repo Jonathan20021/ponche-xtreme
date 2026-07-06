@@ -175,7 +175,7 @@ class ChatApp {
                 
                 <div id="messagesView" class="chat-messages-view">
                     <div class="chat-messages-header">
-                        <button class="chat-back-btn" id="backToConversations">
+                        <button class="chat-back-btn" id="backToConversations" type="button" title="Volver" aria-label="Volver a conversaciones">
                             <i class="fas fa-arrow-left"></i>
                         </button>
                         <div class="chat-avatar" id="currentChatAvatar"></div>
@@ -183,7 +183,7 @@ class ChatApp {
                             <div class="chat-conversation-name" id="currentChatName"></div>
                             <div class="chat-conversation-type" id="currentChatType" style="font-size: 11px; color: #94a3b8;"></div>
                         </div>
-                        <button class="chat-input-btn" id="groupOptionsBtn" style="display: none;" title="Opciones del grupo">
+                        <button class="chat-input-btn" id="groupOptionsBtn" type="button" style="display: none;" title="Opciones del grupo" aria-label="Opciones del grupo">
                             <i class="fas fa-cog"></i>
                         </button>
                     </div>
@@ -231,7 +231,7 @@ class ChatApp {
                 <div class="chat-modal-content">
                     <div class="chat-modal-header">
                         <h3 class="chat-modal-title">Nueva Conversación</h3>
-                        <button class="chat-modal-close" id="closeModalBtn">
+                        <button class="chat-modal-close" id="closeModalBtn" type="button" title="Cerrar" aria-label="Cerrar">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -270,7 +270,7 @@ class ChatApp {
                 <div class="chat-modal-content">
                     <div class="chat-modal-header">
                         <h3 class="chat-modal-title">Agregar Miembro</h3>
-                        <button class="chat-modal-close" id="closeAddMemberModalBtn">
+                        <button class="chat-modal-close" id="closeAddMemberModalBtn" type="button" title="Cerrar" aria-label="Cerrar">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>

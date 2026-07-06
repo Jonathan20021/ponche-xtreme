@@ -15,7 +15,7 @@ require_once 'lib/authorization_functions.php';
 require_once 'lib/vicidial_api_client.php';
 require_once 'lib/work_hours_calculator.php';
 
-ensurePermission('vicidial_reports');
+ensurePermission('vicidial_sync');
 
 date_default_timezone_set('America/Santo_Domingo');
 
@@ -71,6 +71,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errMsgs[] = 'Conexión falló: ' . ($t['error'] ?? 'desconocido');
         }
         $redirTab = 'status';
+    } elseif ($action === 'save_payroll_source') {
+        // Activa/desactiva el pago DESDE Vicidial por agente (users.payroll_source).
+        // Es lo que hace que la nómina use las horas Vicidial de ese empleado.
+        $uid = (int) ($_POST['user_id'] ?? 0);
+        $src = ($_POST['payroll_source'] ?? 'manual') === 'vicidial' ? 'vicidial' : 'manual';
+        if ($uid > 0) {
+            try {
+                $pdo->prepare("UPDATE users SET payroll_source = ? WHERE id = ?")->execute([$src, $uid]);
+                $okMsgs[] = 'Fuente de pago actualizada a ' . ($src === 'vicidial' ? 'VICIDIAL' : 'Ponche') . '.';
+            } catch (PDOException $e) {
+                $errMsgs[] = 'Error al actualizar la fuente de pago.';
+            }
+        }
+        $redirTab = 'payroll';
+    } elseif ($action === 'bulk_payroll_source') {
+        // Política masiva: todos los AGENTES de call (rol AGENT, mapeados y no
+        // ignorados) pagan por Vicidial; el resto (administrativos) por ponche.
+        // Solo toca agentes MAPEADOS (con datos) para que ninguno cobre 0.
+        $mode = $_POST['bulk_mode'] ?? '';
+        try {
+            if ($mode === 'agents_vicidial') {
+                $pdo->exec("UPDATE users u JOIN vicidial_user_map m ON m.user_id = u.id AND m.ignore_agent = 0 SET u.payroll_source = 'vicidial' WHERE UPPER(u.role) = 'AGENT'");
+                $n = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE payroll_source = 'vicidial'")->fetchColumn();
+                $okMsgs[] = "Aplicado: $n agente(s) de call pagan por Vicidial. Los administrativos siguen por ponche.";
+            } elseif ($mode === 'all_manual') {
+                $pdo->exec("UPDATE users SET payroll_source = 'manual'");
+                $okMsgs[] = 'Revertido: TODOS pagan por ponche manual (la nómina no cambia).';
+            }
+        } catch (PDOException $e) {
+            $errMsgs[] = 'Error al aplicar la política masiva.';
+        }
+        $redirTab = 'payroll';
     }
 
     $_SESSION['vsync_flash'] = ['ok' => $okMsgs, 'err' => $errMsgs];
@@ -284,6 +316,37 @@ if ($tab === 'status') {
     ")->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
 
+// Datos para la pestaña de Nómina (control por-agente + semáforo de match)
+$payrollRows = [];
+$refStart = $refEnd = null;
+if ($tab === 'payroll') {
+    require_once __DIR__ . '/lib/work_hours_calculator.php';
+    $refEnd = $date;
+    $refStart = date('Y-m-d', strtotime($date . ' -13 days')); // 2 semanas de referencia
+    $paidSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', getPaidAttendanceTypeSlugs($pdo))));
+    $agents = $pdo->query("
+        SELECT u.id, u.full_name, u.role, COALESCE(u.payroll_source, 'manual') AS payroll_source
+        FROM vicidial_user_map m
+        JOIN users u ON u.id = m.user_id
+        WHERE m.user_id IS NOT NULL AND m.ignore_agent = 0
+        ORDER BY u.full_name
+    ")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    foreach ($agents as $a) {
+        $st = $pdo->prepare("SELECT id, type, timestamp, DATE(timestamp) work_date FROM attendance WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ? ORDER BY timestamp");
+        $st->execute([$a['id'], $refStart, $refEnd]);
+        $md = calculateDailyWorkSecondsFromPunchRows($st->fetchAll(PDO::FETCH_ASSOC), $paidSlugs);
+        $ponche = array_sum($md);
+        $vd = vicidialGetPaidSecondsByDate($pdo, (int) $a['id'], $refStart, $refEnd);
+        $vici = array_sum($vd['by_date']);
+        $ratio = $ponche > 0 ? (int) round(100 * $vici / $ponche) : ($vici > 0 ? 999 : 0);
+        $payrollRows[] = [
+            'id' => (int) $a['id'], 'full_name' => $a['full_name'], 'role' => $a['role'],
+            'source' => $a['payroll_source'], 'ponche' => $ponche, 'vici' => $vici, 'ratio' => $ratio,
+        ];
+    }
+    usort($payrollRows, static fn($x, $y) => $y['ratio'] <=> $x['ratio']);
+}
+
 $avgEntryDelta = !empty($kpi['entry_deltas']) ? (int) round(array_sum($kpi['entry_deltas']) / count($kpi['entry_deltas'])) : null;
 
 include 'header.php';
@@ -328,6 +391,7 @@ include 'header.php';
     $tabs = [
         'concile' => ['Conciliación', 'fa-scale-balanced'],
         'mapping' => ['Mapeo de Usuarios', 'fa-people-arrows'],
+        'payroll' => ['Nómina (pago Vicidial)', 'fa-hand-holding-dollar'],
         'status'  => ['Estado y Bitácora', 'fa-clock-rotate-left'],
     ];
     ?>
@@ -550,6 +614,100 @@ include 'header.php';
                 </table>
             </div>
         </div>
+
+    <?php elseif ($tab === 'payroll'): ?>
+        <!-- Control por-agente: activar pago desde Vicidial, guiado por el semáforo -->
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 mb-4">
+            <p class="text-slate-300 text-sm">
+                <i class="fas fa-circle-info text-indigo-400 mr-1"></i>
+                Activa el <strong>pago desde Vicidial</strong> por agente. El <strong>semáforo</strong> compara, en las 2
+                semanas de referencia (<?= htmlspecialchars((string) $refStart) ?> a <?= htmlspecialchars((string) $refEnd) ?>),
+                las horas pagables de Vicidial contra el ponche.
+                <span class="text-green-400">🟢 match alto</span> = el trabajo del agente vive en el discador → justo pagar
+                por Vicidial. <span class="text-red-400">🔴 bajo</span> = trabaja fuera del discador (WhatsApp/admin) →
+                <strong>déjalo en Ponche</strong> o le recortarías el sueldo injustamente.
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+            <form method="POST" onsubmit="return confirm('¿Poner a TODOS los agentes de call (rol AGENT, mapeados) a pagar por Vicidial? Los administrativos siguen por ponche. La nómina queda en CALCULADA hasta que la apruebes.');">
+                <input type="hidden" name="action" value="bulk_payroll_source">
+                <input type="hidden" name="bulk_mode" value="agents_vicidial">
+                <button type="submit" class="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white">
+                    <i class="fas fa-bolt"></i> Todos los agentes de call → Vicidial
+                </button>
+            </form>
+            <form method="POST" onsubmit="return confirm('¿Revertir TODOS a ponche manual? La nómina no cambiará nada.');">
+                <input type="hidden" name="action" value="bulk_payroll_source">
+                <input type="hidden" name="bulk_mode" value="all_manual">
+                <button type="submit" class="px-4 py-2 rounded-lg text-sm font-medium bg-slate-700/60 hover:bg-slate-600/60 text-slate-200">
+                    <i class="fas fa-rotate-left"></i> Revertir todos a ponche
+                </button>
+            </form>
+            <span class="text-xs text-slate-500">Administrativos (HR, IT, QA, Supervisor, Admin) nunca se tocan con estos botones.</span>
+        </div>
+        <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-900/50 text-slate-400 text-xs uppercase">
+                        <tr>
+                            <th class="text-left px-4 py-3">Agente</th>
+                            <th class="text-right px-3 py-3">Ponche (2 sem)</th>
+                            <th class="text-right px-3 py-3">Vicidial pagable</th>
+                            <th class="text-center px-3 py-3">Match</th>
+                            <th class="text-left px-3 py-3">Recomendación</th>
+                            <th class="text-left px-3 py-3">Paga por</th>
+                            <th class="text-right px-4 py-3">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700/50">
+                        <?php foreach ($payrollRows as $pr):
+                            $r = $pr['ratio'];
+                            if ($r === 999)      { $sem = ['⚪', 'text-slate-400', 'Sin ponche que comparar']; }
+                            elseif ($r >= 85)    { $sem = ['🟢', 'text-green-400', 'Vicidial justo']; }
+                            elseif ($r >= 65)    { $sem = ['🟡', 'text-amber-400', 'Revisar']; }
+                            else                 { $sem = ['🔴', 'text-red-400', 'Dejar en Ponche (trabaja fuera del discador)']; }
+                            $fh = static fn($s) => sprintf('%d:%02d', intdiv((int) $s, 3600), intdiv((int) $s % 3600, 60));
+                        ?>
+                            <tr class="hover:bg-slate-700/20">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="save_payroll_source">
+                                    <input type="hidden" name="user_id" value="<?= (int) $pr['id'] ?>">
+                                    <td class="px-4 py-3">
+                                        <div class="text-slate-100 font-medium"><?= htmlspecialchars($pr['full_name']) ?></div>
+                                        <div class="text-xs text-slate-500"><?= htmlspecialchars($pr['role'] ?: '') ?></div>
+                                    </td>
+                                    <td class="px-3 py-3 text-right text-slate-300"><?= $fh($pr['ponche']) ?></td>
+                                    <td class="px-3 py-3 text-right text-slate-200"><?= $fh($pr['vici']) ?></td>
+                                    <td class="px-3 py-3 text-center font-bold <?= $sem[1] ?>"><?= $r === 999 ? '—' : $r . '%' ?></td>
+                                    <td class="px-3 py-3 <?= $sem[1] ?> text-xs"><?= $sem[0] ?> <?= htmlspecialchars($sem[2]) ?></td>
+                                    <td class="px-3 py-3">
+                                        <select name="payroll_source" class="px-3 py-1.5 bg-slate-900/50 border border-slate-600 rounded-lg text-slate-200 text-sm">
+                                            <option value="manual" <?= $pr['source'] === 'manual' ? 'selected' : '' ?>>Ponche (manual)</option>
+                                            <option value="vicidial" <?= $pr['source'] === 'vicidial' ? 'selected' : '' ?>>Vicidial</option>
+                                        </select>
+                                    </td>
+                                    <td class="px-4 py-3 text-right">
+                                        <button type="submit" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium">
+                                            <i class="fas fa-save mr-1"></i>Guardar
+                                        </button>
+                                    </td>
+                                </form>
+                            </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($payrollRows)): ?>
+                            <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No hay agentes mapeados. Ve a la pestaña Mapeo primero.</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-3">
+            <i class="fas fa-shield-halved mr-1 text-green-500"></i>
+            Los que pongas en <strong>Vicidial</strong> cobrarán por sus horas pagables de Vicidial en la próxima nómina que
+            generes; el resto sigue por ponche. La nómina queda en <strong>CALCULADA</strong> hasta que la apruebes — nada se
+            paga solo. Ajusta los <strong>códigos pagados</strong> en
+            <a href="settings.php#vicidial-sync-config" class="text-indigo-300 underline">Configuración → Vicidial</a>.
+        </p>
 
     <?php elseif ($tab === 'status'): ?>
         <!-- Estado, importación manual y bitácora -->

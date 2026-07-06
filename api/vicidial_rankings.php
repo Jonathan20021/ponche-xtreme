@@ -2,6 +2,7 @@
 session_start();
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../lib/authorization_functions.php';
+require_once __DIR__ . '/../lib/vicidial_report_adapter.php';
 
 header('Content-Type: application/json');
 
@@ -39,34 +40,9 @@ try {
  */
 function calculateRankings($pdo, $startDate, $endDate, $campaign = '')
 {
-    $campaignFilter = $campaign ? "AND current_user_group = :campaign" : "";
-
-    $stmt = $pdo->prepare("
-        SELECT 
-            user_name,
-            user_id,
-            current_user_group,
-            SUM(calls) as total_calls,
-            SUM(time_total) as time_total,
-            SUM(talk_time) as talk_time,
-            SUM(dispo_time) as dispo_time,
-            SUM(dead_time) as dead_time,
-            SUM(sale + pedido + orden) as conversions,
-            SUM(nocal + silenc) as no_contact
-        FROM vicidial_login_stats
-        WHERE upload_date BETWEEN :start_date AND :end_date
-        $campaignFilter
-        GROUP BY user_name, user_id, current_user_group
-        HAVING total_calls >= 10
-    ");
-
-    $params = ['start_date' => $startDate, 'end_date' => $endDate];
-    if ($campaign) {
-        $params['campaign'] = $campaign;
-    }
-
-    $stmt->execute($params);
-    $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Fuente activa (sync automático o CSV) vía el adaptador. Solo agentes con >= 10 llamadas.
+    $rows = vicidialReportsAgentStats($pdo, $startDate, $endDate, $campaign);
+    $agents = array_values(array_filter($rows, static fn($r) => (int) ($r['total_calls'] ?? 0) >= 10));
 
     if (empty($agents)) {
         return [];
@@ -80,8 +56,8 @@ function calculateRankings($pdo, $startDate, $endDate, $campaign = '')
         $talk = (int) $agent['talk_time'];
         $dispo = (int) $agent['dispo_time'];
         $dead = (int) $agent['dead_time'];
-        $conversions = (int) $agent['conversions'];
-        $noContact = (int) $agent['no_contact'];
+        $conversions = (int) ($agent['sale'] ?? 0) + (int) ($agent['pedido'] ?? 0) + (int) ($agent['orden'] ?? 0);
+        $noContact = (int) ($agent['no_contact'] ?? 0);
 
         $conversionRate = $calls > 0 ? ($conversions / $calls) * 100 : 0;
         $occupancy = $time > 0 ? (($talk + $dispo + $dead) / $time) * 100 : 0;

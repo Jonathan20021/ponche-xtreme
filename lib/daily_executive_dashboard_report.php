@@ -17,6 +17,7 @@
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/claude_api_client.php';
+require_once __DIR__ . '/vicidial_report_source.php';
 
 if (!function_exists('getExecutiveDashboardReportSettings')) {
     function getExecutiveDashboardReportSettings(PDO $pdo): array
@@ -327,6 +328,13 @@ if (!function_exists('execDashBuildDailySnapshot')) {
         $stmt->execute([$date]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+        // Fuente Vicidial: para agentes payroll_source='vicidial' las horas pagadas
+        // vienen del desglose de Vicidial (NONPAUSE + pausas pagadas, mismo modelo
+        // que la nómina), no del ponche. Con respaldo a ponche si no hay dato.
+        $useVicidial = reportsVicidialSourceEnabled($pdo);
+        $vicMap = $useVicidial ? getVicidialTimesheetMap($pdo, $date, $date) : [];
+        $vicidialWorkers = 0;
+
         $employees   = [];
         $campaigns   = [];
         $departments = [];
@@ -345,7 +353,15 @@ if (!function_exists('execDashBuildDailySnapshot')) {
             $rate     = $currency === 'DOP' ? (float) $r['hourly_rate_dop'] : (float) $r['hourly_rate'];
             $status   = strtoupper((string) ($r['employment_status'] ?? ''));
 
-            $hours = execDashCalcDailyPaidHours($pdo, $userId, $date, $paidTypes);
+            $vts = ($useVicidial && isset($vicMap[$userId][$date])) ? $vicMap[$userId][$date] : null;
+            if ($vts !== null) {
+                $hours = $vts['paid_seconds'] / 3600;
+                $hoursSource = 'vicidial';
+                $vicidialWorkers++;
+            } else {
+                $hours = execDashCalcDailyPaidHours($pdo, $userId, $date, $paidTypes);
+                $hoursSource = 'ponche';
+            }
             $earnings = $hours * $rate;
 
             if (in_array($status, ['ACTIVE', 'TRIAL'], true)) {
@@ -419,6 +435,7 @@ if (!function_exists('execDashBuildDailySnapshot')) {
                 'rate'           => $rate,
                 'currency'       => $currency,
                 'earnings'       => round($earnings, 2),
+                'source'         => $hoursSource,
             ];
         }
 
@@ -436,6 +453,8 @@ if (!function_exists('execDashBuildDailySnapshot')) {
             ? round($totals['hours_total'] / $totals['worked_today'], 2) : 0;
         $totals['attendance_rate_pct'] = $totals['eligible'] > 0
             ? round(($totals['worked_today'] / $totals['eligible']) * 100, 1) : 0;
+        $totals['vicidial_workers'] = $vicidialWorkers;
+        $totals['vicidial_enabled'] = $useVicidial;
 
         // Sort campaigns by cost desc (USD-equivalent)
         $campaignList = array_values($campaigns);
@@ -566,6 +585,7 @@ if (!function_exists('generateAIExecutiveDashboardSummary')) {
                 'horas'     => $e['hours'],
                 'ingreso'   => $e['earnings'],
                 'moneda'    => $e['currency'],
+                'fuente'    => $e['source'] ?? 'ponche',
             ], $reportData['top_employees']), 0, 10),
         ];
 
@@ -603,6 +623,13 @@ if (!function_exists('generateExecutiveDashboardReportHTML')) {
         $attendance = $reportData['attendance'];
         $topEmps    = $reportData['top_employees'];
         $rate       = (float) $reportData['exchange_rate'];
+
+        // Nota de fuente Vicidial (si aplica)
+        $vicNote = '';
+        if (!empty($totals['vicidial_enabled']) && (int) ($totals['vicidial_workers'] ?? 0) > 0) {
+            $vw = (int) $totals['vicidial_workers'];
+            $vicNote = "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;color:#1e3a8a;padding:12px 16px;border-radius:8px;margin:18px 0;font-size:13px;'>Las horas pagadas y el costo de <strong>{$vw}</strong> agente(s) de discador provienen de <strong>Vicidial</strong> (NONPAUSE + pausas pagadas, igual que la nómina); el resto del personal usa el ponche.</div>";
+        }
 
         $aiBlock = '';
         if (trim($aiSummary) !== '') {
@@ -731,6 +758,7 @@ if (!function_exists('generateExecutiveDashboardReportHTML')) {
   {$statsRow1}
   {$statsRow2}
 
+  {$vicNote}
   {$aiBlock}
   {$emptyBlock}
 

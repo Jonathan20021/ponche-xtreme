@@ -6,6 +6,7 @@
  */
 
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/vicidial_report_source.php';
 
 /**
  * Obtiene todos los empleados activos que deberÃ­an trabajar hoy
@@ -132,25 +133,39 @@ function generateDailyAbsenceReport(PDO $pdo): array {
     $employees = getActiveEmployees($pdo);
     $absences = [];
     $withJustification = [];
-    
+
+    // Presencia Vicidial: para agentes payroll_source='vicidial', un login de
+    // Vicidial cuenta como PRESENTE aunque no hayan ponchado (evita falsas
+    // ausencias de agentes que trabajan en el discador sin marcar el ponche).
+    // Con respaldo: si no hay dato Vicidial, se usa el ponche de siempre.
+    $today = date('Y-m-d');
+    $useVicidial = reportsVicidialSourceEnabled($pdo);
+    $vicLoginMap = $useVicidial ? getVicidialLoginMap($pdo, $today, $today) : [];
+    $presentViaVicidialOnly = 0;
+
     foreach ($employees as $employee) {
         $userId = $employee['user_id'];
         $employeeId = $employee['id'];
-        
+
         // Si no tiene user_id, no puede ponchar
         if (!$userId) {
             continue;
         }
-        
-        // Verificar si ponchÃ³ hoy
-        $hasPunched = hasEmployeePunchedToday($pdo, $userId);
-        
-        if (!$hasPunched) {
+
+        // Presente si ponchÃ³ hoy O (agente Vicidial con login hoy)
+        $hasPunched  = hasEmployeePunchedToday($pdo, $userId);
+        $hasVicidial = isset($vicLoginMap[(int) $userId][$today]);
+        $isPresent   = $hasPunched || $hasVicidial;
+        if ($hasVicidial && !$hasPunched) {
+            $presentViaVicidialOnly++;
+        }
+
+        if (!$isPresent) {
             // Verificar justificaciones
             $permissions = getApprovedPermissionsForToday($pdo, $employeeId);
             $vacations = getApprovedVacationsForToday($pdo, $employeeId);
             $medicalLeaves = getActiveMedicalLeavesForToday($pdo, $employeeId);
-            
+
             $employeeData = [
                 'employee_code' => $employee['employee_code'] ?? 'N/A',
                 'full_name' => trim(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')),
@@ -162,7 +177,7 @@ function generateDailyAbsenceReport(PDO $pdo): array {
                 'medical_leaves' => $medicalLeaves,
                 'has_justification' => !empty($permissions) || !empty($vacations) || !empty($medicalLeaves)
             ];
-            
+
             if ($employeeData['has_justification']) {
                 $withJustification[] = $employeeData;
             } else {
@@ -170,7 +185,7 @@ function generateDailyAbsenceReport(PDO $pdo): array {
             }
         }
     }
-    
+
     return [
         'date' => date('Y-m-d'),
         'date_formatted' => date('l, F j, Y'),
@@ -178,6 +193,8 @@ function generateDailyAbsenceReport(PDO $pdo): array {
         'total_absences' => count($absences) + count($withJustification),
         'absences_without_justification' => $absences,
         'absences_with_justification' => $withJustification,
+        'vicidial_enabled' => $useVicidial,
+        'present_via_vicidial_only' => $presentViaVicidialOnly,
         'generated_at' => date('Y-m-d H:i:s')
     ];
 }
@@ -192,7 +209,17 @@ function generateReportHTML(array $reportData): string {
     $totalAbsences = $reportData['total_absences'];
     $absencesWithout = $reportData['absences_without_justification'];
     $absencesWith = $reportData['absences_with_justification'];
-    
+
+    // Nota de fuente: si Vicidial está activo, un login cuenta como presencia.
+    $vicNote = '';
+    if (!empty($reportData['vicidial_enabled'])) {
+        $pv = (int) ($reportData['present_via_vicidial_only'] ?? 0);
+        $extra = $pv > 0
+            ? " <strong>{$pv}</strong> agente(s) figuran presentes por su login de Vicidial aunque no ponchron."
+            : "";
+        $vicNote = "<div style='background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;color:#1e3a8a;padding:12px 16px;border-radius:8px;margin:0 0 20px 0;font-size:13px;'>Para agentes de discador, un <strong>login de Vicidial</strong> cuenta como presente (además del ponche).{$extra}</div>";
+    }
+
     // Professional HTML with tables
     $html = "<!DOCTYPE html>
 <html>
@@ -272,7 +299,8 @@ function generateReportHTML(array $reportData): string {
                 <div class='stat-label'>Justificadas</div>
                 <div class='stat-number'>" . count($absencesWith) . "</div>
             </div>
-        </div>";
+        </div>
+        {$vicNote}";
     
     // Ausencias sin justificación
     if (!empty($absencesWithout)) {

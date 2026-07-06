@@ -1,6 +1,6 @@
 <?php
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // no mostrar warnings PHP al agente (se siguen registrando)
 
 session_start();
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['AGENT', 'IT', 'Supervisor'], true)) {
@@ -51,6 +51,18 @@ $date_filter = $_GET['dates'] ?? date('Y-m-d');
 $start_date = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));
 $end_date = $_GET['end_date'] ?? date('Y-m-d');
 
+require_once __DIR__ . '/lib/vicidial_api_client.php';
+
+// Fuente de horas del agente (misma que la nómina): 'vicidial' o 'manual' (ponche).
+$payrollSource = 'manual';
+try {
+    $psStmt = $pdo->prepare("SELECT COALESCE(payroll_source, 'manual') FROM users WHERE id = ?");
+    $psStmt->execute([$user_id]);
+    $payrollSource = $psStmt->fetchColumn() ?: 'manual';
+} catch (Throwable $e) {
+    $payrollSource = 'manual';
+}
+
 $attendanceTypes = getAttendanceTypes($pdo, false);
 $attendanceTypeMap = [];
 $durationTypes = [];
@@ -76,49 +88,132 @@ $nonWorkSlugs = [
     sanitizeAttendanceTypeSlug('LUNCH'),
 ];
 
-$dailyStmt = $pdo->prepare('SELECT type, timestamp, TIME(timestamp) AS record_time
-    FROM attendance
-    WHERE user_id = ? AND DATE(timestamp) = ?
-    ORDER BY timestamp ASC');
-$dailyStmt->execute([$user_id, $date_filter]);
-$dailyRows = $dailyStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-$dailyEvents = [];
-$dailyRecords = [];
-foreach ($dailyRows as $row) {
-    $slug = sanitizeAttendanceTypeSlug($row['type'] ?? '');
-    if ($slug === '') {
-        continue;
-    }
-    $meta = $attendanceTypeMap[$slug] ?? null;
-    $label = $meta['label'] ?? ($row['type'] ?? $slug);
-    $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#38BDF8', '#38BDF8');
-    $timestamp = strtotime($row['timestamp'] ?? '');
-    if ($timestamp === false) {
-        continue;
-    }
-    $dailyRecords[] = [
-        'label' => $label,
-        'time' => $row['record_time'],
-        'color' => $colorStart,
-    ];
-    $dailyEvents[] = ['slug' => $slug, 'timestamp' => $timestamp];
-}
-
-$dailySummary = summarizeEvents($dailyEvents, $nonWorkSlugs);
-$dailyDurations = [];
-foreach ($durationTypes as $typeMeta) {
-    $dailyDurations[$typeMeta['slug']] = $dailySummary['durations'][$typeMeta['slug']] ?? 0;
-}
-$dailyProductivity = $dailySummary['total_seconds'] > 0
-    ? round(($dailySummary['work_seconds'] / $dailySummary['total_seconds']) * 100, 1)
-    : 0;
-
 $hourly_rates = getUserHourlyRates($pdo);
 $hourly_rate = $hourly_rates[$username] ?? 0;
-$dailyPayment = round(($dailySummary['work_seconds'] / 3600) * $hourly_rate, 2);
 
-$tardinessStmt = $pdo->prepare("SELECT 
+$dailyRecords = [];
+$dailyDurations = [];
+
+if ($payrollSource === 'vicidial') {
+    // ===== Fuente Vicidial (la MISMA que la nómina) =====
+    $vtRow = null;
+    try {
+        $vtStmt = $pdo->prepare("SELECT nonpause_seconds, total_logged_seconds, pause_breakdown, first_login, last_activity, calls, talk_seconds
+            FROM vicidial_agent_timesheet WHERE user_id = ? AND report_date = ? ORDER BY imported_at DESC LIMIT 1");
+        $vtStmt->execute([$user_id, $date_filter]);
+        $vtRow = $vtStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        $vtRow = null;
+    }
+
+    $paidCodesList = vicidialGetPaidPauseCodes($pdo);
+    $capSec = (int) round((float) getSystemSetting($pdo, 'vicidial_payroll_daily_cap_hours', 14) * 3600);
+    $vWork = 0; $vNonpause = 0; $vTotalLogged = 0;
+
+    if ($vtRow) {
+        $pauseCodes = $vtRow['pause_breakdown'] ? json_decode($vtRow['pause_breakdown'], true) : [];
+        if (!is_array($pauseCodes)) { $pauseCodes = []; }
+        $calc = vicidialComputePaidSeconds((int) $vtRow['nonpause_seconds'], $pauseCodes, $paidCodesList, $capSec);
+        $vWork = $calc['paid_seconds'];
+        $vNonpause = max(0, (int) $vtRow['nonpause_seconds']);
+        $vTotalLogged = max(0, (int) $vtRow['total_logged_seconds']);
+
+        $lowerPause = [];
+        foreach ($pauseCodes as $code => $sec) { $lowerPause[strtolower(trim((string) $code))] = max(0, (int) $sec); }
+        // Alias entre slugs del ponche y los códigos abreviados de Vicidial.
+        $slugToVicidial = ['bano' => 'bao', 'coaching' => 'coachi', 'digitacion' => 'digita'];
+        foreach ($durationTypes as $typeMeta) {
+            $s = strtolower($typeMeta['slug']);
+            $key = $slugToVicidial[$s] ?? $s;
+            $dailyDurations[$typeMeta['slug']] = $lowerPause[$s] ?? ($lowerPause[$key] ?? 0);
+        }
+
+        // "Actividad del día" desde Vicidial (login, productivo, pausas, última actividad)
+        if (!empty($vtRow['first_login'])) {
+            $dailyRecords[] = ['label' => 'Primer login', 'time' => date('H:i:s', strtotime($vtRow['first_login'])), 'color' => '#12B76A'];
+        }
+        $dailyRecords[] = ['label' => 'Tiempo productivo', 'time' => gmdate('H:i:s', $vNonpause), 'color' => '#244886'];
+        foreach ($pauseCodes as $code => $sec) {
+            if ((int) $sec > 0) { $dailyRecords[] = ['label' => (string) $code, 'time' => gmdate('H:i:s', (int) $sec), 'color' => '#F79009']; }
+        }
+        if (!empty($vtRow['last_activity'])) {
+            $dailyRecords[] = ['label' => 'Última actividad', 'time' => date('H:i:s', strtotime($vtRow['last_activity'])), 'color' => '#EF4444'];
+        }
+    } else {
+        foreach ($durationTypes as $typeMeta) { $dailyDurations[$typeMeta['slug']] = 0; }
+    }
+
+    $dailySummary = ['durations' => $dailyDurations, 'total_seconds' => $vWork, 'work_seconds' => $vWork];
+    $dailyProductivity = $vTotalLogged > 0 ? round($vNonpause / $vTotalLogged * 100, 1) : 0;
+    $dailyPayment = round(($vWork / 3600) * $hourly_rate, 2);
+
+    // Rango (Pagos acumulados) desde Vicidial
+    $vdRange = vicidialGetPaidSecondsByDate($pdo, $user_id, $start_date, $end_date);
+    $accumulated_total = 0;
+    $rangeSummary = [];
+    foreach ($vdRange['by_date'] as $workDate => $secs) {
+        $hours = $secs / 3600;
+        $payment = $hours * $hourly_rate;
+        $accumulated_total += $payment;
+        $rangeSummary[] = ['date' => $workDate, 'hours' => $hours, 'payment' => $payment];
+    }
+} else {
+    // ===== Fuente ponche (marcaciones) — comportamiento original =====
+    $dailyStmt = $pdo->prepare('SELECT type, timestamp, TIME(timestamp) AS record_time
+        FROM attendance WHERE user_id = ? AND DATE(timestamp) = ? ORDER BY timestamp ASC');
+    $dailyStmt->execute([$user_id, $date_filter]);
+    $dailyRows = $dailyStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $dailyEvents = [];
+    foreach ($dailyRows as $row) {
+        $slug = sanitizeAttendanceTypeSlug($row['type'] ?? '');
+        if ($slug === '') { continue; }
+        $meta = $attendanceTypeMap[$slug] ?? null;
+        $label = $meta['label'] ?? ($row['type'] ?? $slug);
+        $colorStart = sanitizeHexColorValue($meta['color_start'] ?? '#38BDF8', '#38BDF8');
+        $timestamp = strtotime($row['timestamp'] ?? '');
+        if ($timestamp === false) { continue; }
+        $dailyRecords[] = ['label' => $label, 'time' => $row['record_time'], 'color' => $colorStart];
+        $dailyEvents[] = ['slug' => $slug, 'timestamp' => $timestamp];
+    }
+
+    $dailySummary = summarizeEvents($dailyEvents, $nonWorkSlugs);
+    foreach ($durationTypes as $typeMeta) {
+        $dailyDurations[$typeMeta['slug']] = $dailySummary['durations'][$typeMeta['slug']] ?? 0;
+    }
+    $dailyProductivity = $dailySummary['total_seconds'] > 0
+        ? round(($dailySummary['work_seconds'] / $dailySummary['total_seconds']) * 100, 1)
+        : 0;
+    $dailyPayment = round(($dailySummary['work_seconds'] / 3600) * $hourly_rate, 2);
+
+    $rangeStmt = $pdo->prepare('SELECT type, timestamp, DATE(timestamp) AS work_date
+        FROM attendance WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ? ORDER BY timestamp ASC');
+    $rangeStmt->execute([$user_id, $start_date, $end_date]);
+    $rangeRows = $rangeStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $grouped = [];
+    foreach ($rangeRows as $row) {
+        $slug = sanitizeAttendanceTypeSlug($row['type'] ?? '');
+        if ($slug === '') { continue; }
+        $timestamp = strtotime($row['timestamp'] ?? '');
+        if ($timestamp === false) { continue; }
+        $grouped[$row['work_date']][] = ['slug' => $slug, 'timestamp' => $timestamp];
+    }
+
+    $accumulated_total = 0;
+    $rangeSummary = [];
+    foreach ($grouped as $workDate => $events) {
+        $summary = summarizeEvents($events, $nonWorkSlugs);
+        $hours = $summary['work_seconds'] / 3600;
+        $payment = $hours * $hourly_rate;
+        $accumulated_total += $payment;
+        $rangeSummary[] = ['date' => $workDate, 'hours' => $hours, 'payment' => $payment];
+    }
+}
+
+// Tardanza: siempre desde el ponche (histórico). Un agente de Vicidial sin
+// marcaciones dará 0% (neutral, sin incidencias).
+$tardinessStmt = $pdo->prepare("SELECT
         COUNT(CASE WHEN UPPER(type) = 'ENTRY' AND TIME(timestamp) > '10:05:00' THEN 1 END) AS late_entries,
         COUNT(CASE WHEN UPPER(type) = 'LUNCH' AND TIME(timestamp) > '14:00:00' THEN 1 END) AS late_lunches,
         COUNT(CASE WHEN UPPER(type) = 'BREAK' AND TIME(timestamp) > '17:00:00' THEN 1 END) AS late_breaks,
@@ -131,40 +226,6 @@ $totalTardiness = (($tardinessData['late_entries'] ?? 0) + ($tardinessData['late
 $totalTardiness = ($tardinessData['total_entries'] ?? 0) > 0
     ? round(($totalTardiness / $tardinessData['total_entries']) * 100, 2)
     : 0;
-
-$rangeStmt = $pdo->prepare('SELECT type, timestamp, DATE(timestamp) AS work_date
-    FROM attendance
-    WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
-    ORDER BY timestamp ASC');
-$rangeStmt->execute([$user_id, $start_date, $end_date]);
-$rangeRows = $rangeStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-
-$grouped = [];
-foreach ($rangeRows as $row) {
-    $slug = sanitizeAttendanceTypeSlug($row['type'] ?? '');
-    if ($slug === '') {
-        continue;
-    }
-    $timestamp = strtotime($row['timestamp'] ?? '');
-    if ($timestamp === false) {
-        continue;
-    }
-    $grouped[$row['work_date']][] = ['slug' => $slug, 'timestamp' => $timestamp];
-}
-
-$accumulated_total = 0;
-$rangeSummary = [];
-foreach ($grouped as $workDate => $events) {
-    $summary = summarizeEvents($events, $nonWorkSlugs);
-    $hours = $summary['work_seconds'] / 3600;
-    $payment = $hours * $hourly_rate;
-    $accumulated_total += $payment;
-    $rangeSummary[] = [
-        'date' => $workDate,
-        'hours' => $hours,
-        'payment' => $payment,
-    ];
-}
 
 $heroMetrics = [
     [

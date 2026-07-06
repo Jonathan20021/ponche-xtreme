@@ -13,6 +13,7 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/work_hours_calculator.php';
 require_once __DIR__ . '/claude_api_client.php';
+require_once __DIR__ . '/vicidial_report_source.php';
 
 if (!function_exists('getLoginHoursReportSettings')) {
     /**
@@ -161,16 +162,9 @@ if (!function_exists('generateDailyLoginHoursReport')) {
             ];
         }
 
-        // Compute metrics per employee
-        $employees = [];
-        $totals = [
-            'employees_with_activity' => 0,
-            'late_count'              => 0,
-            'no_exit_count'           => 0,
-            'break_excess_count'      => 0,
-            'total_work_seconds'      => 0,
-            'total_break_seconds'     => 0,
-        ];
+        // Compute metrics per employee (PONCHE). Se acumulan por uid; los totales
+        // se calculan al final desde la lista definitiva (para poder superponer Vicidial).
+        $empByUid = [];
 
         foreach ($byUser as $uid => $row) {
             $punches = $row['punches'];
@@ -202,6 +196,15 @@ if (!function_exists('generateDailyLoginHoursReport')) {
                 $breakSeconds += (int) ($durations[$slug] ?? 0);
             }
 
+            // Desglose de estados productivos (slugs pagados con etiqueta legible)
+            $productiveBreakdown = [];
+            foreach ($paidSlugs as $slug) {
+                $sec = (int) ($durations[$slug] ?? 0);
+                if ($sec > 0) {
+                    $productiveBreakdown[$allSlugs[$slug] ?? $slug] = $sec;
+                }
+            }
+
             // Get scheduled entry time (if any) to flag lateness
             $schedule = getScheduleConfigForUser($pdo, $uid, $date);
             $scheduledEntry = $schedule['entry_time'] ?? null;
@@ -219,23 +222,7 @@ if (!function_exists('generateDailyLoginHoursReport')) {
                 }
             }
 
-            $hasExit = $lastExit !== null;
-            $breakExcess = $breakSeconds > $breakThresholdSeconds;
-
-            if ($isLate) {
-                $totals['late_count']++;
-            }
-            if (!$hasExit) {
-                $totals['no_exit_count']++;
-            }
-            if ($breakExcess) {
-                $totals['break_excess_count']++;
-            }
-            $totals['employees_with_activity']++;
-            $totals['total_work_seconds']  += $workSeconds;
-            $totals['total_break_seconds'] += $breakSeconds;
-
-            $employees[] = [
+            $empByUid[$uid] = [
                 'user_id'          => $uid,
                 'username'         => $row['username'],
                 'full_name'        => $row['full_name'],
@@ -246,14 +233,108 @@ if (!function_exists('generateDailyLoginHoursReport')) {
                 'scheduled_entry'  => $scheduledEntry,
                 'is_late'          => $isLate,
                 'late_minutes'     => $lateMinutes,
-                'has_exit'         => $hasExit,
+                'has_exit'         => $lastExit !== null,
                 'work_seconds'     => $workSeconds,
                 'break_seconds'    => $breakSeconds,
                 'break_count'      => $breakCount,
-                'break_excess'     => $breakExcess,
+                'break_excess'     => $breakSeconds > $breakThresholdSeconds,
                 'durations'        => $durations,
+                'productive_breakdown' => $productiveBreakdown,
                 'total_punches'    => count($punches),
+                'source'           => 'ponche',
             ];
+        }
+
+        // === Superponer Vicidial para agentes payroll_source='vicidial' ===
+        // Entrada = login; horas netas = pagables (NONPAUSE + códigos pagados, igual
+        // que la nómina); breaks = pausas NO pagadas; salida = última actividad.
+        $useVicidial = reportsVicidialSourceEnabled($pdo);
+        $vicidialCount = 0;
+        if ($useVicidial) {
+            $vicMap = getVicidialTimesheetMap($pdo, $date, $date);
+            $needMeta = [];
+            foreach ($vicMap as $vuid => $byDate) {
+                if (isset($byDate[$date]) && !isset($empByUid[(int) $vuid])) { $needMeta[] = (int) $vuid; }
+            }
+            $meta = $needMeta ? getReportUserMeta($pdo, $needMeta) : [];
+
+            foreach ($vicMap as $vuid => $byDate) {
+                if (!isset($byDate[$date])) { continue; }
+                $uid = (int) $vuid;
+                $vts = $byDate[$date];
+
+                $schedule = getScheduleConfigForUser($pdo, $uid, $date);
+                $scheduledEntry = $schedule['entry_time'] ?? null;
+                $isLate = false; $lateMinutes = 0;
+                if ($vts['first_login'] && $scheduledEntry) {
+                    $scheduledTs = strtotime($date . ' ' . $scheduledEntry);
+                    $actualTs = strtotime($vts['first_login']);
+                    if ($scheduledTs && $actualTs && ($actualTs - $scheduledTs) > ($lateThresholdMinutes * 60)) {
+                        $isLate = true; $lateMinutes = (int) round(($actualTs - $scheduledTs) / 60);
+                    }
+                }
+
+                // nº de códigos de break (no pagados) con tiempo
+                $breakCodeCount = 0;
+                foreach ($vts['pause_breakdown'] as $code => $sec) {
+                    if ((int) $sec > 0 && !isset($vts['productive_breakdown'][(string) $code])) { $breakCodeCount++; }
+                }
+
+                // metadatos: del registro de ponche si existe, si no de la consulta de meta
+                $prev = $empByUid[$uid] ?? null;
+                $m    = $meta[$uid] ?? [];
+                $fullName = $prev['full_name'] ?? '';
+                if ($fullName === '') {
+                    $fullName = ($m['full_name'] ?? '') ?: trim(($m['first_name'] ?? '') . ' ' . ($m['last_name'] ?? ''));
+                }
+                if ($fullName === '') { $fullName = $m['username'] ?? ('Usuario ' . $uid); }
+
+                $empByUid[$uid] = [
+                    'user_id'          => $uid,
+                    'username'         => $prev['username'] ?? ($m['username'] ?? ''),
+                    'full_name'        => $fullName,
+                    'employee_code'    => $prev['employee_code'] ?? ($m['employee_code'] ?? ''),
+                    'department'       => $prev['department'] ?? ($m['department_name'] ?? 'Sin departamento'),
+                    'first_entry'      => $vts['first_login'],
+                    'last_exit'        => $vts['last_activity'],
+                    'scheduled_entry'  => $scheduledEntry,
+                    'is_late'          => $isLate,
+                    'late_minutes'     => $lateMinutes,
+                    'has_exit'         => $vts['last_activity'] !== null,
+                    'work_seconds'     => (int) $vts['paid_seconds'],
+                    'break_seconds'    => (int) $vts['break_seconds'],
+                    'break_count'      => $breakCodeCount,
+                    'break_excess'     => $vts['break_seconds'] > $breakThresholdSeconds,
+                    'durations'        => $vts['pause_breakdown'],
+                    'productive_breakdown' => $vts['productive_breakdown'],
+                    'total_punches'    => 0,
+                    'source'           => 'vicidial',
+                    'total_logged'     => (int) $vts['total_logged'],
+                    'calls'            => (int) $vts['calls'],
+                    'capped'           => (bool) $vts['capped'],
+                ];
+                $vicidialCount++;
+            }
+        }
+
+        // Lista definitiva + totales
+        $employees = array_values($empByUid);
+        $totals = [
+            'employees_with_activity' => count($employees),
+            'late_count'              => 0,
+            'no_exit_count'           => 0,
+            'break_excess_count'      => 0,
+            'total_work_seconds'      => 0,
+            'total_break_seconds'     => 0,
+            'vicidial_enabled'        => $useVicidial,
+            'vicidial_count'          => $vicidialCount,
+        ];
+        foreach ($employees as $e) {
+            if (!empty($e['is_late']))     { $totals['late_count']++; }
+            if (empty($e['has_exit']))     { $totals['no_exit_count']++; }
+            if (!empty($e['break_excess'])){ $totals['break_excess_count']++; }
+            $totals['total_work_seconds']  += (int) $e['work_seconds'];
+            $totals['total_break_seconds'] += (int) $e['break_seconds'];
         }
 
         // Sort by full_name
@@ -345,6 +426,7 @@ if (!function_exists('generateAILoginHoursSummary')) {
                     'break_total_min' => (int) round($e['break_seconds'] / 60),
                     'breaks_tomados'  => $e['break_count'],
                     'exceso_break'    => $e['break_excess'],
+                    'fuente'          => $e['source'] ?? 'ponche',
                     'duraciones_min'  => array_map(static fn($s) => (int) round($s / 60), $e['durations']),
                 ];
             }, $reportData['employees']),
@@ -389,6 +471,13 @@ if (!function_exists('generateLoginHoursReportHTML')) {
         $totalWorkHrs  = formatSecondsAsHMS((int) $totals['total_work_seconds']);
         $totalBreakHrs = formatSecondsAsHMS((int) $totals['total_break_seconds']);
 
+        // Nota de fuente Vicidial (si aplica)
+        $vicNote = '';
+        if (!empty($totals['vicidial_enabled']) && (int) ($totals['vicidial_count'] ?? 0) > 0) {
+            $vc = (int) $totals['vicidial_count'];
+            $vicNote = "<div class='vic-note'>Para <strong>{$vc}</strong> agente(s) de discador, las horas netas y el desglose provienen de <strong>Vicidial</strong> (NONPAUSE + pausas pagadas, igual que la nómina) y la entrada es el login de Vicidial; el resto del personal usa el ponche.</div>";
+        }
+
         $aiBlock = '';
         if (trim($aiSummary) !== '') {
             $safeSummary = nl2br(htmlspecialchars($aiSummary), false);
@@ -427,18 +516,20 @@ if (!function_exists('generateLoginHoursReportHTML')) {
                     $breakBadge = " <span class='badge badge-warning'>exceso</span>";
                 }
 
-                // Build a small "durations" chip list for productive states
+                // Chips de estados productivos (uniforme ponche/Vicidial vía productive_breakdown)
                 $chips = '';
-                foreach ($paidSlugs as $slug) {
-                    if (!isset($emp['durations'][$slug])) continue;
-                    $label = htmlspecialchars($allSlugs[$slug] ?? $slug);
-                    $dur   = formatSecondsAsHMS((int) $emp['durations'][$slug]);
-                    $chips .= "<span class='state-chip'>{$label}: <strong>{$dur}</strong></span> ";
+                foreach (($emp['productive_breakdown'] ?? []) as $label => $sec) {
+                    if ((int) $sec <= 0) continue;
+                    $chips .= "<span class='state-chip'>" . htmlspecialchars((string) $label) . ": <strong>" . formatSecondsAsHMS((int) $sec) . "</strong></span> ";
                 }
+
+                $srcTag = (($emp['source'] ?? 'ponche') === 'vicidial')
+                    ? " <span class='src-tag src-vici' title='Datos del login de Vicidial'>Vicidial</span>"
+                    : "";
 
                 $rowsHtml .= "
                     <tr>
-                        <td><strong>{$name}</strong><br><span class='muted'>{$code}</span></td>
+                        <td><strong>{$name}</strong>{$srcTag}<br><span class='muted'>{$code}</span></td>
                         <td>{$dept}</td>
                         <td class='num'>{$entry}{$entryBadge}</td>
                         <td class='num'>{$exit}{$exitBadge}</td>
@@ -485,6 +576,9 @@ if (!function_exists('generateLoginHoursReportHTML')) {
   .badge-danger  { background: #ef4444; color: #fff; }
   .badge-warning { background: #f59e0b; color: #fff; }
   .state-chip { display: inline-block; background: #eef2ff; color: #3730a3; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin: 2px 2px 2px 0; }
+  .src-tag { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: .3px; }
+  .src-vici { background: #e0f2fe; color: #075985; }
+  .vic-note { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; color: #1e3a8a; padding: 12px 16px; border-radius: 8px; margin: 0 0 18px 0; font-size: 13px; }
   .no-data { text-align: center; padding: 24px; color: #666; font-style: italic; }
   .footer { text-align: center; padding: 18px; color: #777; font-size: 12px; margin-top: 20px; }
   .config-note { font-size: 12px; color: #666; margin-top: 6px; }
@@ -527,6 +621,7 @@ if (!function_exists('generateLoginHoursReportHTML')) {
     </div>
   </div>
 
+  {$vicNote}
   {$aiBlock}
 
   <div class="section">

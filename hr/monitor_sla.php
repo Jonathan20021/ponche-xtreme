@@ -4,6 +4,8 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../lib/helpdesk_functions.php';
 
+$conn = getMysqli(); // db.php provee PDO; este script usa mysqli ($conn)
+
 echo "Starting SLA Monitoring...\n";
 echo "Time: " . date('Y-m-d H:i:s') . "\n\n";
 
@@ -11,9 +13,10 @@ echo "Time: " . date('Y-m-d H:i:s') . "\n\n";
 $conn->query("CALL check_sla_breaches()");
 
 // Get tickets approaching SLA deadlines (within 2 hours)
-$query = "SELECT t.*, u.full_name, u.email, c.name as category_name
+$query = "SELECT t.*, u.full_name, e.email, c.name as category_name
           FROM helpdesk_tickets t
           JOIN users u ON t.user_id = u.id
+          LEFT JOIN employees e ON e.user_id = u.id
           JOIN helpdesk_categories c ON t.category_id = c.id
           WHERE t.status IN ('open', 'in_progress', 'pending')
           AND (

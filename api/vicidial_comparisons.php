@@ -2,6 +2,7 @@
 session_start();
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../lib/authorization_functions.php';
+require_once __DIR__ . '/../lib/vicidial_report_adapter.php';
 
 header('Content-Type: application/json');
 
@@ -70,40 +71,20 @@ try {
  */
 function getPeriodData($pdo, $startDate, $endDate, $campaign = '')
 {
-    $campaignFilter = $campaign ? "AND current_user_group = :campaign" : "";
+    // Fuente activa (sync automático o CSV) vía el adaptador.
+    $rows = vicidialReportsAgentStats($pdo, $startDate, $endDate, $campaign);
 
-    $stmt = $pdo->prepare("
-        SELECT 
-            SUM(calls) as total_calls,
-            SUM(time_total) as total_time,
-            SUM(talk_time) as total_talk,
-            SUM(dispo_time) as total_dispo,
-            SUM(dead_time) as total_dead,
-            SUM(pause_time) as total_pause,
-            SUM(wait_time) as total_wait,
-            SUM(sale + pedido + orden) as total_conversions,
-            SUM(nocal + silenc) as total_no_contact,
-            COUNT(DISTINCT user_id) as total_agents
-        FROM vicidial_login_stats
-        WHERE upload_date BETWEEN :start_date AND :end_date
-        $campaignFilter
-    ");
-
-    $params = ['start_date' => $startDate, 'end_date' => $endDate];
-    if ($campaign) {
-        $params['campaign'] = $campaign;
+    $totalCalls = $totalTime = $totalTalk = $totalDispo = $totalDead = $totalConversions = $totalNoContact = 0;
+    foreach ($rows as $r) {
+        $totalCalls       += (int) ($r['total_calls'] ?? 0);
+        $totalTime        += (int) ($r['time_total'] ?? 0);
+        $totalTalk        += (int) ($r['talk_time'] ?? 0);
+        $totalDispo       += (int) ($r['dispo_time'] ?? 0);
+        $totalDead        += (int) ($r['dead_time'] ?? 0);
+        $totalConversions += (int) ($r['sale'] ?? 0) + (int) ($r['pedido'] ?? 0) + (int) ($r['orden'] ?? 0);
+        $totalNoContact   += (int) ($r['no_contact'] ?? 0);
     }
-
-    $stmt->execute($params);
-    $data = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $totalCalls = (int) $data['total_calls'];
-    $totalTime = (int) $data['total_time'];
-    $totalTalk = (int) $data['total_talk'];
-    $totalDispo = (int) $data['total_dispo'];
-    $totalDead = (int) $data['total_dead'];
-    $totalConversions = (int) $data['total_conversions'];
-    $totalNoContact = (int) $data['total_no_contact'];
+    $data = ['total_agents' => count($rows)];
 
     return [
         'calls' => $totalCalls,

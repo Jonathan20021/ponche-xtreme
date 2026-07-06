@@ -80,6 +80,8 @@ try {
     $from   = $arg('from');
     $to     = $arg('to');
 
+    $daysArg = $arg('days');
+
     if ($validDate($single)) {
         $dates[] = $single;
     } elseif ($validDate($from) && $validDate($to)) {
@@ -95,6 +97,13 @@ try {
             $dates[] = date('Y-m-d', $cursor);
             $cursor = strtotime('+1 day', $cursor);
             $guard++;
+        }
+    } elseif ($daysArg !== null && ctype_digit((string) $daysArg) && (int) $daysArg > 0) {
+        // Últimos N días TERMINANDO HOY (para correr al final del día e incluir hoy).
+        // Ej: --days=2 a las 11:30 PM importa HOY (fresco) + AYER (reasegura completo).
+        $n = min(62, (int) $daysArg);
+        for ($i = $n - 1; $i >= 0; $i--) {
+            $dates[] = date('Y-m-d', strtotime("-{$i} day"));
         }
     } else {
         // Default: ayer

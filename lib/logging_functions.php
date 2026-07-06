@@ -254,3 +254,26 @@ function log_system_setting_changed($pdo, $user_id, $user_name, $user_role, $set
 function log_custom_action($pdo, $user_id, $user_name, $user_role, $module, $action, $description, $entity_type = null, $entity_id = null, $details = []) {
     return log_activity($pdo, $user_id, $user_name, $user_role, $module, $action, $description, $entity_type, $entity_id, null, $details);
 }
+
+if (!function_exists('logActivity')) {
+    /**
+     * Compat shim. helpdesk_functions.php y suggestions_api.php llaman
+     * logActivity($userId, $action, $description) — una función que nunca se
+     * definió (fatal "Call to undefined function"). Se mapea a log_custom_action
+     * con datos de sesión y es SIEMPRE a prueba de fallos: el logging jamás debe
+     * tumbar la creación de un ticket/sugerencia/comentario.
+     */
+    function logActivity($userId, string $action, string $description = ''): void
+    {
+        try {
+            global $pdo;
+            if ($pdo instanceof PDO && function_exists('log_custom_action')) {
+                $name = $_SESSION['full_name'] ?? ($_SESSION['username'] ?? '');
+                $role = $_SESSION['role'] ?? '';
+                log_custom_action($pdo, (int) $userId, $name, $role, 'helpdesk', $action, $description);
+            }
+        } catch (Throwable $e) {
+            // best-effort: nunca propagar errores de logging
+        }
+    }
+}

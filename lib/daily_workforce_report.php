@@ -17,6 +17,7 @@
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/claude_api_client.php';
+require_once __DIR__ . '/vicidial_report_source.php';
 
 if (!function_exists('getWorkforceReportSettings')) {
     function getWorkforceReportSettings(PDO $pdo): array
@@ -134,6 +135,12 @@ if (!function_exists('generateDailyWorkforceReport')) {
 
         $dateTs = strtotime($date);
 
+        // Presencia Vicidial: para agentes payroll_source='vicidial', un login de
+        // Vicidial cuenta como PRESENTE aunque no hayan ponchado (con respaldo al ponche).
+        $useVicidial = reportsVicidialSourceEnabled($pdo);
+        $vicLoginMap = $useVicidial ? getVicidialLoginMap($pdo, $date, $date) : [];
+        $presentViaVicidialOnly = 0;
+
         foreach ($rows as $r) {
             $fullName = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''));
             if ($fullName === '') $fullName = $r['full_name'] ?: $r['username'];
@@ -155,7 +162,14 @@ if (!function_exists('generateDailyWorkforceReport')) {
                 'last_punch_before'=> $r['last_punch_before'],
             ];
 
-            if ($r['first_punch_today']) {
+            $hasPunch    = (bool) $r['first_punch_today'];
+            $hasVicidial = isset($vicLoginMap[(int) $r['user_id']][$date]);
+
+            if ($hasPunch || $hasVicidial) {
+                if (!$hasPunch && $hasVicidial) {
+                    $record['present_via_vicidial'] = true;
+                    $presentViaVicidialOnly++;
+                }
                 $present[] = $record;
             } else {
                 // Days since last punch
@@ -220,6 +234,8 @@ if (!function_exists('generateDailyWorkforceReport')) {
                 'trial_absent'      => count($trialAbsent),
                 'suspended'         => $statusMap['SUSPENDED'],
                 'terminated'        => $statusMap['TERMINATED'],
+                'present_via_vicidial_only' => $presentViaVicidialOnly,
+                'vicidial_enabled'          => $useVicidial,
             ],
             'present'        => $present,
             'absent'         => $absent,
@@ -293,6 +309,16 @@ if (!function_exists('generateWorkforceReportHTML')) {
         $byDept     = $reportData['by_department_absent'];
         $byRole     = $reportData['by_role_absent'];
         $trialAbs   = $reportData['trial_absent'];
+
+        // Nota de fuente: si Vicidial está activo, un login cuenta como presencia.
+        $vicNote = '';
+        if (!empty($totals['vicidial_enabled'])) {
+            $pv = (int) ($totals['present_via_vicidial_only'] ?? 0);
+            $extra = $pv > 0
+                ? " <strong>{$pv}</strong> agente(s) cuentan como presentes por su login de Vicidial aunque no poncharon."
+                : "";
+            $vicNote = "<div style='background:#eef2ff;border:1px solid #c7d2fe;border-left:4px solid #6366f1;color:#3730a3;padding:12px 16px;border-radius:8px;margin:0 0 18px 0;font-size:13px;'>Para agentes de discador, un <strong>login de Vicidial</strong> cuenta como presente (además del ponche).{$extra}</div>";
+        }
 
         $aiBlock = '';
         if (trim($aiSummary) !== '') {
@@ -466,6 +492,7 @@ if (!function_exists('generateWorkforceReportHTML')) {
     </div>
   </div>
 
+  {$vicNote}
   {$aiBlock}
   {$successBlock}
   {$trialAbsentSection}

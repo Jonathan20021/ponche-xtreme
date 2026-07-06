@@ -15,7 +15,8 @@
  * IMPORTANTE (zona horaria): el server Vicidial reporta en su hora local
  * (TZ -05:00). La app de ponche y la tabla `attendance` están en hora local de
  * RD (America/Santo_Domingo, -04:00). Por eso los timestamps de Vicidial se
- * llevan a hora RD sumando `vicidial_tz_offset_minutes` (config, default 60)
+ * llevan a hora RD sumando `vicidial_tz_offset_minutes` (config, default 0 —
+ * verificado: este server Vicidial ya reporta en hora RD; ver nota en el default)
  * antes de guardarlos, para que la conciliación compare hora contra hora.
  *
  * Toda la configuración vive en system_settings (editable desde settings.php),
@@ -60,7 +61,9 @@ if (!function_exists('getVicidialSyncConfig')) {
                 WHERE setting_key LIKE 'vicidial_sync_%'
                    OR setting_key LIKE 'vicidial_api_%'
                    OR setting_key LIKE 'vicidial_live_%'
+                   OR setting_key LIKE 'vicidial_payroll_%'
                    OR setting_key = 'vicidial_tz_offset_minutes'
+                   OR setting_key = 'vicidial_paid_pause_codes'
             ");
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
                 $defaults[$row['setting_key']] = $row['setting_value'] ?? '';
@@ -73,6 +76,47 @@ if (!function_exists('getVicidialSyncConfig')) {
         $defaults['vicidial_api_base_url'] = rtrim(trim($defaults['vicidial_api_base_url']), '/');
 
         return $defaults;
+    }
+}
+
+if (!function_exists('vicidialGetPaidSecondsByDate')) {
+    /**
+     * Horas PAGABLES de Vicidial por fecha para un empleado, en el formato que
+     * usa la nómina (calculateDailyWorkSecondsFromPunchRows): [fecha => segundos].
+     * Solo incluye días con segundos > 0. Marca los días que tocaron el tope de
+     * cordura (anomalías a revisar).
+     *
+     * @return array{by_date:array<string,int>, capped_days:array<int,string>, days:int}
+     */
+    function vicidialGetPaidSecondsByDate(PDO $pdo, int $userId, string $startDate, string $endDate): array
+    {
+        $paidCodes = vicidialGetPaidPauseCodes($pdo);
+        $cap = (int) round((float) getSystemSetting($pdo, 'vicidial_payroll_daily_cap_hours', 14) * 3600);
+
+        $byDate = [];
+        $cappedDays = [];
+        try {
+            $stmt = $pdo->prepare("
+                SELECT report_date, nonpause_seconds, pause_breakdown
+                FROM vicidial_agent_timesheet
+                WHERE user_id = ? AND report_date BETWEEN ? AND ?
+            ");
+            $stmt->execute([$userId, $startDate, $endDate]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                $codes = $r['pause_breakdown'] ? json_decode($r['pause_breakdown'], true) : [];
+                $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $paidCodes, $cap);
+                if ($calc['paid_seconds'] > 0) {
+                    $byDate[$r['report_date']] = $calc['paid_seconds'];
+                }
+                if ($calc['capped']) {
+                    $cappedDays[] = $r['report_date'];
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('vicidialGetPaidSecondsByDate: ' . $e->getMessage());
+        }
+        ksort($byDate);
+        return ['by_date' => $byDate, 'capped_days' => $cappedDays, 'days' => count($byDate)];
     }
 }
 
@@ -413,7 +457,16 @@ if (!function_exists('vicidialFetchPerformanceDetail')) {
         $lines = preg_split('/\r\n|\r|\n/', $res['body']);
         $header = null;
         $colIdx = [];
+        $dispoCols = []; // columnas de disposición/estado (SALE, PEDIDO, NOCAL…), detectadas dinámicamente
         $agents = [];
+
+        // Columnas que NO son códigos de disposición (identidad + resumen + promedios
+        // de tiempo). Todo lo demás en el reporte es un conteo por estado/disposición.
+        $nonDispoCols = [
+            'USER NAME', 'ID', 'CURRENT USER GROUP', 'MOST RECENT USER GROUP', 'CALL DATE',
+            'CALLS', 'TIME', 'PAUSE', 'PAUSAVG', 'WAIT', 'WAITAVG', 'TALK', 'TALKAVG',
+            'DISPO', 'DISPAVG', 'DEAD', 'DEADAVG', 'CUSTOMER', 'CUSTAVG', 'TOTAL', 'NONPAUSE', 'STATUS',
+        ];
 
         foreach ($lines as $line) {
             if (trim($line) === '') {
@@ -427,6 +480,11 @@ if (!function_exists('vicidialFetchPerformanceDetail')) {
                     $header = $cells;
                     foreach ($header as $i => $name) {
                         $colIdx[$name] = $i;
+                        // Toda columna que no sea de resumen es un código de disposición.
+                        $up = strtoupper(trim((string) $name));
+                        if ($up !== '' && !in_array($up, $nonDispoCols, true)) {
+                            $dispoCols[$up] = $i;
+                        }
                     }
                 }
                 continue;
@@ -443,6 +501,16 @@ if (!function_exists('vicidialFetchPerformanceDetail')) {
                 continue;
             }
 
+            // Desglose de disposiciones (conteos por estado). Se omiten los ceros
+            // para mantener el JSON compacto. Claves en MAYÚSCULA (SALE, PEDIDO…).
+            $dispositions = [];
+            foreach ($dispoCols as $code => $idx) {
+                $val = isset($cells[$idx]) ? (int) $cells[$idx] : 0;
+                if ($val !== 0) {
+                    $dispositions[$code] = $val;
+                }
+            }
+
             $agents[] = [
                 'vicidial_user'  => $vicidialUser,
                 'vicidial_name'  => $userName,
@@ -453,6 +521,7 @@ if (!function_exists('vicidialFetchPerformanceDetail')) {
                 'wait_seconds'   => vicidialParseHmsToSeconds($get('WAIT')),
                 'talk_seconds'   => vicidialParseHmsToSeconds($get('TALK')),
                 'dispo_seconds'  => vicidialParseHmsToSeconds($get('DISPO')),
+                'dispositions'   => $dispositions,
             ];
         }
 
@@ -722,6 +791,29 @@ if (!function_exists('vicidialGetUserMap')) {
     }
 }
 
+if (!function_exists('ensureVicidialStatusBreakdownColumn')) {
+    /**
+     * Garantiza la columna `vicidial_agent_timesheet.status_breakdown` (JSON con
+     * los conteos por disposición: {"SALE":12,"PEDIDO":5,"NOCAL":30,...}).
+     * Auto-sana el esquema para que un deploy a otra BD no rompa el upsert con
+     * "Unknown column". Corre una sola vez por request.
+     */
+    function ensureVicidialStatusBreakdownColumn(PDO $pdo): void
+    {
+        static $checked = false;
+        if ($checked) { return; }
+        $checked = true;
+        try {
+            $cols = $pdo->query("SHOW COLUMNS FROM vicidial_agent_timesheet LIKE 'status_breakdown'")->fetchAll();
+            if (empty($cols)) {
+                $pdo->exec("ALTER TABLE vicidial_agent_timesheet ADD COLUMN status_breakdown TEXT NULL AFTER pause_breakdown");
+            }
+        } catch (Throwable $e) {
+            error_log('ensureVicidialStatusBreakdownColumn: ' . $e->getMessage());
+        }
+    }
+}
+
 if (!function_exists('importVicidialDay')) {
     /**
      * Orquestador de la Fase 1: importa un día completo.
@@ -739,7 +831,8 @@ if (!function_exists('importVicidialDay')) {
     function importVicidialDay(PDO $pdo, array $cfg, string $date, string $triggeredBy = 'cron'): array
     {
         $startedAt = microtime(true);
-        $offsetMin = (int) ($cfg['vicidial_tz_offset_minutes'] ?? 60);
+        ensureVicidialStatusBreakdownColumn($pdo); // desglose de disposiciones (conversiones)
+        $offsetMin = (int) ($cfg['vicidial_tz_offset_minutes'] ?? 0);
         $minTime   = max(0, (int) ($cfg['vicidial_sync_min_time_seconds'] ?? 60));
 
         // Grupos permitidos (vacío = todos)
@@ -793,12 +886,12 @@ if (!function_exists('importVicidialDay')) {
         $upsert = $pdo->prepare("
             INSERT INTO vicidial_agent_timesheet
                 (report_date, vicidial_user, vicidial_name, user_group, user_id,
-                 first_login, last_activity, total_logged_seconds, nonpause_seconds, pause_breakdown,
+                 first_login, last_activity, total_logged_seconds, nonpause_seconds, pause_breakdown, status_breakdown,
                  calls, talk_seconds, pause_seconds, wait_seconds, dispo_seconds,
                  tz_offset_applied_minutes, raw_first_login, raw_last_activity, source)
             VALUES
                 (:report_date, :vicidial_user, :vicidial_name, :user_group, :user_id,
-                 :first_login, :last_activity, :total_logged_seconds, :nonpause_seconds, :pause_breakdown,
+                 :first_login, :last_activity, :total_logged_seconds, :nonpause_seconds, :pause_breakdown, :status_breakdown,
                  :calls, :talk_seconds, :pause_seconds, :wait_seconds, :dispo_seconds,
                  :tz_offset, :raw_first_login, :raw_last_activity, 'api')
             ON DUPLICATE KEY UPDATE
@@ -808,8 +901,9 @@ if (!function_exists('importVicidialDay')) {
                 first_login          = VALUES(first_login),
                 last_activity        = VALUES(last_activity),
                 total_logged_seconds = VALUES(total_logged_seconds),
-                nonpause_seconds     = VALUES(nonpause_seconds),
-                pause_breakdown      = VALUES(pause_breakdown),
+                nonpause_seconds     = IF(:pause_known = 1, VALUES(nonpause_seconds), nonpause_seconds),
+                pause_breakdown      = IF(:pause_known = 1, VALUES(pause_breakdown), pause_breakdown),
+                status_breakdown     = VALUES(status_breakdown),
                 calls                = VALUES(calls),
                 talk_seconds         = VALUES(talk_seconds),
                 pause_seconds        = VALUES(pause_seconds),
@@ -853,10 +947,20 @@ if (!function_exists('importVicidialDay')) {
             $firstLocal = vicidialShiftToLocal($ts['first_login'] ?? null, $offsetMin);
             $lastLocal  = vicidialShiftToLocal($ts['last_activity'] ?? null, $offsetMin);
 
-            // Desglose de pausas del agente (si vino en el file_download=2)
-            $pauseInfo = $pauseByUser[$vu] ?? ['nonpause' => 0, 'codes' => []];
-            $nonpauseSeconds = (int) ($pauseInfo['nonpause'] ?? 0);
-            $pauseJson = !empty($pauseInfo['codes']) ? json_encode($pauseInfo['codes'], JSON_UNESCAPED_UNICODE) : null;
+            // Desglose de pausas del agente (si vino en el file_download=2). Si el
+            // fetch de pausas falló o el agente no vino, $pauseKnown=0 y el upsert
+            // NO sobrescribe nonpause_seconds/pause_breakdown (preserva lo ya
+            // importado) para no borrar datos buenos con 0 en un re-import con
+            // throttle (429). Es dinero: esas horas alimentan la nómina.
+            $pauseInfo = $pauseByUser[$vu] ?? null;
+            $pauseKnown = $pauseInfo !== null ? 1 : 0;
+            $nonpauseSeconds = $pauseInfo ? (int) ($pauseInfo['nonpause'] ?? 0) : 0;
+            $pauseJson = ($pauseInfo && !empty($pauseInfo['codes'])) ? json_encode($pauseInfo['codes'], JSON_UNESCAPED_UNICODE) : null;
+
+            // Desglose de disposiciones/estados del agente (conteos por código),
+            // del mismo reporte de performance (file_download=1). Alimenta las
+            // métricas de conversión en los Reportes Vicidial en modo sync.
+            $statusJson = !empty($agent['dispositions']) ? json_encode($agent['dispositions'], JSON_UNESCAPED_UNICODE) : null;
 
             try {
                 $upsert->execute([
@@ -870,6 +974,8 @@ if (!function_exists('importVicidialDay')) {
                     ':total_logged_seconds' => (int) ($ts['total_seconds'] ?? 0),
                     ':nonpause_seconds'     => $nonpauseSeconds,
                     ':pause_breakdown'      => $pauseJson,
+                    ':status_breakdown'     => $statusJson,
+                    ':pause_known'          => $pauseKnown,
                     ':calls'                => $agent['calls'],
                     ':talk_seconds'         => $agent['talk_seconds'],
                     ':pause_seconds'        => $agent['pause_seconds'],
