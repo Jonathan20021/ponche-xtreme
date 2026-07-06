@@ -44,7 +44,7 @@ if not exist "%CRON%" ( echo [%date% %time%] ERROR: falta cron_vicidial_sync.php
 
 "!PHP!" "%CRON%" --days=2 >> "%LOG%" 2>&1
 set "RC=!ERRORLEVEL!"
-if "!RC!"=="0" ( echo [%date% %time%] OK - fin exit 0>> "%LOG%" ) else ( echo [%date% %time%] FALLO - exit !RC! ^(ver error arriba / tabla vicidial_sync_log^)>> "%LOG%" )
+if "!RC!"=="0" ( echo [%date% %time%] OK - fin ^(exit 0^)>> "%LOG%" ) else ( echo [%date% %time%] FALLO - exit !RC! ^(ver error arriba / tabla vicidial_sync_log^)>> "%LOG%" )
 endlocal & exit /b %RC%
 
 REM ========================== MODO INSTALACION ===============================
