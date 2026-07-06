@@ -752,6 +752,15 @@ $chartColorsJson = json_encode($chartColors);
                 </div>
                 <span class="ag-chip"><i class="fas fa-tower-broadcast" style="color:var(--ag-teal)"></i> <?= $vicidialToday && $vicidialToday['user_group'] ? htmlspecialchars($vicidialToday['user_group']) : 'Vicidial' ?></span>
             </div>
+            <!-- Estado EN VIVO del agente (se puebla vía agent_live_status.php cada ~25s; oculto si no hay sesión de Vicidial) -->
+            <div class="ag-live" id="agLive" style="display:none;">
+                <span class="ag-live-dot" id="agLiveDot"></span>
+                <div class="ag-live-txt">
+                    <span class="ag-live-label" id="agLiveLabel">—</span>
+                    <span class="ag-live-meta" id="agLiveMeta"></span>
+                </div>
+                <span class="ag-live-time" id="agLiveTime"></span>
+            </div>
             <?php if ($vicidialHasData): ?>
                 <div class="ag-sched" style="grid-template-columns:repeat(3,1fr);">
                     <div class="b"><div class="k"><i class="fas fa-right-to-bracket"></i> Primer login</div><div class="v"><?= $vicidialToday['first_login'] ? htmlspecialchars(date('g:i A', strtotime($vicidialToday['first_login']))) : '—' ?></div></div>
@@ -995,6 +1004,56 @@ $chartColorsJson = json_encode($chartColors);
     prev.addEventListener('click', function () { if (page > 1) { page--; render(); } });
     next.addEventListener('click', function () { if (page < pages) { page++; render(); } });
     render();
+})();
+
+// Widget "En vivo": estado actual del agente en Vicidial (polling ~25s + contador local)
+(function () {
+    var box = document.getElementById('agLive');
+    if (!box) { return; }
+    var dot = document.getElementById('agLiveDot'),
+        label = document.getElementById('agLiveLabel'),
+        meta = document.getElementById('agLiveMeta'),
+        timeEl = document.getElementById('agLiveTime');
+    var P = window.PonchePolling || {};
+    var interval = Math.max(15000, P.modal || 25000);
+    var pauseHidden = P.pauseWhenHidden !== false;
+    var secs = 0, tick = null;
+
+    function fmt(s) { s = Math.max(0, s | 0); var m = Math.floor(s / 60), r = s % 60; return m + ':' + (r < 10 ? '0' : '') + r; }
+    function stopTick() { if (tick) { clearInterval(tick); tick = null; } }
+    function hide() { box.style.display = 'none'; box.classList.remove('on'); stopTick(); }
+
+    function render(live) {
+        if (!live) { hide(); return; } // sin sesión de Vicidial ahora -> ocultar
+        box.style.display = 'flex';
+        box.classList.add('on');
+        dot.style.background = live.color || '#38bdf8';
+        label.innerHTML = escapeHtml(live.label || live.status || '—') + '<span class="ag-live-live">en vivo</span>';
+        var m = [];
+        if (live.campaign) { m.push(live.campaign); }
+        m.push((live.calls || 0) + ' llamadas hoy');
+        meta.textContent = m.join(' · ');
+        secs = live.seconds_in_status || 0;
+        timeEl.textContent = fmt(secs);
+        stopTick();
+        tick = setInterval(function () { secs++; timeEl.textContent = fmt(secs); }, 1000);
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+    function poll() {
+        if (pauseHidden && document.hidden) { return; }
+        fetch('agent_live_status.php', { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.ok || !d.enabled) { hide(); return; }
+                render(d.live);
+            })
+            .catch(function () { /* silencio: nunca romper el dashboard */ });
+    }
+
+    poll();
+    setInterval(poll, interval);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { poll(); } });
 })();
 
 document.getElementById('dates')?.addEventListener('change', function () {

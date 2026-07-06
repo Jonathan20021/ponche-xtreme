@@ -254,6 +254,20 @@ body.agent-ui .site-footer{display:none !important;}
 .ag-seg .mt{font-size:11px; color:var(--ag-muted);}
 .ag-seg .hh{font-size:12px; font-weight:700; color:var(--ag-brand);}
 
+/* Widget "En vivo" del agente (estado actual de Vicidial) */
+.ag-live{display:flex; align-items:center; gap:12px; background:var(--ag-soft); border:1px solid var(--ag-border);
+    border-radius:12px; padding:11px 14px; margin-bottom:14px; transition:background .3s var(--ag-ease);}
+.ag-live-dot{width:11px; height:11px; border-radius:50%; background:#94A3B8; flex-shrink:0;}
+.ag-live.on .ag-live-dot{animation:ag-livepulse 1.8s infinite;}
+@keyframes ag-livepulse{0%{box-shadow:0 0 0 0 rgba(100,116,139,.45)}70%{box-shadow:0 0 0 7px rgba(100,116,139,0)}100%{box-shadow:0 0 0 0 rgba(100,116,139,0)}}
+.ag-live-txt{display:flex; flex-direction:column; line-height:1.25; min-width:0;}
+.ag-live-label{font-weight:700; font-size:14px; color:var(--ag-text);}
+.ag-live-meta{font-size:11.5px; color:var(--ag-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.ag-live-time{margin-left:auto; font-size:14px; font-weight:800; color:var(--ag-text); font-variant-numeric:tabular-nums; letter-spacing:-.3px;}
+.ag-live-live{margin-left:6px; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.6px; color:#0FA958;
+    background:var(--ag-green-bg); padding:2px 6px; border-radius:5px;}
+@media (prefers-reduced-motion:reduce){ .ag-live.on .ag-live-dot{animation:none;} }
+
 /* auth code input */
 .ag-authbox{margin-bottom:14px;}
 .ag-authbox label{display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ag-muted); margin-bottom:6px;}
