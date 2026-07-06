@@ -82,6 +82,11 @@ try {
 
     $daysArg = $arg('days');
 
+    // Modo liviano intradía (--light): refresca SOLO la actividad de HOY sin pedir
+    // las hojas de tiempo por-agente (2 llamadas para todos), para correr cada 15-20
+    // min. El login/logout se preserva de la última corrida completa (nocturna).
+    $light = in_array('--light', $_SERVER['argv'] ?? [], true) || isset($_GET['light']);
+
     if ($validDate($single)) {
         $dates[] = $single;
     } elseif ($validDate($from) && $validDate($to)) {
@@ -105,19 +110,22 @@ try {
         for ($i = $n - 1; $i >= 0; $i--) {
             $dates[] = date('Y-m-d', strtotime("-{$i} day"));
         }
+    } elseif ($light) {
+        // --light sin fecha explícita: HOY (día en curso).
+        $dates[] = date('Y-m-d');
     } else {
         // Default: ayer
         $dates[] = date('Y-m-d', strtotime('yesterday'));
     }
 
-    $out('Días a importar: ' . implode(', ', $dates));
-    $triggeredBy = $isCli ? 'cli' : 'cron';
+    $out('Días a importar: ' . implode(', ', $dates) . ($light ? ' (modo liviano intradía)' : ''));
+    $triggeredBy = $light ? 'live' : ($isCli ? 'cli' : 'cron');
 
     $grandTotals = ['agents' => 0, 'timesheets' => 0, 'rows' => 0, 'maps' => 0, 'errors' => 0];
 
     foreach ($dates as $date) {
         $out("--- Importando $date ---");
-        $summary = importVicidialDay($pdo, $cfg, $date, $triggeredBy);
+        $summary = importVicidialDay($pdo, $cfg, $date, $triggeredBy, $light);
 
         $out("  Estado:            {$summary['status']}");
         $out("  Agentes en reporte:{$summary['agents_in_report']}");

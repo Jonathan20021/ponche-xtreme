@@ -828,8 +828,12 @@ if (!function_exists('importVicidialDay')) {
      *
      * @return array Resumen de la corrida.
      */
-    function importVicidialDay(PDO $pdo, array $cfg, string $date, string $triggeredBy = 'cron'): array
+    function importVicidialDay(PDO $pdo, array $cfg, string $date, string $triggeredBy = 'cron', bool $light = false): array
     {
+        // $light = modo intradía: NO pide las hojas de tiempo por-agente (lo pesado);
+        // solo refresca la actividad acumulada (calls/talk/pausas/nonpause/dispo) con
+        // 2 llamadas para TODOS los agentes. El login/logout se preserva de la última
+        // corrida completa (nocturna) — no se pisa.
         $startedAt = microtime(true);
         ensureVicidialStatusBreakdownColumn($pdo); // desglose de disposiciones (conversiones)
         $offsetMin = (int) ($cfg['vicidial_tz_offset_minutes'] ?? 0);
@@ -898,9 +902,9 @@ if (!function_exists('importVicidialDay')) {
                 vicidial_name        = VALUES(vicidial_name),
                 user_group           = VALUES(user_group),
                 user_id              = VALUES(user_id),
-                first_login          = VALUES(first_login),
-                last_activity        = VALUES(last_activity),
-                total_logged_seconds = VALUES(total_logged_seconds),
+                first_login          = IF(:ts_known = 1, VALUES(first_login), first_login),
+                last_activity        = IF(:ts_known = 1, VALUES(last_activity), last_activity),
+                total_logged_seconds = IF(:ts_known = 1, VALUES(total_logged_seconds), total_logged_seconds),
                 nonpause_seconds     = IF(:pause_known = 1, VALUES(nonpause_seconds), nonpause_seconds),
                 pause_breakdown      = IF(:pause_known = 1, VALUES(pause_breakdown), pause_breakdown),
                 status_breakdown     = VALUES(status_breakdown),
@@ -909,9 +913,9 @@ if (!function_exists('importVicidialDay')) {
                 pause_seconds        = VALUES(pause_seconds),
                 wait_seconds         = VALUES(wait_seconds),
                 dispo_seconds        = VALUES(dispo_seconds),
-                tz_offset_applied_minutes = VALUES(tz_offset_applied_minutes),
-                raw_first_login      = VALUES(raw_first_login),
-                raw_last_activity    = VALUES(raw_last_activity),
+                tz_offset_applied_minutes = IF(:ts_known = 1, VALUES(tz_offset_applied_minutes), tz_offset_applied_minutes),
+                raw_first_login      = IF(:ts_known = 1, VALUES(raw_first_login), raw_first_login),
+                raw_last_activity    = IF(:ts_known = 1, VALUES(raw_last_activity), raw_last_activity),
                 source               = 'api'
         ");
 
@@ -934,14 +938,21 @@ if (!function_exists('importVicidialDay')) {
                 continue;
             }
 
-            // 3. Hoja de tiempo del agente
-            $ts = vicidialFetchTimeSheet($cfg, $vu, $date);
-            if (!$ts['ok']) {
-                $summary['errors'][] = 'Timesheet ' . $vu . ': ' . $ts['error'];
-                $summary['status'] = 'partial';
-                // Aun así guardamos los totales de actividad sin la ventana de login
+            // 3. Hoja de tiempo del agente (login/logout). En modo liviano se OMITE
+            // (es 1 llamada por agente = lo pesado); el login se preserva vía :ts_known.
+            if ($light) {
+                $ts = ['ok' => false, 'first_login' => null, 'last_activity' => null, 'total_seconds' => 0];
+                $tsKnown = 0;
             } else {
-                $summary['timesheets_fetched']++;
+                $ts = vicidialFetchTimeSheet($cfg, $vu, $date);
+                if (!$ts['ok']) {
+                    $summary['errors'][] = 'Timesheet ' . $vu . ': ' . $ts['error'];
+                    $summary['status'] = 'partial';
+                    // Aun así guardamos los totales de actividad sin la ventana de login
+                } else {
+                    $summary['timesheets_fetched']++;
+                }
+                $tsKnown = $ts['ok'] ? 1 : 0;
             }
 
             $firstLocal = vicidialShiftToLocal($ts['first_login'] ?? null, $offsetMin);
@@ -976,6 +987,7 @@ if (!function_exists('importVicidialDay')) {
                     ':pause_breakdown'      => $pauseJson,
                     ':status_breakdown'     => $statusJson,
                     ':pause_known'          => $pauseKnown,
+                    ':ts_known'             => $tsKnown,
                     ':calls'                => $agent['calls'],
                     ':talk_seconds'         => $agent['talk_seconds'],
                     ':pause_seconds'        => $agent['pause_seconds'],
