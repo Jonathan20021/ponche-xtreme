@@ -69,6 +69,25 @@ try {
 
     $cfg = getVicidialSyncConfig($pdo);
 
+    // Modo REFRESCADOR del estado EN VIVO (--live-refresh): solo actualiza el snapshot
+    // vicidial_live_status y sale. Para una tarea cada ~1 min, así el estado en vivo
+    // del portal está caliente aunque nadie tenga el portal abierto (y lo leen también
+    // los clientes remotos/HostGator). Respeta el TTL+lock: no martillа a Vicidial.
+    if (in_array('--live-refresh', $_SERVER['argv'] ?? [], true) || isset($_GET['live_refresh'])) {
+        require_once __DIR__ . '/lib/vicidial_live.php';
+        $r = vicidialGetLiveStatus($pdo, $cfg);
+        if (empty($r['enabled'])) {
+            $out('Estado en vivo DESHABILITADO (vicidial_live_enabled). Saliendo.');
+            exit(0);
+        }
+        $m = $r['meta'] ?? [];
+        $out('Refresco EN VIVO: ' . (!empty($m['source_ok']) ? 'ok' : 'sin conexión')
+            . ' · logueados=' . ($m['counts']['logged_in'] ?? 0)
+            . ' · en_llamada=' . ($m['counts']['on_call'] ?? 0)
+            . ' · edad=' . (($m['age_seconds'] ?? null) !== null ? $m['age_seconds'] . 's' : '?'));
+        exit(0);
+    }
+
     if (($cfg['vicidial_sync_enabled'] ?? '0') !== '1') {
         $out('Sincronización Vicidial DESHABILITADA en settings.php. Saliendo.');
         exit(0);

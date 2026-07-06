@@ -4,14 +4,16 @@ REM  Sincronizacion Vicidial - TODO EN UNO (a prueba de errores)
 REM
 REM  MODOS:
 REM   install  (una vez, doble clic): se auto-eleva a Admin, verifica zona horaria
-REM            (GMT-4) y registra DOS tareas de Windows como SYSTEM:
-REM              - PoncheXtreme-VicidialSync      -> 11:30 PM diario, COMPLETA
+REM            (GMT-4) y registra TRES tareas de Windows como SYSTEM:
+REM              - PoncheXtreme-VicidialSync         -> 11:30 PM diario, COMPLETA
 REM                (importa hoy+ayer con login/logout: alimenta nomina y reportes).
-REM              - PoncheXtreme-VicidialSync-Live -> cada 15 min de 8am a 11pm,
-REM                LIVIANA (solo refresca la actividad de HOY: llamadas, horas
-REM                productivas, pausas, conversiones -> reportes y portal "en vivo").
+REM              - PoncheXtreme-VicidialSync-Live    -> cada 15 min 8am-11pm, LIVIANA
+REM                (actividad de HOY: llamadas, horas productivas, pausas, conversiones).
+REM              - PoncheXtreme-VicidialSync-Refresh -> cada 1 min 8am-11pm, REFRESCA
+REM                el estado EN VIVO (en llamada/pausa) del portal del agente.
 REM   (sin args): corrida COMPLETA (--days=2). Lo que dispara la tarea nocturna.
-REM   light     : corrida LIVIANA (--light, solo hoy). Lo que dispara la intradia.
+REM   light     : corrida LIVIANA (--light, solo hoy). Dispara la intradia.
+REM   liverefresh: refresco del estado en vivo (--live-refresh). Dispara el refrescador.
 REM
 REM  Independiente de la ruta (%~dp0). Auto-detecta php.exe. Idempotente.
 REM ============================================================================
@@ -19,10 +21,12 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "HERE=%~dp0"
 set "TASK=PoncheXtreme-VicidialSync"
 set "TASKLIVE=PoncheXtreme-VicidialSync-Live"
+set "TASKREFRESH=PoncheXtreme-VicidialSync-Refresh"
 set "CRON=%HERE%cron_vicidial_sync.php"
 
 if /I "%~1"=="install" goto :INSTALL
 if /I "%~1"=="light" ( set "MODE=liviano" & set "SYNCARGS=--light" & set "LOG=%HERE%logs\vicidial_sync_live.log" & goto :RUN )
+if /I "%~1"=="liverefresh" ( set "MODE=refresco-vivo" & set "SYNCARGS=--live-refresh" & set "LOG=%HERE%logs\vicidial_live_refresh.log" & goto :RUN )
 set "MODE=completo" & set "SYNCARGS=--days=2" & set "LOG=%HERE%logs\vicidial_sync_cron.log"
 
 REM ============================ MODO CORRIDA ==================================
@@ -56,6 +60,7 @@ echo ==========================================================
 echo   Instalar tareas de Sincronizacion Vicidial (hora RD)
 echo   - Completa : 11:30 PM diario
 echo   - En vivo  : cada 15 min, 8am a 11pm
+echo   - Refresco : cada 1 min,  8am a 11pm (estado en vivo)
 echo ==========================================================
 echo(
 if not exist "%CRON%" ( echo ERROR: no se encontro cron_vicidial_sync.php junto a este .bat. & pause & exit /b 1 )
@@ -76,16 +81,22 @@ echo Registrando tarea EN VIVO (cada 15 min, 8am-11pm)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$a=New-ScheduledTaskAction -Execute '%~f0' -Argument 'light'; $t=New-ScheduledTaskTrigger -Daily -At ([datetime]'08:00'); $t.Repetition=(New-ScheduledTaskTrigger -Once -At ([datetime]'08:00') -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Hours 15)).Repetition; $s=New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -MultipleInstances IgnoreNew; $p=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest; Register-ScheduledTask -TaskName '%TASKLIVE%' -Action $a -Trigger $t -Settings $s -Principal $p -Description 'Sync Vicidial intradia cada 15 min 8am-11pm (liviano, actividad de hoy)' -Force | Out-Null"
 if !errorlevel! NEQ 0 ( echo ERROR al registrar la tarea en vivo. & pause & exit /b 1 )
 
+echo Registrando REFRESCADOR de estado en vivo (cada 1 min, 8am-11pm)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$a=New-ScheduledTaskAction -Execute '%~f0' -Argument 'liverefresh'; $t=New-ScheduledTaskTrigger -Daily -At ([datetime]'08:00'); $t.Repetition=(New-ScheduledTaskTrigger -Once -At ([datetime]'08:00') -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Hours 15)).Repetition; $s=New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -MultipleInstances IgnoreNew; $p=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest; Register-ScheduledTask -TaskName '%TASKREFRESH%' -Action $a -Trigger $t -Settings $s -Principal $p -Description 'Refresca el estado EN VIVO de Vicidial cada 1 min 8am-11pm (portal del agente)' -Force | Out-Null"
+if !errorlevel! NEQ 0 ( echo ERROR al registrar el refrescador. & pause & exit /b 1 )
+
 echo(
 echo Tareas registradas. Corriendo una prueba de cada una...
 schtasks /Run /TN "%TASK%" >nul 2>&1
 schtasks /Run /TN "%TASKLIVE%" >nul 2>&1
+schtasks /Run /TN "%TASKREFRESH%" >nul 2>&1
 timeout /t 20 /nobreak >nul
 echo(
 echo ===================== ESTADO =====================
-powershell -NoProfile -Command "Get-ScheduledTask -TaskName '%TASK%','%TASKLIVE%' | Get-ScheduledTaskInfo | Select-Object TaskName,LastTaskResult,NextRunTime | Format-Table -Auto"
-echo Logs: %HERE%logs\vicidial_sync_cron.log  (completa)
-echo       %HERE%logs\vicidial_sync_live.log  (en vivo)
+powershell -NoProfile -Command "Get-ScheduledTask -TaskName '%TASK%','%TASKLIVE%','%TASKREFRESH%' | Get-ScheduledTaskInfo | Select-Object TaskName,LastTaskResult,NextRunTime | Format-Table -Auto"
+echo Logs: %HERE%logs\vicidial_sync_cron.log     (completa nocturna)
+echo       %HERE%logs\vicidial_sync_live.log     (actividad intradia)
+echo       %HERE%logs\vicidial_live_refresh.log  (estado en vivo)
 echo(
 echo Si LastTaskResult = 0 en ambas, quedo listo.
 echo(
