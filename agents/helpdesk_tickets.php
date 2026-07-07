@@ -51,6 +51,7 @@ require_once __DIR__ . '/../header_agent.php';
 .st-pending{background:#EEF1F6; color:var(--ag-muted);}
 .st-resolved{background:var(--ag-green-bg); color:#0B7A4B;}
 .st-closed{background:#E5E8EE; color:#475569;}
+.st-cancelled{background:var(--ag-red-bg); color:#B42318;}
 .pr-low{background:var(--ag-green-bg); color:#0B7A4B;}
 .pr-medium{background:#E8F1FE; color:#1D5DB8;}
 .pr-high{background:var(--ag-amber-bg); color:#B54708;}
@@ -83,6 +84,22 @@ require_once __DIR__ . '/../header_agent.php';
 .tk-comment .ca{font-weight:700; color:var(--ag-text);}
 .tk-comment .cd{color:var(--ag-muted);}
 .tk-comment .ct{color:var(--ag-muted); font-size:13px; white-space:pre-wrap; line-height:1.5;}
+
+/* adjuntos + timeline + acciones */
+.tk-files{display:flex; flex-wrap:wrap; gap:8px; margin-top:9px;}
+.tk-file-chip{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; background:var(--ag-brand-tint); color:var(--ag-brand); border-radius:8px; padding:5px 10px;}
+.tk-file-chip a{color:inherit; text-decoration:none; cursor:pointer; font-weight:700;}
+.tk-atts{display:flex; flex-wrap:wrap; gap:9px; margin-top:11px;}
+.tk-att{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--ag-brand); background:#fff; border:1px solid var(--ag-border); border-radius:9px; padding:6px 11px; text-decoration:none;}
+.tk-att:hover{border-color:var(--ag-blue);}
+.tk-att img{max-width:170px; max-height:120px; border-radius:8px; border:1px solid var(--ag-border); display:block;}
+.tk-fileinput{display:flex; align-items:center; gap:9px;}
+.tk-fileinput .btn{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700; color:var(--ag-brand); background:var(--ag-brand-tint); border:1px solid #D3DEFB; border-radius:10px; padding:9px 13px; cursor:pointer;}
+.tk-timeline{margin-top:22px; padding-top:20px; border-top:1px solid var(--ag-border);}
+.tk-tl-item{display:flex; gap:11px; font-size:12.5px; color:var(--ag-muted); margin-bottom:11px;}
+.tk-tl-dot{width:9px; height:9px; border-radius:50%; background:var(--ag-blue); margin-top:4px; flex-shrink:0;}
+.tk-actions{display:flex; gap:8px; flex-wrap:wrap; margin:4px 0 18px;}
+.tk-actions .ag-btn{font-size:12.5px;}
 </style>
 
 <div class="agent-dashboard tk-wrap">
@@ -115,6 +132,7 @@ require_once __DIR__ . '/../header_agent.php';
                 <option value="pending">Pendiente</option>
                 <option value="resolved">Resuelto</option>
                 <option value="closed">Cerrado</option>
+                <option value="cancelled">Cancelado</option>
             </select><i class="fas fa-chevron-down chev"></i>
         </div>
         <div class="tk-select">
@@ -176,6 +194,15 @@ require_once __DIR__ . '/../header_agent.php';
                     <option value="critical">Crítica — Bloquea el trabajo</option>
                 </select>
             </div>
+            <div class="tk-field">
+                <label>Adjuntar capturas o archivos (opcional)</label>
+                <div class="tk-fileinput">
+                    <label class="btn" for="ticketFiles"><i class="fas fa-paperclip"></i> Elegir archivos</label>
+                    <input type="file" id="ticketFiles" multiple accept="image/*,application/pdf,.txt" style="display:none;" onchange="renderCreateFiles()">
+                    <span style="font-size:12px; color:var(--ag-muted);">Imagen, PDF o texto · hasta 10 MB c/u</span>
+                </div>
+                <div id="ticketFilesList" class="tk-files"></div>
+            </div>
             <button type="submit" class="ag-btn ag-btn-primary" style="width:100%;"><i class="fas fa-paper-plane"></i> Enviar ticket</button>
         </form>
     </div>
@@ -193,7 +220,7 @@ require_once __DIR__ . '/../header_agent.php';
 let categories = [];
 let currentTicket = null;
 
-const TK_STATUS = {open:'Abierto', in_progress:'En progreso', pending:'Pendiente', resolved:'Resuelto', closed:'Cerrado'};
+const TK_STATUS = {open:'Abierto', in_progress:'En progreso', pending:'Pendiente', resolved:'Resuelto', closed:'Cerrado', cancelled:'Cancelado'};
 const TK_PRIORITY = {low:'Baja', medium:'Media', high:'Alta', critical:'Crítica'};
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -288,6 +315,7 @@ function openCreateTicketModal() { document.getElementById('createTicketModal').
 function closeCreateTicketModal() {
     document.getElementById('createTicketModal').style.display = 'none';
     document.getElementById('createTicketForm').reset();
+    const fl = document.getElementById('ticketFilesList'); if (fl) fl.innerHTML = '';
 }
 
 function createTicket(event) {
@@ -306,14 +334,18 @@ function createTicket(event) {
     fetch('../hr/helpdesk_api.php', { method: 'POST', body: formData })
     .then(response => response.json())
     .then(data => {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar ticket';
         if (data.success) {
-            alert('✓ ¡Ticket creado!\n\nNúmero de ticket: ' + data.ticket_number + '\n\nRecibirás actualizaciones por correo.');
-            closeCreateTicketModal();
-            loadTickets();
-            updateStats();
+            uploadTicketFiles(data.ticket_id, document.getElementById('ticketFiles'), null).then(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar ticket';
+                alert('✓ ¡Ticket creado!\n\nNúmero de ticket: ' + data.ticket_number + '\n\nRecibirás actualizaciones por correo.');
+                closeCreateTicketModal();
+                loadTickets();
+                updateStats();
+            });
         } else {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar ticket';
             alert('Error: ' + data.error);
         }
     })
@@ -339,6 +371,10 @@ function closeViewTicketModal() { document.getElementById('viewTicketModal').sty
 
 function displayTicketDetails(ticket) {
     currentTicket = ticket;
+    const atts = ticket.attachments || [];
+    const descAtts = atts.filter(a => !a.comment_id);
+    const canReopen = (ticket.status === 'resolved' || ticket.status === 'closed');
+    const canCancel = (ticket.status === 'open' || ticket.status === 'in_progress' || ticket.status === 'pending');
 
     let html = `
         <div class="tk-num" style="font-size:13px;">#${escapeHtml(ticket.ticket_number)}</div>
@@ -350,59 +386,125 @@ function displayTicketDetails(ticket) {
         </div>
         <div class="tk-detail-box">
             <p><strong>Creado:</strong> ${formatDate(ticket.created_at)}</p>
-            ${ticket.assigned_to_name ? `<p style="margin:0;"><strong>Asignado a:</strong> ${escapeHtml(ticket.assigned_to_name)}</p>` : '<p style="margin:0;"><strong>Estado:</strong> Esperando asignación</p>'}
+            ${ticket.assigned_to_name ? `<p style="margin:0;"><strong>Atiende:</strong> ${escapeHtml(ticket.assigned_to_name)}</p>` : '<p style="margin:0;"><strong>Estado:</strong> Esperando asignación</p>'}
         </div>
+        ${(canCancel || canReopen) ? `<div class="tk-actions">
+            ${canCancel ? `<button class="ag-btn" style="background:var(--ag-soft);border:1px solid var(--ag-border);color:var(--ag-text)" onclick="changeMyTicket('cancelled')"><i class="fas fa-ban"></i> Cancelar ticket</button>` : ''}
+            ${canReopen ? `<button class="ag-btn ag-btn-primary" onclick="changeMyTicket('open')"><i class="fas fa-rotate-left"></i> Reabrir ticket</button>` : ''}
+        </div>` : ''}
         <div style="margin-bottom:22px;">
             <h4 style="margin:0 0 8px; color:var(--ag-text); font-size:14px;">Descripción</h4>
             <p style="white-space:pre-wrap; color:var(--ag-muted); font-size:13.5px; line-height:1.6; margin:0;">${escapeHtml(ticket.description)}</p>
+            ${descAtts.length ? `<div class="tk-atts">${descAtts.map(attHtml).join('')}</div>` : ''}
         </div>`;
 
     html += `
         <div class="tk-comments">
             <h4 style="margin:0 0 12px; color:var(--ag-text); font-size:14px;">Actualizaciones y comentarios (${ticket.comments.length})</h4>
             ${ticket.comments.length === 0 ? '<p style="color:var(--ag-muted); font-size:13px;">Aún no hay comentarios. Nuestro equipo responderá pronto.</p>' : ''}
-            ${ticket.comments.map(comment => `
-                <div class="tk-comment">
+            ${ticket.comments.map(comment => {
+                const cAtts = atts.filter(a => a.comment_id == comment.id);
+                return `<div class="tk-comment">
                     <div class="ch"><span class="ca">${escapeHtml(comment.user_name)}</span><span class="cd">${formatDate(comment.created_at)}</span></div>
                     <div class="ct">${escapeHtml(comment.comment)}</div>
-                </div>
-            `).join('')}
+                    ${cAtts.length ? `<div class="tk-atts">${cAtts.map(attHtml).join('')}</div>` : ''}
+                </div>`;
+            }).join('')}
             <div style="margin-top:20px;">
                 <h4 style="margin:0 0 8px; color:var(--ag-text); font-size:14px;">Agregar comentario</h4>
                 <form onsubmit="addComment(event)">
                     <div class="tk-field">
-                        <textarea id="newComment" required placeholder="Escribe tu comentario o información adicional…"></textarea>
+                        <textarea id="newComment" placeholder="Escribe tu comentario o adjunta una captura…"></textarea>
+                    </div>
+                    <div class="tk-fileinput" style="margin-bottom:12px;">
+                        <label class="btn" for="commentFiles"><i class="fas fa-paperclip"></i> Adjuntar</label>
+                        <input type="file" id="commentFiles" multiple accept="image/*,application/pdf,.txt" style="display:none;" onchange="renderCommentFiles()">
+                        <span id="commentFilesList" style="font-size:12px;color:var(--ag-muted);"></span>
                     </div>
                     <button type="submit" class="ag-btn ag-btn-primary"><i class="fas fa-comment"></i> Agregar comentario</button>
                 </form>
             </div>
         </div>`;
 
+    if (ticket.status_history && ticket.status_history.length) {
+        html += `<div class="tk-timeline">
+            <h4 style="margin:0 0 12px; color:var(--ag-text); font-size:14px;">Historial</h4>
+            ${ticket.status_history.map(h => `<div class="tk-tl-item"><span class="tk-tl-dot"></span><div><b style="color:var(--ag-text)">${TK_STATUS[h.new_status] || h.new_status}</b> · ${escapeHtml(h.changed_by_name || '')} · ${formatDate(h.created_at)}</div></div>`).join('')}
+        </div>`;
+    }
+
     document.getElementById('ticketDetails').innerHTML = html;
+}
+
+function renderCommentFiles() {
+    const fi = document.getElementById('commentFiles');
+    document.getElementById('commentFilesList').textContent = fi.files.length ? (fi.files.length + ' archivo(s) listo(s)') : '';
+}
+
+function changeMyTicket(status) {
+    if (status === 'cancelled' && !confirm('¿Seguro que quieres cancelar este ticket?')) return;
+    const fd = new FormData();
+    fd.append('action', 'update_status');
+    fd.append('ticket_id', currentTicket.id);
+    fd.append('status', status);
+    fetch('../hr/helpdesk_api.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => { if (d.success) { viewTicket(currentTicket.id); loadTickets(); updateStats(); } else { alert('Error: ' + (d.error || '')); } });
 }
 
 function addComment(event) {
     event.preventDefault();
     const submitBtn = event.target.querySelector('button[type="submit"]');
+    const txt = document.getElementById('newComment').value.trim();
+    const fi = document.getElementById('commentFiles');
+    const hasFiles = fi && fi.files && fi.files.length;
+    if (!txt && !hasFiles) { alert('Escribe un comentario o adjunta un archivo.'); return; }
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando…';
+    const done = () => viewTicket(currentTicket.id);
 
-    const formData = new FormData();
-    formData.append('action', 'add_comment');
-    formData.append('ticket_id', currentTicket.id);
-    formData.append('comment', document.getElementById('newComment').value);
-
-    fetch('../hr/helpdesk_api.php', { method: 'POST', body: formData })
-    .then(response => response.json())
-    .then(data => {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="fas fa-comment"></i> Agregar comentario';
-        if (data.success) { viewTicket(currentTicket.id); }
-        else { alert('Error: ' + data.error); }
-    });
+    if (txt) {
+        const fd = new FormData();
+        fd.append('action', 'add_comment');
+        fd.append('ticket_id', currentTicket.id);
+        fd.append('comment', txt);
+        fetch('../hr/helpdesk_api.php', { method: 'POST', body: fd })
+        .then(r => r.json()).then(d => {
+            if (!d.success) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fas fa-comment"></i> Agregar comentario'; alert('Error: ' + d.error); return; }
+            uploadTicketFiles(currentTicket.id, fi, d.comment_id || null).then(done);
+        });
+    } else {
+        uploadTicketFiles(currentTicket.id, fi, null).then(done);
+    }
 }
 
 function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text ?? ''; return div.innerHTML; }
+
+// ---- Adjuntos ----
+function renderCreateFiles() {
+    const fi = document.getElementById('ticketFiles');
+    const box = document.getElementById('ticketFilesList');
+    box.innerHTML = Array.from(fi.files).map(f => `<span class="tk-file-chip"><i class="fas fa-paperclip"></i> ${escapeHtml(f.name)}</span>`).join('');
+}
+// Sube cada archivo del input al ticket (opcionalmente ligado a un comentario).
+function uploadTicketFiles(ticketId, fileInput, commentId) {
+    if (!fileInput || !fileInput.files || !fileInput.files.length) return Promise.resolve();
+    const jobs = Array.from(fileInput.files).map(f => {
+        const fd = new FormData();
+        fd.append('action', 'upload_attachment');
+        fd.append('ticket_id', ticketId);
+        if (commentId) fd.append('comment_id', commentId);
+        fd.append('file', f);
+        return fetch('../hr/helpdesk_api.php', { method: 'POST', body: fd }).then(r => r.json()).catch(() => null);
+    });
+    return Promise.all(jobs);
+}
+function attHtml(a) {
+    const url = `../hr/helpdesk_attachment.php?id=${a.id}`;
+    return a.is_image == 1
+        ? `<a class="tk-att" href="${url}" target="_blank"><img src="${url}" alt="${escapeHtml(a.file_name)}"></a>`
+        : `<a class="tk-att" href="${url}" target="_blank"><i class="fas fa-paperclip"></i> ${escapeHtml(a.file_name)}</a>`;
+}
 
 function formatDate(dateString) {
     if (!dateString) return '';
