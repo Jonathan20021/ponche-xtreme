@@ -386,6 +386,8 @@ require_once __DIR__ . '/../header.php';
     const a=await api('get_agents'); if(a.success) AGENTS=a.agents;
     const c=await api('get_canned'); if(c.success) CANNED=c.canned;
     loadStats(); loadCounts(); loadTickets();
+    // Abrir un ticket directo por URL (?ticket=ID o ?id=ID), p.ej. desde los emails.
+    const urlp=new URLSearchParams(location.search); const tk=urlp.get('ticket')||urlp.get('id'); if(tk) openTicket(tk);
     setInterval(()=>{ loadStats(); loadCounts(); if(!state.current) loadTickets(); }, 45000);
   })();
 })();
