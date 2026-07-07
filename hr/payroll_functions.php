@@ -108,14 +108,29 @@ function calculateISR($monthlyGrossSalary)
 }
 
 /**
- * Calcula todos los descuentos de un empleado
+ * Calcula todos los descuentos de un empleado.
+ *
+ * $periodFraction = fracción del MES que representa el período de nómina
+ * (1.0 mensual, 0.5 quincenal, 0.25 semanal). AFP/SFS son % planos sobre el
+ * bruto del período (no se prorratean). El ISR sí: su escala es mensual/anual,
+ * así que se lleva el bruto del período a mensual-equivalente (÷ fracción), se
+ * calcula el ISR mensual y se re-prorratea al período (× fracción). Con 1.0 el
+ * comportamiento es idéntico al anterior (períodos mensuales).
  */
-function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [])
+function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [], $periodFraction = 1.0)
 {
+    $periodFraction = (float) $periodFraction;
+    if ($periodFraction <= 0 || $periodFraction > 1.0) {
+        $periodFraction = 1.0;
+    }
+    $isrPeriod = ($periodFraction < 1.0)
+        ? round(calculateISR($grossSalary / $periodFraction) * $periodFraction, 2)
+        : calculateISR($grossSalary);
+
     $deductions = [
         'afp_employee' => calculateAFP($pdo, $grossSalary, false),
         'sfs_employee' => calculateSFS($pdo, $grossSalary, false),
-        'isr' => calculateISR($grossSalary),
+        'isr' => $isrPeriod,
         'custom_deductions' => 0,
         'total_deductions' => 0
     ];
@@ -675,8 +690,29 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     $deductionsEnd   = $period['end_date']   ?? null;
     $customDeductions = getEmployeeCustomDeductions($pdo, $employeeId, $deductionsStart, $deductionsEnd);
 
+    // Fracción del mes que representa el período, para prorratear la escala del
+    // ISR (que es mensual/anual) — mismo criterio que la proración de salario fijo.
+    // Aplica a TODOS los tipos de compensación (por hora, diario y fijo).
+    $isrPeriodFraction = 1.0;
+    if ($period) {
+        if (($period['period_type'] ?? '') === 'BIWEEKLY') {
+            $isrPeriodFraction = 0.5;
+        } elseif (($period['period_type'] ?? '') === 'WEEKLY') {
+            $isrPeriodFraction = 0.25;
+        } elseif (($period['period_type'] ?? '') !== 'MONTHLY'
+            && !empty($period['start_date']) && !empty($period['end_date'])) {
+            $sd = new DateTime($period['start_date']);
+            $ed = new DateTime($period['end_date']);
+            $pDays = $sd->diff($ed)->days + 1;
+            $dInMonth = (int) $sd->format('t');
+            if ($pDays > 0 && $dInMonth > 0) {
+                $isrPeriodFraction = $pDays / $dInMonth;
+            }
+        }
+    }
+
     // Calcular descuentos
-    $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions);
+    $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions, $isrPeriodFraction);
 
     // Aplicar descuento de cooperativa (monto fijo manual)
     $cooperativeDeduction = round((float)($hoursData['cooperative_deduction'] ?? 0), 2);
