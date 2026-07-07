@@ -22,6 +22,7 @@ $agentNavItems = [
     'agent_quality' => ['label' => 'Calidad', 'href' => $basePath . 'agent_quality.php', 'icon' => 'fa-star'],
     'agent_records' => ['label' => 'Registros', 'href' => $basePath . 'agent.php', 'icon' => 'fa-clock'],
     'agent_hours' => ['label' => 'Mis Horas', 'href' => $basePath . 'agents/mis_horas.php', 'icon' => 'fa-business-time'],
+    'agent_calls' => ['label' => 'Mis Llamadas', 'href' => $basePath . 'agent_calls.php', 'icon' => 'fa-headphones'],
     'agent_permissions' => ['label' => 'Solicitar Permiso', 'href' => $basePath . 'agents/request_permission.php', 'icon' => 'fa-calendar-check'],
     'agent_vacations' => ['label' => 'Solicitar Vacaciones', 'href' => $basePath . 'agents/request_vacation.php', 'icon' => 'fa-umbrella-beach'],
     'agent_loans' => ['label' => 'Mis Préstamos', 'href' => $basePath . 'agents/my_loans.php', 'icon' => 'fa-money-check-dollar'],
@@ -32,7 +33,7 @@ $agentNavItems = [
 
 // Grupos del sidebar (estilo Nexus)
 $agentNavGroups = [
-    'General'     => ['agent_dashboard', 'agent_quality', 'agent_records', 'agent_hours'],
+    'General'     => ['agent_dashboard', 'agent_quality', 'agent_records', 'agent_hours', 'agent_calls'],
     'Solicitudes' => ['agent_permissions', 'agent_vacations', 'agent_loans', 'agent_request_loan'],
     'Soporte'     => ['helpdesk_tickets', 'helpdesk_suggestions'],
 ];
@@ -145,7 +146,7 @@ $currentPath = basename($_SERVER['PHP_SELF']);
                     $visibleKeys = [];
                     foreach ($keys as $sectionKey) {
                         if (!isset($agentNavItems[$sectionKey])) { continue; }
-                        $showLink = in_array($sectionKey, ['agent_permissions', 'agent_vacations', 'agent_quality', 'agent_hours', 'agent_loans', 'agent_request_loan'], true)
+                        $showLink = in_array($sectionKey, ['agent_permissions', 'agent_vacations', 'agent_quality', 'agent_hours', 'agent_calls', 'agent_loans', 'agent_request_loan'], true)
                             || userHasPermission($sectionKey);
                         if ($showLink) { $visibleKeys[] = $sectionKey; }
                     }

@@ -31,6 +31,7 @@ if (php_sapi_name() !== 'cli' && !isset($_SERVER['HTTP_X_CRON_KEY'])) {
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/lib/vicidial_api_client.php';
+require_once __DIR__ . '/lib/vicidial_recordings.php';
 
 date_default_timezone_set('America/Santo_Domingo');
 
@@ -85,6 +86,18 @@ try {
             . ' · logueados=' . ($m['counts']['logged_in'] ?? 0)
             . ' · en_llamada=' . ($m['counts']['on_call'] ?? 0)
             . ' · edad=' . (($m['age_seconds'] ?? null) !== null ? $m['age_seconds'] . 's' : '?'));
+        exit(0);
+    }
+
+    // Modo GRABACIONES (--recordings[=YYYY-MM-DD]): importa solo el metadato de
+    // grabaciones de los agentes para esa fecha (default hoy) y sale. Para correrlo
+    // aparte de la sync completa (ej. varias veces al día para frescura).
+    if (in_array('--recordings', $_SERVER['argv'] ?? [], true) || $arg('recordings') !== null || isset($_GET['recordings'])) {
+        $rd = $arg('recordings');
+        $recDate = $validDate($rd) ? $rd : date('Y-m-d');
+        $rec = importVicidialRecordingsDay($pdo, $cfg, $recDate);
+        $out("Grabaciones $recDate: {$rec['rows']} guardadas de {$rec['agents']} agentes"
+            . (count($rec['errors']) ? ' · errores(' . count($rec['errors']) . '): ' . implode('; ', array_slice($rec['errors'], 0, 5)) : ''));
         exit(0);
     }
 
@@ -156,6 +169,14 @@ try {
             foreach (array_slice($summary['errors'], 0, 10) as $e) {
                 $out('    - ' . $e);
             }
+        }
+
+        // Grabaciones de llamadas para el portal del agente (metadato). Solo en la
+        // corrida COMPLETA (no en la liviana intradía), y si está habilitado.
+        if (!$light && vicidialRecordingsEnabled($pdo)) {
+            $rec = importVicidialRecordingsDay($pdo, $cfg, $date);
+            $out("  Grabaciones:       {$rec['rows']} de {$rec['agents']} agentes"
+                . (count($rec['errors']) ? ' (' . count($rec['errors']) . ' errores)' : ''));
         }
 
         $grandTotals['agents']     += $summary['agents_in_report'];

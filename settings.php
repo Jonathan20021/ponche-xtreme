@@ -1089,6 +1089,10 @@ try {
                     // se pagan por su ponche; desde ella, por Vicidial. Vacío = sin corte.
                     $vEffRaw = trim((string) ($_POST['vicidial_payroll_effective_date'] ?? ''));
                     $stmt->execute(['vicidial_payroll_effective_date', (preg_match('/^\d{4}-\d{2}-\d{2}$/', $vEffRaw) === 1 ? $vEffRaw : ''), 'text']);
+                    // Grabaciones en el portal del agente
+                    $stmt->execute(['vicidial_recordings_enabled', isset($_POST['vicidial_recordings_enabled']) ? '1' : '0', 'boolean']);
+                    $stmt->execute(['vicidial_recordings_min_seconds', (string) max(0, min(3600, (int) ($_POST['vicidial_recordings_min_seconds'] ?? 30))), 'number']);
+                    $stmt->execute(['vicidial_recordings_retention_days', (string) max(0, min(3650, (int) ($_POST['vicidial_recordings_retention_days'] ?? 60))), 'number']);
                     // Reportes admin (Tardanzas/Ausencias) alimentados desde Vicidial (kill-switch global).
                     $stmt->execute(['reports_use_vicidial_source', isset($_POST['reports_use_vicidial_source']) ? '1' : '0', 'boolean']);
                     // La contraseña solo se actualiza si se escribió algo (dejar en blanco = conservar la actual).
@@ -4100,6 +4104,38 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                         así el reporte atrapa a quien poncha a tiempo pero entra al discador tarde. El resto del personal — y
                         como respaldo si un agente no tiene login ese día — sigue con la marcación. Apágalo para volver 100%
                         al ponche sin redesplegar.</p>
+                </div>
+
+                <?php
+                    $vRecEnabled = (string) getSystemSetting($pdo, 'vicidial_recordings_enabled', '1') === '1';
+                    $vRecMin = (int) getSystemSetting($pdo, 'vicidial_recordings_min_seconds', 30);
+                    $vRecRet = (int) getSystemSetting($pdo, 'vicidial_recordings_retention_days', 60);
+                ?>
+                <div class="pt-4 border-t border-slate-700/40 space-y-3">
+                    <h3 class="text-primary font-semibold flex items-center gap-2">
+                        <i class="fas fa-headphones text-teal-400"></i> Grabaciones en el portal del agente
+                    </h3>
+                    <label class="inline-flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="vicidial_recordings_enabled" value="1" class="w-5 h-5 accent-indigo-500" <?= $vRecEnabled ? 'checked' : '' ?>>
+                        <span class="font-semibold">Mostrar a cada agente sus grabaciones de llamadas en "Mis Llamadas"</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">El agente escucha SOLO sus propias llamadas, servidas por un proxy con
+                        las credenciales del servidor (nunca ve la URL ni las claves de Vicidial). Se importan en la corrida
+                        nocturna de sincronización.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-stopwatch"></i> Duración mínima (seg) — "conversaciones reales"</label>
+                            <input type="number" name="vicidial_recordings_min_seconds" min="0" max="3600" value="<?= $vRecMin ?>" class="input-control">
+                            <p class="text-xs text-muted mt-1">Oculta marcados/colgados cortos: solo se guardan y muestran llamadas
+                                de esta duración o más. Recomendado: 30-60 seg.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-clock-rotate-left"></i> Días de historial a conservar</label>
+                            <input type="number" name="vicidial_recordings_retention_days" min="0" max="3650" value="<?= $vRecRet ?>" class="input-control">
+                            <p class="text-xs text-muted mt-1">Metadato en la tabla; el audio vive en Vicidial. 0 = sin límite.
+                                Recomendado: 60-90 días.</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex items-center justify-between pt-4 border-t border-slate-200">
