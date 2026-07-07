@@ -837,7 +837,7 @@ $chartColorsJson = json_encode($chartColors);
             <div class="ag-statcard">
                 <div class="sc-top"><div class="sc-ico" style="background:var(--ag-purple);"><i class="fas fa-calendar-check"></i></div><div class="sc-lbl">Días trabajados</div></div>
                 <div class="sc-val"><?= (int) $periodHours['days_worked'] ?></div>
-                <div class="sc-sub">fuente: <?= $periodHours['source_used'] === 'vicidial' ? 'Vicidial' : 'ponche' ?></div>
+                <div class="sc-sub">fuente: <?= ['vicidial' => 'Vicidial', 'mixta' => 'Vicidial + ponche', 'manual' => 'ponche'][$periodHours['source_used']] ?? 'ponche' ?></div>
             </div>
         </div>
     </div>

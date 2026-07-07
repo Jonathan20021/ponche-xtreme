@@ -74,15 +74,20 @@ if (!function_exists('computePeriodHoursForUser')) {
         $punchRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($punchRows, $paidTypeSlugs);
 
-        // 2) Si el agente se paga por Vicidial y HAY datos, Vicidial es la fuente.
-        //    Si no hay ningún dato de Vicidial, se conserva el ponche (respaldo).
+        // 2) Si el agente se paga por Vicidial: Vicidial manda en los días que
+        //    registró, y el ponche RESPALDA los días sin fila en Vicidial (mismo
+        //    merge por día que hr/payroll.php, para que estas horas coincidan EXACTO
+        //    con lo que se paga). Sin ningún dato de Vicidial, todo el ponche.
         if ($payrollSource === 'vicidial') {
+            $punchDaily = $dailyWorkSeconds; // ponche ya calculado arriba
             $vd = vicidialGetPaidSecondsByDate($pdo, $userId, $contextStart, $effectiveEnd);
             if (($vd['days'] ?? 0) > 0) {
-                $dailyWorkSeconds = $vd['by_date'];
-                $result['source_used'] = 'vicidial';
+                $seenDays = array_flip($vd['seen_dates'] ?? array_keys($vd['by_date']));
+                $backfill = array_diff_key($punchDaily, $seenDays);
+                $dailyWorkSeconds = $vd['by_date'] + $backfill;
+                $result['source_used'] = empty($backfill) ? 'vicidial' : 'mixta';
             } else {
-                $result['source_used'] = 'manual'; // respaldo ponche (sin datos Vicidial)
+                $result['source_used'] = 'manual'; // respaldo ponche total (sin datos Vicidial)
             }
         }
 

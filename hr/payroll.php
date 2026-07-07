@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
 
         // Alertas de la fuente Vicidial (días con tope / sin datos) para revisar
         // antes de aprobar. NO bloquean el cálculo; solo se muestran.
-        $vicidialPayrollFlags = ['capped' => [], 'no_data' => []];
+        $vicidialPayrollFlags = ['capped' => [], 'no_data' => [], 'backfilled' => []];
 
         foreach ($employees as $emp) {
             $userId = $emp['user_id'];
@@ -212,12 +212,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             // división semanal 44h, el multiplicador de extra y las deducciones
             // AFP/SFS/ISR — queda EXACTAMENTE igual. Solo cambia la fuente de horas.
             if (($emp['payroll_source'] ?? 'manual') === 'vicidial') {
+                $punchDaily = $dailyWorkSeconds; // ponche ya calculado arriba (respaldo por día)
                 $vd = vicidialGetPaidSecondsByDate($pdo, (int) $userId, $attendanceContextStart, $period['end_date']);
                 if ($vd['days'] > 0) {
-                    // Hay datos de Vicidial: son la fuente de horas de este agente.
-                    $dailyWorkSeconds = $vd['by_date'];
+                    // Vicidial es la fuente en los días que registró. En los días que el
+                    // agente trabajó y MARCÓ pero NO tiene fila en Vicidial (no se logueó,
+                    // discador caído, o recién movido a Vicidial a mitad de período) se
+                    // RESPALDA con el ponche de ese día — nunca pagarle 0 un día trabajado.
+                    // Merge POR DÍA: Vicidial manda donde hay registro; ponche solo cubre
+                    // los días sin registro alguno en Vicidial (no los días de baja
+                    // producción, que sí deben pagarse por Vicidial).
+                    $seenDays = array_flip($vd['seen_dates'] ?? array_keys($vd['by_date']));
+                    $backfill = array_diff_key($punchDaily, $seenDays);
+                    $dailyWorkSeconds = $vd['by_date'] + $backfill;
                     if (!empty($vd['capped_days'])) {
                         $vicidialPayrollFlags['capped'][] = ['user_id' => (int) $userId, 'days' => $vd['capped_days']];
+                    }
+                    if (!empty($backfill)) {
+                        // Días pagados por ponche por falta de registro en Vicidial: a revisar
+                        // (posible agente mal clasificado o hueco de sincronización).
+                        $vicidialPayrollFlags['backfilled'][] = ['user_id' => (int) $userId, 'days' => array_keys($backfill)];
                     }
                 } else {
                     // Sin NINGÚN dato de Vicidial en el período: NO pagar 0. Se conserva
@@ -382,12 +396,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         // Alertas de la fuente Vicidial: días con tope (posible sesión abierta) o
         // agentes sin datos de Vicidial (no se loguearon / discador caído). No
         // bloquean, pero conviene revisarlos ANTES de aprobar.
-        if (!empty($vicidialPayrollFlags['capped']) || !empty($vicidialPayrollFlags['no_data'])) {
+        if (!empty($vicidialPayrollFlags['capped']) || !empty($vicidialPayrollFlags['no_data']) || !empty($vicidialPayrollFlags['backfilled'])) {
             $nCapped = count($vicidialPayrollFlags['capped']);
             $nNoData = count($vicidialPayrollFlags['no_data']);
+            $nBackfill = count($vicidialPayrollFlags['backfilled']);
             $successMsg .= " ⚠️ Vicidial:";
             if ($nCapped > 0) {
                 $successMsg .= " $nCapped empleado(s) con día(s) sobre el tope (revisar sesiones dejadas abiertas).";
+            }
+            if ($nBackfill > 0) {
+                $successMsg .= " $nBackfill agente(s) Vicidial con día(s) trabajados SIN registro en Vicidial — esos días se pagaron por el PONCHE (no se les descontó); si no deben usar Vicidial, cámbialos a 'Ponche' en Conciliación.";
             }
             if ($nNoData > 0) {
                 $successMsg .= " $nNoData agente(s) Vicidial SIN datos en el período (no se loguearon o discador caído) — se les dejó el PONCHE como respaldo (no cobran 0); revísalos.";

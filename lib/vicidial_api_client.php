@@ -83,10 +83,13 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
     /**
      * Horas PAGABLES de Vicidial por fecha para un empleado, en el formato que
      * usa la nómina (calculateDailyWorkSecondsFromPunchRows): [fecha => segundos].
-     * Solo incluye días con segundos > 0. Marca los días que tocaron el tope de
-     * cordura (anomalías a revisar).
+     * by_date solo incluye días con segundos pagables > 0. seen_dates incluye TODOS
+     * los días con fila en Vicidial (aunque el pagable sea 0), para que la nómina
+     * pueda distinguir "día sin registro en Vicidial" (respaldar con ponche) de
+     * "día en Vicidial sin producción" (paga lo de Vicidial). Marca los días que
+     * tocaron el tope de cordura (anomalías a revisar).
      *
-     * @return array{by_date:array<string,int>, capped_days:array<int,string>, days:int}
+     * @return array{by_date:array<string,int>, capped_days:array<int,string>, days:int, seen_dates:array<int,string>}
      */
     function vicidialGetPaidSecondsByDate(PDO $pdo, int $userId, string $startDate, string $endDate): array
     {
@@ -95,6 +98,7 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
 
         $byDate = [];
         $cappedDays = [];
+        $seen = [];
         try {
             $stmt = $pdo->prepare("
                 SELECT report_date, nonpause_seconds, pause_breakdown
@@ -103,6 +107,7 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
             ");
             $stmt->execute([$userId, $startDate, $endDate]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                $seen[$r['report_date']] = true;
                 $codes = $r['pause_breakdown'] ? json_decode($r['pause_breakdown'], true) : [];
                 $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $paidCodes, $cap);
                 if ($calc['paid_seconds'] > 0) {
@@ -116,7 +121,8 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
             error_log('vicidialGetPaidSecondsByDate: ' . $e->getMessage());
         }
         ksort($byDate);
-        return ['by_date' => $byDate, 'capped_days' => $cappedDays, 'days' => count($byDate)];
+        ksort($seen);
+        return ['by_date' => $byDate, 'capped_days' => $cappedDays, 'days' => count($byDate), 'seen_dates' => array_keys($seen)];
     }
 }
 
