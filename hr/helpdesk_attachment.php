@@ -21,7 +21,7 @@ if ($id <= 0) {
 }
 
 $stmt = $conn->prepare("
-    SELECT a.file_name, a.file_path, a.file_type, t.user_id, t.assigned_to
+    SELECT a.file_name, a.file_path, a.file_blob, a.file_type, t.user_id, t.assigned_to
     FROM helpdesk_attachments a
     JOIN helpdesk_tickets t ON t.id = a.ticket_id
     WHERE a.id = ? LIMIT 1
@@ -39,19 +39,26 @@ if (!$canView) {
     exit('Sin acceso.');
 }
 
+$type = $row['file_type'] ?: 'application/octet-stream';
+$disposition = isset($_GET['download']) ? 'attachment' : 'inline';
+header('Content-Type: ' . $type);
+header('Content-Disposition: ' . $disposition . '; filename="' . basename((string) $row['file_name']) . '"');
+header('X-Content-Type-Options: nosniff');
+header('Cache-Control: private, max-age=3600');
+
+// El binario vive en la DB compartida (funciona entre servidores).
+if ($row['file_blob'] !== null && $row['file_blob'] !== '') {
+    header('Content-Length: ' . strlen($row['file_blob']));
+    echo $row['file_blob'];
+    exit;
+}
+
+// Compat: adjuntos antiguos guardados en disco (uploads/helpdesk).
 $path = realpath(__DIR__ . '/../' . ltrim((string) $row['file_path'], '/'));
 $baseDir = realpath(__DIR__ . '/../uploads/helpdesk');
-// Evita path traversal: el archivo debe vivir dentro de uploads/helpdesk.
 if ($path === false || $baseDir === false || strpos($path, $baseDir) !== 0 || !is_file($path)) {
     http_response_code(404);
     exit('Archivo no disponible.');
 }
-
-$type = $row['file_type'] ?: 'application/octet-stream';
-header('Content-Type: ' . $type);
 header('Content-Length: ' . filesize($path));
-$disposition = isset($_GET['download']) ? 'attachment' : 'inline';
-header('Content-Disposition: ' . $disposition . '; filename="' . basename((string) $row['file_name']) . '"');
-header('X-Content-Type-Options: nosniff');
-header('Cache-Control: private, max-age=3600');
 readfile($path);

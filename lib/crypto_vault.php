@@ -5,10 +5,16 @@
  * Cifrado autenticado (AES-256-GCM) para secretos en reposo: contraseñas de
  * acceso remoto (AnyDesk/RustDesk, etc.) de la bóveda del helpdesk.
  *
- * La clave vive en config/vault_key.php (un archivo PHP que hace `return` de la
- * clave: si se pide por HTTP se ejecuta y NO imprime nada). Está en .gitignore.
- * Se genera sola la primera vez. NO borrar (se pierden las credenciales) ni subir.
+ * CLAVE — CERO CONFIGURACIÓN: vive en la BASE DE DATOS COMPARTIDA (system_settings,
+ * clave 'helpdesk_vault_key'). Como la oficina y HostGator usan la MISMA base, los
+ * dos servidores comparten automáticamente la misma clave: al hacer git pull no
+ * hay nada que configurar ni copiar. Se genera sola la primera vez.
+ *
+ * (Opcional, más estricto: si existe config/vault_key.php con una clave válida,
+ * tiene prioridad. No es necesario.)
  */
+
+require_once __DIR__ . '/../db.php';
 
 if (!function_exists('vaultKey')) {
     function vaultKey(): string
@@ -17,6 +23,7 @@ if (!function_exists('vaultKey')) {
         if ($key !== null) {
             return $key;
         }
+        // 1) Archivo local opcional (si alguien quiere separar la clave de la DB).
         $keyFile = __DIR__ . '/../config/vault_key.php';
         if (is_file($keyFile)) {
             $stored = include $keyFile;
@@ -25,18 +32,24 @@ if (!function_exists('vaultKey')) {
                 return $key = $raw;
             }
         }
-        // Generar y persistir una clave nueva de 256 bits.
-        $dir = dirname($keyFile);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0700, true);
+        // 2) DB compartida (por defecto): misma clave en todos los servidores.
+        global $pdo;
+        try {
+            $stored = getSystemSetting($pdo, 'helpdesk_vault_key', '');
+            $raw = ($stored !== '') ? base64_decode($stored, true) : false;
+            if ($raw !== false && strlen($raw) === 32) {
+                return $key = $raw;
+            }
+            // Generar y persistir una vez en la DB compartida.
+            $raw = random_bytes(32);
+            $stmt = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value, setting_type) VALUES ('helpdesk_vault_key', ?, 'text') ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+            $stmt->execute([base64_encode($raw)]);
+            return $key = $raw;
+        } catch (Throwable $e) {
+            // Último recurso (DB caída): clave derivada determinista para no dar fatal.
+            error_log('vaultKey: ' . $e->getMessage());
+            return $key = hash('sha256', 'ponche-helpdesk-vault-fallback-key', true);
         }
-        $raw = random_bytes(32);
-        $php = "<?php\n// Clave de cifrado de la boveda (AES-256). NO subir a git. NO borrar: se\n"
-             . "// pierden todas las contrasenas guardadas. Generada automaticamente.\n"
-             . "return '" . base64_encode($raw) . "';\n";
-        @file_put_contents($keyFile, $php, LOCK_EX);
-        @chmod($keyFile, 0600);
-        return $key = $raw;
     }
 }
 

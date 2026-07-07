@@ -8,5 +8,7 @@
 # Clave de cifrado de la boveda de credenciales de acceso remoto.
 # NUNCA subir: si se filtra se pueden descifrar las contrasenas; si se borra se pierden.
 /config/vault_key.php
-# Adjuntos de tickets subidos por usuarios.
+# Adjuntos de tickets subidos por usuarios (compat; los nuevos van en la DB compartida).
 /uploads/helpdesk/
+# Config local de Claude Code (preview/launch): rutas absolutas por maquina, no va al repo.
+/.claude/
