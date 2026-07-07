@@ -182,41 +182,43 @@ function getTickets($filters = []) {
     return $tickets;
 }
 
-// Assign ticket
+// Assign ticket (assignedTo <= 0 => desasignar / NULL)
 function assignTicket($ticketId, $assignedTo, $assignedBy, $notes = '') {
     global $conn;
-    
-    // Get current assignment
-    $query = "SELECT assigned_to FROM helpdesk_tickets WHERE id = ?";
-    $stmt = $conn->prepare($query);
+    $ticketId = (int) $ticketId;
+    $assignedTo = (int) $assignedTo;
+
+    // Asignación actual (para el log)
+    $stmt = $conn->prepare("SELECT assigned_to FROM helpdesk_tickets WHERE id = ?");
     $stmt->bind_param("i", $ticketId);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $ticket = $result->fetch_assoc();
-    $assignedFrom = $ticket['assigned_to'];
-    
-    // Update ticket
-    $query = "UPDATE helpdesk_tickets SET assigned_to = ? WHERE id = ?";
-    $stmt = $conn->prepare($query);
+    $ticket = $stmt->get_result()->fetch_assoc();
+    $assignedFrom = $ticket['assigned_to'] ?? null;
+
+    // DESASIGNAR: assigned_to = NULL (poner 0 rompía la llave foránea y dejaba
+    // el ticket asignado al anterior). No hay a quién notificar.
+    if ($assignedTo <= 0) {
+        $stmt = $conn->prepare("UPDATE helpdesk_tickets SET assigned_to = NULL WHERE id = ?");
+        $stmt->bind_param("i", $ticketId);
+        $stmt->execute();
+        try { logActivity($assignedBy, 'ticket_unassigned', "Unassigned ticket #$ticketId"); } catch (Throwable $e) {}
+        return true;
+    }
+
+    $stmt = $conn->prepare("UPDATE helpdesk_tickets SET assigned_to = ? WHERE id = ?");
     $stmt->bind_param("ii", $assignedTo, $ticketId);
     $stmt->execute();
-    
-    // Log assignment
-    $query = "INSERT INTO helpdesk_assignments 
-              (ticket_id, assigned_from, assigned_to, assigned_by, notes) 
-              VALUES (?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($query);
+
+    // Log de asignación
+    $stmt = $conn->prepare("INSERT INTO helpdesk_assignments (ticket_id, assigned_from, assigned_to, assigned_by, notes) VALUES (?, ?, ?, ?, ?)");
     $stmt->bind_param("iiiis", $ticketId, $assignedFrom, $assignedTo, $assignedBy, $notes);
     $stmt->execute();
-    
-    // Create notification
-    notifyTicketAssigned($ticketId, $assignedTo, $assignedBy);
-    
-    // Send email
-    sendTicketAssignedEmail($ticketId, $assignedTo);
-    
-    logActivity($assignedBy, 'ticket_assigned', "Assigned ticket #$ticketId to user #$assignedTo");
-    
+
+    // Efectos secundarios best-effort (no deben romper la asignación).
+    try { notifyTicketAssigned($ticketId, $assignedTo, $assignedBy); } catch (Throwable $e) {}
+    try { sendTicketAssignedEmail($ticketId, $assignedTo); } catch (Throwable $e) {}
+    try { logActivity($assignedBy, 'ticket_assigned', "Assigned ticket #$ticketId to user #$assignedTo"); } catch (Throwable $e) {}
+
     return true;
 }
 
