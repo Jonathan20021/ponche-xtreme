@@ -118,7 +118,12 @@ require_once __DIR__ . '/../header.php';
 .hdc-side h4{font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--hd-faint); margin:0 0 10px;}
 .hdc-side .rq{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
 .hdc-side .rq .info{min-width:0;} .hdc-side .rq .nm{font-weight:700; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.hdc-side .rq .rl{font-size:11.5px; color:var(--hd-muted);}
+.hdc-side .rq .rl{font-size:11.5px; color:var(--hd-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.hdc-rolechip{font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--hd-brand); background:var(--hd-brand-tint); border-radius:6px; padding:1px 6px; vertical-align:middle;}
+.hdc-rqmeta{display:grid; grid-template-columns:auto 1fr; gap:6px 12px; margin:2px 0 14px; padding:11px 12px; background:var(--hd-card); border:1px solid var(--hd-line); border-radius:11px; font-size:12px;}
+.hdc-rqmeta .k{color:var(--hd-faint); font-weight:600; white-space:nowrap;}
+.hdc-rqmeta .v{color:var(--hd-ink); font-weight:600; text-align:right; word-break:break-word;}
+.hdc-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle;}
 .hdc-otk{display:block; padding:9px 11px; border:1px solid var(--hd-line); border-radius:10px; margin-bottom:7px; text-decoration:none; color:var(--hd-ink); background:var(--hd-card);}
 .hdc-otk:hover{border-color:var(--hd-brand);}
 .hdc-otk .s{font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -263,6 +268,28 @@ require_once __DIR__ . '/../header.php';
     return (a||b) ? `<div class="hdc-sla">${a}${b}</div>` : '';
   }
 
+  function requesterPanel(t){
+    const r = t.requester || {};
+    const rows = [];
+    if(r.campaign_name) rows.push(['Campaña', `<span class="hdc-dot" style="background:${esc(r.campaign_color||'#2A4CCC')}"></span>${esc(r.campaign_name)}`]);
+    if(r.department_name) rows.push(['Proyecto / Depto.', esc(r.department_name)]);
+    if(r.position) rows.push(['Posición', esc(r.position)]);
+    if(r.supervisor_name) rows.push(['Supervisor', esc(r.supervisor_name)]);
+    if(r.employee_code) rows.push(['Código', esc(r.employee_code)]);
+    if(r.email) rows.push(['Correo', `<a href="mailto:${esc(r.email)}" style="color:var(--hd-brand)">${esc(r.email)}</a>`]);
+    const tel = r.mobile || r.phone; if(tel) rows.push(['Teléfono', esc(tel)]);
+    if(r.hire_date) rows.push(['Ingreso', esc(r.hire_date)]);
+    if(r.employment_status) rows.push(['Estado laboral', esc(r.employment_status)]);
+    const roleTxt = r.role ? `<span class="hdc-rolechip">${esc(r.role)}</span>` : '';
+    const sub = r.username ? esc(r.username) : esc(t.user_email||'');
+    const meta = rows.length ? `<div class="hdc-rqmeta">${rows.map(([k,v])=>`<div class="k">${k}</div><div class="v">${v}</div>`).join('')}</div>`
+      : `<div style="font-size:11.5px;color:var(--hd-faint);margin-bottom:12px">Sin ficha de empleado vinculada.</div>`;
+    return `
+      <h4>Solicitante</h4>
+      <div class="rq"><span class="hdc-avatar" style="width:34px;height:34px;font-size:13px">${initials(t.user_name)}</span>
+        <div class="info"><div class="nm">${esc(t.user_name)} ${roleTxt}</div><div class="rl">${sub}</div></div></div>
+      ${meta}`;
+  }
   function renderDetail(t){
     const msgs = [{nm:t.user_name,tm:t.created_at,body:t.description,first:true,internal:false,atts:(t.attachments||[]).filter(a=>!a.comment_id)}]
       .concat((t.comments||[]).map(c=>({nm:c.user_name,tm:c.created_at,body:c.comment,first:false,internal:c.is_internal==1,atts:(t.attachments||[]).filter(a=>a.comment_id==c.id)})));
@@ -293,8 +320,7 @@ require_once __DIR__ . '/../header.php';
             </div>`).join('')}
         </div>
         <div class="hdc-side">
-          <h4>Solicitante</h4>
-          <div class="rq"><span class="hdc-avatar" style="width:34px;height:34px;font-size:13px">${initials(t.user_name)}</span><div class="info"><div class="nm">${esc(t.user_name)}</div><div class="rl">${esc(t.user_email||'')}</div></div></div>
+          ${requesterPanel(t)}
           <h4>Otros tickets</h4>
           <div id="hdcOther"><div style="font-size:12px;color:var(--hd-faint)">Cargando…</div></div>
           <h4 style="margin-top:16px;"><i class="fas fa-key" style="color:var(--hd-brand)"></i> Acceso remoto</h4>

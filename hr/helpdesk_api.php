@@ -254,6 +254,29 @@ switch ($action) {
             $ticket['status_history'] = $history;
             $ticket['attachments'] = helpdeskGetTicketAttachments($conn, $ticketId);
 
+            // Perfil completo del solicitante (campaña, proyecto/depto, supervisor,
+            // posición, contacto, ingreso) para dar contexto total al soporte.
+            $rq = null;
+            $rqStmt = $conn->prepare("
+                SELECT u.id, u.full_name, u.username, u.role,
+                       e.employee_code, e.position, e.email, e.phone, e.mobile,
+                       e.hire_date, e.employment_status, e.employment_type,
+                       e.city, e.state, e.country,
+                       c.name AS campaign_name, c.color AS campaign_color, c.code AS campaign_code,
+                       d.name AS department_name,
+                       s.full_name AS supervisor_name
+                FROM users u
+                LEFT JOIN employees e ON e.user_id = u.id
+                LEFT JOIN campaigns c ON c.id = e.campaign_id
+                LEFT JOIN departments d ON d.id = e.department_id
+                LEFT JOIN users s ON s.id = e.supervisor_id
+                WHERE u.id = ? LIMIT 1
+            ");
+            $rqStmt->bind_param("i", $ticket['user_id']);
+            $rqStmt->execute();
+            $rq = $rqStmt->get_result()->fetch_assoc() ?: null;
+            $ticket['requester'] = $rq;
+
             echo json_encode(['success' => true, 'ticket' => $ticket]);
         } else {
             echo json_encode(['success' => false, 'error' => 'Ticket not found']);

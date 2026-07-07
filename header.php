@@ -213,6 +213,12 @@ $navItems = [
                 'icon' => 'fa-key',
             ],
             [
+                'section' => 'helpdesk_reports',
+                'label' => 'Reportes de Soporte',
+                'href' => $baseHref . 'helpdesk/reports.php',
+                'icon' => 'fa-chart-line',
+            ],
+            [
                 'section' => 'helpdesk_suggestions',
                 'label' => 'Buzón de Sugerencias',
                 'href' => $baseHref . 'helpdesk/suggestions.php',

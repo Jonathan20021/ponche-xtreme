@@ -131,7 +131,7 @@ if (!function_exists('ensureHelpdeskSupportTables')) {
         }
 
         // Permisos por defecto (solo si el key no tiene filas — no pisa ajustes manuales).
-        foreach ([['helpdesk', ['Admin', 'HR', 'IT', 'Desarrollador']], ['helpdesk_tickets', ['Admin', 'HR', 'IT', 'Desarrollador', 'AGENT', 'Supervisor', 'QA']]] as $perm) {
+        foreach ([['helpdesk', ['Admin', 'HR', 'IT', 'Desarrollador']], ['helpdesk_tickets', ['Admin', 'HR', 'IT', 'Desarrollador', 'AGENT', 'Supervisor', 'QA']], ['helpdesk_reports', ['Admin', 'HR', 'IT', 'Desarrollador']]] as $perm) {
             $has = $conn->query("SELECT COUNT(*) c FROM section_permissions WHERE section_key = '" . $conn->real_escape_string($perm[0]) . "'");
             if ($has && ((int) ($has->fetch_assoc()['c'] ?? 0)) === 0) {
                 $ps = $conn->prepare("INSERT INTO section_permissions (section_key, role) VALUES (?, ?)");
