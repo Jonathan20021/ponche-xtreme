@@ -10,6 +10,7 @@ require_once '../db.php';
 require_once '../lib/work_hours_calculator.php';
 require_once '../hr/payroll_functions.php';
 require_once '../lib/vicidial_api_client.php';
+require_once '../lib/agent_hours.php';
 
 ensurePayrollPeriodsVisibilityColumn($pdo);
 ensurePayrollHolidaysTable($pdo);
@@ -86,97 +87,10 @@ if (!$selectedPeriod && !empty($periods)) {
     }
 }
 
-/**
- * Calcula horas trabajadas por día y totales para un rango de fechas.
- * Solo cuenta días hasta HOY (si la quincena incluye fechas futuras).
- *
- * Las horas extra se separan por semana ISO (lunes-domingo): primero se
- * acumulan 44 horas regulares y solo el excedente semanal cuenta como extra.
- *
- * Si el usuario califica para pago doble en feriados, las horas de ese día
- * se multiplican por el multiplicador del feriado (típicamente 2x), igual
- * que en el cálculo de nómina, para que el agente vea cifras consistentes.
- */
-function computePeriodHoursForUser(PDO $pdo, int $userId, string $startDate, string $endDate, array $paidTypeSlugs, float $weeklyThresholdHours = 44.0, bool $applyHolidayDouble = false, string $payrollSource = 'manual'): array
-{
-    $today = date('Y-m-d');
-    $effectiveEnd = ($endDate > $today) ? $today : $endDate;
-    $contextStart = getIsoWeekStartDate($startDate);
-
-    $result = [
-        'total_seconds' => 0,
-        'regular_seconds' => 0,
-        'overtime_seconds' => 0,
-        'days_worked' => 0,
-        'by_day' => [],
-        'holiday_days' => [],
-    ];
-
-    if ($startDate > $effectiveEnd) {
-        return $result;
-    }
-
-    $holidaysMap = getPayrollHolidaysMap($pdo, $startDate, $effectiveEnd);
-
-    // Fuente de segundos trabajados por día. Para agentes de Vicidial se usa la
-    // MISMA función de horas pagables que la nómina (vicidialGetPaidSecondsByDate),
-    // para que Mis Horas coincida EXACTO con el pago. Para 'manual' se mantiene el ponche.
-    if ($payrollSource === 'vicidial') {
-        $vd = vicidialGetPaidSecondsByDate($pdo, $userId, $contextStart, $effectiveEnd);
-        $dailyWorkSeconds = $vd['by_date'];
-    } else {
-        $stmt = $pdo->prepare("
-            SELECT id, type, timestamp, DATE(timestamp) AS work_date
-            FROM attendance
-            WHERE user_id = ?
-              AND DATE(timestamp) BETWEEN ? AND ?
-            ORDER BY timestamp ASC
-        ");
-        $stmt->execute([$userId, $contextStart, $effectiveEnd]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($rows, $paidTypeSlugs);
-    }
-    $weeklySplit = splitWeeklyRegularOvertimeSeconds($dailyWorkSeconds, (int) round($weeklyThresholdHours * 3600));
-
-    foreach ($weeklySplit['by_day'] as $date => $daySplit) {
-        if ($date < $startDate || $date > $effectiveEnd) {
-            continue;
-        }
-
-        $workSeconds = (int) ($daySplit['work_seconds'] ?? 0);
-        $rawSeconds = $workSeconds;
-        $isHoliday = isset($holidaysMap[$date]);
-        $regSeconds = (int) ($daySplit['regular_seconds'] ?? 0);
-        $otSeconds = (int) ($daySplit['overtime_seconds'] ?? 0);
-
-        // 2) Apply holiday multiplier to BOTH parts after splitting, so the displayed
-        // hours match what payroll will pay (true multiplier × normal pay).
-        if ($isHoliday && $applyHolidayDouble) {
-            $multiplier = (float) $holidaysMap[$date]['multiplier'];
-            $regSeconds = (int) round($regSeconds * $multiplier);
-            $otSeconds = (int) round($otSeconds * $multiplier);
-        }
-
-        $daySeconds = $regSeconds + $otSeconds;
-        $result['days_worked']++;
-        $result['total_seconds'] += $daySeconds;
-        $result['regular_seconds'] += $regSeconds;
-        $result['overtime_seconds'] += $otSeconds;
-        $result['by_day'][$date] = $daySeconds;
-
-        if ($isHoliday) {
-            $result['holiday_days'][$date] = [
-                'name' => $holidaysMap[$date]['name'],
-                'multiplier' => (float) $holidaysMap[$date]['multiplier'],
-                'applied' => $applyHolidayDouble,
-                'raw_seconds' => $rawSeconds,
-            ];
-        }
-    }
-
-    ksort($result['by_day']);
-    return $result;
-}
+// El cálculo de horas por período vive ahora en lib/agent_hours.php
+// (computePeriodHoursForUser), compartido con el dashboard del agente y alineado
+// EXACTO con la nómina, incluido el respaldo al ponche cuando un agente de
+// Vicidial no tiene datos en el período.
 
 function formatHoursHM(int $seconds): string
 {

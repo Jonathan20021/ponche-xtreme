@@ -324,11 +324,13 @@ if ($tab === 'payroll') {
     $refEnd = $date;
     $refStart = date('Y-m-d', strtotime($date . ' -13 days')); // 2 semanas de referencia
     $paidSlugs = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', getPaidAttendanceTypeSlugs($pdo))));
+    // TODOS los agentes activos (ACTIVE/TRIAL), no solo los mapeados a Vicidial, para
+    // poder decidir por cada uno si se paga/marca por Ponche (manual) o por Vicidial.
     $agents = $pdo->query("
         SELECT u.id, u.full_name, u.role, COALESCE(u.payroll_source, 'manual') AS payroll_source
-        FROM vicidial_user_map m
-        JOIN users u ON u.id = m.user_id
-        WHERE m.user_id IS NOT NULL AND m.ignore_agent = 0
+        FROM employees e
+        JOIN users u ON u.id = e.user_id
+        WHERE UPPER(u.role) = 'AGENT' AND e.employment_status IN ('ACTIVE', 'TRIAL')
         ORDER BY u.full_name
     ")->fetchAll(PDO::FETCH_ASSOC) ?: [];
     foreach ($agents as $a) {
@@ -627,6 +629,13 @@ include 'header.php';
                 por Vicidial. <span class="text-red-400">🔴 bajo</span> = trabaja fuera del discador (WhatsApp/admin) →
                 <strong>déjalo en Ponche</strong> o le recortarías el sueldo injustamente.
             </p>
+            <p class="text-slate-400 text-xs mt-3 pt-3 border-t border-slate-700/50">
+                <i class="fas fa-fingerprint text-indigo-300 mr-1"></i>
+                <strong>Ponche (manual)</strong>: al agente le aparece el botón de marcación en su portal y marca su
+                asistencia ahí; su nómina sale del ponche. &nbsp;·&nbsp;
+                <strong>Vicidial</strong>: no ve botón de marcación; su asistencia y pago vienen del discador.
+                Cambiar esto aquí es lo que activa (o quita) la marcación del ponche a cada agente.
+            </p>
         </div>
         <div class="flex flex-wrap items-center gap-3 mb-4">
             <form method="POST" onsubmit="return confirm('¿Poner a TODOS los agentes de call (rol AGENT, mapeados) a pagar por Vicidial? Los administrativos siguen por ponche. La nómina queda en CALCULADA hasta que la apruebes.');">
@@ -682,7 +691,7 @@ include 'header.php';
                                     <td class="px-3 py-3 <?= $sem[1] ?> text-xs"><?= $sem[0] ?> <?= htmlspecialchars($sem[2]) ?></td>
                                     <td class="px-3 py-3">
                                         <select name="payroll_source" class="px-3 py-1.5 bg-slate-900/50 border border-slate-600 rounded-lg text-slate-200 text-sm">
-                                            <option value="manual" <?= $pr['source'] === 'manual' ? 'selected' : '' ?>>Ponche (manual)</option>
+                                            <option value="manual" <?= $pr['source'] === 'manual' ? 'selected' : '' ?>>Ponche · marca en el portal</option>
                                             <option value="vicidial" <?= $pr['source'] === 'vicidial' ? 'selected' : '' ?>>Vicidial</option>
                                         </select>
                                     </td>
@@ -695,7 +704,7 @@ include 'header.php';
                             </tr>
                         <?php endforeach; ?>
                         <?php if (empty($payrollRows)): ?>
-                            <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No hay agentes mapeados. Ve a la pestaña Mapeo primero.</td></tr>
+                            <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No hay agentes activos (rol AGENT, estado ACTIVE/TRIAL).</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>

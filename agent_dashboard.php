@@ -17,9 +17,31 @@ if (!function_exists('sanitizeHexColorValue')) {
     }
 }
 
+// Formato "Xh Ym" seguro para totales de MÁS de 24h (gmdate() haría wrap a 0).
+if (!function_exists('agFmtHoursHM')) {
+    function agFmtHoursHM(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+        return intdiv($seconds, 3600) . 'h ' . str_pad((string) intdiv($seconds % 3600, 60), 2, '0', STR_PAD_LEFT) . 'm';
+    }
+}
+
 $user_id = (int) $_SESSION['user_id'];
 $username = $_SESSION['username'] ?? null;
 $full_name = $_SESSION['full_name'] ?? null;
+
+// Fuente de nómina del agente: 'manual' (marca desde el portal / ponche) o
+// 'vicidial'. Define qué ve el dashboard: los agentes manuales marcan aquí y
+// ven sus horas del ponche; los de Vicidial ven su actividad de Vicidial.
+$payrollSource = 'manual';
+try {
+    $psSt = $pdo->prepare("SELECT COALESCE(payroll_source, 'manual') FROM users WHERE id = ?");
+    $psSt->execute([$user_id]);
+    $payrollSource = $psSt->fetchColumn() ?: 'manual';
+} catch (Throwable $e) {
+    $payrollSource = 'manual';
+}
+$isManualPunch = ($payrollSource === 'manual');
 
 $qualityPdo = getQualityDbConnection();
 $qualityUser = null;
@@ -629,8 +651,35 @@ if ($employeeId) {
     $pendingVacations = $vacStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// ---- Datos de HOY desde Vicidial (la marcación manual del ponche se retiró del
-// portal; la asistencia/actividad del agente proviene de Vicidial) ----
+// ---- Horas del ponche (día seleccionado) + horas acumuladas de la quincena ----
+// Alineadas EXACTO con la nómina (misma librería lib/agent_hours.php). Para
+// agentes manuales alimentan el panel de ponche; para TODOS, la tarjeta
+// "Horas de la quincena".
+require_once __DIR__ . '/lib/agent_hours.php';
+$paidTypeSlugsDash = array_values(array_filter(array_map('sanitizeAttendanceTypeSlug', getPaidAttendanceTypeSlugs($pdo))));
+
+$dayPonche = calculateDailyWorkSecondsFromPunchRows($eventRows, $paidTypeSlugsDash);
+$poncheTodaySeconds = (int) ($dayPonche[$date_filter] ?? array_sum($dayPonche));
+
+$agentPeriods  = getAgentVisiblePeriods($pdo);
+$currentPeriod = pickCurrentAgentPeriod($agentPeriods, date('Y-m-d'));
+$periodHours   = null;
+if ($currentPeriod) {
+    $ucSt = $pdo->prepare("SELECT compensation_type, role, monthly_salary, monthly_salary_dop FROM users WHERE id = ?");
+    $ucSt->execute([$user_id]);
+    $uc = $ucSt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $qualHol = shouldApplyHolidayDoublePay(
+        $uc['compensation_type'] ?? null,
+        $uc['role'] ?? null,
+        max((float) ($uc['monthly_salary'] ?? 0), (float) ($uc['monthly_salary_dop'] ?? 0))
+    );
+    $periodHours = computePeriodHoursForUser(
+        $pdo, $user_id, $currentPeriod['start_date'], $currentPeriod['end_date'],
+        $paidTypeSlugsDash, 44.0, $qualHol, $payrollSource
+    );
+}
+
+// ---- Datos de HOY desde Vicidial (para agentes de Vicidial) ----
 require_once __DIR__ . '/lib/vicidial_api_client.php';
 
 $vicidialToday = null;
@@ -711,7 +760,11 @@ $chartColorsJson = json_encode($chartColors);
             <p>Tu resumen de <?= htmlspecialchars(date('d \d\e M \d\e Y', strtotime($date_filter))) ?>.</p>
         </div>
         <div class="ag-head-actions">
-            <span class="ag-chip"><i class="fas fa-shield-halved" style="color:var(--ag-green)"></i> Conectado a Vicidial</span>
+            <?php if ($isManualPunch): ?>
+                <span class="ag-chip"><i class="fas fa-fingerprint" style="color:var(--ag-brand)"></i> Marcación por ponche</span>
+            <?php else: ?>
+                <span class="ag-chip"><i class="fas fa-shield-halved" style="color:var(--ag-green)"></i> Conectado a Vicidial</span>
+            <?php endif; ?>
             <form method="get" style="margin:0;">
                 <input type="date" name="dates" id="dates" value="<?= htmlspecialchars($date_filter) ?>" class="ag-input" style="padding:9px 12px;">
             </form>
@@ -720,6 +773,18 @@ $chartColorsJson = json_encode($chartColors);
 
     <!-- KPIs -->
     <div class="ag-grid ag-kpis">
+        <?php if ($isManualPunch): ?>
+        <div class="ag-card ag-kpi">
+            <div class="top"><div class="ico" style="background:var(--ag-brand-tint);color:var(--ag-brand)"><i class="fas fa-clock"></i></div></div>
+            <div class="val"><?= gmdate('H:i:s', max(0, (int) $poncheTodaySeconds)) ?></div>
+            <div class="lbl">Horas de hoy (ponche)</div>
+        </div>
+        <div class="ag-card ag-kpi">
+            <div class="top"><div class="ico" style="background:#EDEBFB;color:var(--ag-purple)"><i class="fas fa-business-time"></i></div></div>
+            <div class="val"><?= $periodHours ? number_format($periodHours['total_seconds'] / 3600, 1) : '0.0' ?></div>
+            <div class="lbl">Horas de la quincena</div>
+        </div>
+        <?php else: ?>
         <div class="ag-card ag-kpi">
             <div class="top"><div class="ico" style="background:var(--ag-brand-tint);color:var(--ag-brand)"><i class="fas fa-briefcase"></i></div></div>
             <div class="val"><?= gmdate('H:i:s', max(0, (int) $vicidialPaidSeconds)) ?></div>
@@ -730,6 +795,7 @@ $chartColorsJson = json_encode($chartColors);
             <div class="val"><?= $vicidialProductivity ?>%</div>
             <div class="lbl">Productividad</div>
         </div>
+        <?php endif; ?>
         <div class="ag-card ag-kpi">
             <div class="top"><div class="ico" style="background:#E4F6F6;color:#0FA8A7"><i class="fas fa-star"></i></div></div>
             <div class="val"><?= number_format((float) $qualityMetrics['avg_percentage'], 1) ?>%</div>
@@ -742,6 +808,42 @@ $chartColorsJson = json_encode($chartColors);
         </div>
     </div>
 
+    <!-- Horas de la quincena (TODOS los agentes) — acumulado alineado con la nómina -->
+    <?php if ($periodHours && $currentPeriod): ?>
+    <div class="ag-card ag-sec ag-mt">
+        <div class="ag-sec-head">
+            <div>
+                <div class="ttl"><i class="fas fa-business-time"></i> Horas de la quincena</div>
+                <div class="sub"><?= htmlspecialchars($currentPeriod['name']) ?> · <?= htmlspecialchars(date('d/m', strtotime($currentPeriod['start_date']))) ?>–<?= htmlspecialchars(date('d/m', strtotime($currentPeriod['end_date']))) ?> · iguales a tu nómina</div>
+            </div>
+            <a href="agents/mis_horas.php" class="ag-chip" style="text-decoration:none;">Ver detalle <i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div class="ag-grid ag-kpis" style="gap:12px;">
+            <div class="ag-statcard">
+                <div class="sc-top"><div class="sc-ico" style="background:var(--ag-brand);"><i class="fas fa-clock"></i></div><div class="sc-lbl">Horas totales</div></div>
+                <div class="sc-val"><?= number_format($periodHours['total_seconds'] / 3600, 2) ?></div>
+                <div class="sc-sub"><?= agFmtHoursHM((int) $periodHours['total_seconds']) ?></div>
+            </div>
+            <div class="ag-statcard">
+                <div class="sc-top"><div class="sc-ico" style="background:var(--ag-blue);"><i class="fas fa-briefcase"></i></div><div class="sc-lbl">Regulares</div></div>
+                <div class="sc-val"><?= number_format($periodHours['regular_seconds'] / 3600, 2) ?></div>
+                <div class="sc-sub"><?= agFmtHoursHM((int) $periodHours['regular_seconds']) ?></div>
+            </div>
+            <div class="ag-statcard">
+                <div class="sc-top"><div class="sc-ico" style="background:var(--ag-amber);"><i class="fas fa-bolt"></i></div><div class="sc-lbl">Extra</div></div>
+                <div class="sc-val"><?= number_format($periodHours['overtime_seconds'] / 3600, 2) ?></div>
+                <div class="sc-sub"><?= agFmtHoursHM((int) $periodHours['overtime_seconds']) ?></div>
+            </div>
+            <div class="ag-statcard">
+                <div class="sc-top"><div class="sc-ico" style="background:var(--ag-purple);"><i class="fas fa-calendar-check"></i></div><div class="sc-lbl">Días trabajados</div></div>
+                <div class="sc-val"><?= (int) $periodHours['days_worked'] ?></div>
+                <div class="sc-sub">fuente: <?= $periodHours['source_used'] === 'vicidial' ? 'Vicidial' : 'ponche' ?></div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!$isManualPunch): ?>
     <!-- Row: Jornada de hoy (Vicidial) + Distribución del día -->
     <div class="ag-grid ag-mt" style="grid-template-columns:1.15fr 1fr;">
         <div class="ag-card ag-sec">
@@ -817,6 +919,67 @@ $chartColorsJson = json_encode($chartColors);
             <?php endif; ?>
         </div>
     </div>
+    <?php else: ?>
+    <!-- Row (MANUAL): Marcar asistencia + Marcaciones de hoy -->
+    <div class="ag-grid ag-mt" style="grid-template-columns:1.15fr 1fr;">
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head">
+                <div>
+                    <div class="ttl"><i class="fas fa-fingerprint"></i> Marcar asistencia</div>
+                    <div class="sub">Registra tu entrada, pausas y salida</div>
+                </div>
+                <span class="ag-chip"><i class="fas fa-clock" style="color:var(--ag-brand)"></i> Hoy <?= gmdate('H:i:s', max(0, (int) $poncheTodaySeconds)) ?></span>
+            </div>
+            <div id="agentPunchStatus" class="ag-punch-status" style="display:none;"></div>
+            <form id="agentPunchForm" method="POST" class="ag-punch-form">
+                <div class="ag-punch-grid">
+                    <?php foreach ($activeAttendanceTypes as $t): ?>
+                        <?php
+                            $pslug = sanitizeAttendanceTypeSlug($t['slug'] ?? '');
+                            if ($pslug === '') { continue; }
+                            $plabel = $t['label'] ?? $pslug;
+                            $pico = $t['icon_class'] ?? 'fas fa-circle';
+                            $pcolor = sanitizeHexColorValue($t['color_start'] ?? '#244886', '#244886');
+                        ?>
+                        <button type="submit" name="punch_type" value="<?= htmlspecialchars($pslug) ?>" class="ag-punch punch-btn">
+                            <span class="pico" style="background:<?= htmlspecialchars($pcolor) ?>;"><i class="<?= htmlspecialchars($pico) ?>"></i></span>
+                            <span class="pl"><?= htmlspecialchars($plabel) ?></span>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+                <label class="ag-punch-auth" for="authorization_code">
+                    <i class="fas fa-key"></i>
+                    <input type="text" id="authorization_code" name="authorization_code" placeholder="Código de autorización (solo si se te solicita)" autocomplete="off" inputmode="numeric">
+                </label>
+            </form>
+        </div>
+
+        <div class="ag-card ag-sec">
+            <div class="ag-sec-head">
+                <div class="ttl"><i class="fas fa-list-check"></i> Marcaciones de hoy</div>
+                <span class="ag-chip"><?= htmlspecialchars(date('d/m', strtotime($date_filter))) ?></span>
+            </div>
+            <?php if (!empty($records)): ?>
+                <div class="ag-punch-timeline">
+                    <?php foreach ($records as $rec): ?>
+                        <div class="ag-pt-item">
+                            <span class="ag-pt-ico" style="background:<?= htmlspecialchars($rec['color']) ?>1a;color:<?= htmlspecialchars($rec['color']) ?>;"><i class="<?= htmlspecialchars($rec['icon']) ?>"></i></span>
+                            <div class="ag-pt-body">
+                                <span class="ag-pt-label"><?= htmlspecialchars($rec['label']) ?></span>
+                                <span class="ag-pt-time"><?= htmlspecialchars(date('g:i A', strtotime($rec['time']))) ?></span>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="ag-empty-state" style="min-height:120px;">
+                    <i class="fas fa-clock"></i>
+                    <p>Aún no tienes marcaciones hoy. Usa los botones para registrar tu jornada.</p>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Calidad del agente -->
     <div class="ag-card ag-sec ag-mt">
@@ -841,8 +1004,8 @@ $chartColorsJson = json_encode($chartColors);
         <?php endif; ?>
     </div>
 
-    <!-- Row: Llamadas auditadas + Desglose Vicidial -->
-    <div class="ag-grid ag-mt" style="grid-template-columns:1.55fr .9fr;">
+    <!-- Row: Llamadas auditadas (+ Desglose Vicidial solo para agentes de Vicidial) -->
+    <div class="ag-grid ag-mt" style="grid-template-columns:<?= $isManualPunch ? '1fr' : '1.55fr .9fr' ?>;">
         <div class="ag-card ag-sec">
             <div class="ag-sec-head">
                 <div class="ttl"><i class="fas fa-phone-volume"></i> Llamadas auditadas</div>
@@ -899,6 +1062,7 @@ $chartColorsJson = json_encode($chartColors);
             </div>
         </div>
 
+        <?php if (!$isManualPunch): ?>
         <div class="ag-card ag-sec">
             <div class="ag-sec-head">
                 <div class="ttl"><i class="fas fa-list-check"></i> Desglose de hoy</div>
@@ -926,6 +1090,7 @@ $chartColorsJson = json_encode($chartColors);
                 </div>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
     </div>
 
 </div>
@@ -1124,11 +1289,9 @@ document.getElementById('dates')?.addEventListener('change', function () {
         }
 
         function showStatus(ok, message) {
-            statusDiv.className = (ok
-                ? 'mb-4 rounded-lg p-4 bg-green-500/10 border border-green-500/30 text-green-300 font-semibold'
-                : 'mb-4 rounded-lg p-4 bg-red-500/10 border border-red-500/40 text-red-300 font-bold');
-            statusDiv.innerHTML = (ok ? '<i class="fas fa-check-circle mr-2"></i>' : '<i class="fas fa-exclamation-triangle mr-2"></i>') + message;
-            statusDiv.classList.remove('hidden');
+            statusDiv.className = 'ag-punch-status ' + (ok ? 'ok' : 'err');
+            statusDiv.innerHTML = (ok ? '<i class="fas fa-circle-check"></i> ' : '<i class="fas fa-triangle-exclamation"></i> ') + message;
+            statusDiv.style.display = 'flex';
             statusDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
