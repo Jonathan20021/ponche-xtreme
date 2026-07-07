@@ -224,7 +224,7 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                     <?php endif; ?>
                 </div>
                 <?php if ($srcSecs['vicidial'] > 0 && $srcSecs['ponche'] > 0): ?>
-                    <p class="ag-hint" style="margin-top:10px;"><i class="fas fa-circle-info" style="margin-right:5px;"></i>Los días que trabajaste pero no quedaron registrados en Vicidial se te pagan por tu ponche, para no dejarte ningún día en cero.</p>
+                    <p class="ag-hint" style="margin-top:10px;"><i class="fas fa-circle-info" style="margin-right:5px;"></i>Los días anteriores a la fecha en que Vicidial entró en vigencia —o los días sin registro en Vicidial— se te pagan por tu ponche, para no dejarte ningún día en cero.</p>
                 <?php endif; ?>
                 <?php endif; ?>
 

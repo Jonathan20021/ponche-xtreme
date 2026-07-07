@@ -1085,6 +1085,10 @@ try {
                     $vsPaidCodes = array_values(array_filter(array_map('trim', preg_split('/[,;\n]+/', (string) ($_POST['vicidial_paid_pause_codes'] ?? '')))));
                     $stmt->execute(['vicidial_paid_pause_codes',      json_encode($vsPaidCodes, JSON_UNESCAPED_UNICODE), 'json']);
                     $stmt->execute(['vicidial_payroll_daily_cap_hours', (string) max(1, min(24, (int) ($_POST['vicidial_payroll_daily_cap_hours'] ?? 14))), 'number']);
+                    // Fecha de corte de la transición: antes de esta fecha los agentes 'vicidial'
+                    // se pagan por su ponche; desde ella, por Vicidial. Vacío = sin corte.
+                    $vEffRaw = trim((string) ($_POST['vicidial_payroll_effective_date'] ?? ''));
+                    $stmt->execute(['vicidial_payroll_effective_date', (preg_match('/^\d{4}-\d{2}-\d{2}$/', $vEffRaw) === 1 ? $vEffRaw : ''), 'text']);
                     // Reportes admin (Tardanzas/Ausencias) alimentados desde Vicidial (kill-switch global).
                     $stmt->execute(['reports_use_vicidial_source', isset($_POST['reports_use_vicidial_source']) ? '1' : '0', 'boolean']);
                     // La contraseña solo se actualiza si se escribió algo (dejar en blanco = conservar la actual).
@@ -4060,6 +4064,17 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <p class="text-xs text-muted mt-1">Los días que superen este tope se marcan para revisión (⚠️)
                                 antes de pagar — atrapa sesiones dejadas abiertas. Recomendado: 12-14 h.</p>
                         </div>
+                    </div>
+                    <?php $vEffDate = getSystemSetting($pdo, 'vicidial_payroll_effective_date', '2026-07-07'); ?>
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-day"></i> Vicidial rige desde (fecha de corte de la transición)</label>
+                        <input type="date" name="vicidial_payroll_effective_date"
+                            value="<?= htmlspecialchars($vEffDate) ?>" class="input-control">
+                        <p class="text-xs text-muted mt-1">Los días <strong>anteriores</strong> a esta fecha se pagan por el
+                            <strong>ponche</strong> (el régimen en que los agentes trabajaban durante la transición) y los
+                            días <strong>desde</strong> esta fecha por <strong>Vicidial</strong>. Resuelve la quincena que cruza
+                            el cambio. Déjalo vacío para pagar TODO por Vicidial. Recomendado: el día en que los agentes dejaron
+                            de marcar ponche.</p>
                     </div>
                     <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-200">
                         <i class="fas fa-triangle-exclamation mr-1"></i>

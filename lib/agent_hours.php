@@ -78,23 +78,23 @@ if (!function_exists('computePeriodHoursForUser')) {
         // Fuente de cada día (para transparencia total en el detalle del agente).
         $daySource = [];
 
-        // 2) Si el agente se paga por Vicidial: Vicidial manda en los días que
-        //    registró, y el ponche RESPALDA los días sin fila en Vicidial (mismo
-        //    merge por día que hr/payroll.php, para que estas horas coincidan EXACTO
-        //    con lo que se paga). Sin ningún dato de Vicidial, todo el ponche.
+        // 2) Si el agente se paga por Vicidial: merge POR DÍA idéntico a hr/payroll.php
+        //    (misma función compartida), respetando la fecha de corte de la transición.
+        //    Días ANTES de la fecha efectiva => ponche (régimen anterior); días DESDE
+        //    esa fecha => Vicidial, con respaldo de ponche en días sin registro Vicidial.
+        //    Así "Mis Horas" coincide EXACTO con lo que se paga.
         if ($payrollSource === 'vicidial') {
             $punchDaily = $dailyWorkSeconds; // ponche ya calculado arriba
             $vd = vicidialGetPaidSecondsByDate($pdo, $userId, $contextStart, $effectiveEnd);
-            if (($vd['days'] ?? 0) > 0) {
-                $seenDays = array_flip($vd['seen_dates'] ?? array_keys($vd['by_date']));
-                $backfill = array_diff_key($punchDaily, $seenDays);
-                $dailyWorkSeconds = $vd['by_date'] + $backfill;
-                foreach ($vd['by_date'] as $d => $s) { $daySource[$d] = 'vicidial'; }
-                foreach ($backfill as $d => $s) { $daySource[$d] = 'ponche'; }
-                $result['source_used'] = empty($backfill) ? 'vicidial' : 'mixta';
-            } else {
-                foreach ($dailyWorkSeconds as $d => $s) { $daySource[$d] = 'ponche'; }
-                $result['source_used'] = 'manual'; // respaldo ponche total (sin datos Vicidial)
+            $vEff = getVicidialPayrollEffectiveDate($pdo);
+            $merge = vicidialMergeDailySeconds($punchDaily, $vd, $vEff);
+            $dailyWorkSeconds = $merge['by_date'];
+            $daySource = $merge['source'];
+            if (!empty($daySource)) {
+                $uniqSrc = array_values(array_unique($daySource));
+                $result['source_used'] = (count($uniqSrc) > 1)
+                    ? 'mixta'
+                    : ($uniqSrc[0] === 'ponche' ? 'manual' : 'vicidial');
             }
         } else {
             foreach ($dailyWorkSeconds as $d => $s) { $daySource[$d] = 'ponche'; }

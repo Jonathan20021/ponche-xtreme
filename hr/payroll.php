@@ -214,31 +214,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             if (($emp['payroll_source'] ?? 'manual') === 'vicidial') {
                 $punchDaily = $dailyWorkSeconds; // ponche ya calculado arriba (respaldo por día)
                 $vd = vicidialGetPaidSecondsByDate($pdo, (int) $userId, $attendanceContextStart, $period['end_date']);
-                if ($vd['days'] > 0) {
-                    // Vicidial es la fuente en los días que registró. En los días que el
-                    // agente trabajó y MARCÓ pero NO tiene fila en Vicidial (no se logueó,
-                    // discador caído, o recién movido a Vicidial a mitad de período) se
-                    // RESPALDA con el ponche de ese día — nunca pagarle 0 un día trabajado.
-                    // Merge POR DÍA: Vicidial manda donde hay registro; ponche solo cubre
-                    // los días sin registro alguno en Vicidial (no los días de baja
-                    // producción, que sí deben pagarse por Vicidial).
-                    $seenDays = array_flip($vd['seen_dates'] ?? array_keys($vd['by_date']));
-                    $backfill = array_diff_key($punchDaily, $seenDays);
-                    $dailyWorkSeconds = $vd['by_date'] + $backfill;
-                    if (!empty($vd['capped_days'])) {
-                        $vicidialPayrollFlags['capped'][] = ['user_id' => (int) $userId, 'days' => $vd['capped_days']];
-                    }
-                    if (!empty($backfill)) {
-                        // Días pagados por ponche por falta de registro en Vicidial: a revisar
-                        // (posible agente mal clasificado o hueco de sincronización).
-                        $vicidialPayrollFlags['backfilled'][] = ['user_id' => (int) $userId, 'days' => array_keys($backfill)];
-                    }
-                } else {
-                    // Sin NINGÚN dato de Vicidial en el período: NO pagar 0. Se conserva
-                    // el ponche manual como respaldo (ya calculado arriba) y se marca
-                    // fuerte para revisión — puede ser un agente que no se logueó o el
-                    // discador caído. Nunca dejar a un trabajador en cero por un hueco de datos.
+                // Merge POR DÍA respetando la fecha de corte de la transición: los días
+                // ANTES de la fecha efectiva de Vicidial se pagan por el PONCHE (el
+                // régimen en que trabajaban entonces), y los días DESDE esa fecha por
+                // Vicidial (con respaldo de ponche en los días sin registro Vicidial).
+                $vEff  = getVicidialPayrollEffectiveDate($pdo);
+                $merge = vicidialMergeDailySeconds($punchDaily, $vd, $vEff);
+                $dailyWorkSeconds = $merge['by_date'];
+
+                if (!empty($vd['capped_days'])) {
+                    $vicidialPayrollFlags['capped'][] = ['user_id' => (int) $userId, 'days' => $vd['capped_days']];
+                }
+                if (($vd['days'] ?? 0) === 0) {
+                    // Sin NINGÚN dato de Vicidial en el período: se pagó por ponche (nunca 0).
                     $vicidialPayrollFlags['no_data'][] = (int) $userId;
+                } else {
+                    // Días POST-cambio pagados por ponche por falta de registro en Vicidial
+                    // (hueco real / posible agente mal clasificado). Los días PRE-cambio
+                    // pagados por ponche son esperados por la transición, no se marcan.
+                    $bf = [];
+                    foreach ($merge['source'] as $d => $s) {
+                        if ($s === 'ponche' && (!$vEff || $d >= $vEff)) {
+                            $bf[] = $d;
+                        }
+                    }
+                    if (!empty($bf)) {
+                        $vicidialPayrollFlags['backfilled'][] = ['user_id' => (int) $userId, 'days' => $bf];
+                    }
                 }
             }
 

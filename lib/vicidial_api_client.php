@@ -126,6 +126,71 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
     }
 }
 
+if (!function_exists('getVicidialPayrollEffectiveDate')) {
+    /**
+     * Fecha (Y-m-d) desde la cual los agentes 'vicidial' se pagan por Vicidial.
+     * ANTES de esa fecha se pagan por su PONCHE (el régimen en que trabajaban en
+     * la transición). Configurable en settings.php. Default = 2026-07-07 (día en
+     * que los agentes dejaron de marcar ponche y pasaron a Vicidial puro).
+     * Devuelve null si se deja vacío (= sin corte, todo por Vicidial).
+     */
+    function getVicidialPayrollEffectiveDate(PDO $pdo): ?string
+    {
+        $v = trim((string) getSystemSetting($pdo, 'vicidial_payroll_effective_date', '2026-07-07'));
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) === 1 ? $v : null;
+    }
+}
+
+if (!function_exists('vicidialMergeDailySeconds')) {
+    /**
+     * Combina, POR DÍA, las horas del ponche y de Vicidial para un agente 'vicidial',
+     * respetando la fecha de corte de la transición:
+     *   - Día ANTES de $effectiveDate  -> PONCHE (régimen anterior); si no hay ponche
+     *     pero sí Vicidial, usa Vicidial para no perder el día.
+     *   - Día DESDE $effectiveDate     -> VICIDIAL manda; el ponche respalda SOLO los
+     *     días sin fila en Vicidial (hueco de datos), nunca deja un día trabajado en 0.
+     * $effectiveDate null/'' => sin corte: todo por Vicidial con respaldo de ponche.
+     *
+     * @param array<string,int> $punchDaily  segundos pagables de ponche por día
+     * @param array{by_date:array<string,int>,seen_dates?:array<int,string>} $vd
+     * @return array{by_date:array<string,int>, source:array<string,string>}
+     */
+    function vicidialMergeDailySeconds(array $punchDaily, array $vd, ?string $effectiveDate): array
+    {
+        $vici = $vd['by_date'] ?? [];
+        $seen = array_flip($vd['seen_dates'] ?? array_keys($vici));
+        $days = array_unique(array_merge(array_keys($punchDaily), array_keys($vici)));
+        sort($days);
+
+        $out = [];
+        $src = [];
+        $hasEff = ($effectiveDate !== null && $effectiveDate !== '');
+        foreach ($days as $d) {
+            if ($hasEff && $d < $effectiveDate) {
+                // Pre-cambio: se paga como se trabajaba entonces, por ponche.
+                if (isset($punchDaily[$d])) {
+                    $out[$d] = $punchDaily[$d];
+                    $src[$d] = 'ponche';
+                } elseif (isset($vici[$d])) {
+                    $out[$d] = $vici[$d];
+                    $src[$d] = 'vicidial';
+                }
+            } else {
+                // Post-cambio: Vicidial manda; ponche respalda días sin registro Vicidial.
+                if (isset($vici[$d])) {
+                    $out[$d] = $vici[$d];
+                    $src[$d] = 'vicidial';
+                } elseif (!isset($seen[$d]) && isset($punchDaily[$d])) {
+                    $out[$d] = $punchDaily[$d];
+                    $src[$d] = 'ponche';
+                }
+            }
+        }
+        ksort($out);
+        return ['by_date' => $out, 'source' => $src];
+    }
+}
+
 if (!function_exists('vicidialGetPaidPauseCodes')) {
     /**
      * Lista de códigos de pausa que se PAGAN (además de NONPAUSE, que siempre se
