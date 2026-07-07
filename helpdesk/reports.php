@@ -68,6 +68,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     exit;
 }
 
+// Guardar credenciales SMTP (rotación de clave). La contraseña es de solo escritura:
+// solo se actualiza si escriben una nueva; en blanco = se conserva la actual.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_smtp') {
+    header('Content-Type: application/json; charset=utf-8');
+    $user = trim((string) ($_POST['smtp_username'] ?? ''));
+    $pass = (string) ($_POST['smtp_password'] ?? '');
+    try {
+        $up = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                             VALUES (?, ?, 'text', 'email')
+                             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        if ($user !== '') { $up->execute(['smtp_username', $user]); }
+        if ($pass !== '') { $up->execute(['smtp_password', $pass]); }
+        echo json_encode(['success' => true, 'pass_set' => (getSystemSetting($pdo, 'smtp_password', '') !== '')]);
+    } catch (Throwable $ex) {
+        error_log('reports save_smtp: ' . $ex->getMessage());
+        echo json_encode(['success' => false, 'error' => 'No se pudo guardar']);
+    }
+    exit;
+}
+
 /* ------------------------- Rango de fechas ------------------------- */
 function validDate(?string $s): ?string
 {
@@ -173,6 +193,9 @@ $slaPrio = helpdeskGetSlaPriorities();
 // Preferencias de notificación por correo.
 $notifyEnabled = getSystemSetting($pdo, 'helpdesk_notify_emails', '1') === '1';
 $notifyExtra   = getSystemSetting($pdo, 'helpdesk_notify_extra_emails', '');
+// Credenciales SMTP (para rotar la clave sin tocar archivos ni git).
+$smtpUser      = getSystemSetting($pdo, 'smtp_username', '');
+$smtpPassSet   = getSystemSetting($pdo, 'smtp_password', '') !== '';
 
 /* --------------------------- Helpers ------------------------------ */
 function pct($num, $den): ?float { $den = (float) $den; return $den > 0 ? round(($num / $den) * 100, 1) : null; }
@@ -408,6 +431,24 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
       <button class="hrp-btn primary" id="btnSaveNotify"><i class="fas fa-floppy-disk"></i> Guardar</button>
       <span id="notifyMsg" style="font-size:12.5px; font-weight:700;"></span>
     </div>
+
+    <hr style="border:none; border-top:1px solid var(--hd-line); margin:20px 0 16px;">
+    <h4 style="font-size:12.5px; font-weight:800; color:var(--hd-ink); margin:0 0 4px; display:flex; align-items:center; gap:8px;"><i class="fas fa-lock" style="color:var(--hd-brand); font-size:12px;"></i> Correo saliente (SMTP) <span style="color:var(--hd-faint); font-weight:600; font-size:11px;">&middot; global</span></h4>
+    <p style="font-size:11.5px; color:var(--hd-muted); margin:0 0 12px; line-height:1.5;">Credenciales del buzón que envía los correos. Si rotas la contraseña en cPanel, actualízala aquí (se guarda en la base, no en el repo).</p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; max-width:560px;">
+      <div>
+        <label style="display:block; font-size:11px; font-weight:800; color:var(--hd-faint); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px;">Usuario</label>
+        <input type="text" id="smtpUser" value="<?= $e($smtpUser) ?>" autocomplete="off" style="width:100%; border:1px solid var(--hd-line); border-radius:10px; padding:9px 12px; font-size:13px; background:var(--hd-soft); color:var(--hd-ink); font-family:inherit;">
+      </div>
+      <div>
+        <label style="display:block; font-size:11px; font-weight:800; color:var(--hd-faint); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px;">Contraseña <?= $smtpPassSet ? '<span style="color:var(--ok)">(definida)</span>' : '<span style="color:var(--bad)">(no definida)</span>' ?></label>
+        <input type="password" id="smtpPass" placeholder="<?= $smtpPassSet ? '•••••• dejar en blanco = sin cambios' : 'escribe la contraseña' ?>" autocomplete="new-password" style="width:100%; border:1px solid var(--hd-line); border-radius:10px; padding:9px 12px; font-size:13px; background:var(--hd-soft); color:var(--hd-ink); font-family:inherit;">
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px; margin-top:12px;">
+      <button class="hrp-btn primary" id="btnSaveSmtp"><i class="fas fa-key"></i> Guardar SMTP</button>
+      <span id="smtpMsg" style="font-size:12.5px; font-weight:700;"></span>
+    </div>
   </div>
 
   <!-- Cumplimiento por soporte -->
@@ -603,6 +644,30 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
       if (j.success) {
         msg.textContent = 'Guardado ✓'; msg.style.color = 'var(--ok)';
         if (typeof j.extra === 'string') document.getElementById('notifyExtra').value = j.extra;
+      } else { msg.textContent = j.error || 'Error'; msg.style.color = 'var(--bad)'; }
+    } catch (e) { msg.textContent = 'Error de red'; msg.style.color = 'var(--bad)'; }
+    btn.disabled = false;
+    setTimeout(function () { if (msg) msg.textContent = ''; }, 3500);
+  });
+})();
+
+(function () {
+  var btn = document.getElementById('btnSaveSmtp');
+  if (!btn) return;
+  var msg = document.getElementById('smtpMsg');
+  btn.addEventListener('click', async function () {
+    btn.disabled = true;
+    msg.textContent = 'Guardando…'; msg.style.color = 'var(--hd-muted)';
+    var fd = new FormData();
+    fd.append('action', 'save_smtp');
+    fd.append('smtp_username', document.getElementById('smtpUser').value || '');
+    fd.append('smtp_password', document.getElementById('smtpPass').value || '');
+    try {
+      var r = await fetch('reports.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+      var j = await r.json();
+      if (j.success) {
+        msg.textContent = 'Credenciales guardadas ✓'; msg.style.color = 'var(--ok)';
+        document.getElementById('smtpPass').value = '';
       } else { msg.textContent = j.error || 'Error'; msg.style.color = 'var(--bad)'; }
     } catch (e) { msg.textContent = 'Error de red'; msg.style.color = 'var(--bad)'; }
     btn.disabled = false;

@@ -32,6 +32,7 @@ if (!function_exists('sendEmail')) {
 
             $mail = new PHPMailer(true);
             $mail->SMTPDebug  = !empty($config['debug_mode']) ? SMTP::DEBUG_SERVER : 0;
+            $mail->Timeout    = 15; // no colgar el flujo (p.ej. crear ticket) si el SMTP tarda
             $mail->isSMTP();
             $mail->Host       = $config['smtp_host'];
             $mail->SMTPAuth   = true;
