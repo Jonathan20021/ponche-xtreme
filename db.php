@@ -108,7 +108,9 @@ if (!function_exists('getScheduleConfig')) {
                 'meeting_minutes' => 45,
                 'scheduled_hours' => 8.00,
                 'overtime_enabled' => 1,
-                'overtime_multiplier' => 1.50,
+                // RD: recargo legal de horas extra 44-68h/sem = 35% => 1.35x (Cód. Trabajo art. 203).
+                // Antes 1.50 (más alto que el resto del sistema); si se re-siembra, cuadra con la nómina.
+                'overtime_multiplier' => 1.35,
                 'overtime_start_minutes' => 0,
             ];
 

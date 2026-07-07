@@ -22,6 +22,12 @@ function getDeductionRates($pdo)
 
 /**
  * Calcula el AFP (Administradora de Fondos de Pensiones)
+ *
+ * NOTA (tope legal): la ley RD topa el salario cotizable (AFP máx. y SFS máx.
+ * en múltiplos del salario mínimo cotizable). Aquí se aplica el % sobre el bruto
+ * SIN tope. Es inofensivo con los sueldos actuales (muy por debajo del tope),
+ * pero si algún día se contrata por encima del tope habría que topar el bruto
+ * cotizable (idealmente configurable en settings) antes de aplicar el %.
  */
 function calculateAFP($pdo, $grossSalary, $isEmployer = false)
 {
@@ -78,6 +84,11 @@ function calculateINFOTEP($pdo, $grossSalary)
  */
 function calculateISR($monthlyGrossSalary)
 {
+    // NOTA (moneda): la escala está en DOP. El bruto que llega debe estar en DOP.
+    // Hoy todos los empleados cobran en DOP (los de preferencia USD tienen tasas en
+    // 0). Si algún día se paga en USD, hay que convertir el bruto a DOP antes de
+    // entrar aquí y decidir en qué moneda se guarda la retención (política del
+    // contador), o los tramos quedarían mal.
     // Convertir a salario anual
     $annualSalary = $monthlyGrossSalary * 12;
 
@@ -176,6 +187,40 @@ function calculateEmployerContributions($pdo, $grossSalary)
 function calculateNetSalary($grossSalary, $deductions)
 {
     return round($grossSalary - $deductions['total_deductions'], 2);
+}
+
+/**
+ * Fracción del MES que representa un período de nómina. Se usa para (a) prorratear
+ * la escala MENSUAL del ISR al período y (b) proyectar montos anuales del reporte
+ * DGII de forma correcta. 1.0 mensual, 0.5 quincenal, 0.25 semanal; para CUSTOM =
+ * días del período / días del mes de inicio.
+ */
+function getPeriodMonthFraction($period): float
+{
+    if (!is_array($period)) {
+        return 1.0;
+    }
+    $type = $period['period_type'] ?? '';
+    if ($type === 'BIWEEKLY') {
+        return 0.5;
+    }
+    if ($type === 'WEEKLY') {
+        return 0.25;
+    }
+    if ($type !== 'MONTHLY' && !empty($period['start_date']) && !empty($period['end_date'])) {
+        try {
+            $sd = new DateTime($period['start_date']);
+            $ed = new DateTime($period['end_date']);
+            $pDays = $sd->diff($ed)->days + 1;
+            $dInMonth = (int) $sd->format('t');
+            if ($pDays > 0 && $dInMonth > 0) {
+                return $pDays / $dInMonth;
+            }
+        } catch (Throwable $e) {
+            // fallthrough al default mensual
+        }
+    }
+    return 1.0;
 }
 
 /**
@@ -690,26 +735,9 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     $deductionsEnd   = $period['end_date']   ?? null;
     $customDeductions = getEmployeeCustomDeductions($pdo, $employeeId, $deductionsStart, $deductionsEnd);
 
-    // Fracción del mes que representa el período, para prorratear la escala del
-    // ISR (que es mensual/anual) — mismo criterio que la proración de salario fijo.
-    // Aplica a TODOS los tipos de compensación (por hora, diario y fijo).
-    $isrPeriodFraction = 1.0;
-    if ($period) {
-        if (($period['period_type'] ?? '') === 'BIWEEKLY') {
-            $isrPeriodFraction = 0.5;
-        } elseif (($period['period_type'] ?? '') === 'WEEKLY') {
-            $isrPeriodFraction = 0.25;
-        } elseif (($period['period_type'] ?? '') !== 'MONTHLY'
-            && !empty($period['start_date']) && !empty($period['end_date'])) {
-            $sd = new DateTime($period['start_date']);
-            $ed = new DateTime($period['end_date']);
-            $pDays = $sd->diff($ed)->days + 1;
-            $dInMonth = (int) $sd->format('t');
-            if ($pDays > 0 && $dInMonth > 0) {
-                $isrPeriodFraction = $pDays / $dInMonth;
-            }
-        }
-    }
+    // Fracción del mes que representa el período (para prorratear la escala
+    // MENSUAL del ISR al período). Aplica a todo tipo de compensación.
+    $isrPeriodFraction = getPeriodMonthFraction($period);
 
     // Calcular descuentos
     $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions, $isrPeriodFraction);
@@ -726,6 +754,23 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     if ($additionalDeduction > 0) {
         $deductions['custom_deductions'] = round($deductions['custom_deductions'] + $additionalDeduction, 2);
         $deductions['total_deductions'] = round($deductions['total_deductions'] + $additionalDeduction, 2);
+    }
+
+    // Guardarraíl: el neto NUNCA puede ser negativo. Las deducciones OBLIGATORIAS
+    // (AFP/SFS/ISR) se respetan siempre; si las PERSONALIZADAS (préstamos,
+    // cooperativa, adicionales) exceden lo que queda del bruto, se recortan al
+    // disponible — el resto queda pendiente para el próximo período, nunca se paga
+    // en negativo. Se expone deduction_capped para avisar en la revisión.
+    $mandatoryDeductions = round(
+        $deductions['afp_employee'] + $deductions['sfs_employee'] + $deductions['isr'],
+        2
+    );
+    $availableForCustom = max(0, round($grossSalary - $mandatoryDeductions, 2));
+    $deductions['deduction_capped'] = 0;
+    if ($deductions['custom_deductions'] > $availableForCustom) {
+        $deductions['deduction_capped'] = round($deductions['custom_deductions'] - $availableForCustom, 2);
+        $deductions['custom_deductions'] = $availableForCustom;
+        $deductions['total_deductions'] = round($mandatoryDeductions + $availableForCustom, 2);
     }
 
     // Calcular aportes empleador

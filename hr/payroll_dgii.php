@@ -24,6 +24,13 @@ if (!$period) {
     die('Período no encontrado');
 }
 
+// Proyección anual correcta según el tipo de período: una quincena tiene 24
+// cheques/año (no 12), una semana 48, un mes 12. annualFactor = 12 / fracción
+// del mes. Antes se multiplicaba fijo x12, subestimando el anual en períodos
+// quincenales/semanales.
+$periodFraction = getPeriodMonthFraction($period);
+$annualFactor = $periodFraction > 0 ? 12 / $periodFraction : 12;
+
 // Get DGII report data
 $dgiiData = generateDGIIReport($pdo, $periodId);
 
@@ -181,17 +188,17 @@ foreach ($dgiiData as $record) {
                                 <th class="text-left py-3 px-2">Código</th>
                                 <th class="text-left py-3 px-2">Empleado</th>
                                 <th class="text-left py-3 px-2">Cédula/RNC</th>
-                                <th class="text-right py-3 px-2">Salario Mensual</th>
+                                <th class="text-right py-3 px-2">Salario del Período</th>
                                 <th class="text-right py-3 px-2">Salario Anual Proyectado</th>
-                                <th class="text-right py-3 px-2">ISR Mensual Retenido</th>
+                                <th class="text-right py-3 px-2">ISR del Período</th>
                                 <th class="text-right py-3 px-2">ISR Anual Proyectado</th>
                                 <th class="text-right py-3 px-2">Salario Neto</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($dgiiData as $record): 
-                                $annualSalary = $record['gross_salary'] * 12;
-                                $annualISR = $record['isr'] * 12;
+                            <?php foreach ($dgiiData as $record):
+                                $annualSalary = $record['gross_salary'] * $annualFactor;
+                                $annualISR = $record['isr'] * $annualFactor;
                             ?>
                                 <tr class="border-b border-slate-800 hover:bg-slate-800/50">
                                     <td class="py-2 px-2"><?= htmlspecialchars($record['employee_code']) ?></td>
@@ -209,9 +216,9 @@ foreach ($dgiiData as $record) {
                             <tr class="bg-slate-800/70 font-bold">
                                 <td colspan="3" class="py-3 px-2">TOTALES</td>
                                 <td class="py-3 px-2 text-right"><?= formatDOP($totals['gross']) ?></td>
-                                <td class="py-3 px-2 text-right text-blue-400"><?= formatDOP($totals['gross'] * 12) ?></td>
+                                <td class="py-3 px-2 text-right text-blue-400"><?= formatDOP($totals['gross'] * $annualFactor) ?></td>
                                 <td class="py-3 px-2 text-right text-red-400"><?= formatDOP($totals['isr']) ?></td>
-                                <td class="py-3 px-2 text-right text-red-500"><?= formatDOP($totals['isr'] * 12) ?></td>
+                                <td class="py-3 px-2 text-right text-red-500"><?= formatDOP($totals['isr'] * $annualFactor) ?></td>
                                 <td class="py-3 px-2 text-right text-green-400"><?= formatDOP($totals['net']) ?></td>
                             </tr>
                         </tbody>
@@ -230,19 +237,20 @@ foreach ($dgiiData as $record) {
                 <div class="bg-slate-800/50 p-6 rounded-lg">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <p class="text-slate-400 text-sm mb-2">Total ISR a Declarar (Mensual)</p>
+                            <p class="text-slate-400 text-sm mb-2">Total ISR Retenido (este período)</p>
                             <p class="text-3xl font-bold text-red-400"><?= formatDOP($totals['isr']) ?></p>
                         </div>
                         <div>
                             <p class="text-slate-400 text-sm mb-2">Total ISR Proyectado (Anual)</p>
-                            <p class="text-3xl font-bold text-red-500"><?= formatDOP($totals['isr'] * 12) ?></p>
+                            <p class="text-3xl font-bold text-red-500"><?= formatDOP($totals['isr'] * $annualFactor) ?></p>
                         </div>
                     </div>
                     <div class="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                         <p class="text-sm text-blue-300">
                             <i class="fas fa-info-circle mr-2"></i>
-                            <strong>Nota:</strong> Este reporte debe ser presentado mensualmente a la DGII junto con el formulario IR-3. 
-                            Las retenciones deben ser depositadas antes del día 10 del mes siguiente.
+                            <strong>Nota:</strong> El IR-3 se presenta MENSUAL a la DGII. Este reporte es de UN período
+                            (<?= htmlspecialchars($period['period_type'] === 'BIWEEKLY' ? 'quincena' : strtolower($period['period_type'])) ?>);
+                            para el mes completo, suma las retenciones de las dos quincenas. Deposítalas antes del día 10 del mes siguiente.
                         </p>
                     </div>
                 </div>
