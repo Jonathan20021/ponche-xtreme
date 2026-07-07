@@ -194,7 +194,80 @@ if (!function_exists('ensureHelpdeskSupportTables')) {
               KEY `idx_user` (`user_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+        // SLA por prioridad (configurable desde la UI del reporte). Gobierna los
+        // plazos de respuesta/resolución de los tickets según su prioridad.
+        $conn->query("
+            CREATE TABLE IF NOT EXISTS `helpdesk_sla_priorities` (
+              `priority` VARCHAR(10) NOT NULL PRIMARY KEY,
+              `response_hours` INT UNSIGNED NOT NULL,
+              `resolution_hours` INT UNSIGNED NOT NULL,
+              `updated_by` INT UNSIGNED DEFAULT NULL,
+              `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $hasSla = $conn->query("SELECT COUNT(*) c FROM helpdesk_sla_priorities");
+        if ($hasSla && ((int) ($hasSla->fetch_assoc()['c'] ?? 0)) === 0) {
+            // Defaults razonables en horas (crítica = más estricta).
+            $conn->query("INSERT INTO helpdesk_sla_priorities (priority, response_hours, resolution_hours) VALUES
+                ('critical', 1, 4), ('high', 4, 8), ('medium', 8, 24), ('low', 24, 72)");
+        }
         $done = true;
+    }
+}
+
+if (!function_exists('helpdeskSlaDefaults')) {
+    /** Defaults de SLA por prioridad (horas) — usados si la tabla aún no existe. */
+    function helpdeskSlaDefaults(): array
+    {
+        return [
+            'critical' => ['response' => 1,  'resolution' => 4],
+            'high'     => ['response' => 4,  'resolution' => 8],
+            'medium'   => ['response' => 8,  'resolution' => 24],
+            'low'      => ['response' => 24, 'resolution' => 72],
+        ];
+    }
+}
+
+if (!function_exists('helpdeskGetSlaPriorities')) {
+    /** SLA por prioridad => ['critical'=>['response'=>1,'resolution'=>4], ...]. */
+    function helpdeskGetSlaPriorities(): array
+    {
+        $out = helpdeskSlaDefaults();
+        try {
+            $res = getMysqli()->query("SELECT priority, response_hours, resolution_hours FROM helpdesk_sla_priorities");
+            if ($res) {
+                while ($r = $res->fetch_assoc()) {
+                    if (isset($out[$r['priority']])) {
+                        $out[$r['priority']] = ['response' => (int) $r['response_hours'], 'resolution' => (int) $r['resolution_hours']];
+                    }
+                }
+            }
+        } catch (Throwable $e) { /* tabla ausente: usa defaults */ }
+        return $out;
+    }
+}
+
+if (!function_exists('helpdeskSaveSlaPriorities')) {
+    /** Guarda SLA por prioridad. $vals=['critical'=>['response'=>h,'resolution'=>h],...]. */
+    function helpdeskSaveSlaPriorities(array $vals, ?int $userId = null): bool
+    {
+        $conn = getMysqli();
+        $stmt = $conn->prepare("
+            INSERT INTO helpdesk_sla_priorities (priority, response_hours, resolution_hours, updated_by)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE response_hours = VALUES(response_hours),
+                                    resolution_hours = VALUES(resolution_hours),
+                                    updated_by = VALUES(updated_by)
+        ");
+        foreach (['critical', 'high', 'medium', 'low'] as $p) {
+            if (!isset($vals[$p])) { continue; }
+            $resp  = max(1, min(8760, (int) ($vals[$p]['response'] ?? 0)));
+            $resol = max(1, min(8760, (int) ($vals[$p]['resolution'] ?? 0)));
+            if ($resol < $resp) { $resol = $resp; } // resolución nunca antes que la respuesta
+            $stmt->bind_param('siii', $p, $resp, $resol, $userId);
+            $stmt->execute();
+        }
+        return true;
     }
 }
 

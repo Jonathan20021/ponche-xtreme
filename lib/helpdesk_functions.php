@@ -4,6 +4,7 @@ require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/gemini_api.php';
 require_once __DIR__ . '/email_functions.php';
 require_once __DIR__ . '/logging_functions.php';
+require_once __DIR__ . '/helpdesk_support.php'; // SLA por prioridad configurable
 
 // Generate unique ticket number
 function generateTicketNumber() {
@@ -71,17 +72,23 @@ function createTicket($userId, $categoryId, $subject, $description, $priority = 
     
     $ticketNumber = generateTicketNumber();
     
-    // Get category SLA settings
-    $query = "SELECT sla_response_hours, sla_resolution_hours FROM helpdesk_categories WHERE id = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $categoryId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $category = $result->fetch_assoc();
-    if (!$category) { $category = ['sla_response_hours' => 24, 'sla_resolution_hours' => 72]; }
+    // SLA: primero por prioridad (configurable desde el reporte). Si no hubiera
+    // política de prioridad, cae al SLA de la categoría y luego a un default.
+    $slaByPrio = helpdeskGetSlaPriorities();
+    if (isset($slaByPrio[$priority])) {
+        $respHours  = $slaByPrio[$priority]['response'];
+        $resolHours = $slaByPrio[$priority]['resolution'];
+    } else {
+        $stmt = $conn->prepare("SELECT sla_response_hours, sla_resolution_hours FROM helpdesk_categories WHERE id = ?");
+        $stmt->bind_param("i", $categoryId);
+        $stmt->execute();
+        $category = $stmt->get_result()->fetch_assoc() ?: [];
+        $respHours  = (int) ($category['sla_response_hours'] ?? 24);
+        $resolHours = (int) ($category['sla_resolution_hours'] ?? 72);
+    }
 
-    $responseDeadline = date('Y-m-d H:i:s', strtotime("+{$category['sla_response_hours']} hours"));
-    $resolutionDeadline = date('Y-m-d H:i:s', strtotime("+{$category['sla_resolution_hours']} hours"));
+    $responseDeadline = date('Y-m-d H:i:s', strtotime("+{$respHours} hours"));
+    $resolutionDeadline = date('Y-m-d H:i:s', strtotime("+{$resolHours} hours"));
 
     // Análisis con IA (best-effort: una falla de la API no debe impedir crear el ticket)
     $aiAnalysis = null;

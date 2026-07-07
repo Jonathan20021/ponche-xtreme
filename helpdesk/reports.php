@@ -23,6 +23,27 @@ try { ensureHelpdeskSupportTables(getMysqli()); } catch (Throwable $e) { /* best
 // Acceso por permiso asignado.
 ensurePermission('helpdesk_reports', '../unauthorized.php');
 
+// Guardar SLA por prioridad (AJAX) desde la tarjeta editable del reporte.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_sla') {
+    header('Content-Type: application/json; charset=utf-8');
+    $raw = json_decode($_POST['sla'] ?? '', true);
+    if (!is_array($raw)) { echo json_encode(['success' => false, 'error' => 'Datos inválidos']); exit; }
+    $vals = [];
+    foreach (['critical', 'high', 'medium', 'low'] as $p) {
+        if (isset($raw[$p])) {
+            $vals[$p] = ['response' => (int) ($raw[$p]['response'] ?? 0), 'resolution' => (int) ($raw[$p]['resolution'] ?? 0)];
+        }
+    }
+    try {
+        helpdeskSaveSlaPriorities($vals, (int) $_SESSION['user_id']);
+        echo json_encode(['success' => true, 'sla' => helpdeskGetSlaPriorities()]);
+    } catch (Throwable $ex) {
+        error_log('reports save_sla: ' . $ex->getMessage());
+        echo json_encode(['success' => false, 'error' => 'No se pudo guardar el SLA']);
+    }
+    exit;
+}
+
 /* ------------------------- Rango de fechas ------------------------- */
 function validDate(?string $s): ?string
 {
@@ -121,6 +142,9 @@ foreach (q($pdo, "SELECT priority, COUNT(*) total FROM helpdesk_tickets WHERE cr
 $createdByDay = $resolvedByDay = [];
 foreach (q($pdo, "SELECT DATE(created_at) d, COUNT(*) n FROM helpdesk_tickets WHERE created_at BETWEEN ? AND ? GROUP BY DATE(created_at)", $rp) as $r) { $createdByDay[$r['d']] = (int) $r['n']; }
 foreach (q($pdo, "SELECT DATE(resolved_at) d, COUNT(*) n FROM helpdesk_tickets WHERE resolved_at BETWEEN ? AND ? GROUP BY DATE(resolved_at)", $rp) as $r) { $resolvedByDay[$r['d']] = (int) $r['n']; }
+
+// SLA por prioridad configurable (para la tarjeta editable).
+$slaPrio = helpdeskGetSlaPriorities();
 
 /* --------------------------- Helpers ------------------------------ */
 function pct($num, $den): ?float { $den = (float) $den; return $den > 0 ? round(($num / $den) * 100, 1) : null; }
@@ -264,6 +288,9 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
 .hrp-legend span{display:inline-flex; align-items:center; gap:6px;}
 .hrp-legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
 .hrp-empty{text-align:center; color:var(--hd-faint); font-size:12.5px; padding:24px;}
+.hrp-slain{width:80px; text-align:right; border:1px solid var(--hd-line); border-radius:8px; padding:7px 9px; font-size:12.5px; background:var(--hd-soft); color:var(--hd-ink); font-family:inherit; font-variant-numeric:tabular-nums;}
+.hrp-slain:focus{outline:2px solid var(--hd-brand-tint); border-color:var(--hd-brand);}
+.hrp-slaedit td{padding:8px 10px;}
 @media print{ header,nav,.hrp-toolbar .hrp-datef,.hrp-actions{display:none!important;} .hrp{padding:0;} .hrp-card,.hrp-kpi{box-shadow:none;} }
 </style>
 
@@ -302,6 +329,30 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
     <div class="hrp-kpi"><i class="fas fa-stopwatch ic"></i><div class="n"><?= dur($sum['avg_resp_min'] !== null ? (float) $sum['avg_resp_min'] : null) ?></div><div class="l">Prom. 1ra respuesta</div></div>
     <div class="hrp-kpi"><i class="fas fa-hourglass-half ic"></i><div class="n"><?= dur($sum['avg_resol_min'] !== null ? (float) $sum['avg_resol_min'] : null) ?></div><div class="l">Prom. resolución</div></div>
     <div class="hrp-kpi <?= ((int) $sum['overdue']) > 0 ? 'bad' : 'ok' ?>"><i class="fas fa-triangle-exclamation ic"></i><div class="n"><?= (int) $sum['overdue'] ?></div><div class="l">Vencidos (SLA activo)</div><div class="s">Tickets abiertos fuera de plazo</div></div>
+  </div>
+
+  <!-- SLA por prioridad (editable) -->
+  <div class="hrp-card" style="margin-bottom:18px;">
+    <h3><i class="fas fa-stopwatch"></i> SLA por prioridad <span class="tag">editable</span></h3>
+    <div style="overflow-x:auto;">
+    <table class="hrp-table hrp-slaedit" style="max-width:600px;">
+      <thead><tr><th>Prioridad</th><th class="num">Respuesta (h)</th><th class="num">Resolución (h)</th></tr></thead>
+      <tbody>
+      <?php foreach ($prioLabels as $pk => $plb): $cfg = $slaPrio[$pk] ?? ['response' => 0, 'resolution' => 0]; ?>
+        <tr>
+          <td><span class="hrp-dot" style="display:inline-block;margin-right:8px;background:<?= $prioColors[$pk] ?>"></span><b><?= $e($plb) ?></b></td>
+          <td class="num"><input class="hrp-slain" type="number" min="1" max="8760" step="1" data-p="<?= $e($pk) ?>" data-k="response" value="<?= (int) $cfg['response'] ?>"></td>
+          <td class="num"><input class="hrp-slain" type="number" min="1" max="8760" step="1" data-p="<?= $e($pk) ?>" data-k="resolution" value="<?= (int) $cfg['resolution'] ?>"></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap;">
+      <button class="hrp-btn primary" id="btnSaveSla"><i class="fas fa-floppy-disk"></i> Guardar SLA</button>
+      <span id="slaMsg" style="font-size:12.5px; font-weight:700;"></span>
+      <span style="font-size:11.5px; color:var(--hd-faint);"><i class="fas fa-circle-info"></i> Aplica a los tickets nuevos y al cambiar la prioridad de un ticket. La resolución no puede ser menor que la respuesta.</span>
+    </div>
   </div>
 
   <!-- Cumplimiento por soporte -->
@@ -442,3 +493,41 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  var btn = document.getElementById('btnSaveSla');
+  if (!btn) return;
+  var msg = document.getElementById('slaMsg');
+  btn.addEventListener('click', async function () {
+    btn.disabled = true;
+    msg.textContent = 'Guardando…'; msg.style.color = 'var(--hd-muted)';
+    var data = {};
+    document.querySelectorAll('.hrp-slain').forEach(function (i) {
+      var p = i.dataset.p; if (!data[p]) data[p] = {};
+      data[p][i.dataset.k] = parseInt(i.value, 10) || 0;
+    });
+    try {
+      var fd = new FormData();
+      fd.append('action', 'save_sla');
+      fd.append('sla', JSON.stringify(data));
+      var r = await fetch('reports.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+      var j = await r.json();
+      if (j.success) {
+        msg.textContent = 'SLA guardado ✓'; msg.style.color = 'var(--ok)';
+        if (j.sla) {
+          document.querySelectorAll('.hrp-slain').forEach(function (i) {
+            if (j.sla[i.dataset.p]) i.value = j.sla[i.dataset.p][i.dataset.k];
+          });
+        }
+      } else {
+        msg.textContent = j.error || 'Error al guardar'; msg.style.color = 'var(--bad)';
+      }
+    } catch (e) {
+      msg.textContent = 'Error de red'; msg.style.color = 'var(--bad)';
+    }
+    btn.disabled = false;
+    setTimeout(function () { if (msg) msg.textContent = ''; }, 3500);
+  });
+})();
+</script>

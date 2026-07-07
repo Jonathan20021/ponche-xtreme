@@ -668,8 +668,19 @@ switch ($action) {
         if (!in_array($priority, ['low', 'medium', 'high', 'critical'], true)) {
             echo json_encode(['success' => false, 'error' => 'Prioridad inválida']); break;
         }
-        $stmt = $conn->prepare("UPDATE helpdesk_tickets SET priority = ? WHERE id = ?");
-        $stmt->bind_param('si', $priority, $ticketId);
+        // Recalcular los plazos SLA según la política de la nueva prioridad
+        // (relativo a la fecha de creación del ticket).
+        $sla = helpdeskGetSlaPriorities();
+        $respH  = (int) ($sla[$priority]['response'] ?? 24);
+        $resolH = (int) ($sla[$priority]['resolution'] ?? 72);
+        $stmt = $conn->prepare("
+            UPDATE helpdesk_tickets
+            SET priority = ?,
+                sla_response_deadline = DATE_ADD(created_at, INTERVAL ? HOUR),
+                sla_resolution_deadline = DATE_ADD(created_at, INTERVAL ? HOUR)
+            WHERE id = ?
+        ");
+        $stmt->bind_param('siii', $priority, $respH, $resolH, $ticketId);
         echo json_encode(['success' => $stmt->execute()]);
         break;
 
