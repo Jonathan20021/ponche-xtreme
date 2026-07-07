@@ -135,7 +135,10 @@ require_once __DIR__ . '/../header.php';
 <div class="hdc" id="hdc">
   <div class="hdc-head">
     <div class="hdc-title"><i class="fas fa-headset"></i> Consola de Soporte</div>
-    <div class="hdc-metrics" id="hdcMetrics"></div>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div class="hdc-metrics" id="hdcMetrics"></div>
+      <a href="remote_access.php" class="hdc-btn ghost" style="text-decoration:none;"><i class="fas fa-key"></i> Accesos remotos</a>
+    </div>
   </div>
 
   <div class="hdc-body">
@@ -294,6 +297,8 @@ require_once __DIR__ . '/../header.php';
           <div class="rq"><span class="hdc-avatar" style="width:34px;height:34px;font-size:13px">${initials(t.user_name)}</span><div class="info"><div class="nm">${esc(t.user_name)}</div><div class="rl">${esc(t.user_email||'')}</div></div></div>
           <h4>Otros tickets</h4>
           <div id="hdcOther"><div style="font-size:12px;color:var(--hd-faint)">Cargando…</div></div>
+          <h4 style="margin-top:16px;"><i class="fas fa-key" style="color:var(--hd-brand)"></i> Acceso remoto</h4>
+          <div id="hdcRemote"><div style="font-size:12px;color:var(--hd-faint)">Cargando…</div></div>
         </div>
       </div>
       <div class="hdc-reply" style="position:relative">
@@ -317,6 +322,15 @@ require_once __DIR__ . '/../header.php';
     $('#btnAttach').onclick = ()=>$('#hdcFileInput').click();
     $('#hdcFileInput').onchange = e=>{ for(const f of e.target.files) state.pendingFiles.push(f); renderFiles(); e.target.value=''; };
     $('#btnCanned').onclick = toggleCanned;
+    loadTicketRemote(t.user_id);
+  }
+  async function loadTicketRemote(userId){
+    const box=$('#hdcRemote'); if(!box) return;
+    if(!userId){ box.innerHTML='<div style="font-size:12px;color:var(--hd-faint)">—</div>'; return; }
+    const d=await api('get_remote_for_user',{user_id:userId});
+    if(!d.success||!d.items.length){ box.innerHTML='<div style="font-size:12px;color:var(--hd-faint)">Sin credenciales. <a href="remote_access.php" style="color:var(--hd-brand)">Agregar</a></div>'; return; }
+    box.innerHTML=d.items.map(r=>`<div class="hdc-otk"><div class="s">${esc(r.label)} · ${esc(r.tool)}</div><div class="m">${r.remote_id?('ID '+esc(r.remote_id)):''} ${r.has_password==1?`<a href="#" data-rev="${r.id}" style="color:var(--hd-brand)">ver contraseña</a>`:''}</div><div id="rev-${r.id}"></div></div>`).join('');
+    box.querySelectorAll('[data-rev]').forEach(a=>a.onclick=async e=>{ e.preventDefault(); const id=a.dataset.rev; const dd=await api('reveal_remote',{id},'POST'); if(dd.success){ document.getElementById('rev-'+id).innerHTML=`<code style="display:inline-block;margin-top:5px;background:var(--hd-soft);border:1px solid var(--hd-line);border-radius:6px;padding:3px 8px;font-size:12px">${esc(dd.password||'(vacía)')}</code>`; } });
   }
   function attHtml(a){
     const url=`../hr/helpdesk_attachment.php?id=${a.id}`;

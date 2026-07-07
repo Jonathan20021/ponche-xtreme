@@ -207,6 +207,12 @@ $navItems = [
                 'icon' => 'fa-headset',
             ],
             [
+                'section' => 'helpdesk',
+                'label' => 'Accesos Remotos',
+                'href' => $baseHref . 'helpdesk/remote_access.php',
+                'icon' => 'fa-key',
+            ],
+            [
                 'section' => 'helpdesk_suggestions',
                 'label' => 'Buzón de Sugerencias',
                 'href' => $baseHref . 'helpdesk/suggestions.php',

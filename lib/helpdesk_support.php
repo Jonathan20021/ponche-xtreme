@@ -7,6 +7,8 @@
  * y self-heal de tablas nuevas. Usa mysqli ($conn) como el resto del helpdesk.
  */
 
+require_once __DIR__ . '/crypto_vault.php';
+
 if (!function_exists('helpdeskSupportRoles')) {
     /**
      * Roles que GESTIONAN tickets (consola admin) y pueden ser asignados.
@@ -61,6 +63,25 @@ if (!function_exists('ensureHelpdeskSupportTables')) {
               `file_type` VARCHAR(100),
               `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               KEY `idx_ticket` (`ticket_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        // Bóveda de credenciales de acceso remoto (AnyDesk/RustDesk...). Las
+        // contraseñas/notas se guardan CIFRADAS (password_enc/notes_enc).
+        $conn->query("
+            CREATE TABLE IF NOT EXISTS `helpdesk_remote_access` (
+              `id` INT AUTO_INCREMENT PRIMARY KEY,
+              `user_id` INT UNSIGNED DEFAULT NULL,
+              `label` VARCHAR(150) NOT NULL,
+              `tool` VARCHAR(30) NOT NULL DEFAULT 'anydesk',
+              `remote_id` VARCHAR(120) DEFAULT NULL,
+              `password_enc` TEXT DEFAULT NULL,
+              `notes_enc` TEXT DEFAULT NULL,
+              `ip_hostname` VARCHAR(150) DEFAULT NULL,
+              `created_by` INT UNSIGNED DEFAULT NULL,
+              `updated_by` INT UNSIGNED DEFAULT NULL,
+              `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              KEY `idx_user` (`user_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
         $done = true;

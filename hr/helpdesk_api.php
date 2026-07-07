@@ -724,6 +724,85 @@ switch ($action) {
         echo json_encode(['success' => $stmt->execute()]);
         break;
 
+    // ===== Bóveda de credenciales de acceso remoto (AnyDesk/RustDesk...) =====
+    case 'get_remote':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $where = "1=1"; $params = []; $types = "";
+        if (!empty($_GET['user_id'])) { $where .= " AND r.user_id = ?"; $params[] = intval($_GET['user_id']); $types .= "i"; }
+        if (isset($_GET['search']) && trim($_GET['search']) !== '') {
+            $s = '%' . trim($_GET['search']) . '%';
+            $where .= " AND (r.label LIKE ? OR r.remote_id LIKE ? OR u.full_name LIKE ?)";
+            array_push($params, $s, $s, $s); $types .= "sss";
+        }
+        $sql = "SELECT r.id, r.user_id, r.label, r.tool, r.remote_id, r.ip_hostname, r.updated_at,
+                       (r.password_enc IS NOT NULL AND r.password_enc <> '') AS has_password,
+                       u.full_name AS user_name
+                FROM helpdesk_remote_access r LEFT JOIN users u ON u.id = r.user_id
+                WHERE $where ORDER BY u.full_name, r.label";
+        $stmt = $conn->prepare($sql);
+        if (!empty($params)) { $stmt->bind_param($types, ...$params); }
+        $stmt->execute(); $res = $stmt->get_result();
+        $items = []; while ($row = $res->fetch_assoc()) { $items[] = $row; }
+        echo json_encode(['success' => true, 'items' => $items]);
+        break;
+
+    case 'get_remote_for_user':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $ruid = intval($_GET['user_id'] ?? 0);
+        $stmt = $conn->prepare("SELECT id, label, tool, remote_id, ip_hostname, (password_enc IS NOT NULL AND password_enc <> '') AS has_password FROM helpdesk_remote_access WHERE user_id = ? ORDER BY label");
+        $stmt->bind_param("i", $ruid); $stmt->execute(); $res = $stmt->get_result();
+        $items = []; while ($row = $res->fetch_assoc()) { $items[] = $row; }
+        echo json_encode(['success' => true, 'items' => $items]);
+        break;
+
+    case 'reveal_remote':
+        // Devuelve la contraseña descifrada + AUDITA quién la reveló.
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $rid = intval($_POST['id'] ?? $_GET['id'] ?? 0);
+        $stmt = $conn->prepare("SELECT r.password_enc, r.notes_enc, r.label, u.full_name FROM helpdesk_remote_access r LEFT JOIN users u ON u.id = r.user_id WHERE r.id = ?");
+        $stmt->bind_param("i", $rid); $stmt->execute(); $row = $stmt->get_result()->fetch_assoc();
+        if (!$row) { echo json_encode(['success' => false, 'error' => 'No encontrado']); break; }
+        try { logActivity($userId, 'remote_password_revealed', "Reveló credencial remota #$rid (" . ($row['full_name'] ?: $row['label']) . ")"); } catch (Throwable $e) {}
+        echo json_encode(['success' => true, 'password' => vaultDecrypt($row['password_enc']), 'notes' => vaultDecrypt($row['notes_enc'])]);
+        break;
+
+    case 'save_remote':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $rid = intval($_POST['id'] ?? 0);
+        $ruser = !empty($_POST['user_id']) ? intval($_POST['user_id']) : null;
+        $label = trim($_POST['label'] ?? '');
+        $tool = trim($_POST['tool'] ?? 'anydesk');
+        $remoteId = trim($_POST['remote_id'] ?? '');
+        $ip = trim($_POST['ip_hostname'] ?? '');
+        $pwd = (string) ($_POST['password'] ?? '');
+        $notes = (string) ($_POST['notes'] ?? '');
+        if ($label === '') { echo json_encode(['success' => false, 'error' => 'La etiqueta es requerida']); break; }
+        if ($rid > 0) {
+            // Editar: solo re-cifrar password si vino algo (no borrar al editar sin tocarla).
+            $set = "user_id=?, label=?, tool=?, remote_id=?, ip_hostname=?, updated_by=?";
+            $params = [$ruser, $label, $tool, $remoteId, $ip, $userId]; $types = "issssi";
+            if ($pwd !== '') { $set .= ", password_enc=?"; $params[] = vaultEncrypt($pwd); $types .= "s"; }
+            if (isset($_POST['notes'])) { $set .= ", notes_enc=?"; $params[] = vaultEncrypt($notes); $types .= "s"; }
+            $params[] = $rid; $types .= "i";
+            $stmt = $conn->prepare("UPDATE helpdesk_remote_access SET $set WHERE id=?");
+            $stmt->bind_param($types, ...$params);
+            echo json_encode(['success' => $stmt->execute()]);
+        } else {
+            $pe = vaultEncrypt($pwd); $ne = vaultEncrypt($notes);
+            $stmt = $conn->prepare("INSERT INTO helpdesk_remote_access (user_id, label, tool, remote_id, password_enc, notes_enc, ip_hostname, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("issssssii", $ruser, $label, $tool, $remoteId, $pe, $ne, $ip, $userId, $userId);
+            echo json_encode(['success' => $stmt->execute(), 'id' => $conn->insert_id]);
+        }
+        break;
+
+    case 'delete_remote':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $rid = intval($_POST['id'] ?? 0);
+        $stmt = $conn->prepare("DELETE FROM helpdesk_remote_access WHERE id=?");
+        $stmt->bind_param("i", $rid);
+        echo json_encode(['success' => $stmt->execute()]);
+        break;
+
     default:
         echo json_encode(['success' => false, 'error' => 'Invalid action']);
         break;

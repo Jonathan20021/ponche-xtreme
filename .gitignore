@@ -5,3 +5,8 @@
 /cache/voice_ai_insights/
 /cache/rate_limit/
 /cache/**/*.json
+# Clave de cifrado de la boveda de credenciales de acceso remoto.
+# NUNCA subir: si se filtra se pueden descifrar las contrasenas; si se borra se pierden.
+/config/vault_key.php
+# Adjuntos de tickets subidos por usuarios.
+/uploads/helpdesk/
