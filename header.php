@@ -202,9 +202,9 @@ $navItems = [
             ],
             [
                 'section' => 'helpdesk',
-                'label' => 'Gestión Tickets',
-                'href' => $baseHref . 'helpdesk/dashboard.php',
-                'icon' => 'fa-tasks',
+                'label' => 'Consola de Soporte',
+                'href' => $baseHref . 'helpdesk/console.php',
+                'icon' => 'fa-headset',
             ],
             [
                 'section' => 'helpdesk_suggestions',
