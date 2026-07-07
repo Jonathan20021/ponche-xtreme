@@ -139,7 +139,16 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
     <div class="ag-pagehead">
         <div>
             <h1><i class="fas fa-business-time" style="color:var(--ag-brand);"></i> Mis Horas por Quincena</h1>
-            <p>Horas acumuladas <?= $payrollSource === 'vicidial' ? 'desde Vicidial' : 'a partir de tus marcaciones' ?>, iguales a las de tu nómina.</p>
+            <p><?php
+                $subSrc = $selectedSummary['source_used'] ?? ($payrollSource === 'vicidial' ? 'vicidial' : 'manual');
+                if ($subSrc === 'vicidial') {
+                    echo 'Horas acumuladas desde Vicidial, iguales a las de tu nómina.';
+                } elseif ($subSrc === 'mixta') {
+                    echo 'Horas acumuladas de Vicidial y de tu ponche (según el día), iguales a las de tu nómina.';
+                } else {
+                    echo 'Horas acumuladas a partir de tu ponche, iguales a las de tu nómina.';
+                }
+            ?></p>
         </div>
         <div class="ag-head-actions">
             <span class="ag-chip"><i class="fas fa-rotate"></i> Actualizado <?= date('d/m · H:i') ?></span>
@@ -198,12 +207,33 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                     </div>
                 </div>
 
+                <?php
+                    $srcSecs = ['vicidial' => 0, 'ponche' => 0];
+                    foreach (($selectedSummary['by_day'] ?? []) as $d => $s) {
+                        $srcSecs[($selectedSummary['by_day_source'][$d] ?? 'ponche')] += $s;
+                    }
+                ?>
+                <?php if ($srcSecs['vicidial'] > 0 || $srcSecs['ponche'] > 0): ?>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; align-items:center;">
+                    <span class="ag-tsub" style="font-weight:700;">De dónde salen tus horas:</span>
+                    <?php if ($srcSecs['vicidial'] > 0): ?>
+                        <span class="ag-tag" style="background:#E4F6F6;color:#0B7A7A;"><i class="fas fa-headset"></i> Vicidial · <?= formatDecimalHours($srcSecs['vicidial']) ?>h</span>
+                    <?php endif; ?>
+                    <?php if ($srcSecs['ponche'] > 0): ?>
+                        <span class="ag-tag" style="background:var(--ag-brand-tint);color:var(--ag-brand);"><i class="fas fa-fingerprint"></i> Ponche · <?= formatDecimalHours($srcSecs['ponche']) ?>h</span>
+                    <?php endif; ?>
+                </div>
+                <?php if ($srcSecs['vicidial'] > 0 && $srcSecs['ponche'] > 0): ?>
+                    <p class="ag-hint" style="margin-top:10px;"><i class="fas fa-circle-info" style="margin-right:5px;"></i>Los días que trabajaste pero no quedaron registrados en Vicidial se te pagan por tu ponche, para no dejarte ningún día en cero.</p>
+                <?php endif; ?>
+                <?php endif; ?>
+
                 <?php if (!empty($selectedSummary['by_day'])): ?>
                     <div style="margin-top:20px;">
                         <div style="font-size:13.5px; font-weight:700; color:var(--ag-text); display:flex; align-items:center; gap:8px; margin-bottom:10px;"><i class="fas fa-calendar-day" style="color:var(--ag-brand);"></i> Detalle diario</div>
                         <div style="overflow-x:auto;">
                             <table class="ag-table">
-                                <thead><tr><th>Fecha</th><th style="text-align:right;">Horas</th><th style="text-align:right;">Equivalente</th></tr></thead>
+                                <thead><tr><th>Fecha</th><th style="text-align:center;">Fuente</th><th style="text-align:right;">Horas</th><th style="text-align:right;">Equivalente</th></tr></thead>
                                 <tbody>
                                     <?php foreach ($selectedSummary['by_day'] as $date => $secs): ?>
                                         <?php $holidayInfo = $selectedSummary['holiday_days'][$date] ?? null; ?>
@@ -216,6 +246,14 @@ $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
                                                     <?php else: ?>
                                                         <span class="ag-tag" style="background:#EEF1F6;color:var(--ag-muted);margin-left:8px;" title="<?= htmlspecialchars($holidayInfo['name']) ?>"><i class="fas fa-star"></i> Festivo</span>
                                                     <?php endif; ?>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td style="text-align:center;">
+                                                <?php $daySrc = $selectedSummary['by_day_source'][$date] ?? 'ponche'; ?>
+                                                <?php if ($daySrc === 'vicidial'): ?>
+                                                    <span class="ag-tag" style="background:#E4F6F6;color:#0B7A7A;" title="Horas tomadas de tu actividad en Vicidial"><i class="fas fa-headset"></i> Vicidial</span>
+                                                <?php else: ?>
+                                                    <span class="ag-tag" style="background:var(--ag-brand-tint);color:var(--ag-brand);" title="Horas tomadas de tu ponche (no hubo registro en Vicidial ese día)"><i class="fas fa-fingerprint"></i> Ponche</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td style="text-align:right; font-weight:700;">

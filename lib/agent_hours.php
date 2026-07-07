@@ -50,6 +50,7 @@ if (!function_exists('computePeriodHoursForUser')) {
             'overtime_seconds' => 0,
             'days_worked' => 0,
             'by_day' => [],
+            'by_day_source' => [], // date => 'vicidial' | 'ponche'  (transparencia por día)
             'holiday_days' => [],
             'source_used' => $payrollSource === 'vicidial' ? 'vicidial' : 'manual',
         ];
@@ -74,6 +75,9 @@ if (!function_exists('computePeriodHoursForUser')) {
         $punchRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($punchRows, $paidTypeSlugs);
 
+        // Fuente de cada día (para transparencia total en el detalle del agente).
+        $daySource = [];
+
         // 2) Si el agente se paga por Vicidial: Vicidial manda en los días que
         //    registró, y el ponche RESPALDA los días sin fila en Vicidial (mismo
         //    merge por día que hr/payroll.php, para que estas horas coincidan EXACTO
@@ -85,10 +89,15 @@ if (!function_exists('computePeriodHoursForUser')) {
                 $seenDays = array_flip($vd['seen_dates'] ?? array_keys($vd['by_date']));
                 $backfill = array_diff_key($punchDaily, $seenDays);
                 $dailyWorkSeconds = $vd['by_date'] + $backfill;
+                foreach ($vd['by_date'] as $d => $s) { $daySource[$d] = 'vicidial'; }
+                foreach ($backfill as $d => $s) { $daySource[$d] = 'ponche'; }
                 $result['source_used'] = empty($backfill) ? 'vicidial' : 'mixta';
             } else {
+                foreach ($dailyWorkSeconds as $d => $s) { $daySource[$d] = 'ponche'; }
                 $result['source_used'] = 'manual'; // respaldo ponche total (sin datos Vicidial)
             }
+        } else {
+            foreach ($dailyWorkSeconds as $d => $s) { $daySource[$d] = 'ponche'; }
         }
 
         $weeklySplit = splitWeeklyRegularOvertimeSeconds(
@@ -119,6 +128,7 @@ if (!function_exists('computePeriodHoursForUser')) {
             $result['regular_seconds'] += $regSeconds;
             $result['overtime_seconds'] += $otSeconds;
             $result['by_day'][$date] = $daySeconds;
+            $result['by_day_source'][$date] = $daySource[$date] ?? ($payrollSource === 'vicidial' ? 'vicidial' : 'ponche');
 
             if ($isHoliday) {
                 $result['holiday_days'][$date] = [
