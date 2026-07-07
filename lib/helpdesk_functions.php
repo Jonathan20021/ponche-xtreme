@@ -314,8 +314,9 @@ function notifyTicketCreated($ticketId, $userId) {
     $result = $stmt->get_result();
     $ticket = $result->fetch_assoc();
     
-    // Notify all admins and HR
-    $query = "SELECT id FROM users WHERE role IN ('admin', 'hr') AND id != ?";
+    // Notificar al equipo de soporte (IT, Desarrollador, Admin, HR). Antes comparaba
+    // 'admin'/'hr' en minúscula y NO coincidía con los roles reales -> nadie se enteraba.
+    $query = "SELECT id FROM users WHERE UPPER(role) IN ('ADMIN','HR','IT','DESARROLLADOR') AND id != ?";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("i", $userId);
     $stmt->execute();

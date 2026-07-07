@@ -33,10 +33,17 @@ try {
     
     $userId = $_SESSION['user_id'] ?? null;
     $userRole = $_SESSION['role'] ?? 'employee';
-    
+
+    // Identidad del equipo de soporte (gestiona TODOS los tickets). Reemplaza los
+    // chequeos rotos que comparaban 'Admin'/'HR' (y a veces en minúscula) y dejaban
+    // fuera a IT/Desarrollador.
+    require_once __DIR__ . '/../lib/helpdesk_support.php';
+    $isSupport = isHelpdeskSupport($userRole);
+
     // Cargar funciones solo si es necesario
     if ($action !== 'get_categories') {
         require_once __DIR__ . '/../lib/helpdesk_functions.php';
+        ensureHelpdeskSupportTables($conn);
     }
     
 } catch (Exception $e) {
@@ -92,14 +99,14 @@ switch ($action) {
             
             $params = [];
             $types = "";
-            
-            // Regular users can only see their own tickets
-            if ($userRole !== 'Admin' && $userRole !== 'HR') {
+
+            // Quien NO es soporte solo ve sus propios tickets.
+            if (!$isSupport) {
                 $query .= " AND t.user_id = ?";
                 $params[] = $userId;
                 $types .= "i";
             }
-            
+
             if (!empty($_GET['status'])) {
                 $query .= " AND t.status = ?";
                 $params[] = $_GET['status'];
@@ -120,28 +127,56 @@ switch ($action) {
                 $params[] = intval($_GET['assigned_to']);
                 $types .= "i";
             }
-            
-            $query .= " ORDER BY t.created_at DESC";
-            
-            if (!empty($_GET['limit'])) {
-                $query .= " LIMIT ?";
-                $params[] = intval($_GET['limit']);
-                $types .= "i";
+            // Vistas rápidas (solo soporte)
+            if ($isSupport && !empty($_GET['view'])) {
+                if ($_GET['view'] === 'unassigned') {
+                    $query .= " AND t.assigned_to IS NULL AND t.status NOT IN ('closed','cancelled')";
+                } elseif ($_GET['view'] === 'mine') {
+                    $query .= " AND t.assigned_to = ?";
+                    $params[] = $userId;
+                    $types .= "i";
+                } elseif ($_GET['view'] === 'unresolved') {
+                    $query .= " AND t.status NOT IN ('resolved','closed','cancelled')";
+                }
             }
-            
+            // Búsqueda libre: número, asunto, descripción o solicitante.
+            if (isset($_GET['search']) && trim($_GET['search']) !== '') {
+                $s = '%' . trim($_GET['search']) . '%';
+                $query .= " AND (t.ticket_number LIKE ? OR t.subject LIKE ? OR t.description LIKE ? OR u.full_name LIKE ?)";
+                array_push($params, $s, $s, $s, $s);
+                $types .= "ssss";
+            }
+
+            // Total (para paginación) antes de aplicar LIMIT.
+            $countSql = preg_replace('/^\s*SELECT.*?\sFROM\s/s', 'SELECT COUNT(*) AS c FROM ', $query, 1);
+            $cstmt = $conn->prepare($countSql);
+            if (!empty($params)) { $cstmt->bind_param($types, ...$params); }
+            $cstmt->execute();
+            $total = (int) (($cstmt->get_result()->fetch_assoc()['c']) ?? 0);
+
+            // Orden: primero por prioridad, luego lo más nuevo.
+            $query .= " ORDER BY FIELD(t.priority,'critical','high','medium','low'), t.created_at DESC";
+
+            $limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 25;
+            $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+            $offset = ($page - 1) * $limit;
+            $query .= " LIMIT ? OFFSET ?";
+            $params[] = $limit; $types .= "i";
+            $params[] = $offset; $types .= "i";
+
             $stmt = $conn->prepare($query);
             if (!empty($params)) {
                 $stmt->bind_param($types, ...$params);
             }
             $stmt->execute();
             $result = $stmt->get_result();
-            
+
             $tickets = [];
             while ($row = $result->fetch_assoc()) {
                 $tickets[] = $row;
             }
-            
-            echo json_encode(['success' => true, 'tickets' => $tickets]);
+
+            echo json_encode(['success' => true, 'tickets' => $tickets, 'total' => $total, 'page' => $page, 'limit' => $limit]);
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'error' => 'Error loading tickets: ' . $e->getMessage()]);
         }
@@ -160,7 +195,7 @@ switch ($action) {
                   WHERE t.id = ?";
         
         // Regular users can only see their own tickets
-        if ($userRole !== 'Admin' && $userRole !== 'HR') {
+        if (!$isSupport) {
             $query .= " AND t.user_id = ?";
             $stmt = $conn->prepare($query);
             $stmt->bind_param("ii", $ticketId, $userId);
@@ -182,7 +217,7 @@ switch ($action) {
                       WHERE c.ticket_id = ?";
             
             // Hide internal comments from regular users
-            if ($userRole !== 'Admin' && $userRole !== 'HR') {
+            if (!$isSupport) {
                 $query .= " AND c.is_internal = 0";
             }
             
@@ -217,7 +252,8 @@ switch ($action) {
             }
             
             $ticket['status_history'] = $history;
-            
+            $ticket['attachments'] = helpdeskGetTicketAttachments($conn, $ticketId);
+
             echo json_encode(['success' => true, 'ticket' => $ticket]);
         } else {
             echo json_encode(['success' => false, 'error' => 'Ticket not found']);
@@ -225,7 +261,7 @@ switch ($action) {
         break;
         
     case 'assign_ticket':
-        if ($userRole !== 'Admin' && $userRole !== 'HR') {
+        if (!$isSupport) {
             echo json_encode(['success' => false, 'error' => 'Unauthorized']);
             exit;
         }
@@ -251,7 +287,7 @@ switch ($action) {
         $result = $stmt->get_result();
         $ticket = $result->fetch_assoc();
         
-        $canUpdate = ($userRole === 'admin' || $userRole === 'hr' || 
+        $canUpdate = ($isSupport || 
                      $ticket['user_id'] == $userId || 
                      $ticket['assigned_to'] == $userId);
         
@@ -282,7 +318,7 @@ switch ($action) {
         $result = $stmt->get_result();
         $ticket = $result->fetch_assoc();
         
-        $canComment = ($userRole === 'admin' || $userRole === 'hr' || 
+        $canComment = ($isSupport || 
                       $ticket['user_id'] == $userId || 
                       $ticket['assigned_to'] == $userId);
         
@@ -292,7 +328,7 @@ switch ($action) {
         }
         
         // Only admins/hr can add internal comments
-        if ($isInternal && $userRole !== 'Admin' && $userRole !== 'HR') {
+        if ($isInternal && !$isSupport) {
             $isInternal = 0;
         }
         
@@ -373,7 +409,7 @@ switch ($action) {
         break;
         
     case 'get_statistics':
-        if ($userRole !== 'Admin' && $userRole !== 'HR') {
+        if (!$isSupport) {
             echo json_encode(['success' => false, 'error' => 'Unauthorized']);
             exit;
         }
@@ -453,7 +489,7 @@ switch ($action) {
         break;
         
     case 'ai_suggest_response':
-        if ($userRole !== 'Admin' && $userRole !== 'HR') {
+        if (!$isSupport) {
             echo json_encode(['success' => false, 'error' => 'Unauthorized']);
             exit;
         }
@@ -507,7 +543,7 @@ switch ($action) {
         break;
         
     case 'create_category':
-        if ($userRole !== 'Admin' && $userRole !== 'HR') {
+        if (!$isSupport) {
             echo json_encode(['success' => false, 'error' => 'Unauthorized']);
             exit;
         }
@@ -532,7 +568,7 @@ switch ($action) {
         break;
         
     case 'update_category':
-        if ($userRole !== 'Admin' && $userRole !== 'HR') {
+        if (!$isSupport) {
             echo json_encode(['success' => false, 'error' => 'Unauthorized']);
             exit;
         }
@@ -560,7 +596,7 @@ switch ($action) {
         break;
         
     case 'delete_category':
-        if ($userRole !== 'Admin' && $userRole !== 'HR') {
+        if (!$isSupport) {
             echo json_encode(['success' => false, 'error' => 'Unauthorized']);
             exit;
         }
@@ -591,6 +627,103 @@ switch ($action) {
         }
         break;
         
+    case 'get_agents':
+        // Pool de asignables (equipo de soporte: IT, Desarrollador, Admin, HR).
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $roles = helpdeskSupportRoles();
+        $in = "'" . implode("','", array_map(function ($r) use ($conn) { return $conn->real_escape_string($r); }, $roles)) . "'";
+        $res = $conn->query("SELECT id, full_name, role FROM users WHERE is_active = 1 AND UPPER(role) IN ($in) ORDER BY full_name");
+        $agents = [];
+        while ($row = $res->fetch_assoc()) { $agents[] = $row; }
+        echo json_encode(['success' => true, 'agents' => $agents]);
+        break;
+
+    case 'update_priority':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $ticketId = intval($_POST['ticket_id']);
+        $priority = $_POST['priority'] ?? '';
+        if (!in_array($priority, ['low', 'medium', 'high', 'critical'], true)) {
+            echo json_encode(['success' => false, 'error' => 'Prioridad inválida']); break;
+        }
+        $stmt = $conn->prepare("UPDATE helpdesk_tickets SET priority = ? WHERE id = ?");
+        $stmt->bind_param('si', $priority, $ticketId);
+        echo json_encode(['success' => $stmt->execute()]);
+        break;
+
+    case 'update_ticket_category':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $ticketId = intval($_POST['ticket_id']);
+        $categoryId = intval($_POST['category_id']);
+        $stmt = $conn->prepare("UPDATE helpdesk_tickets SET category_id = ? WHERE id = ?");
+        $stmt->bind_param('ii', $categoryId, $ticketId);
+        echo json_encode(['success' => $stmt->execute()]);
+        break;
+
+    case 'get_requester_tickets':
+        // Otros tickets del mismo solicitante (panel de contexto). Solo soporte.
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $ticketId = intval($_GET['ticket_id']);
+        $stmt = $conn->prepare("SELECT user_id FROM helpdesk_tickets WHERE id = ?");
+        $stmt->bind_param('i', $ticketId); $stmt->execute();
+        $owner = $stmt->get_result()->fetch_assoc();
+        $rows = [];
+        if ($owner) {
+            $stmt = $conn->prepare("SELECT id, ticket_number, subject, status, priority, created_at FROM helpdesk_tickets WHERE user_id = ? AND id <> ? ORDER BY created_at DESC LIMIT 10");
+            $stmt->bind_param('ii', $owner['user_id'], $ticketId); $stmt->execute();
+            $r = $stmt->get_result();
+            while ($row = $r->fetch_assoc()) { $rows[] = $row; }
+        }
+        echo json_encode(['success' => true, 'tickets' => $rows]);
+        break;
+
+    case 'upload_attachment':
+        // Adjuntar archivo (captura del error). Permitido al dueño del ticket o a soporte.
+        $ticketId = intval($_POST['ticket_id'] ?? 0);
+        $commentId = !empty($_POST['comment_id']) ? intval($_POST['comment_id']) : null;
+        $stmt = $conn->prepare("SELECT user_id, assigned_to FROM helpdesk_tickets WHERE id = ?");
+        $stmt->bind_param('i', $ticketId); $stmt->execute();
+        $tk = $stmt->get_result()->fetch_assoc();
+        if (!$tk) { echo json_encode(['success' => false, 'error' => 'Ticket no encontrado']); break; }
+        $canUp = $isSupport || $tk['user_id'] == $userId || $tk['assigned_to'] == $userId;
+        if (!$canUp) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        if (empty($_FILES['file'])) { echo json_encode(['success' => false, 'error' => 'No se recibió archivo']); break; }
+        $r = helpdeskSaveUploadedFile($conn, $ticketId, (int) $userId, $_FILES['file'], $commentId);
+        echo json_encode($r['ok'] ? ['success' => true, 'id' => $r['id'], 'file_name' => $r['file_name']] : ['success' => false, 'error' => $r['error']]);
+        break;
+
+    case 'get_canned':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $res = $conn->query("SELECT id, title, body, category_id FROM helpdesk_canned_responses WHERE is_active = 1 ORDER BY title");
+        $canned = [];
+        while ($row = $res->fetch_assoc()) { $canned[] = $row; }
+        echo json_encode(['success' => true, 'canned' => $canned]);
+        break;
+
+    case 'save_canned':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $id = intval($_POST['id'] ?? 0);
+        $title = trim($_POST['title'] ?? '');
+        $body = trim($_POST['body'] ?? '');
+        if ($title === '' || $body === '') { echo json_encode(['success' => false, 'error' => 'Título y contenido requeridos']); break; }
+        if ($id > 0) {
+            $stmt = $conn->prepare("UPDATE helpdesk_canned_responses SET title = ?, body = ? WHERE id = ?");
+            $stmt->bind_param('ssi', $title, $body, $id);
+            echo json_encode(['success' => $stmt->execute()]);
+        } else {
+            $stmt = $conn->prepare("INSERT INTO helpdesk_canned_responses (title, body, created_by) VALUES (?, ?, ?)");
+            $stmt->bind_param('ssi', $title, $body, $userId);
+            echo json_encode(['success' => $stmt->execute(), 'id' => $conn->insert_id]);
+        }
+        break;
+
+    case 'delete_canned':
+        if (!$isSupport) { echo json_encode(['success' => false, 'error' => 'Unauthorized']); break; }
+        $id = intval($_POST['id'] ?? 0);
+        $stmt = $conn->prepare("UPDATE helpdesk_canned_responses SET is_active = 0 WHERE id = ?");
+        $stmt->bind_param('i', $id);
+        echo json_encode(['success' => $stmt->execute()]);
+        break;
+
     default:
         echo json_encode(['success' => false, 'error' => 'Invalid action']);
         break;
