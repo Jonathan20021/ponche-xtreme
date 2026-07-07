@@ -11,6 +11,56 @@ use PHPMailer\PHPMailer\SMTP;
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+if (!function_exists('sendEmail')) {
+    /**
+     * Envío genérico de correo HTML vía PHPMailer + config/email_config.php.
+     * Best-effort: devuelve true/false y NUNCA lanza (para no romper flujos que
+     * lo llaman en caliente, p. ej. crear/asignar tickets del helpdesk).
+     *
+     * @param string      $to        destinatario
+     * @param string      $subject   asunto
+     * @param string      $htmlBody  cuerpo HTML
+     * @param string|null $toName    nombre del destinatario (opcional)
+     */
+    function sendEmail(string $to, string $subject, string $htmlBody, ?string $toName = null): bool
+    {
+        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+        try {
+            $config = require __DIR__ . '/../config/email_config.php';
+
+            $mail = new PHPMailer(true);
+            $mail->SMTPDebug  = !empty($config['debug_mode']) ? SMTP::DEBUG_SERVER : 0;
+            $mail->isSMTP();
+            $mail->Host       = $config['smtp_host'];
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $config['smtp_username'];
+            $mail->Password   = $config['smtp_password'];
+            $mail->SMTPSecure = $config['smtp_secure'];
+            $mail->Port       = (int) $config['smtp_port'];
+            $mail->CharSet    = $config['charset'] ?? 'UTF-8';
+
+            $mail->setFrom($config['from_email'], $config['from_name'] ?? 'Helpdesk');
+            $mail->addAddress($to, $toName ?: $to);
+            if (!empty($config['reply_to_email'])) {
+                $mail->addReplyTo($config['reply_to_email'], $config['reply_to_name'] ?? '');
+            }
+
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body    = $htmlBody;
+            $mail->AltBody = trim(preg_replace('/\s+/', ' ', strip_tags($htmlBody)));
+
+            $mail->send();
+            return true;
+        } catch (Throwable $e) {
+            error_log('sendEmail: ' . $e->getMessage());
+            return false;
+        }
+    }
+}
+
 /**
  * Send welcome email to new employee
  * 

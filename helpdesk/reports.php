@@ -44,6 +44,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     exit;
 }
 
+// Guardar preferencias de notificación por correo (AJAX).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_notify') {
+    header('Content-Type: application/json; charset=utf-8');
+    $enabled = (($_POST['enabled'] ?? '') === '1') ? '1' : '0';
+    $valid = [];
+    foreach (preg_split('/[\s,;]+/', (string) ($_POST['extra'] ?? '')) as $a) {
+        $a = trim($a);
+        if ($a !== '' && filter_var($a, FILTER_VALIDATE_EMAIL)) { $valid[] = $a; }
+    }
+    $extra = implode(', ', array_values(array_unique($valid)));
+    try {
+        $up = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                             VALUES (?, ?, 'text', 'helpdesk')
+                             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $up->execute(['helpdesk_notify_emails', $enabled]);
+        $up->execute(['helpdesk_notify_extra_emails', $extra]);
+        echo json_encode(['success' => true, 'enabled' => $enabled, 'extra' => $extra]);
+    } catch (Throwable $ex) {
+        error_log('reports save_notify: ' . $ex->getMessage());
+        echo json_encode(['success' => false, 'error' => 'No se pudo guardar']);
+    }
+    exit;
+}
+
 /* ------------------------- Rango de fechas ------------------------- */
 function validDate(?string $s): ?string
 {
@@ -145,6 +169,10 @@ foreach (q($pdo, "SELECT DATE(resolved_at) d, COUNT(*) n FROM helpdesk_tickets W
 
 // SLA por prioridad configurable (para la tarjeta editable).
 $slaPrio = helpdeskGetSlaPriorities();
+
+// Preferencias de notificación por correo.
+$notifyEnabled = getSystemSetting($pdo, 'helpdesk_notify_emails', '1') === '1';
+$notifyExtra   = getSystemSetting($pdo, 'helpdesk_notify_extra_emails', '');
 
 /* --------------------------- Helpers ------------------------------ */
 function pct($num, $den): ?float { $den = (float) $den; return $den > 0 ? round(($num / $den) * 100, 1) : null; }
@@ -291,6 +319,14 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
 .hrp-slain{width:80px; text-align:right; border:1px solid var(--hd-line); border-radius:8px; padding:7px 9px; font-size:12.5px; background:var(--hd-soft); color:var(--hd-ink); font-family:inherit; font-variant-numeric:tabular-nums;}
 .hrp-slain:focus{outline:2px solid var(--hd-brand-tint); border-color:var(--hd-brand);}
 .hrp-slaedit td{padding:8px 10px;}
+.hrp-switch{display:inline-flex; align-items:center; gap:11px; cursor:pointer; user-select:none;}
+.hrp-switch input{position:absolute; opacity:0; width:0; height:0;}
+.hrp-switch .sl{width:44px; height:25px; border-radius:999px; background:var(--hd-line); position:relative; transition:.2s var(--ag-ease,ease); flex-shrink:0;}
+.hrp-switch .sl::after{content:''; position:absolute; top:2px; left:2px; width:21px; height:21px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.22); transition:.2s;}
+.hrp-switch input:checked + .sl{background:var(--ok);}
+.hrp-switch input:checked + .sl::after{transform:translateX(19px);}
+.hrp-switch input:focus-visible + .sl{outline:2px solid var(--hd-brand); outline-offset:2px;}
+.hrp-switch .tx{font-size:13.5px; font-weight:700; color:var(--hd-ink);}
 @media print{ header,nav,.hrp-toolbar .hrp-datef,.hrp-actions{display:none!important;} .hrp{padding:0;} .hrp-card,.hrp-kpi{box-shadow:none;} }
 </style>
 
@@ -352,6 +388,25 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
       <button class="hrp-btn primary" id="btnSaveSla"><i class="fas fa-floppy-disk"></i> Guardar SLA</button>
       <span id="slaMsg" style="font-size:12.5px; font-weight:700;"></span>
       <span style="font-size:11.5px; color:var(--hd-faint);"><i class="fas fa-circle-info"></i> Aplica a los tickets nuevos y al cambiar la prioridad de un ticket. La resolución no puede ser menor que la respuesta.</span>
+    </div>
+  </div>
+
+  <!-- Notificaciones por correo (editable) -->
+  <div class="hrp-card" style="margin-bottom:18px;">
+    <h3><i class="fas fa-bell"></i> Notificaciones por correo <span class="tag">helpdesk</span></h3>
+    <label class="hrp-switch">
+      <input type="checkbox" id="notifyEnabled" <?= $notifyEnabled ? 'checked' : '' ?>>
+      <span class="sl"></span>
+      <span class="tx">Enviar correos automáticos del helpdesk</span>
+    </label>
+    <p style="font-size:12px; color:var(--hd-muted); margin:11px 0 16px; line-height:1.55;">
+      Al <b>crear</b> un ticket se avisa al equipo de soporte (Admin/HR/IT/Desarrollador con correo en su ficha) y se confirma al solicitante. Al <b>asignar</b>, se avisa por correo al agente asignado.
+    </p>
+    <label style="display:block; font-size:11px; font-weight:800; color:var(--hd-faint); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px;">Correos extra a avisar en la creación (separados por coma)</label>
+    <input type="text" id="notifyExtra" value="<?= $e($notifyExtra) ?>" placeholder="soporte@evallishbpo.com, it@evallishbpo.com" style="width:100%; max-width:540px; border:1px solid var(--hd-line); border-radius:10px; padding:10px 12px; font-size:13px; background:var(--hd-soft); color:var(--hd-ink); font-family:inherit;">
+    <div style="display:flex; align-items:center; gap:12px; margin-top:14px;">
+      <button class="hrp-btn primary" id="btnSaveNotify"><i class="fas fa-floppy-disk"></i> Guardar</button>
+      <span id="notifyMsg" style="font-size:12.5px; font-weight:700;"></span>
     </div>
   </div>
 
@@ -526,6 +581,30 @@ $prioColors = ['critical' => '#E0393B', 'high' => '#F79009', 'medium' => '#4A6CF
     } catch (e) {
       msg.textContent = 'Error de red'; msg.style.color = 'var(--bad)';
     }
+    btn.disabled = false;
+    setTimeout(function () { if (msg) msg.textContent = ''; }, 3500);
+  });
+})();
+
+(function () {
+  var btn = document.getElementById('btnSaveNotify');
+  if (!btn) return;
+  var msg = document.getElementById('notifyMsg');
+  btn.addEventListener('click', async function () {
+    btn.disabled = true;
+    msg.textContent = 'Guardando…'; msg.style.color = 'var(--hd-muted)';
+    var fd = new FormData();
+    fd.append('action', 'save_notify');
+    fd.append('enabled', document.getElementById('notifyEnabled').checked ? '1' : '0');
+    fd.append('extra', document.getElementById('notifyExtra').value || '');
+    try {
+      var r = await fetch('reports.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+      var j = await r.json();
+      if (j.success) {
+        msg.textContent = 'Guardado ✓'; msg.style.color = 'var(--ok)';
+        if (typeof j.extra === 'string') document.getElementById('notifyExtra').value = j.extra;
+      } else { msg.textContent = j.error || 'Error'; msg.style.color = 'var(--bad)'; }
+    } catch (e) { msg.textContent = 'Error de red'; msg.style.color = 'var(--bad)'; }
     btn.disabled = false;
     setTimeout(function () { if (msg) msg.textContent = ''; }, 3500);
   });

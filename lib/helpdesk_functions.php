@@ -111,7 +111,8 @@ function createTicket($userId, $categoryId, $subject, $description, $priority = 
         // log) debe romper la creación del ticket ni devolver error al agente.
         try { logAIInteraction($ticketId, 'analysis', "Analyze ticket: $subject", json_encode($aiAnalysis)); } catch (Throwable $e) {}
         try { notifyTicketCreated($ticketId, $userId); } catch (Throwable $e) {}
-        try { sendTicketCreatedEmail($ticketId); } catch (Throwable $e) {}
+        try { sendTicketCreatedEmail($ticketId); } catch (Throwable $e) {}          // confirmación al solicitante
+        try { sendTicketCreatedSupportEmails($ticketId); } catch (Throwable $e) {}  // aviso al equipo de soporte + devs
         try { logActivity($userId, 'ticket_created', "Created ticket #$ticketNumber"); } catch (Throwable $e) {}
 
         return ['success' => true, 'ticket_id' => $ticketId, 'ticket_number' => $ticketNumber];
@@ -415,78 +416,168 @@ function createNotification($ticketId, $userId, $type, $title, $message) {
 // Email notification functions
 function sendTicketCreatedEmail($ticketId) {
     global $conn;
-    
-    // El email vive en la tabla employees (users no tiene columna email).
-    $query = "SELECT t.*, e.email, u.full_name, c.name as category_name
-              FROM helpdesk_tickets t
-              JOIN users u ON t.user_id = u.id
-              LEFT JOIN employees e ON e.user_id = u.id
-              JOIN helpdesk_categories c ON t.category_id = c.id
-              WHERE t.id = ?";
-    $stmt = $conn->prepare($query);
+    if (!helpdeskEmailsEnabled()) { return false; }
+
+    // Confirmación al solicitante. El email vive en employees (users no lo tiene).
+    $stmt = $conn->prepare("SELECT t.ticket_number, t.subject, t.description, t.priority,
+                                   e.email, u.full_name, c.name AS category_name
+                            FROM helpdesk_tickets t
+                            JOIN users u ON t.user_id = u.id
+                            LEFT JOIN employees e ON e.user_id = u.id
+                            LEFT JOIN helpdesk_categories c ON c.id = t.category_id
+                            WHERE t.id = ?");
     $stmt->bind_param("i", $ticketId);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $ticket = $result->fetch_assoc();
+    $ticket = $stmt->get_result()->fetch_assoc();
+    if (empty($ticket['email'])) { return false; } // sin email no hay a quién avisar
 
-    if (empty($ticket['email'])) { return false; } // sin email no hay nada que enviar
+    $appUrl = '';
+    try { $cfg = require __DIR__ . '/../config/email_config.php'; $appUrl = rtrim($cfg['app_url'] ?? '', '/'); } catch (Throwable $e) {}
+    $link = $appUrl ? ($appUrl . '/agents/helpdesk_tickets.php') : '';
+    $esc = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 
-    $subject = "Ticket Created: {$ticket['ticket_number']}";
-    $body = "
-        <h2>Your Support Ticket Has Been Created</h2>
-        <p>Dear {$ticket['full_name']},</p>
-        <p>Your support ticket has been successfully created and our team will respond shortly.</p>
-        <h3>Ticket Details:</h3>
-        <ul>
-            <li><strong>Ticket Number:</strong> {$ticket['ticket_number']}</li>
-            <li><strong>Subject:</strong> {$ticket['subject']}</li>
-            <li><strong>Category:</strong> {$ticket['category_name']}</li>
-            <li><strong>Priority:</strong> {$ticket['priority']}</li>
-            <li><strong>Status:</strong> {$ticket['status']}</li>
-        </ul>
-        <p><strong>Description:</strong><br>{$ticket['description']}</p>
-        <p>You can track your ticket status in the helpdesk portal.</p>
-    ";
-    
-    return sendEmail($ticket['email'], $subject, $body);
+    $inner = "<p style='color:#161f35; font-size:14px; margin:0 0 14px;'>Hola " . $esc($ticket['full_name']) . ", recibimos tu ticket y nuestro equipo lo atenderá pronto.</p>
+      <table style='width:100%; border-collapse:collapse; margin:0 0 16px;'>"
+        . helpdeskEmailRow('Ticket', $esc($ticket['ticket_number']))
+        . helpdeskEmailRow('Asunto', $esc($ticket['subject']))
+        . helpdeskEmailRow('Categoría', $esc($ticket['category_name'] ?? '—'))
+        . helpdeskEmailRow('Prioridad', $esc(ucfirst($ticket['priority'])))
+      . "</table>"
+      . ($link ? "<div style='text-align:center; margin:6px 0 2px;'><a href='{$link}' style='background:#244886; color:#fff; text-decoration:none; padding:12px 28px; border-radius:10px; font-weight:700; font-size:14px; display:inline-block;'>Ver mis tickets</a></div>" : '');
+    $body = helpdeskEmailShell('Ticket recibido: ' . $ticket['ticket_number'], $inner);
+
+    return sendEmail($ticket['email'], "Ticket recibido: {$ticket['ticket_number']}", $body, $ticket['full_name']);
 }
 
 function sendTicketAssignedEmail($ticketId, $assignedTo) {
     global $conn;
-    
-    // El email vive en la tabla employees (users no tiene columna email).
-    $query = "SELECT t.*, e.email, u.full_name, c.name as category_name
-              FROM helpdesk_tickets t
-              JOIN users u ON u.id = ?
-              LEFT JOIN employees e ON e.user_id = u.id
-              JOIN helpdesk_categories c ON t.category_id = c.id
-              WHERE t.id = ?";
-    $stmt = $conn->prepare($query);
+    if (!helpdeskEmailsEnabled()) { return false; }
+
+    // Aviso al agente de soporte asignado. El email vive en employees.
+    $stmt = $conn->prepare("SELECT t.ticket_number, t.subject, t.description, t.priority,
+                                   e.email, u.full_name, c.name AS category_name
+                            FROM helpdesk_tickets t
+                            JOIN users u ON u.id = ?
+                            LEFT JOIN employees e ON e.user_id = u.id
+                            LEFT JOIN helpdesk_categories c ON c.id = t.category_id
+                            WHERE t.id = ?");
     $stmt->bind_param("ii", $assignedTo, $ticketId);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $ticket = $result->fetch_assoc();
+    $ticket = $stmt->get_result()->fetch_assoc();
+    if (empty($ticket['email'])) { return false; } // sin email no hay a quién avisar
 
-    if (empty($ticket['email'])) { return false; } // sin email no hay nada que enviar
+    $appUrl = '';
+    try { $cfg = require __DIR__ . '/../config/email_config.php'; $appUrl = rtrim($cfg['app_url'] ?? '', '/'); } catch (Throwable $e) {}
+    $link = $appUrl ? ($appUrl . '/helpdesk/console.php?ticket=' . (int) $ticketId) : '';
+    $esc = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
 
-    $subject = "Ticket Assigned: {$ticket['ticket_number']}";
-    $body = "
-        <h2>New Ticket Assignment</h2>
-        <p>Dear {$ticket['full_name']},</p>
-        <p>A support ticket has been assigned to you.</p>
-        <h3>Ticket Details:</h3>
-        <ul>
-            <li><strong>Ticket Number:</strong> {$ticket['ticket_number']}</li>
-            <li><strong>Subject:</strong> {$ticket['subject']}</li>
-            <li><strong>Category:</strong> {$ticket['category_name']}</li>
-            <li><strong>Priority:</strong> {$ticket['priority']}</li>
-            <li><strong>SLA Response Deadline:</strong> {$ticket['sla_response_deadline']}</li>
-            <li><strong>SLA Resolution Deadline:</strong> {$ticket['sla_resolution_deadline']}</li>
-        </ul>
-        <p>Please review and respond to this ticket as soon as possible.</p>
-    ";
-    
-    return sendEmail($ticket['email'], $subject, $body);
+    $inner = "<p style='color:#161f35; font-size:14px; margin:0 0 14px;'>Hola " . $esc($ticket['full_name']) . ", se te asignó un ticket de soporte. Revísalo y da la primera respuesta lo antes posible.</p>
+      <table style='width:100%; border-collapse:collapse; margin:0 0 16px;'>"
+        . helpdeskEmailRow('Ticket', $esc($ticket['ticket_number']))
+        . helpdeskEmailRow('Asunto', $esc($ticket['subject']))
+        . helpdeskEmailRow('Categoría', $esc($ticket['category_name'] ?? '—'))
+        . helpdeskEmailRow('Prioridad', $esc(ucfirst($ticket['priority'])))
+      . "</table>"
+      . ($link ? "<div style='text-align:center; margin:6px 0 2px;'><a href='{$link}' style='background:#244886; color:#fff; text-decoration:none; padding:12px 28px; border-radius:10px; font-weight:700; font-size:14px; display:inline-block;'>Abrir en la Consola</a></div>" : '');
+    $body = helpdeskEmailShell('Ticket asignado: ' . $ticket['ticket_number'], $inner);
+
+    return sendEmail($ticket['email'], "Ticket asignado: {$ticket['ticket_number']}", $body, $ticket['full_name']);
+}
+
+// ¿Enviar correos del helpdesk? Interruptor configurable (system_settings).
+function helpdeskEmailsEnabled() {
+    global $pdo;
+    try { return getSystemSetting($pdo, 'helpdesk_notify_emails', '1') === '1'; }
+    catch (Throwable $e) { return true; }
+}
+
+// Correos extra a notificar en la creación (además del equipo de soporte).
+function helpdeskExtraRecipients() {
+    global $pdo;
+    try { $raw = getSystemSetting($pdo, 'helpdesk_notify_extra_emails', ''); }
+    catch (Throwable $e) { $raw = ''; }
+    $out = [];
+    foreach (preg_split('/[\s,;]+/', (string) $raw) as $addr) {
+        $addr = trim($addr);
+        if ($addr !== '' && filter_var($addr, FILTER_VALIDATE_EMAIL)) { $out[] = $addr; }
+    }
+    return $out;
+}
+
+// Plantilla HTML de marca (Evallish) para los correos del helpdesk.
+function helpdeskEmailShell($heading, $innerHtml) {
+    $year = date('Y');
+    $heading = htmlspecialchars((string) $heading, ENT_QUOTES, 'UTF-8');
+    return "
+    <div style='font-family:Segoe UI,Roboto,Arial,sans-serif; max-width:600px; margin:0 auto; background:#f4f6fb; padding:0 0 24px;'>
+      <div style='background:#244886; color:#fff; padding:26px 30px;'>
+        <div style='font-size:12px; letter-spacing:.6px; opacity:.85; text-transform:uppercase;'>Evallish BPO &middot; Soporte</div>
+        <h1 style='margin:6px 0 0; font-size:20px; font-weight:700;'>{$heading}</h1>
+      </div>
+      <div style='background:#fff; margin:0 20px; padding:24px 26px; border:1px solid #e6ebf3; border-top:none; border-radius:0 0 14px 14px;'>{$innerHtml}</div>
+      <p style='color:#8a97ae; font-size:11.5px; text-align:center; margin:16px 20px 0;'>Notificación automática del Helpdesk de Evallish BPO &middot; {$year}. No respondas a este correo.</p>
+    </div>";
+}
+
+function helpdeskEmailRow($k, $v) {
+    return "<tr><td style='padding:8px 0; color:#5b6b88; font-size:13px; border-bottom:1px solid #eef1f6;'><strong>{$k}</strong></td>
+                <td style='padding:8px 0; color:#161f35; font-size:13px; border-bottom:1px solid #eef1f6; text-align:right;'>{$v}</td></tr>";
+}
+
+// Correo a TODO el equipo de soporte (Admin/HR/IT/Desarrollador) + extras al crear.
+function sendTicketCreatedSupportEmails($ticketId) {
+    global $conn;
+    if (!helpdeskEmailsEnabled()) { return; }
+
+    $stmt = $conn->prepare("SELECT t.ticket_number, t.subject, t.description, t.priority,
+                                   c.name AS category_name, ru.full_name AS requester_name
+                            FROM helpdesk_tickets t
+                            LEFT JOIN helpdesk_categories c ON c.id = t.category_id
+                            JOIN users ru ON ru.id = t.user_id
+                            WHERE t.id = ?");
+    $stmt->bind_param('i', $ticketId);
+    $stmt->execute();
+    $t = $stmt->get_result()->fetch_assoc();
+    if (!$t) { return; }
+
+    $appUrl = '';
+    try { $cfg = require __DIR__ . '/../config/email_config.php'; $appUrl = rtrim($cfg['app_url'] ?? '', '/'); } catch (Throwable $e) {}
+    $link = $appUrl ? ($appUrl . '/helpdesk/console.php?ticket=' . (int) $ticketId) : '';
+    $esc = fn($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+
+    $inner = "<p style='color:#161f35; font-size:14px; margin:0 0 14px;'>Se creó un nuevo ticket de soporte que requiere atención del equipo.</p>
+      <table style='width:100%; border-collapse:collapse; margin:0 0 16px;'>"
+        . helpdeskEmailRow('Ticket', $esc($t['ticket_number']))
+        . helpdeskEmailRow('Asunto', $esc($t['subject']))
+        . helpdeskEmailRow('Solicitante', $esc($t['requester_name']))
+        . helpdeskEmailRow('Categoría', $esc($t['category_name'] ?? '—'))
+        . helpdeskEmailRow('Prioridad', $esc(ucfirst($t['priority'])))
+      . "</table>"
+      . "<p style='color:#5b6b88; font-size:13px; background:#f7f9fc; border:1px solid #eef1f6; border-radius:10px; padding:12px 14px; margin:0 0 18px; white-space:pre-wrap;'>" . $esc(mb_strimwidth((string) $t['description'], 0, 400, '…')) . "</p>"
+      . ($link ? "<div style='text-align:center; margin:6px 0 2px;'><a href='{$link}' style='background:#244886; color:#fff; text-decoration:none; padding:12px 28px; border-radius:10px; font-weight:700; font-size:14px; display:inline-block;'>Abrir en la Consola</a></div>" : '');
+    $body    = helpdeskEmailShell('Nuevo ticket: ' . $t['ticket_number'], $inner);
+    $subject = "Nuevo ticket de soporte: {$t['ticket_number']}";
+
+    // Destinatarios: equipo de soporte con email en su ficha, activos.
+    $sent = [];
+    $res = $conn->query("SELECT DISTINCT e.email, u.full_name
+                         FROM users u JOIN employees e ON e.user_id = u.id
+                         WHERE UPPER(u.role) IN ('ADMIN','HR','IT','DESARROLLADOR')
+                           AND e.email IS NOT NULL AND e.email <> '' AND u.is_active = 1");
+    if ($res) {
+        while ($r = $res->fetch_assoc()) {
+            $addr = strtolower(trim($r['email']));
+            if ($addr === '' || isset($sent[$addr])) { continue; }
+            $sent[$addr] = true;
+            try { sendEmail($r['email'], $subject, $body, $r['full_name']); } catch (Throwable $e) {}
+        }
+    }
+    // Destinatarios extra configurables.
+    foreach (helpdeskExtraRecipients() as $addr) {
+        if (isset($sent[strtolower($addr)])) { continue; }
+        $sent[strtolower($addr)] = true;
+        try { sendEmail($addr, $subject, $body, 'Equipo de soporte'); } catch (Throwable $e) {}
+    }
 }
 
 // Get ticket statistics
