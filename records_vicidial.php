@@ -210,7 +210,7 @@ if ($queryError === null && $totalRows > 0) {
         $pst->execute($params);
         foreach ($pst->fetchAll(PDO::FETCH_ASSOC) as $pr) {
             $codes = $pr['pause_breakdown'] ? json_decode($pr['pause_breakdown'], true) : [];
-            $totPayable += vicidialComputePaidSeconds((int) $pr['nonpause_seconds'], is_array($codes) ? $codes : [], $vPaidCodes, $vDailyCapSeconds)['paid_seconds'];
+            $totPayable += vicidialComputeDayPaid($pdo, (int) $pr['nonpause_seconds'], is_array($codes) ? $codes : [], $vDailyCapSeconds)['paid_seconds'];
         }
     } catch (Throwable $e) {
         // no rompas la página por el total
@@ -399,7 +399,7 @@ include 'header.php';
                         </td></tr>
                     <?php else: foreach ($rows as $r):
                         $codes = $r['pause_breakdown'] ? json_decode($r['pause_breakdown'], true) : [];
-                        $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $vPaidCodes, $vDailyCapSeconds);
+                        $calc = vicidialComputeDayPaid($pdo, (int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $vDailyCapSeconds);
                         $rowAdj = $r['user_id'] !== null
                             ? vicidialApplyDayAdjustment($pdo, (int) $r['user_id'], $r['report_date'], $calc['paid_seconds'])
                             : ['seconds' => $calc['paid_seconds'], 'adjusted' => false, 'reason' => ''];

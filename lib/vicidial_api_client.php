@@ -52,6 +52,10 @@ if (!function_exists('getVicidialSyncConfig')) {
             // de pausa que TAMBIÉN se pagan. El resto (Break, Bao, NXDIAL...) no.
             'vicidial_paid_pause_codes'      => '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi","SIN_CODIGO"]',
             'vicidial_payroll_daily_cap_hours' => '14', // tope de cordura por día (anomalías)
+            // Tope de PAUSA SIN CÓDIGO pagada por día. Una sesión dejada abierta acumula
+            // todo el tiempo inactivo ahí; sin este tope, olvidar cerrar sesión se pagaría
+            // hasta el tope de cordura. 0 = sin tope.
+            'vicidial_payroll_uncoded_cap_hours' => '2',
         ];
 
         try {
@@ -158,12 +162,14 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
      */
     function vicidialGetPaidSecondsByDate(PDO $pdo, int $userId, string $startDate, string $endDate): array
     {
-        $paidCodes = vicidialGetPaidPauseCodes($pdo);
-        $cap = (int) round((float) getSystemSetting($pdo, 'vicidial_payroll_daily_cap_hours', 14) * 3600);
-
         $byDate = [];
         $cappedDays = [];
         $seen = [];
+
+        // Se agrega POR DÍA antes de calcular: los topes (pausa sin código, tope de
+        // cordura) son diarios, no por cuenta de Vicidial. Si no, un agente con dos
+        // cuentas cobraría el tope de pausa sin código dos veces el mismo día.
+        $agg = [];
         try {
             $stmt = $pdo->prepare("
                 SELECT report_date, nonpause_seconds, pause_breakdown
@@ -172,19 +178,28 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
             ");
             $stmt->execute([$userId, $startDate, $endDate]);
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
-                $seen[$r['report_date']] = true;
+                $d = $r['report_date'];
+                $seen[$d] = true;
                 $codes = $r['pause_breakdown'] ? json_decode($r['pause_breakdown'], true) : [];
-                // Sin tope aquí: el tope es por DÍA, no por cuenta de Vicidial.
-                $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $paidCodes, 0);
-                $byDate[$r['report_date']] = ($byDate[$r['report_date']] ?? 0) + $calc['paid_seconds'];
+                if (!is_array($codes)) {
+                    $codes = [];
+                }
+                if (!isset($agg[$d])) {
+                    $agg[$d] = ['nonpause' => 0, 'codes' => []];
+                }
+                $agg[$d]['nonpause'] += max(0, (int) $r['nonpause_seconds']);
+                foreach ($codes as $c => $s) {
+                    $agg[$d]['codes'][$c] = ($agg[$d]['codes'][$c] ?? 0) + max(0, (int) $s);
+                }
             }
         } catch (Throwable $e) {
             error_log('vicidialGetPaidSecondsByDate: ' . $e->getMessage());
         }
 
-        foreach ($byDate as $d => $sec) {
-            if ($cap > 0 && $sec > $cap) {
-                $byDate[$d] = $cap;
+        foreach ($agg as $d => $a) {
+            $calc = vicidialComputeDayPaid($pdo, $a['nonpause'], $a['codes']);
+            $byDate[$d] = $calc['paid_seconds'];
+            if ($calc['capped']) {
                 $cappedDays[] = $d;
             }
         }
@@ -297,36 +312,104 @@ if (!function_exists('vicidialGetPaidPauseCodes')) {
     }
 }
 
+if (!function_exists('vicidialGetUncodedPauseCapSeconds')) {
+    /**
+     * Tope diario de PAUSA SIN CÓDIGO pagada, en segundos (0 = sin tope).
+     *
+     * Existe porque una sesión que el agente deja abierta acumula todo ese tiempo
+     * inactivo como pausa sin código, y esa pausa se paga. Sin este tope, olvidarse
+     * de cerrar sesión valdría hasta el tope de cordura diario (14 h). Con él, el
+     * agente cobra su jornada real y el excedente inactivo no se paga.
+     */
+    function vicidialGetUncodedPauseCapSeconds(PDO $pdo): int
+    {
+        $h = (float) getSystemSetting($pdo, 'vicidial_payroll_uncoded_cap_hours', 2);
+        return $h > 0 ? (int) round($h * 3600) : 0;
+    }
+}
+
+if (!function_exists('vicidialComputeDayPaid')) {
+    /**
+     * PUNTO ÚNICO del cálculo de horas pagables de un día de Vicidial. Lee toda la
+     * configuración (códigos pagados, tope de pausa sin código, tope de cordura) y
+     * devuelve el pagable final. Úsalo desde cualquier vista: así la nómina, el
+     * portal del agente y los reportes no pueden divergir.
+     *
+     * @param array $pauseBreakdown [codigo => segundos]
+     * @return array{paid_seconds:int, raw_paid_seconds:int, capped:bool, uncoded_seconds:int, uncoded_dropped:int}
+     */
+    function vicidialComputeDayPaid(PDO $pdo, int $nonpauseSeconds, array $pauseBreakdown, int $dailyCapSeconds = -1): array
+    {
+        if ($dailyCapSeconds < 0) {
+            $dailyCapSeconds = (int) round((float) getSystemSetting($pdo, 'vicidial_payroll_daily_cap_hours', 14) * 3600);
+        }
+        return vicidialComputePaidSeconds(
+            $nonpauseSeconds,
+            $pauseBreakdown,
+            vicidialGetPaidPauseCodes($pdo),
+            $dailyCapSeconds,
+            vicidialGetUncodedPauseCapSeconds($pdo)
+        );
+    }
+}
+
 if (!function_exists('vicidialComputePaidSeconds')) {
     /**
      * Segundos PAGABLES de un día de Vicidial = NONPAUSE + suma de los códigos de
      * pausa pagados. Aplica un tope de cordura (anomalías) si se pasa capSeconds>0.
      *
-     * @param int   $nonpauseSeconds NONPAUSE (trabajando)
-     * @param array $pauseBreakdown  [codigo => segundos] (todos los códigos)
-     * @param array $paidCodes       códigos de pausa que se pagan (nombres)
-     * @param int   $capSeconds      tope máximo por día (0 = sin tope)
-     * @return array{paid_seconds:int, raw_paid_seconds:int, capped:bool}
+     * La pausa SIN CÓDIGO (VICIDIAL_UNCODED_PAUSE), cuando está entre los códigos
+     * pagados, se paga solo hasta $uncodedCapSeconds. El excedente NO se paga: es
+     * casi siempre una sesión que el agente dejó abierta, no trabajo.
+     *
+     * @param int   $nonpauseSeconds    NONPAUSE (trabajando)
+     * @param array $pauseBreakdown     [codigo => segundos] (todos los códigos)
+     * @param array $paidCodes          códigos de pausa que se pagan (nombres)
+     * @param int   $capSeconds         tope máximo por día (0 = sin tope)
+     * @param int   $uncodedCapSeconds  tope de pausa sin código pagada (0 = sin tope)
+     * @return array{paid_seconds:int, raw_paid_seconds:int, capped:bool, uncoded_seconds:int, uncoded_dropped:int}
      */
-    function vicidialComputePaidSeconds(int $nonpauseSeconds, array $pauseBreakdown, array $paidCodes, int $capSeconds = 0): array
+    function vicidialComputePaidSeconds(int $nonpauseSeconds, array $pauseBreakdown, array $paidCodes, int $capSeconds = 0, int $uncodedCapSeconds = 0): array
     {
         $paidSet = [];
         foreach ($paidCodes as $c) {
             $paidSet[strtolower(trim($c))] = true;
         }
+        $uncodedKey = strtolower(VICIDIAL_UNCODED_PAUSE);
+
         $paid = max(0, $nonpauseSeconds);
+        $uncodedSeconds = 0;
+        $uncodedDropped = 0;
+
         foreach ($pauseBreakdown as $code => $sec) {
-            if (isset($paidSet[strtolower(trim((string) $code))])) {
-                $paid += max(0, (int) $sec);
+            $key = strtolower(trim((string) $code));
+            $sec = max(0, (int) $sec);
+            if (!isset($paidSet[$key])) {
+                continue;
+            }
+            if ($key === $uncodedKey) {
+                $uncodedSeconds = $sec;
+                $payable = ($uncodedCapSeconds > 0) ? min($sec, $uncodedCapSeconds) : $sec;
+                $uncodedDropped = $sec - $payable;
+                $paid += $payable;
+            } else {
+                $paid += $sec;
             }
         }
+
         $raw = $paid;
         $capped = false;
         if ($capSeconds > 0 && $paid > $capSeconds) {
             $paid = $capSeconds;
             $capped = true;
         }
-        return ['paid_seconds' => $paid, 'raw_paid_seconds' => $raw, 'capped' => $capped];
+        return [
+            'paid_seconds'     => $paid,
+            'raw_paid_seconds' => $raw,
+            'capped'           => $capped,
+            'uncoded_seconds'  => $uncodedSeconds,
+            'uncoded_dropped'  => $uncodedDropped,
+        ];
     }
 }
 

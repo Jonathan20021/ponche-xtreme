@@ -245,7 +245,7 @@ if (!function_exists('getVicidialTimesheetMap')) {
                 $codes = $r['pause_breakdown'] ? json_decode((string) $r['pause_breakdown'], true) : [];
                 if (!is_array($codes)) { $codes = []; }
                 $nonpause = max(0, (int) $r['nonpause_seconds']);
-                $calc = vicidialComputePaidSeconds($nonpause, $codes, $paidCodes, $cap);
+                $calc = vicidialComputeDayPaid($pdo, $nonpause, $codes, $cap);
 
                 // break = pausas que NO se pagan; productive = NONPAUSE + pausas pagadas.
                 $breakSeconds = 0;

@@ -113,7 +113,7 @@ if ($payrollSource === 'vicidial') {
     if ($vtRow) {
         $pauseCodes = $vtRow['pause_breakdown'] ? json_decode($vtRow['pause_breakdown'], true) : [];
         if (!is_array($pauseCodes)) { $pauseCodes = []; }
-        $calc = vicidialComputePaidSeconds((int) $vtRow['nonpause_seconds'], $pauseCodes, $paidCodesList, $capSec);
+        $calc = vicidialComputeDayPaid($pdo, (int) $vtRow['nonpause_seconds'], $pauseCodes, $capSec);
         // Ajuste manual de Gestión de Desempeño: manda sobre Vicidial y se refleja
         // aquí sin pasos extra (mismo dato que verá la nómina).
         $dayAdj = vicidialApplyDayAdjustment($pdo, (int) $user_id, $date_filter, $calc['paid_seconds']);

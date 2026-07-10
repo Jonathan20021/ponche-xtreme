@@ -1085,6 +1085,10 @@ try {
                     $vsPaidCodes = array_values(array_filter(array_map('trim', preg_split('/[,;\n]+/', (string) ($_POST['vicidial_paid_pause_codes'] ?? '')))));
                     $stmt->execute(['vicidial_paid_pause_codes',      json_encode($vsPaidCodes, JSON_UNESCAPED_UNICODE), 'json']);
                     $stmt->execute(['vicidial_payroll_daily_cap_hours', (string) max(1, min(24, (int) ($_POST['vicidial_payroll_daily_cap_hours'] ?? 14))), 'number']);
+                    // Tope de pausa sin código pagada (0 = sin tope). Protege la nómina de
+                    // las sesiones que el agente deja abiertas.
+                    $vsUncodedCap = (float) str_replace(',', '.', (string) ($_POST['vicidial_payroll_uncoded_cap_hours'] ?? '2'));
+                    $stmt->execute(['vicidial_payroll_uncoded_cap_hours', (string) max(0, min(24, $vsUncodedCap)), 'number']);
                     // Fecha de corte de la transición: antes de esta fecha los agentes 'vicidial'
                     // se pagan por su ponche; desde ella, por Vicidial. Vacío = sin corte.
                     $vEffRaw = trim((string) ($_POST['vicidial_payroll_effective_date'] ?? ''));
@@ -4067,6 +4071,14 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                                 value="<?= $vCapHours ?>" class="input-control" required>
                             <p class="text-xs text-muted mt-1">Los días que superen este tope se marcan para revisión (⚠️)
                                 antes de pagar — atrapa sesiones dejadas abiertas. Recomendado: 12-14 h.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-scissors"></i> Tope de pausa SIN CÓDIGO pagada (horas/día)</label>
+                            <input type="number" name="vicidial_payroll_uncoded_cap_hours" min="0" max="24" step="0.25"
+                                value="<?= htmlspecialchars((string) ($vCfg['vicidial_payroll_uncoded_cap_hours'] ?? '2')) ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Solo aplica si <code>SIN_CODIGO</code> está entre los códigos pagados.
+                                Un agente que deja la sesión abierta acumula ese tiempo como pausa sin código: se le paga hasta
+                                este tope y el excedente no. <strong>0 = sin tope</strong> (se paga todo). Recomendado: 2 h.</p>
                         </div>
                     </div>
                     <?php $vEffDate = getSystemSetting($pdo, 'vicidial_payroll_effective_date', '2026-07-07'); ?>

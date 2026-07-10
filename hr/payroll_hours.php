@@ -163,6 +163,7 @@ $agents = $pdo->query("
 
 $paidCodes = vicidialGetPaidPauseCodes($pdo);
 $capSeconds = (int) round((float) getSystemSetting($pdo, 'vicidial_payroll_daily_cap_hours', 14) * 3600);
+$uncodedCapSeconds = vicidialGetUncodedPauseCapSeconds($pdo);
 
 // Días con datos de Vicidial en el rango, ya mapeados a un empleado.
 $sql = "
@@ -191,30 +192,30 @@ foreach ($raw as $r) {
     $key = $r['user_id'] . '|' . $r['report_date'];
     $codes = $r['pause_breakdown'] ? json_decode($r['pause_breakdown'], true) : [];
     if (!is_array($codes)) { $codes = []; }
-    $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], $codes, $paidCodes, 0);
 
     if (!isset($byKey[$key])) {
         $byKey[$key] = [
             'user_id' => (int) $r['user_id'], 'full_name' => $r['full_name'],
             'report_date' => $r['report_date'], 'accounts' => [],
-            'logged' => 0, 'nonpause' => 0, 'raw_paid' => 0, 'codes' => [],
+            'logged' => 0, 'nonpause' => 0, 'codes' => [],
         ];
     }
     $byKey[$key]['accounts'][] = $r['vicidial_user'];
     $byKey[$key]['logged'] += (int) $r['total_logged_seconds'];
     $byKey[$key]['nonpause'] += (int) $r['nonpause_seconds'];
-    $byKey[$key]['raw_paid'] += $calc['paid_seconds'];
     foreach ($codes as $c => $s) {
         $byKey[$key]['codes'][$c] = ($byKey[$key]['codes'][$c] ?? 0) + (int) $s;
     }
 }
 
-// Tope de cordura por día, después de sumar cuentas (igual que la nómina).
+// Los topes (pausa sin código, cordura diaria) se aplican al TOTAL del día, ya
+// sumadas las cuentas. Mismo punto de cálculo que la nómina y el portal.
 foreach ($byKey as $k => $row) {
-    $byKey[$k]['capped'] = $capSeconds > 0 && $row['raw_paid'] > $capSeconds;
-    if ($byKey[$k]['capped']) {
-        $byKey[$k]['raw_paid'] = $capSeconds;
-    }
+    $calc = vicidialComputeDayPaid($pdo, $row['nonpause'], $row['codes'], $capSeconds);
+    $byKey[$k]['raw_paid']        = $calc['paid_seconds'];
+    $byKey[$k]['capped']          = $calc['capped'];
+    $byKey[$k]['uncoded_seconds'] = $calc['uncoded_seconds'];
+    $byKey[$k]['uncoded_dropped'] = $calc['uncoded_dropped'];
 }
 
 // Ajustes existentes del rango.
@@ -377,6 +378,10 @@ foreach ($rows as $r) {
                             <?= ph_hms($r['raw_paid']) ?>
                             <?php if ($r['capped']): ?>
                                 <i class="fas fa-triangle-exclamation text-amber-400" title="Topado a <?= (int) round($capSeconds / 3600) ?>h/día"></i>
+                            <?php endif; ?>
+                            <?php if ($r['uncoded_dropped'] > 0): ?>
+                                <i class="fas fa-scissors text-orange-400"
+                                   title="Pausa sin código: <?= ph_hms($r['uncoded_seconds']) ?> en total, se pagan <?= ph_hms($uncodedCapSeconds) ?> y no se pagan <?= ph_hms($r['uncoded_dropped']) ?>. Casi siempre es una sesión dejada abierta."></i>
                             <?php endif; ?>
                         </td>
                         <td class="px-4 py-2">
