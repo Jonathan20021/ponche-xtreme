@@ -184,11 +184,15 @@ if (!function_exists('vicidialReportsAgentStatsSync')) {
                 t.user_group AS current_user_group,
                 SUM(t.calls) AS total_calls,
                 SUM(t.total_logged_seconds) AS time_total,
-                SUM(t.pause_seconds) AS pause_time,
+                -- La pausa real del día es TOTAL - NONPAUSE (invariante del desglose de
+                -- pausas). `pause_seconds` viene del OTRO reporte (tiempos por llamada) y
+                -- no cuadra con el día: usarlo aquí daba dead_time absurdos (una agente
+                -- sin llamadas salía con 9h de tiempo muerto).
+                SUM(GREATEST(0, t.total_logged_seconds - t.nonpause_seconds)) AS pause_time,
                 SUM(t.wait_seconds) AS wait_time,
                 SUM(t.talk_seconds) AS talk_time,
                 SUM(t.dispo_seconds) AS dispo_time,
-                SUM(GREATEST(0, t.total_logged_seconds - t.nonpause_seconds - t.pause_seconds)) AS dead_time,
+                SUM(GREATEST(0, t.nonpause_seconds - t.wait_seconds - t.talk_seconds - t.dispo_seconds)) AS dead_time,
                 0 AS customer_time,
                 0 AS sale, 0 AS pedido, 0 AS orden, 0 AS no_contact, 0 AS other_dispositions
             FROM vicidial_agent_timesheet t
