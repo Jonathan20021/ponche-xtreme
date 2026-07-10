@@ -71,6 +71,42 @@ if (!function_exists('getVicidialLoginMap')) {
     }
 }
 
+if (!function_exists('getVicidialPresenceSet')) {
+    /**
+     * user_ids de agentes 'vicidial' con actividad real en Vicidial ese día, SIN
+     * depender de `first_login`.
+     *
+     * Red de seguridad del reporte de ausencias: la hora de login viene de la hoja de
+     * tiempo, una llamada aparte que puede fallar o llegar tarde. La PRESENCIA no
+     * necesita la hora, basta con que haya actividad. Sin esto, un agente que trabajó
+     * el día entero en el discador salía reportado como ausente.
+     *
+     * @return array<int,bool> [user_id => true]
+     */
+    function getVicidialPresenceSet(PDO $pdo, string $date): array
+    {
+        $out = [];
+        try {
+            $stmt = $pdo->prepare("
+                SELECT DISTINCT t.user_id
+                FROM vicidial_agent_timesheet t
+                INNER JOIN users u ON u.id = t.user_id
+                WHERE t.user_id IS NOT NULL
+                  AND COALESCE(u.payroll_source, 'manual') = 'vicidial'
+                  AND t.report_date = ?
+                  AND (t.total_logged_seconds > 0 OR t.nonpause_seconds > 0 OR t.calls > 0)
+            ");
+            $stmt->execute([$date]);
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $uid) {
+                $out[(int) $uid] = true;
+            }
+        } catch (Throwable $e) {
+            error_log('getVicidialPresenceSet: ' . $e->getMessage());
+        }
+        return $out;
+    }
+}
+
 if (!function_exists('getReportUserMeta')) {
     /**
      * Metadatos (nombre, código, departamento) para una lista de user_ids.

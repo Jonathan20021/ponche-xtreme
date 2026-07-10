@@ -141,6 +141,10 @@ function generateDailyAbsenceReport(PDO $pdo): array {
     $today = date('Y-m-d');
     $useVicidial = reportsVicidialSourceEnabled($pdo);
     $vicLoginMap = $useVicidial ? getVicidialLoginMap($pdo, $today, $today) : [];
+    // La presencia NO puede depender de tener la HORA de login: esa viene de la hoja
+    // de tiempo, una llamada aparte que puede fallar o llegar tarde. Basta con que el
+    // agente tenga actividad en Vicidial ese dia.
+    $vicPresence = $useVicidial ? getVicidialPresenceSet($pdo, $today) : [];
     $presentViaVicidialOnly = 0;
 
     foreach ($employees as $employee) {
@@ -154,7 +158,7 @@ function generateDailyAbsenceReport(PDO $pdo): array {
 
         // Presente si ponchÃ³ hoy O (agente Vicidial con login hoy)
         $hasPunched  = hasEmployeePunchedToday($pdo, $userId);
-        $hasVicidial = isset($vicLoginMap[(int) $userId][$today]);
+        $hasVicidial = isset($vicLoginMap[(int) $userId][$today]) || isset($vicPresence[(int) $userId]);
         $isPresent   = $hasPunched || $hasVicidial;
         if ($hasVicidial && !$hasPunched) {
             $presentViaVicidialOnly++;

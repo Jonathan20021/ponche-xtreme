@@ -1182,6 +1182,23 @@ if (!function_exists('importVicidialDay')) {
         $summary['new_mappings'] = vicidialAutoSeedUserMap($pdo, $perf['agents']);
         $userMap = vicidialGetUserMap($pdo);
 
+        // Agentes que YA tienen first_login guardado para este día. En modo liviano no
+        // se bajan hojas de tiempo (1 request por agente), pero SÍ hay que bajar la del
+        // agente al que aún le falta el login: los reportes de ausencias y tardanzas
+        // necesitan la hora de llegada, y sin ella un agente que trabajó todo el día en
+        // el discador salía reportado como ausente. Se pide una sola vez por agente y
+        // por día: en las corridas siguientes ya está guardada y no se vuelve a pedir.
+        $haveLogin = [];
+        try {
+            $lg = $pdo->prepare("SELECT vicidial_user FROM vicidial_agent_timesheet WHERE report_date = ? AND first_login IS NOT NULL");
+            $lg->execute([$date]);
+            foreach ($lg->fetchAll(PDO::FETCH_COLUMN) ?: [] as $vu) {
+                $haveLogin[$vu] = true;
+            }
+        } catch (Throwable $e) {
+            error_log('importVicidialDay haveLogin: ' . $e->getMessage());
+        }
+
         // Upsert de la hoja de tiempo
         $upsert = $pdo->prepare("
             INSERT INTO vicidial_agent_timesheet
@@ -1199,7 +1216,7 @@ if (!function_exists('importVicidialDay')) {
                 user_group           = VALUES(user_group),
                 user_id              = VALUES(user_id),
                 first_login          = IF(:ts_known = 1, VALUES(first_login), first_login),
-                last_activity        = IF(:ts_known = 1, VALUES(last_activity), last_activity),
+                last_activity        = IF(:la_known = 1, VALUES(last_activity), last_activity),
                 total_logged_seconds = IF(:total_known = 1, VALUES(total_logged_seconds), total_logged_seconds),
                 nonpause_seconds     = IF(:pause_known = 1, VALUES(nonpause_seconds), nonpause_seconds),
                 pause_breakdown      = IF(:pause_known = 1, VALUES(pause_breakdown), pause_breakdown),
@@ -1211,7 +1228,7 @@ if (!function_exists('importVicidialDay')) {
                 dispo_seconds        = VALUES(dispo_seconds),
                 tz_offset_applied_minutes = IF(:ts_known = 1, VALUES(tz_offset_applied_minutes), tz_offset_applied_minutes),
                 raw_first_login      = IF(:ts_known = 1, VALUES(raw_first_login), raw_first_login),
-                raw_last_activity    = IF(:ts_known = 1, VALUES(raw_last_activity), raw_last_activity),
+                raw_last_activity    = IF(:la_known = 1, VALUES(raw_last_activity), raw_last_activity),
                 source               = 'api'
         ");
 
@@ -1251,8 +1268,10 @@ if (!function_exists('importVicidialDay')) {
             }
 
             // 3. Hoja de tiempo del agente (login/logout). En modo liviano se OMITE
-            // (es 1 llamada por agente = lo pesado); el login se preserva vía :ts_known.
-            if ($light) {
+            // (es 1 llamada por agente = lo pesado), SALVO que a este agente aún le
+            // falte el first_login del día: sin él, ausencias y tardanzas lo dan por
+            // ausente. Esa llamada ocurre una sola vez por agente y por día.
+            if ($light && isset($haveLogin[$vu])) {
                 $ts = ['ok' => false, 'first_login' => null, 'last_activity' => null, 'total_seconds' => 0];
                 $tsKnown = 0;
             } else {
@@ -1266,6 +1285,11 @@ if (!function_exists('importVicidialDay')) {
                 }
                 $tsKnown = $ts['ok'] ? 1 : 0;
             }
+
+            // `last_activity` solo se fija en la corrida COMPLETA (nocturna), cuando el
+            // día ya cerró. Si se guardara la del fetch intradía, el portal mostraría
+            // "última actividad: 09:05" toda la tarde.
+            $laKnown = (!$light && $tsKnown === 1) ? 1 : 0;
 
             $firstLocal = vicidialShiftToLocal($ts['first_login'] ?? null, $offsetMin);
             $lastLocal  = vicidialShiftToLocal($ts['last_activity'] ?? null, $offsetMin);
@@ -1303,6 +1327,7 @@ if (!function_exists('importVicidialDay')) {
                     ':status_breakdown'     => $statusJson,
                     ':pause_known'          => $pauseKnown,
                     ':ts_known'             => $tsKnown,
+                    ':la_known'             => $laKnown,
                     ':total_known'          => $totalKnown,
                     ':calls'                => $agent['calls'],
                     ':talk_seconds'         => $agent['talk_seconds'],
