@@ -226,7 +226,7 @@ $offset = ($page - 1) * $perPage;
 $rows = [];
 if ($queryError === null && $totalRows > 0) {
     try {
-        $dataSql = "SELECT t.report_date, t.first_login, t.last_activity, t.total_logged_seconds,
+        $dataSql = "SELECT t.report_date, t.user_id, t.first_login, t.last_activity, t.total_logged_seconds,
                            t.nonpause_seconds, t.pause_breakdown,
                            t.calls, t.talk_seconds, t.pause_seconds, t.wait_seconds, t.dispo_seconds,
                            t.user_group, t.vicidial_user, users.full_name, users.username "
@@ -400,7 +400,10 @@ include 'header.php';
                     <?php else: foreach ($rows as $r):
                         $codes = $r['pause_breakdown'] ? json_decode($r['pause_breakdown'], true) : [];
                         $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $vPaidCodes, $vDailyCapSeconds);
-                        $paidSec = $calc['paid_seconds'];
+                        $rowAdj = $r['user_id'] !== null
+                            ? vicidialApplyDayAdjustment($pdo, (int) $r['user_id'], $r['report_date'], $calc['paid_seconds'])
+                            : ['seconds' => $calc['paid_seconds'], 'adjusted' => false, 'reason' => ''];
+                        $paidSec = $rowAdj['seconds'];
                         $unpaidSec = max(0, (int) $r['total_logged_seconds'] - $paidSec);
                     ?>
                         <tr>
@@ -413,7 +416,9 @@ include 'header.php';
                             <td class="text-muted"><?= vSecondsToHms($r['total_logged_seconds']) ?></td>
                             <td style="color:#34d399;font-weight:700;">
                                 <?= vSecondsToHms($paidSec) ?>
-                                <?php if ($calc['capped']): ?>
+                                <?php if ($rowAdj['adjusted']): ?>
+                                    <i class="fas fa-pen-to-square" style="color:#60a5fa;" title="Ajuste manual (Vicidial reportó <?= vSecondsToHms($calc['paid_seconds']) ?>) — <?= htmlspecialchars($rowAdj['reason']) ?>"></i>
+                                <?php elseif ($calc['capped']): ?>
                                     <i class="fas fa-triangle-exclamation" style="color:#f59e0b;" title="Superó el tope de <?= (int) round($vDailyCapSeconds/3600) ?>h/día — revisar (posible sesión dejada abierta)"></i>
                                 <?php endif; ?>
                             </td>

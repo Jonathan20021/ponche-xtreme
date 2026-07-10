@@ -50,7 +50,7 @@ if (!function_exists('getVicidialSyncConfig')) {
             // Nómina desde Vicidial (Fase 3): qué códigos de pausa se PAGAN.
             // NONPAUSE (tiempo trabajando) siempre se paga; aquí van los códigos
             // de pausa que TAMBIÉN se pagan. El resto (Break, Bao, NXDIAL...) no.
-            'vicidial_paid_pause_codes'      => '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi"]',
+            'vicidial_paid_pause_codes'      => '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi","SIN_CODIGO"]',
             'vicidial_payroll_daily_cap_hours' => '14', // tope de cordura por día (anomalías)
         ];
 
@@ -79,6 +79,63 @@ if (!function_exists('getVicidialSyncConfig')) {
     }
 }
 
+if (!function_exists('vicidialGetAdjustmentsByDate')) {
+    /**
+     * Ajustes manuales de horas pagables (tabla intermedia) para un empleado.
+     * Gestión de Desempeño los edita; la fuente cruda de Vicidial nunca se toca.
+     *
+     * @return array<string,array{seconds:int, original:int, reason:string, by:int}>
+     */
+    function vicidialGetAdjustmentsByDate(PDO $pdo, int $userId, string $startDate, string $endDate): array
+    {
+        $out = [];
+        try {
+            $stmt = $pdo->prepare("
+                SELECT work_date, adjusted_seconds, original_seconds, reason, adjusted_by
+                FROM vicidial_payroll_adjustments
+                WHERE user_id = ? AND work_date BETWEEN ? AND ?
+            ");
+            $stmt->execute([$userId, $startDate, $endDate]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                $out[$r['work_date']] = [
+                    'seconds'  => max(0, (int) $r['adjusted_seconds']),
+                    'original' => max(0, (int) $r['original_seconds']),
+                    'reason'   => (string) $r['reason'],
+                    'by'       => (int) $r['adjusted_by'],
+                ];
+            }
+        } catch (Throwable $e) {
+            // Tabla ausente (deploy a medias) => sin ajustes, nunca romper la nómina.
+            error_log('vicidialGetAdjustmentsByDate: ' . $e->getMessage());
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('vicidialApplyDayAdjustment')) {
+    /**
+     * Aplica el ajuste manual de UN día sobre las horas pagables crudas. Para las
+     * vistas que calculan un solo día (portal del agente, registros) y por tanto
+     * no pasan por vicidialGetPaidSecondsByDate(). Devuelve siempre un valor
+     * utilizable, aunque la tabla de ajustes no exista.
+     *
+     * @return array{seconds:int, adjusted:bool, original:int, reason:string}
+     */
+    function vicidialApplyDayAdjustment(PDO $pdo, int $userId, string $date, int $rawPaidSeconds): array
+    {
+        $adj = vicidialGetAdjustmentsByDate($pdo, $userId, $date, $date);
+        if (!isset($adj[$date])) {
+            return ['seconds' => $rawPaidSeconds, 'adjusted' => false, 'original' => $rawPaidSeconds, 'reason' => ''];
+        }
+        return [
+            'seconds'  => $adj[$date]['seconds'],
+            'adjusted' => true,
+            'original' => $rawPaidSeconds,
+            'reason'   => $adj[$date]['reason'],
+        ];
+    }
+}
+
 if (!function_exists('vicidialGetPaidSecondsByDate')) {
     /**
      * Horas PAGABLES de Vicidial por fecha para un empleado, en el formato que
@@ -89,7 +146,15 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
      * "día en Vicidial sin producción" (paga lo de Vicidial). Marca los días que
      * tocaron el tope de cordura (anomalías a revisar).
      *
-     * @return array{by_date:array<string,int>, capped_days:array<int,string>, days:int, seen_dates:array<int,string>}
+     * PUNTO ÚNICO de la verdad sobre horas pagables de Vicidial: lo consumen la
+     * nómina (hr/payroll.php) y el portal del agente (lib/agent_hours.php). Aquí,
+     * y solo aquí, se aplican los ajustes manuales de Gestión de Desempeño.
+     *
+     * Un agente con DOS cuentas de Vicidial activas el mismo día suma ambas
+     * (antes la segunda fila sobrescribía a la primera y se le pagaba una sola).
+     * El tope de cordura se aplica al TOTAL del día, después de sumar.
+     *
+     * @return array{by_date:array<string,int>, capped_days:array<int,string>, days:int, seen_dates:array<int,string>, adjusted_days:array<int,string>}
      */
     function vicidialGetPaidSecondsByDate(PDO $pdo, int $userId, string $startDate, string $endDate): array
     {
@@ -109,20 +174,44 @@ if (!function_exists('vicidialGetPaidSecondsByDate')) {
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
                 $seen[$r['report_date']] = true;
                 $codes = $r['pause_breakdown'] ? json_decode($r['pause_breakdown'], true) : [];
-                $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $paidCodes, $cap);
-                if ($calc['paid_seconds'] > 0) {
-                    $byDate[$r['report_date']] = $calc['paid_seconds'];
-                }
-                if ($calc['capped']) {
-                    $cappedDays[] = $r['report_date'];
-                }
+                // Sin tope aquí: el tope es por DÍA, no por cuenta de Vicidial.
+                $calc = vicidialComputePaidSeconds((int) $r['nonpause_seconds'], is_array($codes) ? $codes : [], $paidCodes, 0);
+                $byDate[$r['report_date']] = ($byDate[$r['report_date']] ?? 0) + $calc['paid_seconds'];
             }
         } catch (Throwable $e) {
             error_log('vicidialGetPaidSecondsByDate: ' . $e->getMessage());
         }
+
+        foreach ($byDate as $d => $sec) {
+            if ($cap > 0 && $sec > $cap) {
+                $byDate[$d] = $cap;
+                $cappedDays[] = $d;
+            }
+        }
+
+        // Ajustes manuales: mandan sobre lo que diga Vicidial. Un día ajustado
+        // cuenta como "visto" aunque Vicidial no lo tenga, para que la nómina no
+        // lo respalde con el ponche y termine pagando dos veces.
+        $adjusted = [];
+        foreach (vicidialGetAdjustmentsByDate($pdo, $userId, $startDate, $endDate) as $d => $adj) {
+            $byDate[$d] = $adj['seconds'];
+            $seen[$d] = true;
+            $adjusted[] = $d;
+        }
+
+        // by_date solo lleva días con horas pagables; los de 0 quedan en seen_dates.
+        $byDate = array_filter($byDate, static fn($s) => $s > 0);
+
         ksort($byDate);
         ksort($seen);
-        return ['by_date' => $byDate, 'capped_days' => $cappedDays, 'days' => count($byDate), 'seen_dates' => array_keys($seen)];
+        sort($adjusted);
+        return [
+            'by_date'       => $byDate,
+            'capped_days'   => $cappedDays,
+            'days'          => count($byDate),
+            'seen_dates'    => array_keys($seen),
+            'adjusted_days' => $adjusted,
+        ];
     }
 }
 
@@ -199,10 +288,10 @@ if (!function_exists('vicidialGetPaidPauseCodes')) {
      */
     function vicidialGetPaidPauseCodes(PDO $pdo): array
     {
-        $raw = getSystemSetting($pdo, 'vicidial_paid_pause_codes', '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi"]');
+        $raw = getSystemSetting($pdo, 'vicidial_paid_pause_codes', '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi","SIN_CODIGO"]');
         $list = is_array($raw) ? $raw : json_decode((string) $raw, true);
         if (!is_array($list)) {
-            $list = ['Coachi', 'ITRes', 'LAGGED', 'LOGIN', 'Digita', 'wasapi'];
+            $list = ['Coachi', 'ITRes', 'LAGGED', 'LOGIN', 'Digita', 'wasapi', 'SIN_CODIGO'];
         }
         return array_values(array_filter(array_map('strval', $list)));
     }
@@ -604,6 +693,20 @@ if (!function_exists('vicidialFetchPerformanceDetail')) {
     }
 }
 
+if (!defined('VICIDIAL_UNCODED_PAUSE')) {
+    /**
+     * Nombre interno del bucket de "pausa sin código": el tiempo que el agente
+     * pasa en pausa sin haber elegido un código. Vicidial lo devuelve en una
+     * columna del CSV cuyo encabezado viene VACÍO, así que le ponemos nombre
+     * nosotros para poder verlo, reportarlo y decidir si se paga.
+     *
+     * Verificado contra la API (95 filas, 5 días): para todo agente se cumple
+     *   NONPAUSE + PAUSE = TOTAL   y   suma(códigos con nombre) + SIN_CODIGO = PAUSE
+     * al segundo exacto.
+     */
+    define('VICIDIAL_UNCODED_PAUSE', 'SIN_CODIGO');
+}
+
 if (!function_exists('vicidialFetchPauseBreakdown')) {
     /**
      * Descarga el "PAUSE CODE BREAKDOWN" (file_download=2) del Agent Performance
@@ -612,7 +715,14 @@ if (!function_exists('vicidialFetchPauseBreakdown')) {
      * wasapi, ...). Los códigos se detectan dinámicamente del encabezado (si el
      * cliente agrega uno nuevo, se importa igual).
      *
-     * @return array{ok:bool, agents:array<string,array{nonpause:int,pause_total:int,total:int,codes:array<string,int>}>, error:string}
+     * Las columnas SIN encabezado se agregan bajo VICIDIAL_UNCODED_PAUSE en vez
+     * de descartarse: son pausa real (hasta 1h47m en un día para un agente) y
+     * antes quedaban invisibles y sin pagar.
+     *
+     * `mismatches` lista los agentes cuyo desglose NO cuadra con PAUSE/TOTAL
+     * (parseo sospechoso). Es dinero: se registra en el log de sincronización.
+     *
+     * @return array{ok:bool, agents:array<string,array{nonpause:int,pause_total:int,total:int,codes:array<string,int>}>, mismatches:array<int,string>, error:string}
      */
     function vicidialFetchPauseBreakdown(array $cfg, string $date): array
     {
@@ -632,15 +742,17 @@ if (!function_exists('vicidialFetchPauseBreakdown')) {
         ]);
 
         if (!$res['ok']) {
-            return ['ok' => false, 'agents' => [], 'error' => $res['error']];
+            return ['ok' => false, 'agents' => [], 'mismatches' => [], 'error' => $res['error']];
         }
 
         // Columnas que NO son códigos de pausa
         $nonCodeCols = ['USER NAME', 'ID', 'CURRENT USER GROUP', 'MOST RECENT USER GROUP', 'TOTAL', 'NONPAUSE', 'PAUSE'];
         $header = null;
         $colIdx = [];
-        $codeCols = [];
+        $codeCols = [];   // nombre del código => índice de columna
+        $uncodedIdx = []; // índices de columnas con encabezado vacío (pausa sin código)
         $agents = [];
+        $mismatches = [];
 
         foreach (preg_split('/\r\n|\r|\n/', $res['body']) as $line) {
             if (trim($line) === '') {
@@ -654,6 +766,11 @@ if (!function_exists('vicidialFetchPauseBreakdown')) {
                     foreach ($header as $i => $name) {
                         $name = trim($name);
                         if ($name === '') {
+                            // Columna sin encabezado: pausa que el agente tomó sin
+                            // elegir código. Se agrega, no se descarta.
+                            if ($i >= 4) {
+                                $uncodedIdx[] = $i;
+                            }
                             continue;
                         }
                         $colIdx[$name] = $i;
@@ -680,18 +797,36 @@ if (!function_exists('vicidialFetchPauseBreakdown')) {
                     $codes[$code] = $sec;
                 }
             }
+            $uncoded = 0;
+            foreach ($uncodedIdx as $i) {
+                $uncoded += vicidialParseHmsToSeconds($cells[$i] ?? '');
+            }
+            if ($uncoded > 0) {
+                $codes[VICIDIAL_UNCODED_PAUSE] = $uncoded;
+            }
+
+            $nonpause = vicidialParseHmsToSeconds($get('NONPAUSE'));
+            $pause    = vicidialParseHmsToSeconds($get('PAUSE'));
+            $total    = vicidialParseHmsToSeconds($get('TOTAL'));
+
+            // Cuadre aritmético. Si no cierra, el desglose no es de fiar y no se
+            // debe pagar a ciegas: se reporta para revisión manual.
+            if (abs(array_sum($codes) - $pause) > 2 || abs(($nonpause + $pause) - $total) > 2) {
+                $mismatches[] = $vu;
+            }
+
             $agents[$vu] = [
-                'nonpause'    => vicidialParseHmsToSeconds($get('NONPAUSE')),
-                'pause_total' => vicidialParseHmsToSeconds($get('PAUSE')),
-                'total'       => vicidialParseHmsToSeconds($get('TOTAL')),
+                'nonpause'    => $nonpause,
+                'pause_total' => $pause,
+                'total'       => $total,
                 'codes'       => $codes,
             ];
         }
 
         if ($header === null) {
-            return ['ok' => false, 'agents' => [], 'error' => 'No se encontró el desglose de pausas (file_download=2).'];
+            return ['ok' => false, 'agents' => [], 'mismatches' => [], 'error' => 'No se encontró el desglose de pausas (file_download=2).'];
         }
-        return ['ok' => true, 'agents' => $agents, 'error' => ''];
+        return ['ok' => true, 'agents' => $agents, 'mismatches' => $mismatches, 'error' => ''];
     }
 }
 
@@ -948,6 +1083,13 @@ if (!function_exists('importVicidialDay')) {
         $pb = vicidialFetchPauseBreakdown($cfg, $date);
         if ($pb['ok']) {
             $pauseByUser = $pb['agents'];
+            if (!empty($pb['mismatches'])) {
+                // El desglose no cuadra con PAUSE/TOTAL para estos agentes. Se
+                // importa igual (dato crudo), pero queda constancia: sus horas
+                // pagables pueden estar mal y hay que revisarlas a mano.
+                $summary['errors'][] = 'Desglose de pausas no cuadra para: ' . implode(', ', $pb['mismatches']);
+                $summary['status'] = 'partial';
+            }
         } else {
             $summary['errors'][] = 'Pause breakdown: ' . $pb['error'];
             $summary['status'] = 'partial';
@@ -975,7 +1117,7 @@ if (!function_exists('importVicidialDay')) {
                 user_id              = VALUES(user_id),
                 first_login          = IF(:ts_known = 1, VALUES(first_login), first_login),
                 last_activity        = IF(:ts_known = 1, VALUES(last_activity), last_activity),
-                total_logged_seconds = IF(:ts_known = 1, VALUES(total_logged_seconds), total_logged_seconds),
+                total_logged_seconds = IF(:total_known = 1, VALUES(total_logged_seconds), total_logged_seconds),
                 nonpause_seconds     = IF(:pause_known = 1, VALUES(nonpause_seconds), nonpause_seconds),
                 pause_breakdown      = IF(:pause_known = 1, VALUES(pause_breakdown), pause_breakdown),
                 status_breakdown     = VALUES(status_breakdown),
@@ -1004,8 +1146,24 @@ if (!function_exists('importVicidialDay')) {
                     continue;
                 }
             }
-            // Filtrar agentes con tiempo insignificante (ruido)
-            if ($agent['time_seconds'] < $minTime) {
+
+            // Desglose de pausas del agente (si vino en el file_download=2). Si el
+            // fetch de pausas falló o el agente no vino, $pauseKnown=0 y el upsert
+            // NO sobrescribe nonpause_seconds/pause_breakdown (preserva lo ya
+            // importado) para no borrar datos buenos con 0 en un re-import con
+            // throttle (429). Es dinero: esas horas alimentan la nómina.
+            $pauseInfo = $pauseByUser[$vu] ?? null;
+            $pauseKnown = $pauseInfo !== null ? 1 : 0;
+
+            // Filtrar agentes con tiempo insignificante (ruido). Se mide contra el
+            // tiempo LOGUEADO (TOTAL del desglose), NO contra TIME (tiempo en
+            // llamadas): un agente puede pasar la jornada entera en coaching o en
+            // WhatsApp sin tomar una sola llamada, y esas horas se pagan. Medir
+            // contra TIME descartaba su fila completa y le pagaba 0.
+            $loggedSeconds = $pauseInfo !== null
+                ? (int) ($pauseInfo['total'] ?? 0)
+                : (int) $agent['time_seconds']; // sin desglose: se conserva el criterio viejo
+            if ($loggedSeconds < $minTime) {
                 continue;
             }
 
@@ -1029,15 +1187,18 @@ if (!function_exists('importVicidialDay')) {
             $firstLocal = vicidialShiftToLocal($ts['first_login'] ?? null, $offsetMin);
             $lastLocal  = vicidialShiftToLocal($ts['last_activity'] ?? null, $offsetMin);
 
-            // Desglose de pausas del agente (si vino en el file_download=2). Si el
-            // fetch de pausas falló o el agente no vino, $pauseKnown=0 y el upsert
-            // NO sobrescribe nonpause_seconds/pause_breakdown (preserva lo ya
-            // importado) para no borrar datos buenos con 0 en un re-import con
-            // throttle (429). Es dinero: esas horas alimentan la nómina.
-            $pauseInfo = $pauseByUser[$vu] ?? null;
-            $pauseKnown = $pauseInfo !== null ? 1 : 0;
             $nonpauseSeconds = $pauseInfo ? (int) ($pauseInfo['nonpause'] ?? 0) : 0;
             $pauseJson = ($pauseInfo && !empty($pauseInfo['codes'])) ? json_encode($pauseInfo['codes'], JSON_UNESCAPED_UNICODE) : null;
+
+            // Tiempo logueado. La hoja de tiempo (corrida nocturna completa) es la
+            // fuente autoritativa; en modo liviano NO se descarga, así que se usa el
+            // TOTAL del desglose de pausas, que ya tenemos y cuadra exacto
+            // (NONPAUSE + PAUSE = TOTAL). Antes quedaba en 0 durante todo el día y
+            // el portal le mostraba al agente "Total logueado 0:00" junto a sus
+            // horas pagables reales.
+            $tsTotal = ($ts['ok'] ?? false) ? (int) ($ts['total_seconds'] ?? 0) : 0;
+            $totalLogged = $tsTotal > 0 ? $tsTotal : $loggedSeconds;
+            $totalKnown = $totalLogged > 0 ? 1 : 0; // nunca pisar un valor bueno con 0
 
             // Desglose de disposiciones/estados del agente (conteos por código),
             // del mismo reporte de performance (file_download=1). Alimenta las
@@ -1053,12 +1214,13 @@ if (!function_exists('importVicidialDay')) {
                     ':user_id'              => $mapEntry['user_id'],
                     ':first_login'          => $firstLocal,
                     ':last_activity'        => $lastLocal,
-                    ':total_logged_seconds' => (int) ($ts['total_seconds'] ?? 0),
+                    ':total_logged_seconds' => $totalLogged,
                     ':nonpause_seconds'     => $nonpauseSeconds,
                     ':pause_breakdown'      => $pauseJson,
                     ':status_breakdown'     => $statusJson,
                     ':pause_known'          => $pauseKnown,
                     ':ts_known'             => $tsKnown,
+                    ':total_known'          => $totalKnown,
                     ':calls'                => $agent['calls'],
                     ':talk_seconds'         => $agent['talk_seconds'],
                     ':pause_seconds'        => $agent['pause_seconds'],

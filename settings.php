@@ -4040,8 +4040,8 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 </div>
 
                 <?php
-                    $vPaidCodesCfg = $vCfg['vicidial_paid_pause_codes'] ?? '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi"]';
-                    $vPaidCodesArr = is_array($vPaidCodesCfg) ? $vPaidCodesCfg : (json_decode((string) $vPaidCodesCfg, true) ?: ['Coachi', 'ITRes', 'LAGGED', 'LOGIN', 'Digita', 'wasapi']);
+                    $vPaidCodesCfg = $vCfg['vicidial_paid_pause_codes'] ?? '["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi","SIN_CODIGO"]';
+                    $vPaidCodesArr = is_array($vPaidCodesCfg) ? $vPaidCodesCfg : (json_decode((string) $vPaidCodesCfg, true) ?: ['Coachi', 'ITRes', 'LAGGED', 'LOGIN', 'Digita', 'wasapi', 'SIN_CODIGO']);
                     $vCapHours = (int) ($vCfg['vicidial_payroll_daily_cap_hours'] ?? 14);
                 ?>
                 <div class="pt-4 border-t border-slate-700/40 space-y-3">

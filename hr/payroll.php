@@ -709,6 +709,12 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                     <i class="fas fa-hand-holding-usd"></i>
                     Descuentos por Empleado
                 </a>
+                <?php if (userHasPermission('payroll_hours_adjust')): ?>
+                <a href="payroll_hours.php" class="btn-secondary">
+                    <i class="fas fa-user-clock"></i>
+                    Ajuste de Horas
+                </a>
+                <?php endif; ?>
                 <a href="payroll_settings.php" class="btn-secondary">
                     <i class="fas fa-cog"></i>
                     Configuración

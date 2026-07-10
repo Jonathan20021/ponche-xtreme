@@ -710,7 +710,9 @@ if ($vicidialToday) {
     $paidCodesList = vicidialGetPaidPauseCodes($pdo);
     $capSec = (int) round((float) getSystemSetting($pdo, 'vicidial_payroll_daily_cap_hours', 14) * 3600);
     $calcPaid = vicidialComputePaidSeconds((int) $vicidialToday['nonpause_seconds'], $pauseCodes, $paidCodesList, $capSec);
-    $vicidialPaidSeconds = $calcPaid['paid_seconds'];
+    // Un ajuste manual de Gestión de Desempeño manda sobre lo que diga Vicidial,
+    // para que el agente vea exactamente las horas que se le van a pagar.
+    $vicidialPaidSeconds = vicidialApplyDayAdjustment($pdo, (int) $user_id, $date_filter, $calcPaid['paid_seconds'])['seconds'];
 
     $vNonpause = max(0, (int) $vicidialToday['nonpause_seconds']);
     $vTotalLogged = max(0, (int) $vicidialToday['total_logged_seconds']);
