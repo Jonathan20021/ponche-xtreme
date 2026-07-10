@@ -47,6 +47,30 @@ function ph_hms(int $seconds): string
     return sprintf('%d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60));
 }
 
+/**
+ * Texto normalizado sobre el que busca el filtro en vivo: minúsculas y sin
+ * acentos, para que "nunez" encuentre a "Núñez" y "garcia" a "García".
+ *
+ * NO se usa vicidialNormalizeName(): ese pasa por iconv //TRANSLIT, que en
+ * Windows convierte "ú" en "'u" y termina partiendo el apellido en "n u nez".
+ * Aquí se mapean los acentos a mano y se conservan guiones y guiones bajos,
+ * que hacen falta para buscar por fecha (2026-07-08) y por cuenta (Auril_Gzm26).
+ * El JS del buscador normaliza igual (NFD + quitar marcas combinantes).
+ */
+function ph_searchKey(string $s): string
+{
+    $s = mb_strtolower(trim($s), 'UTF-8');
+    $s = strtr($s, [
+        'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a',
+        'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+        'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+        'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'õ' => 'o',
+        'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
+        'ñ' => 'n', 'ç' => 'c',
+    ]);
+    return preg_replace('/\s+/', ' ', $s);
+}
+
 // ---------------------------------------------------------------------------
 // Acciones (PRG)
 // ---------------------------------------------------------------------------
@@ -326,7 +350,32 @@ foreach ($rows as $r) {
             </div>
         </div>
 
-        <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl overflow-x-auto">
+        <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl">
+            <!-- Buscador en vivo: filtra las filas ya cargadas, sin recargar la página. -->
+            <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-700/50">
+                <div class="relative flex-1 min-w-[220px]">
+                    <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+                    <input type="search" id="phSearch" autocomplete="off"
+                           placeholder="Buscar agente, fecha o cuenta de Vicidial…"
+                           class="w-full pl-9 pr-9 py-2 rounded-lg bg-slate-900/60 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-indigo-500">
+                    <button type="button" id="phSearchClear"
+                            class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 px-1"
+                            title="Limpiar (Esc)"><i class="fas fa-xmark"></i></button>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                    <label class="flex items-center gap-2 text-slate-400 cursor-pointer select-none">
+                        <input type="checkbox" id="phOnlyAdjusted" class="accent-indigo-500">
+                        Solo días ajustados
+                    </label>
+                    <label class="flex items-center gap-2 text-slate-400 cursor-pointer select-none">
+                        <input type="checkbox" id="phOnlyFlagged" class="accent-orange-500">
+                        Solo días a revisar
+                    </label>
+                    <span id="phCount" class="text-slate-500 whitespace-nowrap"></span>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead>
                     <tr class="text-left text-slate-400 border-b border-slate-700/60">
@@ -358,8 +407,17 @@ foreach ($rows as $r) {
                     // asocian por el atributo form= de HTML5.
                     $fid = 'adj-' . (int) $r['user_id'] . '-' . str_replace('-', '', $r['report_date']);
                     $fdel = 'del-' . (int) $r['user_id'] . '-' . str_replace('-', '', $r['report_date']);
+
+                    // Texto sobre el que busca el filtro en vivo: nombre, fecha y cuentas.
+                    $haystack = ph_searchKey(
+                        $r['full_name'] . ' ' . $r['report_date'] . ' ' . implode(' ', $r['accounts'])
+                    );
+                    $flagged = $r['capped'] || $r['uncoded_dropped'] > 0;
                 ?>
-                    <tr class="border-b border-slate-800/60 <?= $adj ? 'bg-blue-500/5' : '' ?>">
+                    <tr class="ph-row border-b border-slate-800/60 <?= $adj ? 'bg-blue-500/5' : '' ?>"
+                        data-search="<?= htmlspecialchars($haystack) ?>"
+                        data-adjusted="<?= $adj ? '1' : '0' ?>"
+                        data-flagged="<?= $flagged ? '1' : '0' ?>">
                         <td class="px-4 py-2 text-slate-300 whitespace-nowrap"><?= htmlspecialchars($r['report_date']) ?></td>
                         <td class="px-4 py-2 text-slate-200">
                             <?= htmlspecialchars($r['full_name']) ?>
@@ -429,8 +487,14 @@ foreach ($rows as $r) {
                         </td>
                     </tr>
                 <?php endforeach; endif; ?>
+                    <tr id="phNoMatch" class="hidden">
+                        <td colspan="9" class="px-4 py-8 text-center text-slate-500">
+                            Ningún día coincide con la búsqueda.
+                        </td>
+                    </tr>
                 </tbody>
             </table>
+            </div>
         </div>
 
         <p class="text-xs text-slate-500 mt-4">
@@ -440,6 +504,55 @@ foreach ($rows as $r) {
             Regenerar la nómina <strong>no</strong> borra estos ajustes.
         </p>
     </div>
+
+    <script>
+    (function () {
+        const input    = document.getElementById('phSearch');
+        const clearBtn = document.getElementById('phSearchClear');
+        const onlyAdj  = document.getElementById('phOnlyAdjusted');
+        const onlyFlag = document.getElementById('phOnlyFlagged');
+        const counter  = document.getElementById('phCount');
+        const noMatch  = document.getElementById('phNoMatch');
+        const rows     = Array.from(document.querySelectorAll('tr.ph-row'));
+        if (!input || !rows.length) { if (counter) counter.textContent = ''; return; }
+
+        // Misma normalización que el lado PHP: minúsculas y sin acentos, para que
+        // "nunez" encuentre a "Núñez" y "garcia" a "García".
+        const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+        function apply() {
+            // Cada palabra debe aparecer: "mabel 07-08" filtra por agente Y fecha.
+            const terms = norm(input.value).split(/\s+/).filter(Boolean);
+            let shown = 0;
+
+            for (const row of rows) {
+                const hay = row.dataset.search || '';
+                const okText = terms.every((t) => hay.includes(t));
+                const okAdj  = !onlyAdj.checked  || row.dataset.adjusted === '1';
+                const okFlag = !onlyFlag.checked || row.dataset.flagged === '1';
+                const visible = okText && okAdj && okFlag;
+                row.classList.toggle('hidden', !visible);
+                if (visible) shown++;
+            }
+
+            noMatch.classList.toggle('hidden', shown > 0);
+            clearBtn.classList.toggle('hidden', input.value === '');
+            counter.textContent = shown === rows.length
+                ? `${rows.length} día${rows.length === 1 ? '' : 's'}`
+                : `${shown} de ${rows.length}`;
+        }
+
+        input.addEventListener('input', apply);
+        onlyAdj.addEventListener('change', apply);
+        onlyFlag.addEventListener('change', apply);
+        clearBtn.addEventListener('click', () => { input.value = ''; input.focus(); apply(); });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { input.value = ''; apply(); }
+        });
+
+        apply();
+    })();
+    </script>
 
     <?php include '../footer.php'; ?>
 </body>
