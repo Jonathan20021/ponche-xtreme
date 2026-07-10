@@ -1,4 +1,4 @@
-# Despliegue — Correcciones de nómina Vicidial (commit `7371f15`)
+# Despliegue — Correcciones de nómina Vicidial (commits `7371f15` … `78efd0e`)
 
 > **Urgente:** la base de datos ya está actualizada (es la compartida de HostGator), pero
 > el Windows Server sigue corriendo el código viejo. Su tarea de las **23:30** vuelve a
@@ -12,6 +12,7 @@
 - [x] Tablas `vicidial_payroll_adjustments` y `vicidial_payroll_adjustment_log` creadas.
 - [x] Permiso `payroll_hours_adjust` para Admin, Desarrollador, DIRECTOR, HR, ENCARGADODEGESTIONHUMANA, IT.
 - [x] `system_settings.vicidial_paid_pause_codes` = `["Coachi","ITRes","LAGGED","LOGIN","Digita","wasapi","SIN_CODIGO"]`.
+- [x] `system_settings.vicidial_payroll_uncoded_cap_hours` = `2` (tope de pausa sin código pagada).
 - [x] Backfill de `2026-07-01` a `2026-07-09` con el importador corregido.
 
 ## 2. Copiar archivos
@@ -64,7 +65,17 @@ Debe aparecer `"SIN_CODIGO":15559`. Luego, en la app:
   no se distingue "el agente pausó sin elegir código" de "el agente eligió un código que
   no tiene nombre configurado".
 
-## 5. Nota operativa importante
+## 5. Tope de pausa sin código (nuevo)
+
+`SIN_CODIGO` se paga, pero solo hasta **2 h/día** (`settings.php` → Integración Vicidial).
+Una sesión que el agente deja abierta acumula todo el tiempo inactivo ahí; sin el tope,
+olvidar cerrar sesión valdría hasta 14 h. El tope aplica **solo** a la pausa sin código:
+el tiempo productivo y los demás códigos pagados nunca se recortan. Un ajuste manual de
+Gestión de Desempeño manda por encima del tope.
+
+En la UI de Ajuste de Horas los días recortados salen con un icono de tijera.
+
+## 6. Nota operativa importante
 
 El `.bat` importa el **día en curso** a las 23:31, cuando todavía hay agentes logueados.
 Esos números quedan **provisionales** hasta que la corrida de la noche siguiente vuelve a
