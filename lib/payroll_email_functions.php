@@ -395,7 +395,7 @@ function generatePayrollSlipHTML(array $data): string {
                     </div>
                     <div class="info-item">
                         <span class="info-label">Horas Trabajadas:</span>
-                        <span class="info-value"><?= number_format($data['total_hours'], 1) ?></span>
+                        <span class="info-value"><?= number_format($data['total_hours'], 2) ?></span>
                     </div>
                     <?php if (!empty($data['hourly_rate']) && $data['hourly_rate'] > 0): ?>
                     <div class="info-item">
@@ -432,7 +432,7 @@ function generatePayrollSlipHTML(array $data): string {
                     </tr>
                     <?php if ($data['overtime_amount'] > 0): ?>
                     <tr>
-                        <td>Horas Extra (<?= number_format($data['overtime_hours'], 1) ?> hrs)</td>
+                        <td>Horas Extra (<?= number_format($data['overtime_hours'], 2) ?> hrs)</td>
                         <td class="amount positive"><?= formatDOP($data['overtime_amount']) ?></td>
                     </tr>
                     <?php endif; ?>
@@ -583,7 +583,7 @@ function generatePayrollSlipPlainText(array $data): string {
     $text .= "Cédula: {$data['identification_number']}\n";
     $text .= "Posición: {$data['position']}\n";
     $text .= "Departamento: " . ($data['department_name'] ?: 'N/A') . "\n";
-    $text .= "Horas Trabajadas: " . number_format($data['total_hours'], 1) . "\n";
+    $text .= "Horas Trabajadas: " . number_format($data['total_hours'], 2) . "\n";
     
     // Add salary information for transparency
     if (!empty($data['hourly_rate']) && $data['hourly_rate'] > 0) {
@@ -602,7 +602,7 @@ function generatePayrollSlipPlainText(array $data): string {
     $text .= "Salario Base: " . formatDOP($data['base_salary']) . "\n";
     
     if ($data['overtime_amount'] > 0) {
-        $text .= "Horas Extra (" . number_format($data['overtime_hours'], 1) . " hrs): " . formatDOP($data['overtime_amount']) . "\n";
+        $text .= "Horas Extra (" . number_format($data['overtime_hours'], 2) . " hrs): " . formatDOP($data['overtime_amount']) . "\n";
     }
     if ($data['bonuses'] > 0) {
         $text .= "Bonificaciones: " . formatDOP($data['bonuses']) . "\n";

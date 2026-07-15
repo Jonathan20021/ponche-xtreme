@@ -783,7 +783,7 @@ $chartColorsJson = json_encode($chartColors);
         </div>
         <div class="ag-card ag-kpi">
             <div class="top"><div class="ico" style="background:#EDEBFB;color:var(--ag-purple)"><i class="fas fa-business-time"></i></div></div>
-            <div class="val"><?= $periodHours ? number_format($periodHours['total_seconds'] / 3600, 1) : '0.0' ?></div>
+            <div class="val"><?= $periodHours ? number_format($periodHours['total_seconds'] / 3600, 2) : '0.00' ?></div>
             <div class="lbl">Horas de la quincena</div>
         </div>
         <?php else: ?>

@@ -200,7 +200,7 @@ function generatePayrollSlipPreview($data) {
                 <?php if (!empty($data['monthly_salary']) && $data['monthly_salary'] > 0): ?>
                 <div><strong>Salario Mensual:</strong> <?= formatDOP($data['monthly_salary']) ?></div>
                 <?php endif; ?>
-                <div><strong>Horas:</strong> <?= number_format($data['total_hours'], 1) ?></div>
+                <div><strong>Horas:</strong> <?= number_format($data['total_hours'], 2) ?></div>
                 <?php if (!empty($data['overtime_multiplier']) && $data['overtime_multiplier'] > 1): ?>
                 <div><strong>Mult. H.Extra:</strong> <?= number_format($data['overtime_multiplier'], 2) ?>x</div>
                 <?php endif; ?>

@@ -1163,8 +1163,8 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                         <div class="font-medium"><?= htmlspecialchars($record['first_name'] . ' ' . $record['last_name']) ?></div>
                                         <div class="text-xs text-slate-400"><?= htmlspecialchars($record['employee_code']) ?></div>
                                     </td>
-                                    <td class="py-2 px-2 text-center"><?= number_format($record['total_hours'], 1) ?></td>
-                                    <td class="py-2 px-2 text-center"><?= number_format($record['overtime_hours'], 1) ?></td>
+                                    <td class="py-2 px-2 text-center"><?= number_format($record['total_hours'], 2) ?></td>
+                                    <td class="py-2 px-2 text-center"><?= number_format($record['overtime_hours'], 2) ?></td>
                                     <td class="py-2 px-2 text-center">
                                         <?php
                                         $hasManualExtra = ((float) $record['manual_regular_hours'] > 0 || (float) $record['manual_overtime_hours'] > 0);
@@ -1200,8 +1200,8 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                             <?php endforeach; ?>
                             <tr class="bg-slate-800/70 font-bold">
                                 <td class="py-3 px-2">TOTALES</td>
-                                <td class="py-3 px-2 text-center"><?= number_format($totals['hours'], 1) ?></td>
-                                <td class="py-3 px-2 text-center"><?= number_format($totals['overtime_hours'], 1) ?></td>
+                                <td class="py-3 px-2 text-center"><?= number_format($totals['hours'], 2) ?></td>
+                                <td class="py-3 px-2 text-center"><?= number_format($totals['overtime_hours'], 2) ?></td>
                                 <td class="py-3 px-2 text-center text-slate-400">-</td>
                                 <td class="py-3 px-2 text-right text-emerald-300"><?= formatDOP($totals['sales']) ?></td>
                                 <td class="py-3 px-2 text-right text-amber-300"><?= formatDOP($totals['night']) ?></td>
