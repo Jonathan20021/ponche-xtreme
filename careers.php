@@ -190,7 +190,14 @@ $employment_types = [
                         <i class="fas fa-search"></i><span>Rastrear Solicitud</span>
                     </a>
                 </div>
-                <button class="md:hidden p-2 text-slate-700" id="mobileMenuBtn"><i class="fas fa-bars"></i></button>
+                <button class="md:hidden p-2 text-slate-700" id="mobileMenuBtn" aria-label="Menú"><i class="fas fa-bars"></i></button>
+            </div>
+            <!-- Menú móvil: sin esto el enlace de rastreo quedaba invisible en teléfono -->
+            <div id="mobileMenu" class="hidden md:hidden pb-4 flex flex-col gap-2">
+                <a href="#vacantes" class="px-4 py-2.5 rounded-xl bg-slate-50 text-sm font-semibold text-slate-700">Vacantes</a>
+                <a href="track_application.php" class="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold flex items-center gap-2">
+                    <i class="fas fa-search"></i> Rastrear Solicitud
+                </a>
             </div>
         </div>
     </nav>
@@ -341,11 +348,12 @@ $employment_types = [
                     <h3 class="font-semibold mb-1">Datos seguros</h3>
                     <p class="text-sm text-slate-400">Tu información se almacena cifrada y se usa sólo para reclutamiento.</p>
                 </div>
-                <div class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                <a href="track_application.php" class="p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors block">
                     <div class="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center mb-3"><i class="fas fa-compass"></i></div>
                     <h3 class="font-semibold mb-1">Seguimiento en línea</h3>
                     <p class="text-sm text-slate-400">Rastrea el estado de tu solicitud con tu código único.</p>
-                </div>
+                    <span class="inline-flex items-center gap-1 mt-3 text-sm font-semibold text-emerald-400">Consultar mi postulación <i class="fas fa-arrow-right text-xs"></i></span>
+                </a>
             </div>
         </div>
     </section>
@@ -399,7 +407,7 @@ $employment_types = [
                         <form id="applicationForm" class="p-6 space-y-5" enctype="multipart/form-data">
                             <input type="hidden" name="job_posting_id" id="job_posting_id">
                             <input type="hidden" name="puesto_aplicado" id="puesto_aplicado">
-                            <input type="hidden" name="form_version" value="2026-06-05-essential">
+                            <input type="hidden" name="form_version" value="2026-07-23-extended">
 
                             <!-- AI banner -->
                             <div class="ai-banner rounded-2xl p-5 text-white relative overflow-hidden">
@@ -452,6 +460,101 @@ $employment_types = [
                                     <div class="sm:col-span-2">
                                         <label class="form-label">Dirección / Sector</label>
                                         <input type="text" name="direccion" class="form-input" placeholder="Ciudad, sector">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">Fecha de nacimiento</label>
+                                        <input type="date" name="fecha_nacimiento" id="fechaNacimiento" class="form-input" required onchange="calcularEdad()">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Edad</label>
+                                        <input type="text" name="edad" id="edadCalculada" class="form-input bg-slate-100" readonly placeholder="Se calcula sola">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">Nacionalidad</label>
+                                        <input type="text" name="nacionalidad" class="form-input" value="Dominicana" required>
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">Estado civil</label>
+                                        <select name="estado_civil" class="form-input" required>
+                                            <option value="">Selecciona...</option>
+                                            <option>Soltero/a</option>
+                                            <option>Casado/a</option>
+                                            <option>Unión libre</option>
+                                            <option>Divorciado/a</option>
+                                            <option>Viudo/a</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Tipo de sangre</label>
+                                        <select name="tipo_sangre" class="form-input">
+                                            <option value="">Selecciona...</option>
+                                            <option>O+</option><option>O-</option>
+                                            <option>A+</option><option>A-</option>
+                                            <option>B+</option><option>B-</option>
+                                            <option>AB+</option><option>AB-</option>
+                                            <option value="No lo sé">No lo sé</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Sexo</label>
+                                        <select name="sexo" class="form-input">
+                                            <option value="">Selecciona...</option>
+                                            <option>Femenino</option>
+                                            <option>Masculino</option>
+                                            <option>Prefiero no decirlo</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Estatura</label>
+                                        <input type="text" name="estatura" class="form-input" placeholder="Ej: 1.70 m">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Peso</label>
+                                        <input type="text" name="peso" class="form-input" placeholder="Ej: 150 lb / 68 kg">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Con quién vives?</label>
+                                        <select name="vive_con" class="form-input" required>
+                                            <option value="">Selecciona...</option>
+                                            <option>Solo/a</option>
+                                            <option>Con mis padres</option>
+                                            <option>Con mi pareja</option>
+                                            <option>Con familiares</option>
+                                            <option>Con amigos / compañeros</option>
+                                            <option>Otro</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">¿Cuántas personas viven contigo?</label>
+                                        <input type="number" min="0" max="30" name="personas_vive" class="form-input" placeholder="Ej: 3">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Cuántas personas dependen de ti?</label>
+                                        <input type="number" min="0" max="30" name="personas_dependen" class="form-input" placeholder="Ej: 2" required>
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Tienes hijos?</label>
+                                        <select name="tiene_hijos" id="tieneHijos" class="form-input" required onchange="toggleHijosFields()">
+                                            <option value="">Selecciona...</option>
+                                            <option value="SI">Sí</option>
+                                            <option value="NO">No</option>
+                                        </select>
+                                    </div>
+                                    <div id="cantidadHijosWrap" class="hidden">
+                                        <label class="form-label">¿Cuántos hijos tienes?</label>
+                                        <input type="number" min="0" max="20" name="cantidad_hijos" class="form-input" placeholder="Ej: 2">
+                                    </div>
+                                    <div id="edadHijosWrap" class="hidden">
+                                        <label class="form-label">Edades de tus hijos</label>
+                                        <input type="text" name="edad_hijos" class="form-input" placeholder="Ej: 5 y 9 años">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Cuentas con vivienda propia?</label>
+                                        <select name="casa_propia" class="form-input" required>
+                                            <option value="">Selecciona...</option>
+                                            <option value="SI">Sí</option>
+                                            <option value="NO">No</option>
+                                        </select>
                                     </div>
                                 </div>
                             </fieldset>
@@ -575,13 +678,44 @@ $employment_types = [
                                 </div>
                             </fieldset>
 
-                            <!-- Mensaje + fuente -->
+                            <!-- Cursos e idiomas -->
                             <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
-                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">4. Cuéntanos más</legend>
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">4. Cursos e idiomas</legend>
+                                <p class="text-xs text-slate-500 mt-2">Agrega todos los cursos e idiomas que aparecen en tu currículo. Puedes añadir varias filas.</p>
+
+                                <div class="mt-4">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h5 class="text-sm font-bold text-slate-800"><i class="fas fa-certificate text-brand-600 mr-1"></i> Cursos y capacitaciones</h5>
+                                        <button type="button" onclick="addCurso()" class="text-xs font-semibold text-brand-700 hover:text-brand-800 px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 transition-colors">
+                                            <i class="fas fa-plus mr-1"></i> Agregar curso
+                                        </button>
+                                    </div>
+                                    <div id="cursosList" class="space-y-3"></div>
+                                </div>
+
+                                <div class="mt-5">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h5 class="text-sm font-bold text-slate-800"><i class="fas fa-language text-brand-600 mr-1"></i> Idiomas</h5>
+                                        <button type="button" onclick="addIdioma()" class="text-xs font-semibold text-brand-700 hover:text-brand-800 px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 transition-colors">
+                                            <i class="fas fa-plus mr-1"></i> Agregar idioma
+                                        </button>
+                                    </div>
+                                    <div id="idiomasList" class="space-y-3"></div>
+                                </div>
+                            </fieldset>
+
+                            <!-- Rol de interés + fuente -->
+                            <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">5. Cuéntanos más</legend>
                                 <div class="grid sm:grid-cols-2 gap-4 mt-3">
                                     <div class="sm:col-span-2">
-                                        <label class="form-label">Mensaje breve / por qué deberíamos contratarte</label>
-                                        <textarea name="cover_letter_short" rows="3" class="form-input" placeholder="Opcional. 1-2 frases con tu valor diferencial."></textarea>
+                                        <label class="form-label req">¿Cuál es el rol de su interés?</label>
+                                        <select name="role_interest" class="form-input" required>
+                                            <option value="">Selecciona...</option>
+                                            <option value="Inglés">Inglés</option>
+                                            <option value="Español">Español</option>
+                                            <option value="APPOINT">APPOINT</option>
+                                        </select>
                                     </div>
                                     <div>
                                         <label class="form-label">¿Cómo te enteraste?</label>
@@ -741,6 +875,101 @@ $employment_types = [
             el.classList.toggle('hidden', !hasCommitment);
             if (!hasCommitment) el.querySelectorAll('input').forEach(i => { i.value = ''; });
         }
+        function toggleHijosFields() {
+            const tiene = document.getElementById('tieneHijos')?.value === 'SI';
+            ['cantidadHijosWrap', 'edadHijosWrap'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.toggle('hidden', !tiene);
+                if (!tiene) el.querySelectorAll('input').forEach(i => { i.value = ''; });
+            });
+        }
+
+        // Edad derivada de la fecha de nacimiento: RRHH la ve en la postulación sin pedirla dos veces
+        function calcularEdad() {
+            const input = document.getElementById('fechaNacimiento');
+            const out = document.getElementById('edadCalculada');
+            if (!input || !out) return;
+            if (!input.value) { out.value = ''; return; }
+            const nac = new Date(input.value + 'T00:00:00');
+            if (isNaN(nac.getTime())) { out.value = ''; return; }
+            const hoy = new Date();
+            let edad = hoy.getFullYear() - nac.getFullYear();
+            const m = hoy.getMonth() - nac.getMonth();
+            if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+            out.value = (edad >= 0 && edad < 120) ? (edad + ' años') : '';
+        }
+
+        // Filas repetibles: el candidato puede declarar todos los cursos e idiomas de su CV
+        let cursoIdx = 0;
+        function addCurso(focus = true) {
+            const list = document.getElementById('cursosList');
+            const i = cursoIdx++;
+            const row = document.createElement('div');
+            row.className = 'grid sm:grid-cols-12 gap-2 items-start bg-slate-50 border border-slate-200 rounded-xl p-3';
+            row.innerHTML = `
+                <div class="sm:col-span-5">
+                    <label class="form-label">Curso o capacitación</label>
+                    <input type="text" name="cursos[${i}][curso]" class="form-input" placeholder="Ej: Servicio al cliente">
+                </div>
+                <div class="sm:col-span-4">
+                    <label class="form-label">Institución</label>
+                    <input type="text" name="cursos[${i}][institucion]" class="form-input" placeholder="Ej: INFOTEP">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="form-label">Año</label>
+                    <input type="text" name="cursos[${i}][fecha]" class="form-input" placeholder="2024">
+                </div>
+                <div class="sm:col-span-1 flex sm:justify-center sm:pt-6">
+                    <button type="button" onclick="this.closest('div.grid').remove()" class="w-full sm:w-auto px-3 py-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Quitar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>`;
+            list.appendChild(row);
+            if (focus) row.querySelector('input')?.focus();
+        }
+
+        let idiomaIdx = 0;
+        function addIdioma(focus = true) {
+            const list = document.getElementById('idiomasList');
+            const i = idiomaIdx++;
+            const niveles = ['', 'Básico', 'Intermedio', 'Avanzado', 'Nativo'];
+            const opts = niveles.map(n => `<option value="${n}">${n === '' ? 'Nivel...' : n}</option>`).join('');
+            const row = document.createElement('div');
+            row.className = 'grid sm:grid-cols-12 gap-2 items-start bg-slate-50 border border-slate-200 rounded-xl p-3';
+            row.innerHTML = `
+                <div class="sm:col-span-4">
+                    <label class="form-label">Idioma</label>
+                    <input type="text" name="idiomas[${i}][idioma]" class="form-input" placeholder="Ej: Inglés">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="form-label">Habla</label>
+                    <select name="idiomas[${i}][habla]" class="form-input">${opts}</select>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="form-label">Lee</label>
+                    <select name="idiomas[${i}][lee]" class="form-input">${opts}</select>
+                </div>
+                <div class="sm:col-span-3">
+                    <label class="form-label">Escribe</label>
+                    <select name="idiomas[${i}][escribe]" class="form-input">${opts}</select>
+                </div>
+                <div class="sm:col-span-1 flex sm:justify-center sm:pt-6">
+                    <button type="button" onclick="this.closest('div.grid').remove()" class="w-full sm:w-auto px-3 py-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Quitar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>`;
+            list.appendChild(row);
+            if (focus) row.querySelector('input')?.focus();
+        }
+
+        function resetRepeatables() {
+            document.getElementById('cursosList').innerHTML = '';
+            document.getElementById('idiomasList').innerHTML = '';
+            cursoIdx = 0; idiomaIdx = 0;
+            addCurso(false);
+            addIdioma(false);
+        }
 
         function backToJobInfo() {
             document.getElementById('applicationFormPanel').classList.add('hidden');
@@ -755,6 +984,9 @@ $employment_types = [
                 form.reset();
                 toggleStudyFields();
                 toggleCommitmentField();
+                toggleHijosFields();
+                calcularEdad();
+                resetRepeatables();
                 document.getElementById('cvFileName').textContent = 'Adjuntar CV (PDF, DOC, DOCX)';
                 document.getElementById('aiStatus').classList.add('hidden');
                 document.getElementById('jobInfoPanel').classList.add('hidden');
@@ -764,6 +996,13 @@ $employment_types = [
 
         modalBackdrop.addEventListener('click', closeModal);
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal(); });
+
+        document.getElementById('mobileMenuBtn')?.addEventListener('click', () => {
+            document.getElementById('mobileMenu')?.classList.toggle('hidden');
+        });
+
+        // Arranca con una fila vacía de curso e idioma para que se vea que se pueden llenar
+        resetRepeatables();
 
         // CV picker UI
         const cvFile = document.getElementById('cv-file');
@@ -816,12 +1055,32 @@ $employment_types = [
                 }
                 if (res.success) {
                     closeModal();
+                    const code = res.application_code || '';
+                    const trackUrl = res.tracking_url || (location.origin + location.pathname.replace(/careers\.php$/, '') + 'track_application.php?code=' + encodeURIComponent(code));
                     Swal.fire({
                         title: '¡Solicitud recibida!',
-                        html: `Tu código es <code class="bg-slate-100 text-brand-700 px-2 py-0.5 rounded font-mono">${res.application_code || '—'}</code>.<br>Guárdalo para rastrear tu postulación.`,
+                        html: `
+                            <p class="text-sm text-slate-600 mb-3">Guarda tu código para consultar el estatus de tu postulación cuando quieras.</p>
+                            <code class="inline-block bg-slate-100 text-brand-700 px-3 py-1.5 rounded font-mono text-base">${escapeHtml(code) || '—'}</code>
+                            <div class="mt-4 text-left">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">Enlace de seguimiento</label>
+                                <input id="trackUrlInput" type="text" readonly value="${escapeHtml(trackUrl)}"
+                                       class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
+                            </div>`,
                         icon: 'success',
-                        confirmButtonText: 'Listo',
+                        showCancelButton: true,
+                        confirmButtonText: 'Copiar enlace',
+                        cancelButtonText: 'Listo',
                         confirmButtonColor: '#3a63f5'
+                    }).then(r => {
+                        if (r.isConfirmed) {
+                            const input = document.getElementById('trackUrlInput');
+                            const copy = navigator.clipboard
+                                ? navigator.clipboard.writeText(trackUrl)
+                                : Promise.reject();
+                            copy.then(() => Swal.fire({ title: 'Enlace copiado', icon: 'success', timer: 1600, showConfirmButton: false }))
+                                .catch(() => { if (input) { input.select(); document.execCommand('copy'); } });
+                        }
                     });
                 } else {
                     Swal.fire({ title: 'Error', text: res.message || 'No se pudo enviar', icon: 'error', confirmButtonColor: '#ef4444' });

@@ -105,6 +105,22 @@ $displayYears = !empty($application['years_of_experience']) ? $application['year
     : ($application['recent_years'] ?? '')
 );
 $displayYears = $displayYears !== '' ? $displayYears : 'N/A';
+
+// Rol de interes (Ingles / Espanol / APPOINT). Columna propia desde 2026-07; las
+// postulaciones anteriores lo traen dentro del JSON del formulario.
+$displayRole = $application['role_interest'] ?? '';
+if ($displayRole === '' && $formPayload && !empty($formPayload['rol_interes'])) {
+    $displayRole = $formPayload['rol_interes'];
+}
+
+// Enlace publico de seguimiento para reenviarlo al candidato
+$emailCfgForTracking = @include __DIR__ . '/../config/email_config.php';
+$trackingBase = is_array($emailCfgForTracking) && !empty($emailCfgForTracking['app_url'])
+    ? rtrim($emailCfgForTracking['app_url'], '/')
+    : '';
+$trackingUrl = $trackingBase !== ''
+    ? $trackingBase . '/track_application.php?code=' . urlencode($application['application_code'])
+    : '';
 // AI summary fields (added by recruitment AI migration)
 $aiScore         = isset($application['ai_score']) && $application['ai_score'] !== null ? (int) $application['ai_score'] : null;
 $aiSummary       = $application['ai_summary']        ?? '';
@@ -186,12 +202,25 @@ require_once '../header.php';
                             <i class="fas fa-calendar text-indigo-400"></i>
                             <?php echo date('d/m/Y', strtotime($application['applied_date'])); ?>
                         </span>
+                        <?php if ($displayRole !== ''): ?>
+                            <span class="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-200 font-semibold">
+                                <i class="fas fa-headset"></i>
+                                Rol de interés: <?php echo htmlspecialchars($displayRole); ?>
+                            </span>
+                        <?php endif; ?>
                     </div>
                 </div>
-                <div>
+                <div class="flex flex-col items-start lg:items-end gap-2">
                     <span class="status-badge-recruitment status-<?php echo htmlspecialchars($application['status']); ?> text-lg">
                         <?php echo htmlspecialchars($status_labels[$application['status']] ?? $application['status']); ?>
                     </span>
+                    <?php if ($trackingUrl !== ''): ?>
+                        <button type="button" class="btn-secondary inline-flex items-center gap-2 text-sm"
+                                data-tracking-url="<?php echo htmlspecialchars($trackingUrl); ?>"
+                                onclick="copyTrackingUrl(this)">
+                            <i class="fas fa-link"></i> Copiar enlace de seguimiento
+                        </button>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -397,6 +426,18 @@ require_once '../header.php';
                     Informacion Personal
                 </h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="text-sm text-slate-400">Rol de interés</label>
+                        <p class="text-white font-medium">
+                            <?php if ($displayRole !== ''): ?>
+                                <span class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-emerald-200 font-semibold">
+                                    <i class="fas fa-headset"></i><?php echo htmlspecialchars($displayRole); ?>
+                                </span>
+                            <?php else: ?>
+                                <span class="text-slate-400">No indicado</span>
+                            <?php endif; ?>
+                        </p>
+                    </div>
                     <div>
                         <label class="text-sm text-slate-400">Email</label>
                         <p class="text-white font-medium"><?php echo htmlspecialchars($displayEmail); ?></p>
@@ -549,8 +590,8 @@ require_once '../header.php';
                                             <?php echo htmlspecialchars($display($value('puesto_aplicado'))); ?></p>
                                     </div>
                                     <div>
-                                        <label class="text-sm text-slate-400">Serie</label>
-                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('serie'))); ?></p>
+                                        <label class="text-sm text-slate-400">Rol de interés</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($displayRole)); ?></p>
                                     </div>
                                     <div>
                                         <label class="text-sm text-slate-400">Cedula</label>
@@ -642,6 +683,11 @@ require_once '../header.php';
                                         <label class="text-sm text-slate-400">Tiene hijos</label>
                                         <p class="font-medium">
                                             <?php echo htmlspecialchars($display($yesNo($value('tiene_hijos')))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Cantidad de hijos</label>
+                                        <p class="font-medium"><?php echo htmlspecialchars($display($value('cantidad_hijos'))); ?>
+                                        </p>
                                     </div>
                                     <div>
                                         <label class="text-sm text-slate-400">Edad de hijos</label>
@@ -1188,7 +1234,7 @@ require_once '../header.php';
                                                 <span class="font-medium"><?php echo $status_labels[$history['new_status']]; ?></span>
                                             </p>
                                             <p class="text-slate-400 text-xs mt-1">
-                                                <?php echo htmlspecialchars($history['changed_by_name']); ?>
+                                                <?php echo htmlspecialchars($history['changed_by_name'] ?? 'Sistema'); ?>
                                                 <?php echo date('d/m/Y H:i', strtotime($history['changed_at'])); ?>
                                             </p>
                                         </div>
@@ -1256,6 +1302,22 @@ require_once '../header.php';
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+// Copia al portapapeles el enlace publico con el que el candidato consulta su estatus
+function copyTrackingUrl(btn) {
+    const url = btn.dataset.trackingUrl || '';
+    if (!url) return;
+    const done = () => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i> Enlace copiado';
+        setTimeout(() => { btn.innerHTML = orig; }, 2000);
+    };
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(done).catch(() => window.prompt('Copia el enlace:', url));
+    } else {
+        window.prompt('Copia el enlace:', url);
+    }
+}
+
 async function runAIProcessing(applicationId, btn) {
     const orig = btn.innerHTML;
     btn.disabled = true;

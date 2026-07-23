@@ -17,6 +17,26 @@ try {
         @mkdir(__DIR__ . '/logs', 0755, true);
     }
 
+    // Blindaje de codificacion. Cuando el candidato pega texto desde Word o desde un
+    // PDF pueden llegar bytes que no son UTF-8 valido. json_encode() devuelve false
+    // ante ellos y el snapshot del formulario se guardaba VACIO: Reclutamiento veia
+    // "N/A" en todos los campos aunque el candidato si los hubiera llenado.
+    $sanitizeUtf8 = function ($value) use (&$sanitizeUtf8) {
+        if (is_array($value)) {
+            return array_map($sanitizeUtf8, $value);
+        }
+        if (!is_string($value) || mb_check_encoding($value, 'UTF-8')) {
+            return $value;
+        }
+        // Windows-1252 / Latin-1 es el origen habitual de esos bytes
+        $converted = @mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
+        if (is_string($converted) && mb_check_encoding($converted, 'UTF-8')) {
+            return $converted;
+        }
+        return mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+    };
+    $_POST = $sanitizeUtf8($_POST);
+
     // Compact field set
     $nombres            = trim($_POST['nombres'] ?? '');
     $apellidos          = trim($_POST['apellidos'] ?? '');
@@ -41,12 +61,79 @@ try {
     $other_commitments_details = trim($_POST['other_commitments_details'] ?? '');
     $overtime_available = trim($_POST['overtime_available'] ?? '');
     $weekend_holiday_available = trim($_POST['weekend_holiday_available'] ?? '');
-    $cover_letter_short = trim($_POST['cover_letter_short'] ?? '');
+    $role_interest      = trim($_POST['role_interest'] ?? '');
     $source             = trim($_POST['source'] ?? '');
     $linkedin_url       = trim($_POST['linkedin_url'] ?? '');
     $puesto_aplicado    = trim($_POST['puesto_aplicado'] ?? '');
     $acepta             = !empty($_POST['acepta_datos']) ? 'SI' : 'NO';
-    $form_version       = trim($_POST['form_version'] ?? '2026-06-05-essential');
+    $form_version       = trim($_POST['form_version'] ?? '2026-07-23-extended');
+
+    // Datos personales que RRHH necesita para la validación inicial y que muchos
+    // candidatos no traen en el CV.
+    $fecha_nacimiento   = trim($_POST['fecha_nacimiento'] ?? '');
+    $nacionalidad       = trim($_POST['nacionalidad'] ?? '');
+    $estado_civil       = trim($_POST['estado_civil'] ?? '');
+    $tipo_sangre        = trim($_POST['tipo_sangre'] ?? '');
+    $sexo               = trim($_POST['sexo'] ?? '');
+    $estatura           = trim($_POST['estatura'] ?? '');
+    $peso               = trim($_POST['peso'] ?? '');
+    $vive_con           = trim($_POST['vive_con'] ?? '');
+    $personas_vive      = trim($_POST['personas_vive'] ?? '');
+    $personas_dependen  = trim($_POST['personas_dependen'] ?? '');
+    $tiene_hijos        = trim($_POST['tiene_hijos'] ?? '');
+    $cantidad_hijos     = trim($_POST['cantidad_hijos'] ?? '');
+    $edad_hijos         = trim($_POST['edad_hijos'] ?? '');
+    $casa_propia        = trim($_POST['casa_propia'] ?? '');
+
+    // La edad se recalcula en el servidor: el campo del formulario es sólo lectura
+    // y no queremos que un valor manipulado llegue a la ficha de Reclutamiento.
+    $dob_sql = null;
+    $edad    = '';
+    if ($fecha_nacimiento !== '') {
+        $dob = DateTime::createFromFormat('Y-m-d', $fecha_nacimiento);
+        if ($dob && $dob->format('Y-m-d') === $fecha_nacimiento) {
+            $today = new DateTime('today');
+            if ($dob < $today) {
+                $dob_sql = $fecha_nacimiento;
+                $edad = (string) $dob->diff($today)->y;
+            }
+        }
+    }
+
+    // Rol de interés (reemplaza la antigua pregunta "por qué deberíamos contratarte")
+    $allowed_roles = ['Inglés', 'Español', 'APPOINT'];
+    if ($role_interest !== '' && !in_array($role_interest, $allowed_roles, true)) {
+        $role_interest = '';
+    }
+
+    // Cursos e idiomas: filas repetibles del formulario -> se guardan tal cual las
+    // renderiza hr/view_application.php.
+    $normalizeRows = function ($rows, array $fields) {
+        $out = [];
+        if (!is_array($rows)) {
+            return $out;
+        }
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $clean = [];
+            $hasData = false;
+            foreach ($fields as $f) {
+                $v = trim((string) ($row[$f] ?? ''));
+                $clean[$f] = $v;
+                if ($v !== '') {
+                    $hasData = true;
+                }
+            }
+            if ($hasData) {
+                $out[] = $clean;
+            }
+        }
+        return $out;
+    };
+    $cursos  = $normalizeRows($_POST['cursos']  ?? [], ['curso', 'institucion', 'fecha']);
+    $idiomas = $normalizeRows($_POST['idiomas'] ?? [], ['idioma', 'habla', 'lee', 'escribe']);
 
     // Required fields
     $required = [
@@ -189,6 +276,7 @@ try {
     $formPayload = [
         'form_version'      => $form_version,
         'puesto_aplicado'   => $puesto_aplicado,
+        'rol_interes'       => $role_interest,
         'nombres'           => $nombres,
         'apellido_paterno'  => $apellidos,   // map for legacy renderer
         'apellido_materno'  => '',
@@ -196,7 +284,22 @@ try {
         'telefono'          => $telefono,
         'direccion'         => $direccion,
         'email'             => $email,
-        'mensaje'           => $cover_letter_short,
+        'fecha_nacimiento'  => $dob_sql ?? $fecha_nacimiento,
+        'edad'              => $edad,
+        'nacionalidad'      => $nacionalidad,
+        'estado_civil'      => $estado_civil,
+        'tipo_sangre'       => $tipo_sangre,
+        'sexo'              => $sexo,
+        'estatura'          => $estatura,
+        'peso'              => $peso,
+        'vive_con'          => $vive_con,
+        'personas_vive'     => $personas_vive,
+        'personas_dependen' => $personas_dependen,
+        'tiene_hijos'       => $tiene_hijos,
+        'cantidad_hijos'    => $cantidad_hijos,
+        'edad_hijos'        => $edad_hijos,
+        'casa_propia'       => $casa_propia,
+        'idiomas'           => $idiomas,
         'experiencias'      => [
             ['empresa' => $current_company, 'cargo' => $current_position, 'tiempo' => $years_experience, 'sueldo' => '', 'tareas' => '', 'razon_salida' => '']
         ],
@@ -230,20 +333,34 @@ try {
             'que_estudia'         => $study_subject,
             'donde_estudia'       => $study_place,
             'horario_clases'      => $study_schedule,
+            'otros_cursos'        => $cursos,
         ],
     ];
+
+    // Segunda red de seguridad: preferimos guardar el formulario con algun caracter
+    // sustituido antes que perderlo entero.
+    $coverLetterJson = json_encode($formPayload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    if ($coverLetterJson === false) {
+        error_log('submit_application: json_encode del formulario fallo (' . json_last_error_msg() . ')');
+        $coverLetterJson = json_encode($formPayload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    }
+    if ($coverLetterJson === false) {
+        $coverLetterJson = null;
+    }
 
     $insert = $pdo->prepare("
         INSERT INTO job_applications (
             application_code, job_posting_id, first_name, last_name, email, phone,
             address, date_of_birth, education_level, years_of_experience,
             current_position, current_company, expected_salary, cv_filename, cv_path,
-            cover_letter, linkedin_url, status, cedula, source, availability_preference
+            cover_letter, linkedin_url, status, cedula, source, availability_preference,
+            role_interest
         ) VALUES (
             :application_code, :job_posting_id, :first_name, :last_name, :email, :phone,
-            :address, NULL, :education_level, :years_of_experience,
+            :address, :date_of_birth, :education_level, :years_of_experience,
             :current_position, :current_company, :expected_salary, :cv_filename, :cv_path,
-            :cover_letter, :linkedin_url, 'new', :cedula, :source, :availability_preference
+            :cover_letter, :linkedin_url, 'new', :cedula, :source, :availability_preference,
+            :role_interest
         )
     ");
 
@@ -262,11 +379,13 @@ try {
         'expected_salary'         => $expected_salary !== '' ? $expected_salary : null,
         'cv_filename'             => $cv_filename,
         'cv_path'                 => $cv_path,
-        'cover_letter'            => json_encode($formPayload, JSON_UNESCAPED_UNICODE),
+        'cover_letter'            => $coverLetterJson,
         'linkedin_url'            => $linkedin_url !== '' ? $linkedin_url : null,
         'cedula'                  => $cedula,
         'source'                  => $source !== '' ? $source : null,
         'availability_preference' => $availability_pref !== '' ? $availability_pref : null,
+        'date_of_birth'           => $dob_sql,
+        'role_interest'           => $role_interest !== '' ? $role_interest : null,
     ]);
 
     $application_id = (int) $pdo->lastInsertId();
@@ -314,11 +433,24 @@ try {
         error_log('Recruitment AI inline processing error: ' . $aiEx->getMessage());
     }
 
+    // Enlace público de seguimiento: se le muestra al candidato al terminar y
+    // Reclutamiento puede reenviárselo desde la ficha de la postulación.
+    $trackingUrl = '';
+    try {
+        $emailCfg = require __DIR__ . '/config/email_config.php';
+        if (!empty($emailCfg['app_url'])) {
+            $trackingUrl = rtrim($emailCfg['app_url'], '/') . '/track_application.php?code=' . urlencode($application_code);
+        }
+    } catch (Throwable $cfgEx) {
+        error_log('tracking url config error: ' . $cfgEx->getMessage());
+    }
+
     echo json_encode([
         'success'          => true,
         'message'          => 'Solicitud enviada exitosamente.',
         'application_code' => $application_code,
         'application_id'   => $application_id,
+        'tracking_url'     => $trackingUrl,
         'ai'               => [
             'processed' => (bool) ($aiResult['success'] ?? false),
             'score'     => $aiResult['score'] ?? null,

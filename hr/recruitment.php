@@ -9,6 +9,7 @@ ensurePermission('hr_recruitment', '../unauthorized.php');
 $status_filter = $_GET['status'] ?? 'all';
 $job_filter    = $_GET['job']    ?? 'all';
 $ai_filter     = $_GET['ai']     ?? 'all'; // all|high|medium|low|unknown
+$role_filter   = $_GET['role']   ?? 'all'; // all|Inglés|Español|APPOINT
 $search        = trim((string) ($_GET['search'] ?? ''));
 $sort          = $_GET['sort']   ?? 'applied_date';
 $order         = strtoupper($_GET['order'] ?? 'DESC');
@@ -28,6 +29,10 @@ if ($job_filter !== 'all') {
 }
 if (!in_array($ai_filter, ['all', 'high', 'medium', 'low', 'unknown'], true)) {
     $ai_filter = 'all';
+}
+$role_options = ['Inglés', 'Español', 'APPOINT'];
+if ($role_filter !== 'all' && !in_array($role_filter, $role_options, true)) {
+    $role_filter = 'all';
 }
 if (!in_array($view, ['table', 'cards'], true)) {
     $view = 'table';
@@ -70,6 +75,10 @@ if ($ai_filter !== 'all') {
     } elseif ($ai_filter === 'low') {
         $baseQuery .= " AND a.ai_score IS NOT NULL AND a.ai_score < 50";
     }
+}
+if ($role_filter !== 'all') {
+    $baseQuery .= " AND a.role_interest = :role_interest";
+    $params['role_interest'] = $role_filter;
 }
 if ($search !== '') {
     $baseQuery .= " AND (
@@ -283,6 +292,15 @@ function scoreColor(?int $score): string
                 </select>
             </div>
             <div class="md:col-span-2">
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-200 mb-1.5">Rol de interés</label>
+                <select class="form-select" name="role">
+                    <option value="all">Todos los roles</option>
+                    <?php foreach ($role_options as $r): ?>
+                        <option value="<?php echo htmlspecialchars($r); ?>" <?php if ($role_filter === $r) echo 'selected'; ?>><?php echo htmlspecialchars($r); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="md:col-span-2">
                 <label class="block text-xs font-semibold uppercase tracking-wider text-slate-200 mb-1.5">Score IA</label>
                 <select class="form-select" name="ai">
                     <option value="all"     <?php if ($ai_filter==='all')     echo 'selected'; ?>>Todos</option>
@@ -292,9 +310,9 @@ function scoreColor(?int $score): string
                     <option value="unknown" <?php if ($ai_filter==='unknown') echo 'selected'; ?>>Sin evaluar</option>
                 </select>
             </div>
-            <div class="md:col-span-2 flex gap-2">
-                <button class="btn-primary flex-1"><i class="fas fa-filter"></i> Filtrar</button>
-                <a href="recruitment.php" class="btn-secondary"><i class="fas fa-times"></i></a>
+            <div class="md:col-span-12 flex gap-2 md:justify-end">
+                <button class="btn-primary"><i class="fas fa-filter"></i> Filtrar</button>
+                <a href="recruitment.php" class="btn-secondary"><i class="fas fa-times"></i> Limpiar</a>
             </div>
         </form>
     </div>
@@ -343,6 +361,11 @@ function scoreColor(?int $score): string
 
                         <div class="text-sm text-slate-300 flex flex-wrap gap-2">
                             <span><i class="fas fa-briefcase mr-1 text-indigo-400"></i><?php echo htmlspecialchars($app['job_title'] ?? 'Sin vacante'); ?></span>
+                            <?php if (!empty($app['role_interest'])): ?>
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-emerald-200 text-xs font-semibold">
+                                    <i class="fas fa-headset"></i><?php echo htmlspecialchars($app['role_interest']); ?>
+                                </span>
+                            <?php endif; ?>
                             <?php if (!empty($app['email']) && $app['email'] !== 'sin-correo@evallish.local'): ?>
                                 <span><i class="fas fa-envelope mr-1"></i><?php echo htmlspecialchars($app['email']); ?></span>
                             <?php endif; ?>
@@ -372,6 +395,7 @@ function scoreColor(?int $score): string
                             <th class="text-left py-3 px-4 text-slate-100 text-xs font-bold uppercase tracking-wider">Código</th>
                             <th class="text-left py-3 px-4 text-slate-100 text-xs font-bold uppercase tracking-wider">Candidato</th>
                             <th class="text-left py-3 px-4 text-slate-100 text-xs font-bold uppercase tracking-wider">Vacante</th>
+                            <th class="text-left py-3 px-4 text-slate-100 text-xs font-bold uppercase tracking-wider">Rol</th>
                             <th class="text-center py-3 px-4 text-slate-100 text-xs font-bold uppercase tracking-wider">IA</th>
                             <th class="text-left py-3 px-4 text-slate-100 text-xs font-bold uppercase tracking-wider">Estado</th>
                             <th class="text-left py-3 px-4 text-slate-100 text-xs font-bold uppercase tracking-wider">Aplicó</th>
@@ -402,6 +426,15 @@ function scoreColor(?int $score): string
                                         <div class="text-xs text-slate-300 mt-0.5"><i class="fas fa-building mr-1 text-slate-400"></i><?php echo htmlspecialchars($app['job_department']); ?></div>
                                     <?php endif; ?>
                                 </td>
+                                <td class="py-3 px-4">
+                                    <?php if (!empty($app['role_interest'])): ?>
+                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-emerald-200 text-xs font-semibold whitespace-nowrap">
+                                            <i class="fas fa-headset"></i><?php echo htmlspecialchars($app['role_interest']); ?>
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="text-xs text-slate-500">—</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td class="py-3 px-4 text-center">
                                     <div class="inline-flex flex-col items-center gap-1">
                                         <div class="score-donut" style="width:46px;height:46px;--pct: <?php echo $score ?? 0; ?>; --color:<?php echo scoreColor($score); ?>;">
@@ -426,6 +459,7 @@ function scoreColor(?int $score): string
                                             'status' => $status_filter !== 'all' ? $status_filter : null,
                                             'job'    => $job_filter    !== 'all' ? $job_filter    : null,
                                             'ai'     => $ai_filter     !== 'all' ? $ai_filter     : null,
+                                            'role'   => $role_filter   !== 'all' ? $role_filter   : null,
                                             'search' => $search ?: null,
                                             'view'   => $view !== 'table' ? $view : null,
                                             'page'   => $page > 1 ? $page : null,
