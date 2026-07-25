@@ -419,15 +419,10 @@ try {
         $aiCfg = getRecruitmentAIConfig($pdo);
         if (!empty($aiCfg['recruitment_ai_enabled']) && $aiCfg['recruitment_ai_enabled'] !== '0') {
             // Only run inline if there's a CV (PDF). Otherwise still attempt screening from form data.
+            // processApplicationAI() ya deja registrada la disposición sugerida y
+            // avisa a Reclutamiento en la campana con la justificación. Solo la
+            // aplica al candidato si la revisión está apagada en settings.
             $aiResult = processApplicationAI($pdo, $application_id);
-
-            // Optional: auto-shortlist on high score
-            if (!empty($aiResult['score']) && $aiResult['score'] >= (int) ($aiCfg['recruitment_ai_min_score_shortlist'] ?? 75)) {
-                $upd = $pdo->prepare("UPDATE job_applications SET status = 'shortlisted' WHERE id = ? AND status = 'new'");
-                $upd->execute([$application_id]);
-                $hist2 = $pdo->prepare("INSERT INTO application_status_history (application_id, old_status, new_status, notes) VALUES (?, 'new', 'shortlisted', 'Auto-preseleccionado por IA (score alto)')");
-                $hist2->execute([$application_id]);
-            }
         }
     } catch (Throwable $aiEx) {
         error_log('Recruitment AI inline processing error: ' . $aiEx->getMessage());

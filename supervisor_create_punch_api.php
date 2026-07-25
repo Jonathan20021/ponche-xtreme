@@ -133,6 +133,15 @@ try {
         $ipAddress = '127.0.0.1';
     }
 
+    // Foto de las horas del día ANTES de agregar el punch.
+    require_once __DIR__ . '/lib/attendance_audit.php';
+    $auditBeforeCreate = attendanceAuditSnapshot(
+        $pdo,
+        (int) $targetUserId,
+        $hasCustomTimestamp ? $newDate : date('Y-m-d')
+    );
+
+    $customTimestamp = null;
     if ($hasCustomTimestamp) {
         $customTimestamp = $newDate . ' ' . $newTime . ':00';
         $insertStmt = $pdo->prepare("
@@ -149,6 +158,24 @@ try {
     }
 
     $recordId = (int)$pdo->lastInsertId();
+
+    // Historial de modificaciones del ponche: un punch agregado a mano por un
+    // supervisor también mueve las horas del día.
+    $auditNewTimestamp = $customTimestamp ?: date('Y-m-d H:i:s');
+    $auditWorkDate     = date('Y-m-d', strtotime($auditNewTimestamp));
+    attendanceAuditRecord($pdo, [
+        'attendance_id' => $recordId,
+        'user_id'       => (int) $targetUserId,
+        'work_date'     => $auditWorkDate,
+        'action'        => 'CREATE',
+        'old_type'      => null,
+        'new_type'      => $typeSlug,
+        'old_timestamp' => null,
+        'new_timestamp' => $auditNewTimestamp,
+        'reason'        => trim((string) ($_POST['reason'] ?? $_POST['notes'] ?? '')) ?: 'Punch agregado por supervisor',
+        'source'        => 'monitor supervisor',
+        'performed_by'  => $_SESSION['user_id'] ?? null,
+    ], $auditBeforeCreate);
 
     $supervisorId = (int)$_SESSION['user_id'];
     $supervisorName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Supervisor';

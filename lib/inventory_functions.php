@@ -196,6 +196,12 @@ if (!function_exists('inv_record_movement')) {
                 ]
             );
 
+            // Aviso automático si este movimiento dejó el artículo agotado, bajo
+            // el mínimo o próximo a agotarse. Va después del commit y no lanza:
+            // notificar nunca debe tumbar un movimiento de stock ya aplicado.
+            require_once __DIR__ . '/inventory_alerts.php';
+            inv_notify_stock_state($pdo, $itemTypeId, (float) $item['current_stock'], $newStock);
+
             return $movementId;
         } catch (Throwable $e) {
             if ($startedTx && $pdo->inTransaction()) $pdo->rollBack();

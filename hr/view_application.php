@@ -131,6 +131,14 @@ $aiExtracted     = !empty($application['ai_extracted_data']) ? (array) (json_dec
 $aiProcessedAt   = $application['ai_processed_at']   ?? null;
 $aiModelUsed     = $application['ai_model_used']     ?? null;
 
+// Disposición sugerida por la IA pendiente de revisión: mientras esté PENDING el
+// candidato NO se mueve solo, se decide aquí.
+require_once __DIR__ . '/../lib/recruitment_ai.php';
+$aiProposedStatus = $application['ai_proposed_status'] ?? null;
+$aiProposalState  = $application['ai_proposal_state']  ?? null;
+$aiProposalReason = $application['ai_proposal_reason'] ?? '';
+$aiProposalPending = ($aiProposalState === 'PENDING') && !empty($aiProposedStatus);
+
 $aiScoreColor = '#94a3b8';
 $aiScoreLabel = 'Sin evaluar';
 if ($aiScore !== null) {
@@ -225,6 +233,49 @@ require_once '../header.php';
             </div>
         </div>
     </div>
+
+    <?php if ($aiProposalPending): ?>
+        <!-- Disposición sugerida por la IA, esperando decisión humana -->
+        <div class="mb-6 rounded-xl border border-amber-500/50 bg-amber-500/10 p-5">
+            <div class="flex flex-col lg:flex-row lg:items-center gap-4">
+                <div class="flex-1">
+                    <div class="text-xs uppercase font-bold tracking-widest text-amber-300">
+                        <i class="fas fa-gavel"></i> Disposición sugerida por IA · pendiente de aprobación
+                    </div>
+                    <h3 class="text-lg font-bold mt-1 text-white">
+                        <?php echo htmlspecialchars(recruitmentDispositionLabel((string) $aiProposedStatus)); ?>
+                        <?php if ($aiScore !== null): ?>
+                            <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/20 font-semibold">score <?php echo $aiScore; ?>/100</span>
+                        <?php endif; ?>
+                    </h3>
+                    <?php if ($aiProposalReason !== ''): ?>
+                        <p class="text-sm text-amber-100 mt-1"><?php echo htmlspecialchars($aiProposalReason); ?></p>
+                    <?php endif; ?>
+                    <p class="text-xs text-amber-200/80 mt-2">
+                        El candidato sigue en
+                        <strong><?php echo htmlspecialchars($status_labels[$application['status']] ?? $application['status']); ?></strong>
+                        hasta que apruebes esta sugerencia.
+                    </p>
+                </div>
+                <div class="flex gap-2 flex-shrink-0">
+                    <form method="POST" action="recruitment_ai_disposition.php">
+                        <input type="hidden" name="application_id" value="<?php echo (int) $application_id; ?>">
+                        <input type="hidden" name="decision" value="approve">
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
+                            <i class="fas fa-check mr-1"></i> Aplicar disposición
+                        </button>
+                    </form>
+                    <form method="POST" action="recruitment_ai_disposition.php">
+                        <input type="hidden" name="application_id" value="<?php echo (int) $application_id; ?>">
+                        <input type="hidden" name="decision" value="discard">
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-semibold">
+                            <i class="fas fa-xmark mr-1"></i> Descartar sugerencia
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <!-- AI Insights Panel -->
     <div class="ai-banner-card mb-6">

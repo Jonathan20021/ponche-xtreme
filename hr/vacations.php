@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../db.php';
+require_once '../lib/vacation_calculator.php';
 
 // Check permissions
 ensurePermission('hr_vacations', '../unauthorized.php');
@@ -16,22 +17,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_request'])) {
     $vacationType = $_POST['vacation_type'];
     $reason = trim($_POST['reason'] ?? '');
     
-    // Calculate total days
-    $start = new DateTime($startDate);
-    $end = new DateTime($endDate);
-    $totalDays = $start->diff($end)->days + 1;
-    
-    // Get user_id from employee_id
-    $empStmt = $pdo->prepare("SELECT user_id FROM employees WHERE id = ?");
-    $empStmt->execute([$employeeId]);
-    $userId = $empStmt->fetchColumn();
-    
-    $stmt = $pdo->prepare("
-        INSERT INTO vacation_requests (employee_id, user_id, start_date, end_date, total_days, vacation_type, reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([$employeeId, $userId, $startDate, $endDate, $totalDays, $vacationType, $reason]);
-    $successMsg = "Solicitud de vacaciones creada correctamente.";
+    // Dias que consume el periodo. Antes se contaban dias CALENDARIO
+    // (diff + 1), asi que domingos y feriados descontaban vacaciones y el
+    // sabado contaba completo aunque la jornada sea de 4 horas. De ahi los
+    // saldos negativos. Ahora lo calcula lib/vacation_calculator.php.
+    $calc = calculateVacationDays($pdo, $startDate, $endDate);
+    $totalDays = $calc['total'];
+
+    if ($endDate < $startDate) {
+        $errorMsg = 'La fecha final no puede ser anterior a la inicial.';
+    } elseif ($totalDays <= 0) {
+        $errorMsg = 'El período seleccionado no consume días de vacaciones (solo domingos o feriados). Revisa las fechas.';
+    } else {
+        // Get user_id from employee_id
+        $empStmt = $pdo->prepare("SELECT user_id FROM employees WHERE id = ?");
+        $empStmt->execute([$employeeId]);
+        $userId = $empStmt->fetchColumn();
+
+        $b = $calc['breakdown'];
+        $stmt = $pdo->prepare("
+            INSERT INTO vacation_requests
+                (employee_id, user_id, start_date, end_date, total_days, calendar_days,
+                 days_breakdown, vacation_type, reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $employeeId, $userId, $startDate, $endDate, $totalDays,
+            $calc['calendar_days'],
+            sprintf('%d completos, %d medios (sábado), %d domingos, %d feriados',
+                $b['full'], $b['half'], $b['sundays'], $b['holidays']),
+            $vacationType, $reason,
+        ]);
+
+        $successMsg = sprintf(
+            'Solicitud creada: %s día(s) de vacaciones sobre %d días calendario (%d completos, %d sábado(s) a media jornada, %d domingo(s) y %d feriado(s) no se cuentan).',
+            rtrim(rtrim(number_format($totalDays, 1), '0'), '.'),
+            $calc['calendar_days'], $b['full'], $b['half'], $b['sundays'], $b['holidays']
+        );
+    }
 }
 
 // Handle vacation request review
@@ -48,48 +71,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_request'])) {
         $reqStmt->execute([$requestId]);
         $request = $reqStmt->fetch(PDO::FETCH_ASSOC);
         
-        // Update request status
-        $stmt = $pdo->prepare("
-            UPDATE vacation_requests 
-            SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?
-            WHERE id = ?
-        ");
-        $stmt->execute([$newStatus, $_SESSION['user_id'], $reviewNotes, $requestId]);
-        
-        // If approved, update vacation balance
-        if ($newStatus === 'APPROVED' && $request) {
-            $year = date('Y', strtotime($request['start_date']));
-            
-            // Check if balance exists
-            $balanceStmt = $pdo->prepare("SELECT * FROM vacation_balances WHERE employee_id = ? AND year = ?");
-            $balanceStmt->execute([$request['employee_id'], $year]);
-            $balance = $balanceStmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($balance) {
-                // Update existing balance
-                $newUsed = $balance['used_days'] + $request['total_days'];
-                $newRemaining = $balance['total_days'] - $newUsed;
-                
-                $updateBalanceStmt = $pdo->prepare("
-                    UPDATE vacation_balances 
-                    SET used_days = ?, remaining_days = ?
-                    WHERE id = ?
-                ");
-                $updateBalanceStmt->execute([$newUsed, $newRemaining, $balance['id']]);
-            } else {
-                // Create new balance (14 days default)
-                $totalDays = 14.00;
-                $usedDays = $request['total_days'];
-                $remainingDays = $totalDays - $usedDays;
-                
-                $insertBalanceStmt = $pdo->prepare("
-                    INSERT INTO vacation_balances (employee_id, year, total_days, used_days, remaining_days)
-                    VALUES (?, ?, ?, ?, ?)
-                ");
-                $insertBalanceStmt->execute([$request['employee_id'], $year, $totalDays, $usedDays, $remainingDays]);
+        // Comprobante de pago de las vacaciones. Si no se sube ahora, se puede
+        // cargar después sin volver a revisar la solicitud.
+        $receiptPath = null;
+        if (!empty($_FILES['payment_receipt_file']['name'])
+            && ($_FILES['payment_receipt_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+
+            $ext = strtolower(pathinfo($_FILES['payment_receipt_file']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['pdf', 'jpg', 'jpeg', 'png'], true)
+                && (int) $_FILES['payment_receipt_file']['size'] <= 10 * 1024 * 1024) {
+
+                $dir = __DIR__ . '/../uploads/vacation_receipts';
+                if (is_dir($dir) || @mkdir($dir, 0755, true) || is_dir($dir)) {
+                    $fname = 'comprobante_' . $requestId . '_' . date('YmdHis') . '_' . mt_rand(1000, 9999) . '.' . $ext;
+                    if (move_uploaded_file($_FILES['payment_receipt_file']['tmp_name'], $dir . '/' . $fname)) {
+                        $receiptPath = 'uploads/vacation_receipts/' . $fname;
+                    }
+                }
             }
         }
+
+        $paymentAmount = ($_POST['payment_amount'] ?? '') !== '' ? (float) $_POST['payment_amount'] : null;
+        $paymentDate   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['payment_date'] ?? '') ? $_POST['payment_date'] : null;
+        $paymentNotes  = trim((string) ($_POST['payment_notes'] ?? '')) ?: null;
+
+        // Update request status. COALESCE deja intacto lo que ya estaba cargado
+        // si esta revisión no trae comprobante.
+        $stmt = $pdo->prepare("
+            UPDATE vacation_requests
+            SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?,
+                payment_receipt_file = COALESCE(?, payment_receipt_file),
+                payment_amount = COALESCE(?, payment_amount),
+                payment_date = COALESCE(?, payment_date),
+                payment_notes = COALESCE(?, payment_notes)
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $newStatus, $_SESSION['user_id'], $reviewNotes,
+            $receiptPath, $paymentAmount, $paymentDate, $paymentNotes,
+            $requestId,
+        ]);
         
+        // El balance se RECONSTRUYE desde las solicitudes aprobadas y la
+        // antigüedad del colaborador, en vez de irle sumando días a un total
+        // de 14 quemado. Así una corrección posterior en una solicitud queda
+        // reflejada sola, y los días que le tocan salen de su antigüedad
+        // (14 al año, 18 desde el quinto — art. 177 del Código de Trabajo).
+        if ($request) {
+            $year = (int) date('Y', strtotime($request['start_date']));
+            vacationRecalculateBalance($pdo, (int) $request['employee_id'], $year);
+        }
+
         $pdo->commit();
         $successMsg = "Solicitud revisada correctamente.";
     } catch (Exception $e) {
@@ -287,7 +319,11 @@ $balances = $pdo->query("
                         <tbody>
                             <?php foreach ($balances as $balance): ?>
                                 <?php
-                                $percentage = ($balance['used_days'] / $balance['total_days']) * 100;
+                                // total_days puede ser 0 en quien aun no cumple el ano de
+                                // antiguedad; dividir ahi rompia la pagina.
+                                $percentage = ((float) $balance['total_days']) > 0
+                                    ? ($balance['used_days'] / $balance['total_days']) * 100
+                                    : 0;
                                 $progressColor = $percentage >= 80 ? '#ef4444' : ($percentage >= 50 ? '#f59e0b' : '#10b981');
                                 ?>
                                 <tr class="border-b border-slate-800 hover:bg-slate-800/50">
@@ -401,7 +437,37 @@ $balances = $pdo->query("
                                             <p class="text-slate-400 mb-1">
                                                 <i class="fas fa-clock text-orange-400 mr-2"></i>
                                                 Duración: <span class="text-white font-semibold"><?= number_format($request['total_days'], 1) ?> día(s)</span>
+                                                <?php if (!empty($request['calendar_days'])): ?>
+                                                    <span class="text-slate-500 text-xs">de <?= (int) $request['calendar_days'] ?> días calendario</span>
+                                                <?php endif; ?>
                                             </p>
+                                            <?php if (!empty($request['days_breakdown'])): ?>
+                                                <p class="text-slate-500 text-xs mb-1 ml-6" title="Sábado = media jornada; domingos y feriados no consumen vacaciones">
+                                                    <?= htmlspecialchars($request['days_breakdown']) ?>
+                                                </p>
+                                            <?php endif; ?>
+                                            <?php if (!empty($request['payment_receipt_file']) || !empty($request['payment_amount'])): ?>
+                                                <p class="text-slate-400 mb-1">
+                                                    <i class="fas fa-receipt text-emerald-400 mr-2"></i>
+                                                    Pago:
+                                                    <?php if (!empty($request['payment_amount'])): ?>
+                                                        <span class="text-white font-semibold">RD$<?= number_format((float) $request['payment_amount'], 2) ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($request['payment_date'])): ?>
+                                                        <span class="text-slate-500 text-xs"><?= date('d/m/Y', strtotime($request['payment_date'])) ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($request['payment_receipt_file'])): ?>
+                                                        <a href="../<?= htmlspecialchars($request['payment_receipt_file']) ?>" target="_blank"
+                                                           class="ml-1 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-xs hover:bg-emerald-500/30">
+                                                            <i class="fas fa-file-invoice-dollar"></i> Ver comprobante
+                                                        </a>
+                                                    <?php endif; ?>
+                                                </p>
+                                            <?php elseif (strtoupper($request['status']) === 'APPROVED'): ?>
+                                                <p class="text-amber-400/70 text-xs mb-1 ml-6">
+                                                    <i class="fas fa-triangle-exclamation"></i> Sin comprobante de pago
+                                                </p>
+                                            <?php endif; ?>
                                             <p class="text-slate-400 mb-1">
                                                 <i class="fas fa-user-clock text-indigo-400 mr-2"></i>
                                                 Solicitado: <span class="text-white"><?= date('d/m/Y H:i', strtotime($request['created_at'])) ?></span>
@@ -518,14 +584,42 @@ $balances = $pdo->query("
     <div id="reviewModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div class="glass-card" style="width: min(500px, 90%);">
             <h3 class="text-xl font-semibold text-white mb-4">Revisar Solicitud</h3>
-            <form method="POST" id="reviewForm">
+            <form method="POST" id="reviewForm" enctype="multipart/form-data">
                 <input type="hidden" name="review_request" value="1">
                 <input type="hidden" name="request_id" id="review_request_id">
                 <input type="hidden" name="new_status" id="review_new_status">
-                
-                <div class="form-group mb-6">
+
+                <div class="form-group mb-4">
                     <label for="review_notes">Notas (opcional)</label>
-                    <textarea id="review_notes" name="review_notes" rows="4" placeholder="Agrega comentarios sobre esta decisión..."></textarea>
+                    <textarea id="review_notes" name="review_notes" rows="3" placeholder="Agrega comentarios sobre esta decisión..."></textarea>
+                </div>
+
+                <!-- Comprobante de pago de las vacaciones. Se muestra solo al
+                     aprobar: al rechazar no hay nada que pagar. -->
+                <div id="paymentBlock" class="mb-6 p-3 rounded-lg bg-slate-800/60 border border-slate-700">
+                    <p class="text-slate-300 text-sm font-semibold mb-3">
+                        <i class="fas fa-receipt text-emerald-400"></i> Comprobante de pago
+                        <span class="text-slate-500 text-xs font-normal">(opcional, se puede cargar después)</span>
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div class="form-group mb-0">
+                            <label for="payment_amount">Monto pagado</label>
+                            <input type="number" step="0.01" min="0" id="payment_amount" name="payment_amount" placeholder="0.00">
+                        </div>
+                        <div class="form-group mb-0">
+                            <label for="payment_date">Fecha de pago</label>
+                            <input type="date" id="payment_date" name="payment_date">
+                        </div>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="payment_receipt_file">Constancia o comprobante</label>
+                        <input type="file" id="payment_receipt_file" name="payment_receipt_file" accept=".pdf,.jpg,.jpeg,.png">
+                        <p class="text-xs text-slate-400 mt-1">PDF o imagen, hasta 10 MB.</p>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="payment_notes">Referencia</label>
+                        <input type="text" id="payment_notes" name="payment_notes" maxlength="255" placeholder="No. de transferencia, cheque...">
+                    </div>
                 </div>
 
                 <div class="flex gap-3">
@@ -545,6 +639,11 @@ $balances = $pdo->query("
     <script>
         function reviewRequest(requestId, newStatus) {
             document.getElementById('review_request_id').value = requestId;
+            // El comprobante solo tiene sentido si se aprueba.
+            const bloquePago = document.getElementById('paymentBlock');
+            if (bloquePago) {
+                bloquePago.style.display = (newStatus === 'APPROVED') ? '' : 'none';
+            }
             document.getElementById('review_new_status').value = newStatus;
             document.getElementById('reviewModal').classList.remove('hidden');
         }

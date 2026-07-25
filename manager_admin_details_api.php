@@ -17,6 +17,7 @@ header('Content-Type: application/json');
 header('Cache-Control: no-cache, must-revalidate');
 
 require_once 'db.php';
+require_once __DIR__ . '/lib/monitor_history.php';
 
 // Verificar permisos
 if (!isset($_SESSION['user_id'])) {
@@ -127,133 +128,88 @@ try {
         ];
     }
     
-    // Calcular estadísticas del día
-    $stats = [
-        'total_punches' => count($punches),
-        'paid_punches' => 0,
-        'unpaid_punches' => 0,
-        'total_paid_time' => 0,
-        'total_unpaid_time' => 0,
-        'by_type' => []
-    ];
-    
-    // Obtener todos los punches ordenados cronológicamente para calcular duraciones
-    $timeCalcStmt = $pdo->prepare("
-        SELECT 
-            type,
-            timestamp
-        FROM attendance
-        WHERE user_id = ?
-        AND DATE(timestamp) = CURDATE()
-        ORDER BY timestamp ASC
-    ");
-    $timeCalcStmt->execute([$userId]);
-    $timeData = $timeCalcStmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Calcular duraciones entre punches consecutivos
-    for ($i = 0; $i < count($timeData); $i++) {
-        $currentPunch = $timeData[$i];
-        $typeSlug = strtoupper($currentPunch['type']);
-        
-        // IMPORTANTE: Verificar que el tipo existe en el mapa
-        if (!isset($typesMap[$typeSlug])) {
-            error_log("Tipo no encontrado en mapa: $typeSlug");
-            continue; // Saltar este punch si no está en el mapa
-        }
-        
-        $typeInfo = $typesMap[$typeSlug];
-        
-        // Inicializar el tipo si no existe en stats - usar valores directos para evitar referencias
-        if (!isset($stats['by_type'][$typeSlug])) {
-            $label = (string)$typeInfo['label'];
-            $isPaid = (int)$typeInfo['is_paid'];
-            
-            $stats['by_type'][$typeSlug] = [
-                'label' => $label,
-                'count' => 0,
-                'total_seconds' => 0,
-                'is_paid' => $isPaid
-            ];
-            
-        }
-        
-        // Incrementar contador
-        $stats['by_type'][$typeSlug]['count']++;
-        
-        // Calcular duración
-        if ($i < count($timeData) - 1) {
-            // Hay un siguiente punch
-            $nextPunch = $timeData[$i + 1];
-            $duration = strtotime($nextPunch['timestamp']) - strtotime($currentPunch['timestamp']);
-            
-            if ($duration > 0 && $duration < 43200) {
-                $stats['by_type'][$typeSlug]['total_seconds'] += $duration;
-                
-                if ((int)$typeInfo['is_paid'] === 1) {
-                    $stats['total_paid_time'] += $duration;
-                } else {
-                    $stats['total_unpaid_time'] += $duration;
-                }
-            }
-        } else {
-            // Último punch - solo calcular si es pagado
-            $currentTime = time();
-            $punchTime = strtotime($currentPunch['timestamp']);
-            $duration = $currentTime - $punchTime;
-            
-            if ((int)$typeInfo['is_paid'] === 1) {
-                if ($duration > 0 && $duration < 43200) {
-                    $stats['by_type'][$typeSlug]['total_seconds'] += $duration;
-                    $stats['total_paid_time'] += $duration;
-                }
-            }
-        }
+    // ---------------------------------------------------------------------
+    // Tiempo por estado + histórico de disposiciones, desde el cálculo canónico
+    // de la nómina (lib/monitor_history.php). Antes esto tenía su propio
+    // recorrido "delta hasta el siguiente punch" con tope de 12h, que atribuía
+    // mal las sub-pausas y podía no cuadrar con lo que se paga.
+    // ---------------------------------------------------------------------
+    $targetDate = date('Y-m-d');
+    $history = monitorHistoryBuild($pdo, $userId, $targetDate);
+
+    $punchCountByType = [];
+    foreach ($punchesFormatted as $p) {
+        $punchCountByType[$p['type']] = ($punchCountByType[$p['type']] ?? 0) + 1;
     }
-    
-    // Contar punches pagados y no pagados
-    foreach ($stats['by_type'] as $type => $data) {
-        if ((int)$data['is_paid'] === 1) {
+
+    $stats = [
+        'total_punches'     => count($punches),
+        'paid_punches'      => 0,
+        'unpaid_punches'    => 0,
+        'total_paid_time'   => (int) $history['totals']['paid_seconds'],
+        'total_unpaid_time' => (int) $history['totals']['unpaid_seconds'],
+        'by_type'           => []
+    ];
+
+    foreach ($history['by_state'] as $state) {
+        $stats['by_type'][$state['slug']] = [
+            'label'                => $state['label'],
+            'count'                => (int) ($punchCountByType[$state['slug']] ?? $state['episodes']),
+            'total_seconds'        => (int) $state['seconds'],
+            'is_paid'              => $state['is_paid'] ? 1 : 0,
+            'total_time_formatted' => $state['duration_formatted'],
+            'percentage'           => (float) $state['pct'],
+            'episodes'             => (int) $state['episodes'],
+        ];
+    }
+
+    // Tipos marcados que no acumularon tiempo (el EXIT que cierra el día)
+    foreach ($punchCountByType as $slug => $count) {
+        if (isset($stats['by_type'][$slug])) {
+            continue;
+        }
+        $typeInfo = $typesMap[$slug] ?? null;
+        $stats['by_type'][$slug] = [
+            'label'                => $typeInfo['label'] ?? $slug,
+            'count'                => (int) $count,
+            'total_seconds'        => 0,
+            'is_paid'              => (int) ($typeInfo['is_paid'] ?? 0),
+            'total_time_formatted' => '0s',
+            'percentage'           => 0.0,
+            'episodes'             => 0,
+        ];
+    }
+
+    foreach ($stats['by_type'] as $data) {
+        if ((int) $data['is_paid'] === 1) {
             $stats['paid_punches'] += $data['count'];
         } else {
             $stats['unpaid_punches'] += $data['count'];
         }
     }
-    
-    // Formatear tiempos
-    $stats['total_paid_time_formatted'] = formatDuration($stats['total_paid_time']);
+
+    $stats['total_paid_time_formatted']   = formatDuration($stats['total_paid_time']);
     $stats['total_unpaid_time_formatted'] = formatDuration($stats['total_unpaid_time']);
-    $stats['total_time'] = $stats['total_paid_time'] + $stats['total_unpaid_time'];
-    $stats['total_time_formatted'] = formatDuration($stats['total_time']);
-    
-    // Formatear by_type
-    foreach ($stats['by_type'] as $type => &$data) {
-        $data['total_time_formatted'] = formatDuration($data['total_seconds']);
-        $data['percentage'] = $stats['total_time'] > 0 
-            ? round(($data['total_seconds'] / $stats['total_time']) * 100, 1) 
-            : 0;
-        
-    }
-    
-    // Preparar datos para gráfica
+    $stats['total_time']                  = $stats['total_paid_time'] + $stats['total_unpaid_time'];
+    $stats['total_time_formatted']        = formatDuration($stats['total_time']);
+
+    // Preparar datos para gráfica (minutos por estado)
     $chartData = [
         'labels' => [],
         'data' => [],
         'colors' => [],
         'isPaid' => []
     ];
-    
-    foreach ($stats['by_type'] as $type => $data) {
-        if (!isset($typesMap[$type])) {
-            error_log("Tipo $type no encontrado en typesMap al crear gráfica");
+    foreach ($history['by_state'] as $state) {
+        if ((int) $state['seconds'] <= 0) {
             continue;
         }
-        $typeInfo = $typesMap[$type];
-        $chartData['labels'][] = $typeInfo['label'];
-        $chartData['data'][] = round($data['total_seconds'] / 60, 1); // Convertir a minutos
-        $chartData['colors'][] = $typeInfo['color_start'];
-        $chartData['isPaid'][] = $data['is_paid'];
+        $chartData['labels'][] = $state['label'];
+        $chartData['data'][]   = round($state['seconds'] / 60, 1);
+        $chartData['colors'][] = $state['color'];
+        $chartData['isPaid'][] = $state['is_paid'] ? 1 : 0;
     }
-    
+
     echo json_encode([
         'success' => true,
         'timestamp' => date('Y-m-d H:i:s'),
@@ -261,9 +217,13 @@ try {
         'punches' => $punchesFormatted,
         'stats' => $stats,
         'chart_data' => $chartData,
+        // Histórico de disposiciones del día
+        'state_timeline' => $history['timeline'],
+        'state_totals'   => $history['by_state'],
+        'day_totals'     => $history['totals'],
         'attendance_types' => array_values($typesMap)
     ]);
-    
+
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode([

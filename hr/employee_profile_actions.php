@@ -1,0 +1,365 @@
+<?php
+/**
+ * hr/employee_profile_actions.php
+ *
+ * Acciones que se disparan desde el perfil del colaborador:
+ *   - add_warning        : registrar una amonestación
+ *   - add_medical_leave  : registrar una licencia médica
+ *   - assign_campaign    : asignar una campaña (puede tener varias a la vez)
+ *   - end_campaign       : finalizar una asignación de campaña
+ *   - request_signature  : generar el enlace de firma electrónica de un documento
+ *   - terminate          : registrar la salida con motivo y elegibilidad de recontratación
+ *
+ * Todo vuelve al perfil con un mensaje; no hay pantallas intermedias.
+ */
+
+session_start();
+require_once '../db.php';
+require_once '../lib/employee_record.php';
+require_once '../lib/notifications.php';
+
+ensurePermission('hr_employees', '../unauthorized.php');
+
+$employeeId = (int) ($_POST['employee_id'] ?? 0);
+$action     = (string) ($_POST['action'] ?? '');
+$userId     = (int) ($_SESSION['user_id'] ?? 0);
+
+function profileBack(int $employeeId, string $message = '', bool $ok = true): void
+{
+    if ($message !== '') {
+        $_SESSION[$ok ? 'profile_success' : 'profile_error'] = $message;
+    }
+    header('Location: employee_profile.php?id=' . $employeeId);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $employeeId <= 0) {
+    header('Location: employees.php');
+    exit;
+}
+
+// El empleado tiene que existir; también se necesita su user_id para notificar.
+$empStmt = $pdo->prepare("
+    SELECT e.id, e.user_id, e.first_name, e.last_name, e.employee_code, e.campaign_id
+    FROM employees e WHERE e.id = ?
+");
+$empStmt->execute([$employeeId]);
+$employee = $empStmt->fetch(PDO::FETCH_ASSOC);
+if (!$employee) {
+    header('Location: employees.php');
+    exit;
+}
+$employeeName = trim($employee['first_name'] . ' ' . $employee['last_name']);
+
+/**
+ * Guarda un archivo subido dentro de uploads/ y devuelve la ruta relativa.
+ */
+function profileStoreUpload(string $field, string $subdir, int $employeeId): ?string
+{
+    if (empty($_FILES[$field]['name']) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return null;
+    }
+
+    $allowed = ['pdf', 'jpg', 'jpeg', 'png'];
+    $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed, true)) {
+        return null;
+    }
+    if ((int) $_FILES[$field]['size'] > 10 * 1024 * 1024) {
+        return null;
+    }
+
+    $dir = __DIR__ . '/../uploads/' . $subdir;
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+        return null;
+    }
+
+    $name = $subdir . '_' . $employeeId . '_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    if (!move_uploaded_file($_FILES[$field]['tmp_name'], $dir . '/' . $name)) {
+        return null;
+    }
+
+    return 'uploads/' . $subdir . '/' . $name;
+}
+
+try {
+    switch ($action) {
+
+        // ------------------------------------------------------------------
+        case 'add_warning':
+            $subject = trim((string) ($_POST['subject'] ?? ''));
+            $incidentDate = (string) ($_POST['incident_date'] ?? '');
+            if ($subject === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $incidentDate)) {
+                profileBack($employeeId, 'Falta el asunto o la fecha del hecho.', false);
+            }
+
+            $labels = employeeWarningLabels();
+            $type     = array_key_exists($_POST['warning_type'] ?? '', $labels['types']) ? $_POST['warning_type'] : 'VERBAL';
+            $severity = array_key_exists($_POST['severity'] ?? '', $labels['severities']) ? $_POST['severity'] : 'LEVE';
+            $suspension = ($_POST['suspension_days'] ?? '') !== '' ? (float) $_POST['suspension_days'] : null;
+
+            $attachment = profileStoreUpload('attachment', 'warnings', $employeeId);
+
+            $stmt = $pdo->prepare("
+                INSERT INTO employee_warnings
+                    (employee_id, warning_type, severity, subject, description, incident_date,
+                     corrective_action, suspension_days, attachment, issued_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $employeeId, $type, $severity, $subject,
+                trim((string) ($_POST['description'] ?? '')) ?: null,
+                $incidentDate,
+                trim((string) ($_POST['corrective_action'] ?? '')) ?: null,
+                $suspension, $attachment, $userId ?: null,
+            ]);
+
+            profileBack($employeeId, 'Amonestación registrada en el expediente de ' . $employeeName . '.');
+            break;
+
+        // ------------------------------------------------------------------
+        case 'add_medical_leave':
+            $start = (string) ($_POST['start_date'] ?? '');
+            $end   = (string) ($_POST['end_date'] ?? '');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $end)) {
+                profileBack($employeeId, 'Las fechas de la licencia no son válidas.', false);
+            }
+            if ($end < $start) {
+                profileBack($employeeId, 'La fecha final no puede ser anterior a la inicial.', false);
+            }
+
+            $totalDays = (new DateTime($start))->diff(new DateTime($end))->days + 1;
+            $certificate = profileStoreUpload('medical_certificate_file', 'medical_leaves', $employeeId);
+
+            $stmt = $pdo->prepare("
+                INSERT INTO medical_leaves
+                    (employee_id, user_id, leave_type, diagnosis, start_date, end_date, total_days,
+                     is_paid, doctor_name, medical_center, medical_certificate_number,
+                     medical_certificate_file, status, reviewed_by, reviewed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, NOW())
+            ");
+            $stmt->execute([
+                $employeeId,
+                $employee['user_id'] ?: null,
+                (string) ($_POST['leave_type'] ?? 'ENFERMEDAD'),
+                trim((string) ($_POST['diagnosis'] ?? '')) ?: null,
+                $start, $end, $totalDays,
+                isset($_POST['is_paid']) ? 1 : 0,
+                trim((string) ($_POST['doctor_name'] ?? '')) ?: null,
+                trim((string) ($_POST['medical_center'] ?? '')) ?: null,
+                trim((string) ($_POST['medical_certificate_number'] ?? '')) ?: null,
+                $certificate,
+                $userId ?: null,
+            ]);
+
+            // La licencia justifica las ausencias de esos días: el historial del
+            // perfil y el reporte diario las tomarán como justificadas.
+            profileBack($employeeId, "Licencia médica registrada ($totalDays día(s)). Las ausencias de ese período quedan justificadas.");
+            break;
+
+        // ------------------------------------------------------------------
+        case 'assign_campaign':
+            $campaignId = (int) ($_POST['campaign_id'] ?? 0);
+            if ($campaignId <= 0) {
+                profileBack($employeeId, 'Selecciona una campaña.', false);
+            }
+
+            // No duplicar una asignación vigente a la misma campaña
+            $dup = $pdo->prepare("
+                SELECT COUNT(*) FROM employee_campaigns
+                WHERE employee_id = ? AND campaign_id = ? AND end_date IS NULL
+            ");
+            $dup->execute([$employeeId, $campaignId]);
+            if ((int) $dup->fetchColumn() > 0) {
+                profileBack($employeeId, 'El colaborador ya está asignado a esa campaña.', false);
+            }
+
+            $isPrimary = isset($_POST['is_primary']) ? 1 : 0;
+            $startDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['start_date'] ?? '') ? $_POST['start_date'] : date('Y-m-d');
+
+            $pdo->beginTransaction();
+            try {
+                if ($isPrimary) {
+                    // Solo puede haber una principal; el resto queda como secundaria.
+                    $pdo->prepare("UPDATE employee_campaigns SET is_primary = 0 WHERE employee_id = ?")
+                        ->execute([$employeeId]);
+                }
+
+                $ins = $pdo->prepare("
+                    INSERT INTO employee_campaigns (employee_id, campaign_id, is_primary, start_date, assigned_by)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $ins->execute([$employeeId, $campaignId, $isPrimary, $startDate, $userId ?: null]);
+
+                // employees.campaign_id sigue siendo la campaña PRINCIPAL: los
+                // monitores, la nómina y los reportes leen esa columna y no deben
+                // cambiar de comportamiento por esta función.
+                if ($isPrimary || empty($employee['campaign_id'])) {
+                    $pdo->prepare("UPDATE employees SET campaign_id = ? WHERE id = ?")
+                        ->execute([$campaignId, $employeeId]);
+                    if (!$isPrimary) {
+                        $pdo->prepare("UPDATE employee_campaigns SET is_primary = 1 WHERE employee_id = ? AND campaign_id = ? AND end_date IS NULL")
+                            ->execute([$employeeId, $campaignId]);
+                    }
+                }
+
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            profileBack($employeeId, 'Campaña asignada.');
+            break;
+
+        // ------------------------------------------------------------------
+        case 'end_campaign':
+            $assignmentId = (int) ($_POST['assignment_id'] ?? 0);
+            if ($assignmentId <= 0) {
+                profileBack($employeeId, 'Asignación no válida.', false);
+            }
+
+            $rowStmt = $pdo->prepare("SELECT campaign_id, is_primary FROM employee_campaigns WHERE id = ? AND employee_id = ?");
+            $rowStmt->execute([$assignmentId, $employeeId]);
+            $row = $rowStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
+                profileBack($employeeId, 'Asignación no encontrada.', false);
+            }
+
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare("UPDATE employee_campaigns SET end_date = CURDATE() WHERE id = ?")
+                    ->execute([$assignmentId]);
+
+                // Si se cerró la principal, otra vigente toma el relevo para que
+                // employees.campaign_id nunca quede apuntando a una campaña cerrada.
+                if ((int) $row['is_primary'] === 1) {
+                    $next = $pdo->prepare("
+                        SELECT id, campaign_id FROM employee_campaigns
+                        WHERE employee_id = ? AND end_date IS NULL
+                        ORDER BY start_date DESC, id DESC LIMIT 1
+                    ");
+                    $next->execute([$employeeId]);
+                    $nextRow = $next->fetch(PDO::FETCH_ASSOC);
+
+                    if ($nextRow) {
+                        $pdo->prepare("UPDATE employee_campaigns SET is_primary = 1 WHERE id = ?")->execute([$nextRow['id']]);
+                        $pdo->prepare("UPDATE employees SET campaign_id = ? WHERE id = ?")->execute([$nextRow['campaign_id'], $employeeId]);
+                    } else {
+                        $pdo->prepare("UPDATE employees SET campaign_id = NULL WHERE id = ?")->execute([$employeeId]);
+                    }
+                }
+
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            profileBack($employeeId, 'Asignación de campaña finalizada.');
+            break;
+
+        // ------------------------------------------------------------------
+        case 'request_signature':
+            $docKey = trim((string) ($_POST['doc_key'] ?? ''));
+            if ($docKey === '') {
+                profileBack($employeeId, 'Documento no válido.', false);
+            }
+
+            $docStmt = $pdo->prepare("SELECT label FROM required_document_types WHERE doc_key = ? AND is_active = 1");
+            $docStmt->execute([$docKey]);
+            $docLabel = $docStmt->fetchColumn();
+            if ($docLabel === false) {
+                profileBack($employeeId, 'Ese documento no está en el catálogo.', false);
+            }
+
+            // Si ya hay una solicitud pendiente se reutiliza su enlace en vez de
+            // generar otra: dos enlaces vivos para el mismo documento confunden.
+            $existing = $pdo->prepare("
+                SELECT token FROM employee_document_signatures
+                WHERE employee_id = ? AND doc_key = ? AND status = 'PENDIENTE'
+                ORDER BY id DESC LIMIT 1
+            ");
+            $existing->execute([$employeeId, $docKey]);
+            $token = $existing->fetchColumn();
+
+            if ($token === false) {
+                $token = bin2hex(random_bytes(24));
+                $ins = $pdo->prepare("
+                    INSERT INTO employee_document_signatures
+                        (employee_id, doc_key, status, token, requested_by, expires_at)
+                    VALUES (?, ?, 'PENDIENTE', ?, ?, DATE_ADD(NOW(), INTERVAL 30 DAY))
+                ");
+                $ins->execute([$employeeId, $docKey, $token, $userId ?: null]);
+            }
+
+            $_SESSION['profile_signature_link'] = [
+                'doc_key' => $docKey,
+                'label'   => $docLabel,
+                'token'   => $token,
+            ];
+            profileBack($employeeId, 'Enlace de firma listo para "' . $docLabel . '". Compártelo con el colaborador.');
+            break;
+
+        // ------------------------------------------------------------------
+        case 'terminate':
+            $labels = employeeTerminationLabels();
+            $reason = (string) ($_POST['termination_reason'] ?? '');
+            $rehire = (string) ($_POST['rehire_eligibility'] ?? '');
+            $date   = (string) ($_POST['termination_date'] ?? date('Y-m-d'));
+
+            if (!array_key_exists($reason, $labels['reasons'])) {
+                profileBack($employeeId, 'Selecciona un motivo de terminación válido.', false);
+            }
+            if (!array_key_exists($rehire, $labels['rehire'])) {
+                profileBack($employeeId, 'Selecciona la elegibilidad para recontratación.', false);
+            }
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $date = date('Y-m-d');
+            }
+
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare("
+                    UPDATE employees
+                    SET employment_status = 'TERMINATED',
+                        termination_date = ?, termination_reason = ?, termination_notes = ?,
+                        rehire_eligibility = ?, rehire_notes = ?,
+                        terminated_by = ?, terminated_at = NOW()
+                    WHERE id = ?
+                ");
+                $stmt->execute([
+                    $date, $reason,
+                    trim((string) ($_POST['termination_notes'] ?? '')) ?: null,
+                    $rehire,
+                    trim((string) ($_POST['rehire_notes'] ?? '')) ?: null,
+                    $userId ?: null,
+                    $employeeId,
+                ]);
+
+                // Se cierran las campañas vigentes y se desactiva el acceso: si no,
+                // el colaborador seguiría contando como activo en los monitores.
+                $pdo->prepare("UPDATE employee_campaigns SET end_date = ? WHERE employee_id = ? AND end_date IS NULL")
+                    ->execute([$date, $employeeId]);
+
+                if (!empty($employee['user_id'])) {
+                    $pdo->prepare("UPDATE users SET is_active = 0 WHERE id = ?")->execute([$employee['user_id']]);
+                }
+
+                $pdo->commit();
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+
+            profileBack($employeeId, 'Salida registrada: ' . $labels['reasons'][$reason] . ' · ' . $labels['rehire'][$rehire] . '.');
+            break;
+
+        // ------------------------------------------------------------------
+        default:
+            profileBack($employeeId, 'Acción no reconocida.', false);
+    }
+} catch (Throwable $e) {
+    error_log('employee_profile_actions (' . $action . '): ' . $e->getMessage());
+    profileBack($employeeId, 'No se pudo completar la acción: ' . $e->getMessage(), false);
+}

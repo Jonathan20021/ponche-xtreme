@@ -12,11 +12,23 @@ require_once __DIR__ . '/../lib/rate_limiter.php';
 enforceRateLimit(120, 60); // 120 requests por minuto máximo
 
 require_once '../db.php';
+require_once '../lib/work_hours_calculator.php';
 
 // Verificar permisos de HR
 if (!isset($_SESSION['user_id']) || !userHasPermission('hr_dashboard')) {
     http_response_code(401);
     echo json_encode(['error' => 'No autorizado']);
+    exit;
+}
+
+// ---------------------------------------------------------------------------
+// action=history -> histórico de disposiciones de UN empleado en UNA fecha:
+// en qué estado estuvo, desde cuándo y cuánto tiempo permaneció en cada uno.
+// El monitor solo mostraba el estado actual y se perdía todo lo anterior.
+// ---------------------------------------------------------------------------
+if (($_GET['action'] ?? '') === 'history') {
+    require_once __DIR__ . '/../lib/monitor_history.php';
+    monitorHistoryRespond($pdo);
     exit;
 }
 

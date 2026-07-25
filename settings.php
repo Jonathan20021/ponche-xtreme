@@ -353,6 +353,25 @@ try {
                 $exitTimes = $_POST['exit_time'] ?? [];
                 $overtimeMultipliers = $_POST['overtime_multiplier'] ?? [];
 
+                // Historial de cambios salariales: esta edición masiva actualizaba
+                // sueldos y tarifas sin dejar rastro (salary_history estaba vacía),
+                // así que no se podía saber qué cobraba alguien antes ni desde cuándo.
+                require_once __DIR__ . '/lib/salary_history.php';
+                $salaryBefore = [];
+                try {
+                    $ids = array_values(array_filter(array_map('intval', array_keys($hourlyRatesUsd)), static fn($i) => $i > 0));
+                    if (!empty($ids)) {
+                        $ph = implode(',', array_fill(0, count($ids), '?'));
+                        $beforeStmt = $pdo->prepare("SELECT id, hourly_rate, hourly_rate_dop, monthly_salary, monthly_salary_dop FROM users WHERE id IN ($ph)");
+                        $beforeStmt->execute($ids);
+                        foreach ($beforeStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                            $salaryBefore[(int) $row['id']] = $row;
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('update_users salaryBefore: ' . $e->getMessage());
+                }
+
                 $pdo->beginTransaction();
                 $updateWithRoleStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, monthly_salary = ?, hourly_rate_dop = ?, monthly_salary_dop = ?, preferred_currency = ?, department_id = ?, exit_time = ?, overtime_multiplier = ?, role = ? WHERE id = ?");
                 $updateWithoutRoleStmt = $pdo->prepare("UPDATE users SET hourly_rate = ?, monthly_salary = ?, hourly_rate_dop = ?, monthly_salary_dop = ?, preferred_currency = ?, department_id = ?, exit_time = ?, overtime_multiplier = ? WHERE id = ?");
@@ -415,6 +434,23 @@ try {
 
                     if ($newPassword !== '') {
                         $passwordStmt->execute([$newPassword, $userId]);
+                    }
+
+                    // Deja constancia si de verdad cambió la compensación.
+                    if (isset($salaryBefore[$userId])) {
+                        recordSalaryChange(
+                            $pdo,
+                            $userId,
+                            $salaryBefore[$userId],
+                            [
+                                'hourly_rate'        => (float) $rateUsd,
+                                'hourly_rate_dop'    => (float) $rateDop,
+                                'monthly_salary'     => (float) $monthlyUsd,
+                                'monthly_salary_dop' => (float) $monthlyDop,
+                            ],
+                            $_SESSION['user_id'] ?? null,
+                            'Actualizado desde Ajustes (edición de usuarios)'
+                        );
                     }
                 }
 
@@ -1029,6 +1065,80 @@ try {
                     $successMessages[] = 'Configuración de intervalos de actualización guardada. Recarga las páginas abiertas para aplicarla.';
                 } catch (PDOException $e) {
                     $errorMessages[] = 'Error al guardar la configuración de intervalos de actualización.';
+                }
+                break;
+
+            case 'update_notifications_config':
+                // Centro de notificaciones (campana) + revisión de la disposición
+                // sugerida por la IA en Reclutamiento + alertas de stock.
+                // Todo aquí para no dejar destinatarios ni umbrales hardcodeados.
+                $notifEnabled   = isset($_POST['notifications_enabled']) ? 1 : 0;
+                $notifPoll      = max(15, min(600, (int) ($_POST['notifications_poll_seconds'] ?? 90)));
+                $notifRetention = max(1,  min(365, (int) ($_POST['notifications_retention_days'] ?? 45)));
+
+                $aiRequireApproval = isset($_POST['recruitment_ai_require_approval']) ? 1 : 0;
+                $aiNotifyRoles     = trim((string) ($_POST['recruitment_ai_notify_roles'] ?? ''));
+                $aiNotifyUserIds   = trim((string) ($_POST['recruitment_ai_notify_user_ids'] ?? ''));
+                $aiNotifyEmail     = isset($_POST['recruitment_ai_notify_email']) ? 1 : 0;
+                $aiNotifyEmailTo   = trim((string) ($_POST['recruitment_ai_notify_email_recipients'] ?? ''));
+
+                $stockEnabled   = isset($_POST['inventory_stock_alerts_enabled']) ? 1 : 0;
+                $stockRoles     = trim((string) ($_POST['inventory_stock_alert_roles'] ?? ''));
+                $stockUserIds   = trim((string) ($_POST['inventory_stock_alert_user_ids'] ?? ''));
+                $stockNearPct   = max(0, min(200, (int) ($_POST['inventory_stock_alert_near_pct'] ?? 20)));
+                $stockCooldown  = max(1, min(168, (int) ($_POST['inventory_stock_alert_cooldown_hours'] ?? 24)));
+                $stockDigest    = isset($_POST['inventory_stock_alert_digest']) ? 1 : 0;
+                $stockEmail     = isset($_POST['inventory_stock_alert_email']) ? 1 : 0;
+                $stockEmailTo   = trim((string) ($_POST['inventory_stock_alert_email_recipients'] ?? ''));
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'string', ?)
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['notifications_enabled',        (string) $notifEnabled,   'notifications']);
+                    $stmt->execute(['notifications_poll_seconds',   (string) $notifPoll,      'notifications']);
+                    $stmt->execute(['notifications_retention_days', (string) $notifRetention, 'notifications']);
+
+                    $stmt->execute(['recruitment_ai_require_approval',        (string) $aiRequireApproval, 'recruitment_ai']);
+                    $stmt->execute(['recruitment_ai_notify_roles',            $aiNotifyRoles,              'recruitment_ai']);
+                    $stmt->execute(['recruitment_ai_notify_user_ids',         $aiNotifyUserIds,            'recruitment_ai']);
+                    $stmt->execute(['recruitment_ai_notify_email',            (string) $aiNotifyEmail,     'recruitment_ai']);
+                    $stmt->execute(['recruitment_ai_notify_email_recipients', $aiNotifyEmailTo,            'recruitment_ai']);
+
+                    $stmt->execute(['inventory_stock_alerts_enabled',         (string) $stockEnabled,  'inventory']);
+                    $stmt->execute(['inventory_stock_alert_roles',            $stockRoles,             'inventory']);
+                    $stmt->execute(['inventory_stock_alert_user_ids',         $stockUserIds,           'inventory']);
+                    $stmt->execute(['inventory_stock_alert_near_pct',         (string) $stockNearPct,  'inventory']);
+                    $stmt->execute(['inventory_stock_alert_cooldown_hours',   (string) $stockCooldown, 'inventory']);
+                    $stmt->execute(['inventory_stock_alert_digest',           (string) $stockDigest,   'inventory']);
+                    $stmt->execute(['inventory_stock_alert_email',            (string) $stockEmail,    'inventory']);
+                    $stmt->execute(['inventory_stock_alert_email_recipients', $stockEmailTo,           'inventory']);
+
+                    $successMessages[] = 'Configuración de notificaciones guardada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al guardar la configuración de notificaciones.';
+                }
+                break;
+
+            case 'run_stock_alerts_now':
+                // Barrido manual de stock, para verificar la configuración sin
+                // esperar a la tarea programada.
+                try {
+                    require_once __DIR__ . '/lib/inventory_alerts.php';
+                    $scan = inv_scan_stock_alerts($pdo, 'revisión manual desde Ajustes');
+                    $successMessages[] = sprintf(
+                        'Revisión de stock ejecutada: %d artículos revisados, %d aviso(s) creado(s) (agotados: %d, bajo el mínimo: %d, por agotarse: %d).',
+                        $scan['scanned'], $scan['alerted'],
+                        $scan['by_level']['OUT'], $scan['by_level']['LOW'], $scan['by_level']['NEAR']
+                    );
+                    if ($scan['alerted'] === 0) {
+                        $successMessages[] = 'No se crearon avisos nuevos: o no hay artículos en alerta, o ya se avisó dentro de la ventana de silencio configurada.';
+                    }
+                } catch (Throwable $e) {
+                    $errorMessages[] = 'Error al ejecutar la revisión de stock: ' . $e->getMessage();
                 }
                 break;
 
@@ -3752,6 +3862,252 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         </script>
 
         <!-- Auto-refresh / Polling Intervals Configuration -->
+        <!-- Centro de Notificaciones: campana + disposiciones de IA + alertas de stock -->
+        <section id="notifications-config" class="glass-card space-y-6">
+            <?php
+                $notifKeys = [
+                    'notifications_enabled'                  => '1',
+                    'notifications_poll_seconds'             => '90',
+                    'notifications_retention_days'           => '45',
+                    'recruitment_ai_require_approval'        => '1',
+                    'recruitment_ai_notify_roles'            => 'HR,Admin',
+                    'recruitment_ai_notify_user_ids'         => '',
+                    'recruitment_ai_notify_email'            => '0',
+                    'recruitment_ai_notify_email_recipients' => '',
+                    'inventory_stock_alerts_enabled'         => '1',
+                    'inventory_stock_alert_roles'            => 'HR,Admin,IT',
+                    'inventory_stock_alert_user_ids'         => '',
+                    'inventory_stock_alert_near_pct'         => '20',
+                    'inventory_stock_alert_cooldown_hours'   => '24',
+                    'inventory_stock_alert_digest'           => '1',
+                    'inventory_stock_alert_email'            => '0',
+                    'inventory_stock_alert_email_recipients' => '',
+                ];
+                $notifCfg = $notifKeys;
+                try {
+                    $nStmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings
+                                          WHERE setting_key LIKE 'notifications_%'
+                                             OR setting_key LIKE 'recruitment_ai_notify%'
+                                             OR setting_key = 'recruitment_ai_require_approval'
+                                             OR setting_key LIKE 'inventory_stock_alert%'");
+                    foreach ($nStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $nRow) {
+                        if (array_key_exists($nRow['setting_key'], $notifCfg)) {
+                            $notifCfg[$nRow['setting_key']] = (string) ($nRow['setting_value'] ?? '');
+                        }
+                    }
+                } catch (PDOException $e) {
+                    // Si aún no corrió run_notifications_migration.php se muestran los defaults.
+                }
+
+                // Pendientes ahora mismo, para dar contexto al configurar
+                $notifPendingAi = 0;
+                $notifUnreadAll = 0;
+                try {
+                    $notifPendingAi = (int) $pdo->query("SELECT COUNT(*) FROM job_applications WHERE ai_proposal_state = 'PENDING'")->fetchColumn();
+                } catch (PDOException $e) { /* columnas aún no creadas */ }
+                try {
+                    $notifUnreadAll = (int) $pdo->query("SELECT COUNT(*) FROM system_notifications WHERE resolved_at IS NULL")->fetchColumn();
+                } catch (PDOException $e) { /* tabla aún no creada */ }
+
+                $notifRolesList = [];
+                try {
+                    $notifRolesList = $pdo->query("SELECT DISTINCT role FROM section_permissions ORDER BY role")->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                } catch (PDOException $e) { /* ignorar */ }
+            ?>
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-bell text-amber-400"></i>
+                        Notificaciones del Sistema
+                    </h2>
+                    <p class="text-muted text-sm">La campana del encabezado. Aquí se define quién recibe los avisos
+                        dentro del ponche: las disposiciones que sugiere la IA de Reclutamiento (para revisarlas antes de
+                        aplicarlas) y las alertas de stock bajo o próximo a agotarse del Inventario.</p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $notifCfg['notifications_enabled'] === '1' ? 'check-circle text-green-400' : 'times-circle text-amber-400' ?>"></i>
+                    <?= $notifCfg['notifications_enabled'] === '1' ? 'Campana activa' : 'Campana apagada' ?>
+                </span>
+            </div>
+
+            <?php if ($notifPendingAi > 0 || $notifUnreadAll > 0): ?>
+                <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 text-sm text-amber-200">
+                    <i class="fas fa-info-circle"></i>
+                    Ahora mismo hay <strong><?= $notifPendingAi ?></strong> disposición(es) de IA esperando revisión y
+                    <strong><?= $notifUnreadAll ?></strong> notificación(es) sin resolver.
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" class="space-y-6">
+                <input type="hidden" name="action" value="update_notifications_config">
+
+                <!-- Campana -->
+                <div class="section-card p-5 space-y-4">
+                    <h3 class="font-semibold text-primary"><i class="fas fa-bell text-amber-400"></i> Campana</h3>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="notifications_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $notifCfg['notifications_enabled'] === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Mostrar la campana de notificaciones</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Si se apaga, no se crean ni se muestran notificaciones en pantalla
+                        (los reportes por correo siguen igual).</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-stopwatch"></i> Revisar si hay nuevas (segundos)</label>
+                            <input type="number" name="notifications_poll_seconds" min="15" max="600"
+                                value="<?= (int) $notifCfg['notifications_poll_seconds'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Recomendado 90s. Subirlo reduce peticiones (el 429 de
+                                HostGator). También respeta la pausa en segundo plano.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-broom"></i> Retención (días)</label>
+                            <input type="number" name="notifications_retention_days" min="1" max="365"
+                                value="<?= (int) $notifCfg['notifications_retention_days'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Las notificaciones ya atendidas se borran pasado este
+                                tiempo. Las que piden acción y siguen sin resolver no se borran.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reclutamiento: disposición sugerida por la IA -->
+                <div class="section-card p-5 space-y-4">
+                    <h3 class="font-semibold text-primary"><i class="fas fa-user-check text-purple-400"></i>
+                        Reclutamiento — disposición sugerida por la IA</h3>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="recruitment_ai_require_approval" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $notifCfg['recruitment_ai_require_approval'] === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Pedir aprobación antes de aplicar la disposición al candidato</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Activado (recomendado): al evaluar una postulación, la IA
+                        <strong>propone</strong> la disposición y manda la notificación con el resultado de la evaluación
+                        (ubicación, disponibilidad, perfil, score) y la justificación. El candidato no se mueve hasta que
+                        alguien aprueba desde su ficha. Apagado: se preselecciona solo por score alto, como antes
+                        (nunca se descarta a nadie de forma automática).</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-shield"></i> Roles que reciben el aviso</label>
+                            <input type="text" name="recruitment_ai_notify_roles"
+                                value="<?= htmlspecialchars($notifCfg['recruitment_ai_notify_roles']) ?>"
+                                class="input-control" placeholder="HR,Admin">
+                            <p class="text-xs text-muted mt-1">Separados por coma.
+                                <?php if (!empty($notifRolesList)): ?>
+                                    Disponibles: <?= htmlspecialchars(implode(', ', $notifRolesList)) ?>.
+                                <?php endif; ?>
+                            </p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-tag"></i> Además, estos usuarios (IDs)</label>
+                            <input type="text" name="recruitment_ai_notify_user_ids"
+                                value="<?= htmlspecialchars($notifCfg['recruitment_ai_notify_user_ids']) ?>"
+                                class="input-control" placeholder="Ej: 85,102">
+                            <p class="text-xs text-muted mt-1">IDs de usuario separados por coma, para avisar a una
+                                persona en concreto aunque su rol no esté en la lista.</p>
+                        </div>
+                    </div>
+
+                    <label class="inline-flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="recruitment_ai_notify_email" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $notifCfg['recruitment_ai_notify_email'] === '1' ? 'checked' : '' ?>>
+                        <span>Enviar también copia por correo</span>
+                    </label>
+                    <div>
+                        <label class="form-label"><i class="fas fa-envelope"></i> Correos</label>
+                        <input type="text" name="recruitment_ai_notify_email_recipients"
+                            value="<?= htmlspecialchars($notifCfg['recruitment_ai_notify_email_recipients']) ?>"
+                            class="input-control" placeholder="correo1@empresa.com, correo2@empresa.com">
+                    </div>
+                </div>
+
+                <!-- Inventario: alertas de stock -->
+                <div class="section-card p-5 space-y-4">
+                    <h3 class="font-semibold text-primary"><i class="fas fa-boxes-stacked text-emerald-400"></i>
+                        Inventario — stock bajo y próximo a agotarse</h3>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="inventory_stock_alerts_enabled" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $notifCfg['inventory_stock_alerts_enabled'] === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Avisar automáticamente cuando un producto esté bajo o por agotarse</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Avisa en dos momentos: al instante, cuando una salida de inventario
+                        deja el artículo bajo el mínimo o en cero; y en la revisión programada (8:10 AM y 2:10 PM), para
+                        los que llevan días bajos y nadie mueve.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-shield"></i> Roles que reciben el aviso</label>
+                            <input type="text" name="inventory_stock_alert_roles"
+                                value="<?= htmlspecialchars($notifCfg['inventory_stock_alert_roles']) ?>"
+                                class="input-control" placeholder="HR,Admin,IT">
+                            <p class="text-xs text-muted mt-1">Separados por coma.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-tag"></i> Además, estos usuarios (IDs)</label>
+                            <input type="text" name="inventory_stock_alert_user_ids"
+                                value="<?= htmlspecialchars($notifCfg['inventory_stock_alert_user_ids']) ?>"
+                                class="input-control" placeholder="Ej: 85">
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-percentage"></i> Margen "próximo a agotarse" (%)</label>
+                            <input type="number" name="inventory_stock_alert_near_pct" min="0" max="200"
+                                value="<?= (int) $notifCfg['inventory_stock_alert_near_pct'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">Avisa cuando la existencia esté a este % por encima del
+                                mínimo. Con 20% y un mínimo de 10, avisa al bajar de 12. En 0 solo avisa al llegar al
+                                mínimo.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-hourglass-half"></i> Ventana de silencio (horas)</label>
+                            <input type="number" name="inventory_stock_alert_cooldown_hours" min="1" max="168"
+                                value="<?= (int) $notifCfg['inventory_stock_alert_cooldown_hours'] ?>" class="input-control" required>
+                            <p class="text-xs text-muted mt-1">No se repite el aviso del mismo artículo en el mismo nivel
+                                durante este tiempo. Evita que un artículo con muchas salidas llene la campana.</p>
+                        </div>
+                    </div>
+
+                    <label class="inline-flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="inventory_stock_alert_digest" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $notifCfg['inventory_stock_alert_digest'] === '1' ? 'checked' : '' ?>>
+                        <span>Agrupar los "bajo el mínimo" en un solo aviso resumen</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Recomendado. En la revisión programada suele haber decenas de
+                        artículos bajo el mínimo a la vez; un aviso por cada uno dejaría la campana inservible. Los
+                        <strong>agotados</strong> siempre van uno por uno.</p>
+
+                    <label class="inline-flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="inventory_stock_alert_email" value="1" class="w-5 h-5 accent-cyan-500"
+                            <?= $notifCfg['inventory_stock_alert_email'] === '1' ? 'checked' : '' ?>>
+                        <span>Enviar también copia por correo</span>
+                    </label>
+                    <div>
+                        <label class="form-label"><i class="fas fa-envelope"></i> Correos</label>
+                        <input type="text" name="inventory_stock_alert_email_recipients"
+                            value="<?= htmlspecialchars($notifCfg['inventory_stock_alert_email_recipients']) ?>"
+                            class="input-control" placeholder="correo1@empresa.com, correo2@empresa.com">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Configuración
+                    </button>
+                </div>
+            </form>
+
+            <form method="POST" class="pt-2">
+                <input type="hidden" name="action" value="run_stock_alerts_now">
+                <button type="submit" class="btn-secondary">
+                    <i class="fas fa-magnifying-glass-chart"></i>
+                    Revisar el stock ahora
+                </button>
+                <span class="text-xs text-muted ml-2">Ejecuta el barrido de inventario en este momento, para comprobar la
+                    configuración sin esperar a la revisión programada.</span>
+            </form>
+        </section>
+
         <section id="polling-config" class="glass-card space-y-6">
             <?php $pollCfg = getPollingConfig($pdo); ?>
             <div class="panel-heading">
@@ -7197,6 +7553,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Claude AI (global)',
                 icon: 'fas fa-robot',
                 selectors: ['#claude-global-config']
+            },
+            {
+                key: 'notifications',
+                label: 'Notificaciones (Campana)',
+                icon: 'fas fa-bell',
+                selectors: ['#notifications-config']
             },
             {
                 key: 'polling_intervals',

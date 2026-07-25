@@ -265,6 +265,114 @@ include 'header.php';
     margin-bottom: 0.75rem;
 }
 
+/* ---- Historico de disposiciones (tiempo en cada estado) ---- */
+.state-bar {
+    display: flex;
+    width: 100%;
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--punch-status-bg);
+    margin-bottom: 0.875rem;
+}
+
+.state-bar-seg {
+    display: block;
+    height: 100%;
+    min-width: 2px;
+}
+
+.state-totals {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.state-total-row,
+.state-seg-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 6px;
+    background: var(--punch-status-bg);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+
+.state-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.state-total-label,
+.state-seg-label {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.state-total-episodes,
+.state-seg-live {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.state-total-time,
+.state-seg-duration {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.state-total-pct {
+    width: 3.2rem;
+    text-align: right;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.state-seg-time {
+    font-family: Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.state-seg-row.is-open {
+    outline: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.state-seg-live {
+    color: #10b981;
+    font-weight: 700;
+}
+
+.state-segments-details > summary {
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.state-segments {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-height: 16rem;
+    overflow-y: auto;
+}
+
 .punch-icon {
     width: 40px;
     height: 40px;
@@ -1265,6 +1373,23 @@ include 'header.php';
                 </div>
             </div>
 
+            <!-- Historico de disposiciones: cuanto permanecio en cada estado -->
+            <div class="modal-section">
+                <div class="modal-section-title">
+                    <i class="fas fa-timeline"></i>
+                    Histórico de Disposiciones
+                    <span class="text-xs font-normal ml-2" style="color: var(--text-secondary);">
+                        tiempo que permaneció en cada estado
+                    </span>
+                </div>
+                <div id="stateBar" class="state-bar"></div>
+                <div id="stateHistory">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                </div>
+            </div>
+
             <!-- Detalles por Tipo de Punch -->
             <div class="modal-section">
                 <div class="modal-section-title">
@@ -1662,6 +1787,7 @@ async function loadAgentDetails(userId, preserveEditorState = false) {
             }
             updateModalStats(data.stats);
             updatePunchTimeline(data.punches, preserveEditorState);
+            updateStateHistory(data.state_timeline, data.state_totals, data.day_totals);
             updatePunchBreakdown(data.stats.by_type);
             updateChart(data.chart_data);
         } else {
@@ -2344,6 +2470,72 @@ function restorePunchEditorState(existingTypes = []) {
         
         applyStoredPunchStatus(punchId);
     }
+}
+
+/**
+ * Histórico de disposiciones del día: barra proporcional + tramos.
+ *
+ * Responde a lo que faltaba en el monitor: no solo el estado actual, sino en qué
+ * estados estuvo el agente durante su jornada y cuánto permaneció en cada uno.
+ * Las duraciones vienen del cálculo canónico de la nómina (no se recalculan aquí).
+ */
+function updateStateHistory(timeline, stateTotals, dayTotals) {
+    const bar = document.getElementById('stateBar');
+    const box = document.getElementById('stateHistory');
+    if (!bar || !box) return;
+
+    if (!Array.isArray(timeline) || timeline.length === 0) {
+        bar.innerHTML = '';
+        box.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <p class="text-sm">Sin disposiciones registradas en esta fecha</p>
+            </div>
+        `;
+        return;
+    }
+
+    const totalSeconds = (dayTotals && dayTotals.total_seconds) ? dayTotals.total_seconds : 0;
+
+    // Barra proporcional de la jornada completa
+    bar.innerHTML = timeline.map(seg => {
+        const pct = totalSeconds > 0 ? (seg.seconds * 100 / totalSeconds) : 0;
+        const tip = `${seg.label}: ${seg.start} - ${seg.end || 'ahora'} (${seg.duration_formatted})`;
+        return `<span class="state-bar-seg" style="width:${pct}%;background:${seg.color}" title="${escapeHtml(tip)}"></span>`;
+    }).join('');
+
+    // Totales por estado (lo que el CEO quiere leer de un vistazo)
+    const totalsHtml = (Array.isArray(stateTotals) ? stateTotals : []).map(s => `
+        <div class="state-total-row">
+            <span class="state-dot" style="background:${s.color}"></span>
+            <span class="state-total-label">
+                <i class="${s.icon}"></i> ${escapeHtml(s.label)}
+            </span>
+            <span class="state-total-episodes">${s.episodes}x</span>
+            <span class="state-total-time">${escapeHtml(s.duration_formatted)}</span>
+            <span class="state-total-pct">${s.pct}%</span>
+        </div>
+    `).join('');
+
+    // Tramos en orden cronológico
+    const segmentsHtml = timeline.map(seg => `
+        <div class="state-seg-row${seg.is_open ? ' is-open' : ''}">
+            <span class="state-seg-time">${escapeHtml(seg.start)} → ${escapeHtml(seg.end || 'ahora')}</span>
+            <span class="state-seg-label">
+                <span class="state-dot" style="background:${seg.color}"></span>
+                <i class="${seg.icon}"></i> ${escapeHtml(seg.label)}
+            </span>
+            <span class="state-seg-duration">${escapeHtml(seg.duration_formatted)}</span>
+            ${seg.is_open ? '<span class="state-seg-live">en curso</span>' : ''}
+        </div>
+    `).join('');
+
+    box.innerHTML = `
+        <div class="state-totals">${totalsHtml}</div>
+        <details class="state-segments-details" open>
+            <summary>Secuencia del día (${timeline.length} tramos)</summary>
+            <div class="state-segments">${segmentsHtml}</div>
+        </details>
+    `;
 }
 
 function updatePunchBreakdown(byType) {

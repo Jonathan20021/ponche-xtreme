@@ -99,6 +99,277 @@ function calculateDailyWorkSecondsFromPunchRows(array $punches, array $paidTypeS
     return $dailyWorkSeconds;
 }
 
+/**
+ * Normaliza una lista de slugs de tipos pagados al formato que usa attendance.type.
+ * Úsalo SIEMPRE antes de pasar getPaidAttendanceTypeSlugs() al calculador: si los
+ * slugs no están normalizados igual que los eventos, ningún intervalo hace match
+ * y el resultado sale en 0 horas.
+ *
+ * @param string[] $slugs
+ * @return string[]
+ */
+function normalizePaidTypeSlugs(array $slugs): array
+{
+    $out = [];
+    foreach ($slugs as $slug) {
+        $clean = sanitizeAttendanceTypeSlug((string) $slug);
+        if ($clean !== '') {
+            $out[$clean] = true;
+        }
+    }
+    return array_keys($out);
+}
+
+/**
+ * Segundos pagados por día para un usuario en un rango, leídos del ponche y
+ * calculados con la lógica canónica (la misma que paga la nómina).
+ *
+ * Esta es la puerta de entrada para CUALQUIER pantalla o reporte que muestre
+ * "horas trabajadas": así el panel de RRHH, los Excel y la nómina no pueden
+ * volver a divergir.
+ *
+ * @param string[] $paidTypeSlugs slugs sin normalizar (se normalizan aquí)
+ * @return array<string,int> fecha (Y-m-d) => segundos pagados
+ */
+function getPaidWorkSecondsByDateForUser(
+    PDO $pdo,
+    int $userId,
+    string $startDate,
+    string $endDate,
+    array $paidTypeSlugs
+): array {
+    $paid = normalizePaidTypeSlugs($paidTypeSlugs);
+    if (empty($paid)) {
+        return [];
+    }
+
+    // Se incluye `id` a propósito: el calculador lo usa para descartar el punch
+    // "fantasma" cuando un supervisor editó un timestamp hacia adelante.
+    $stmt = $pdo->prepare("
+        SELECT id, type, timestamp, DATE(timestamp) AS work_date
+        FROM attendance
+        WHERE user_id = ?
+          AND DATE(timestamp) BETWEEN ? AND ?
+        ORDER BY timestamp ASC, id ASC
+    ");
+    $stmt->execute([$userId, $startDate, $endDate]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    return calculateDailyWorkSecondsFromPunchRows($rows, $paid);
+}
+
+/**
+ * Igual que getPaidWorkSecondsByDateForUser() pero además devuelve, por día, el
+ * desglose de tiempo en CADA estado (pagados y pausas) y los punches crudos.
+ * Lo usa el detalle del monitor en tiempo real.
+ *
+ * @param string[] $paidTypeSlugs
+ * @return array<string,array{work_seconds:int,durations_all:array<string,int>,punches:array}>
+ */
+function getDailyStateBreakdownForUser(
+    PDO $pdo,
+    int $userId,
+    string $startDate,
+    string $endDate,
+    array $paidTypeSlugs
+): array {
+    $paid = normalizePaidTypeSlugs($paidTypeSlugs);
+
+    $stmt = $pdo->prepare("
+        SELECT id, type, timestamp, DATE(timestamp) AS work_date
+        FROM attendance
+        WHERE user_id = ?
+          AND DATE(timestamp) BETWEEN ? AND ?
+        ORDER BY timestamp ASC, id ASC
+    ");
+    $stmt->execute([$userId, $startDate, $endDate]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $byDate = [];
+    foreach ($rows as $row) {
+        $byDate[$row['work_date']][] = $row;
+    }
+
+    $out = [];
+    foreach ($byDate as $date => $dayRows) {
+        $calc = calculateWorkSecondsFromPunches($dayRows, $paid);
+        $out[$date] = [
+            'work_seconds'  => (int) ($calc['work_seconds'] ?? 0),
+            'durations_all' => $calc['durations_all'] ?? [],
+            'punches'       => $dayRows,
+        ];
+    }
+    ksort($out);
+    return $out;
+}
+
+/**
+ * Línea de tiempo de estados de un día: en qué estado estuvo el agente, desde
+ * cuándo, hasta cuándo y cuánto duró. Aplica EXACTAMENTE las mismas reglas que
+ * computeDurationsWithPauseWindows() (de ahí sale el total pagado), de modo que
+ * el histórico del monitor no puede contradecir a la nómina.
+ *
+ * Reglas heredadas:
+ *   - Una ventana de pausa es UN segmento: las sub-pausas que caen dentro (un
+ *     BA_NO en medio de un BREAK) las absorbe la pausa externa.
+ *   - ENTRY es un marcador: no interrumpe un estado pagado ya activo.
+ *   - EXIT cierra la jornada.
+ *   - Tramos pagados consecutivos del mismo slug se unen en un solo segmento.
+ *
+ * @param array<int,array{type:string,timestamp:string|int,id?:int}> $punches
+ * @param string[] $paidTypeSlugs
+ * @param int|null $nowTs si se pasa, el último segmento se extiende hasta ahí y
+ *                        se marca is_open (para el estado en vivo del monitor).
+ * @return array<int,array{slug:string,start:int,end:int,seconds:int,is_paid:bool,is_open:bool}>
+ */
+function computeStateSegments(array $punches, array $paidTypeSlugs, ?int $nowTs = null): array
+{
+    $paidSet = [];
+    foreach (normalizePaidTypeSlugs($paidTypeSlugs) as $slug) {
+        $paidSet[$slug] = true;
+    }
+
+    $events = [];
+    foreach ($punches as $row) {
+        $slug = sanitizeAttendanceTypeSlug($row['type'] ?? '');
+        if ($slug === '') {
+            continue;
+        }
+        $ts = is_int($row['timestamp'] ?? null) ? $row['timestamp'] : strtotime((string) ($row['timestamp'] ?? ''));
+        if ($ts === false || $ts === null) {
+            continue;
+        }
+        $event = ['slug' => $slug, 'timestamp' => (int) $ts];
+        if (isset($row['id'])) {
+            $event['id'] = (int) $row['id'];
+        }
+        $events[] = $event;
+    }
+    usort($events, static fn($a, $b) => $a['timestamp'] <=> $b['timestamp']);
+
+    // Mismo descarte del punch "fantasma" de una edición de supervisor.
+    $clean = [];
+    foreach ($events as $event) {
+        $lastIdx = count($clean) - 1;
+        if ($lastIdx >= 0
+            && isset($paidSet[$event['slug']])
+            && $clean[$lastIdx]['slug'] === $event['slug']
+            && isset($event['id'], $clean[$lastIdx]['id'])
+        ) {
+            if ((int) $event['id'] > (int) $clean[$lastIdx]['id']) {
+                $clean[] = $event;
+            } else {
+                $clean[$lastIdx] = $event;
+            }
+        } else {
+            $clean[] = $event;
+        }
+    }
+    $events = $clean;
+
+    $count = count($events);
+    if ($count === 0) {
+        return [];
+    }
+
+    $entrySlug = sanitizeAttendanceTypeSlug('ENTRY');
+    $exitSlug  = sanitizeAttendanceTypeSlug('EXIT');
+    $boundarySet = [$entrySlug => true, $exitSlug => true];
+
+    $segments = [];
+    $activePaidSlug = null;
+    $pauseStart = null;
+    $pauseSlug = null;
+
+    // Añade un tramo al final, uniéndolo al anterior si es el mismo estado.
+    $push = static function (string $slug, int $start, int $end, bool $isPaid) use (&$segments): void {
+        if ($end <= $start) {
+            return;
+        }
+        $lastIdx = count($segments) - 1;
+        if ($lastIdx >= 0 && $segments[$lastIdx]['slug'] === $slug && $segments[$lastIdx]['end'] === $start) {
+            $segments[$lastIdx]['end'] = $end;
+            $segments[$lastIdx]['seconds'] = $end - $segments[$lastIdx]['start'];
+            return;
+        }
+        $segments[] = [
+            'slug'    => $slug,
+            'start'   => $start,
+            'end'     => $end,
+            'seconds' => $end - $start,
+            'is_paid' => $isPaid,
+            'is_open' => false,
+        ];
+    };
+
+    for ($i = 0; $i < $count; $i++) {
+        $event = $events[$i];
+        $slug = $event['slug'];
+        $isPaid = isset($paidSet[$slug]);
+        $isBoundary = isset($boundarySet[$slug]);
+        $isExit = ($slug === $exitSlug);
+
+        if ($isPaid) {
+            if ($pauseStart !== null) {
+                $push($pauseSlug, $pauseStart, $event['timestamp'], false);
+                $pauseStart = null;
+                $pauseSlug = null;
+            }
+            $activePaidSlug = $slug;
+        } elseif ($isExit) {
+            if ($pauseStart !== null) {
+                $push($pauseSlug, $pauseStart, $event['timestamp'], false);
+                $pauseStart = null;
+                $pauseSlug = null;
+            }
+            $activePaidSlug = null;
+        } elseif ($isBoundary) {
+            // ENTRY: marcador, no cambia el estado activo.
+        } else {
+            $activePaidSlug = null;
+            if ($pauseStart === null) {
+                $pauseStart = $event['timestamp'];
+                $pauseSlug = $slug;
+            }
+        }
+
+        $nextTs = ($i + 1 < $count) ? $events[$i + 1]['timestamp'] : null;
+        if ($nextTs !== null) {
+            if ($activePaidSlug !== null) {
+                $push($activePaidSlug, $event['timestamp'], $nextTs, true);
+            } elseif ($pauseStart !== null) {
+                // Se acredita al cerrar la ventana, para que la pausa externa
+                // absorba las sub-pausas (igual que el cálculo de nómina).
+            } else {
+                $push($slug, $event['timestamp'], $nextTs, false);
+            }
+        }
+    }
+
+    // Pausa que quedó abierta al final del día (nunca volvió del BREAK).
+    if ($pauseStart !== null) {
+        $lastTs = $events[$count - 1]['timestamp'];
+        $push($pauseSlug, $pauseStart, $lastTs, false);
+    }
+
+    // Estado en vivo: extiende el último estado hasta "ahora".
+    if ($nowTs !== null) {
+        $lastEventTs = $events[$count - 1]['timestamp'];
+        $lastSlug = $events[$count - 1]['slug'];
+        if ($nowTs > $lastEventTs && $lastSlug !== $exitSlug) {
+            $openSlug = $activePaidSlug ?? ($pauseSlug ?? $lastSlug);
+            $openStart = $activePaidSlug !== null ? $lastEventTs : ($pauseStart ?? $lastEventTs);
+            $push($openSlug, $openStart, $nowTs, $activePaidSlug !== null);
+            $lastIdx = count($segments) - 1;
+            if ($lastIdx >= 0) {
+                $segments[$lastIdx]['is_open'] = true;
+            }
+        }
+    }
+
+    return $segments;
+}
+
 function getIsoWeekStartDate(string $date): string
 {
     $dt = new DateTimeImmutable($date);

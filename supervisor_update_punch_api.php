@@ -142,12 +142,37 @@ try {
     }
     
     $params[] = $punchId;
-    
+
+    // Foto de las horas del día ANTES del cambio, para el historial de
+    // modificaciones del ponche (equivalente al de Vicidial).
+    require_once __DIR__ . '/lib/attendance_audit.php';
+    $auditWorkDate = date('Y-m-d', strtotime($punch['timestamp']));
+    $auditBefore   = attendanceAuditSnapshot($pdo, (int) $targetUserId, $auditWorkDate);
+
     $updateQuery = "UPDATE attendance SET " . implode(', ', $updates) . " WHERE id = ?";
     $updateStmt = $pdo->prepare($updateQuery);
     $updateStmt->execute($params);
 
     $pdo->commit();
+
+    // Va después del commit: la foto "después" tiene que leer lo ya guardado.
+    $auditNewTimestamp = ($newTime !== null && $newTime !== '')
+        ? $auditWorkDate . ' ' . $newTime . ':00'
+        : $punch['timestamp'];
+
+    attendanceAuditRecord($pdo, [
+        'attendance_id' => $punchId,
+        'user_id'       => (int) $targetUserId,
+        'work_date'     => $auditWorkDate,
+        'action'        => 'UPDATE',
+        'old_type'      => $punch['type'],
+        'new_type'      => $newTypeSlug,
+        'old_timestamp' => $punch['timestamp'],
+        'new_timestamp' => $auditNewTimestamp,
+        'reason'        => trim((string) ($_POST['reason'] ?? $_POST['notes'] ?? '')) ?: null,
+        'source'        => 'monitor supervisor',
+        'performed_by'  => $_SESSION['user_id'] ?? null,
+    ], $auditBefore);
 
     $supervisorId = (int) $_SESSION['user_id'];
     $supervisorName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Supervisor';

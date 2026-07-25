@@ -163,9 +163,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'ip_address' => $record['ip_address']
             ];
 
+            // Foto de las horas del día ANTES de tocarlo: es lo que permite
+            // mostrar después "original vs modificado" como en Vicidial.
+            require_once __DIR__ . '/lib/attendance_audit.php';
+            $auditUserId   = (int) $record['user_id'];
+            $auditOldDate  = date('Y-m-d', strtotime($record['timestamp']));
+            $auditNewDate  = date('Y-m-d', strtotime($timestamp));
+            $auditBefore   = attendanceAuditSnapshot($pdo, $auditUserId, $auditOldDate);
+            $auditBeforeNewDay = ($auditNewDate !== $auditOldDate)
+                ? attendanceAuditSnapshot($pdo, $auditUserId, $auditNewDate)
+                : null;
+
             $update_query = "UPDATE attendance SET type = ?, timestamp = ?, ip_address = ? WHERE id = ?";
             $update_stmt = $pdo->prepare($update_query);
             $update_stmt->execute([$type, $timestamp, $ip_address, $record_id]);
+
+            attendanceAuditRecord($pdo, [
+                'attendance_id' => $record_id,
+                'user_id'       => $auditUserId,
+                'work_date'     => $auditOldDate,
+                'action'        => 'UPDATE',
+                'old_type'      => $record['type'],
+                'new_type'      => $type,
+                'old_timestamp' => $record['timestamp'],
+                'new_timestamp' => $timestamp,
+                'reason'        => $notes ?? null,
+                'source'        => 'edit_record',
+                'performed_by'  => $_SESSION['user_id'] ?? null,
+            ], $auditBefore);
+
+            // Si el punch se movió a otro día, ese día también cambió de horas.
+            if ($auditBeforeNewDay !== null) {
+                attendanceAuditRecord($pdo, [
+                    'attendance_id' => $record_id,
+                    'user_id'       => $auditUserId,
+                    'work_date'     => $auditNewDate,
+                    'action'        => 'UPDATE',
+                    'old_type'      => $record['type'],
+                    'new_type'      => $type,
+                    'old_timestamp' => $record['timestamp'],
+                    'new_timestamp' => $timestamp,
+                    'reason'        => $notes ?? null,
+                    'source'        => 'edit_record (cambio de fecha)',
+                    'performed_by'  => $_SESSION['user_id'] ?? null,
+                ], $auditBeforeNewDay);
+            }
 
             if ($validatedAuthCodeId) {
                 logAuthorizationCodeUsage(

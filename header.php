@@ -120,6 +120,24 @@ $navItems = [
                 'icon' => 'fa-file-contract',
             ],
             [
+                'section' => 'hr_employees',
+                'label' => 'Delivery — Restaurantes',
+                'href' => $baseHref . 'hr/delivery_restaurants.php',
+                'icon' => 'fa-utensils',
+            ],
+            [
+                'section' => 'hr_vacations',
+                'label' => 'Calendario de Vacaciones',
+                'href' => $baseHref . 'hr/vacation_calendar.php',
+                'icon' => 'fa-umbrella-beach',
+            ],
+            [
+                'section' => 'hr_employees',
+                'label' => 'Formatos de Documentos',
+                'href' => $baseHref . 'hr/document_templates.php',
+                'icon' => 'fa-file-pen',
+            ],
+            [
                 'section' => 'hr_recruitment_ai',
                 'label' => 'Análisis Reclutamiento IA',
                 'href' => $baseHref . 'hr/recruitment_ai_analysis.php',
@@ -271,6 +289,20 @@ $userDisplayName = '';
 if ($isAuthenticated) {
     $userDisplayName = $_SESSION['full_name'] ?? ($_SESSION['username'] ?? '');
 }
+
+// Centro de notificaciones (campana). El conteo inicial se pinta ya resuelto
+// para que la campana no aparezca "vacía" mientras carga el primer fetch.
+$notificationsAvailable = false;
+$notificationsUnread = 0;
+$notificationsPollSeconds = 90;
+if ($isAuthenticated) {
+    require_once __DIR__ . '/lib/notifications.php';
+    if (notificationsEnabled($pdo)) {
+        $notificationsAvailable = true;
+        $notificationsUnread = notifyUnreadCount($pdo, (int) $_SESSION['user_id'], (string) ($_SESSION['role'] ?? ''));
+        $notificationsPollSeconds = max(15, (int) (notificationsGetSettings($pdo)['notifications_poll_seconds'] ?? 90));
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -287,6 +319,9 @@ if ($isAuthenticated) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <link href="<?= htmlspecialchars($assetBase) ?>/css/theme.css" rel="stylesheet">
     <link href="<?= htmlspecialchars($assetBase) ?>/css/chat.css" rel="stylesheet">
+    <?php if ($notificationsAvailable): ?>
+        <link href="<?= htmlspecialchars($assetBase) ?>/css/notifications.css" rel="stylesheet">
+    <?php endif; ?>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="<?= htmlspecialchars($assetBase) ?>/js/app.js" defer></script>
@@ -319,6 +354,18 @@ if ($isAuthenticated) {
             };
         </script>
         <script src="<?= htmlspecialchars($assetBase) ?>/js/chat.js?v=<?= time() ?>" defer></script>
+    <?php endif; ?>
+    <?php if ($notificationsAvailable): ?>
+        <script>
+            window.PoncheNotifications = {
+                endpoint: <?= json_encode($baseHref . 'api/notifications.php') ?>,
+                // Las URLs de las notificaciones se guardan relativas a la raíz de
+                // la app; desde hr/ o helpdesk/ hay que prefijar con '../'.
+                baseHref: <?= json_encode($baseHref) ?>,
+                pollSeconds: <?= (int) $notificationsPollSeconds ?>
+            };
+        </script>
+        <script src="<?= htmlspecialchars($assetBase) ?>/js/notifications.js" defer></script>
     <?php endif; ?>
     <title>Evallish BPO Control</title>
 </head>
@@ -414,6 +461,31 @@ if ($isAuthenticated) {
                             </a>
                         <?php endif; ?>
                     <?php endforeach; ?>
+                    <?php if ($notificationsAvailable): ?>
+                        <!-- Centro de notificaciones (stock bajo, disposiciones de IA por revisar...) -->
+                        <div class="notif-center" data-notif-center>
+                            <button type="button" class="notif-bell" data-notif-toggle
+                                aria-haspopup="true" aria-expanded="false" title="Notificaciones">
+                                <i class="fas fa-bell"></i>
+                                <span class="notif-badge<?= $notificationsUnread > 0 ? '' : ' hidden' ?>" data-notif-badge>
+                                    <?= $notificationsUnread > 99 ? '99+' : (int) $notificationsUnread ?>
+                                </span>
+                            </button>
+                            <div class="notif-panel" data-notif-panel hidden>
+                                <div class="notif-panel-head">
+                                    <span class="notif-panel-title">
+                                        <i class="fas fa-bell mr-2"></i>Notificaciones
+                                    </span>
+                                    <button type="button" class="notif-mark-all" data-notif-mark-all>
+                                        Marcar todas como leídas
+                                    </button>
+                                </div>
+                                <div class="notif-list" data-notif-list>
+                                    <div class="notif-empty">Cargando…</div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                     <a href="<?= $baseHref ?>logout.php"
                         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 transition-colors">
                         <i class="fas fa-sign-out-alt text-xs"></i>

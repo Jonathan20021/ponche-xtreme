@@ -582,6 +582,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permission']))
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING', NOW())
             ");
             $insertStmt->execute([$employeeId, $user_id, $permissionType, $startDate, $endDate, $totalDays, $reason]);
+
+    // Aviso automatico a RRHH: el cliente pidio enterarse cada vez que se
+    // registra un permiso, no al dia siguiente por correo.
+    try {
+        require_once __DIR__ . '/lib/employee_notifications.php';
+        notifyPermissionRegistered($pdo, (int) $pdo->lastInsertId());
+    } catch (Throwable $notifyEx) {
+        error_log('notifyPermissionRegistered: ' . $notifyEx->getMessage());
+    }
+
             
             $_SESSION['permission_success'] = "Solicitud de permiso enviada correctamente.";
             header('Location: agent_dashboard.php?dates=' . urlencode($date_filter));

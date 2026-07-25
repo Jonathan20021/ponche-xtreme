@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/lib/work_hours_calculator.php';
 
 ensurePermission('adherence_report');
 
@@ -118,72 +119,45 @@ foreach ($dailyRowsBasic as $row) {
     
     // Obtener todos los punches del día ordenados cronológicamente
     $punchesStmt = $pdo->prepare("
-        SELECT a.timestamp, a.type, at.is_paid
+        SELECT a.id, a.timestamp, a.type
         FROM attendance a
-        LEFT JOIN attendance_types at ON CAST(at.slug AS CHAR) = CAST(a.type AS CHAR)
-        WHERE a.user_id = :user_id 
+        WHERE a.user_id = :user_id
         AND DATE(a.timestamp) = :work_date
-        ORDER BY a.timestamp ASC
+        ORDER BY a.timestamp ASC, a.id ASC
     ");
     $punchesStmt->execute([':user_id' => $userId, ':work_date' => $workDate]);
     $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
-    
-    // Calcular productive_seconds usando lógica de INTERVALOS (paid state periods)
-    $productiveSeconds = 0;
+
+    // Horas productivas con la lógica canónica de la nómina
+    // (lib/work_hours_calculator.php). La versión anterior sumaba solo el tramo
+    // entre punches pagados y perdía el que va del último punch pagado a la
+    // pausa/salida que lo cierra, subvaluando la adherencia.
+    $calc = calculateWorkSecondsFromPunches($punches, normalizePaidTypeSlugs($paidTypes));
+    $productiveSeconds = (int) ($calc['work_seconds'] ?? 0);
+
     $firstEntry = null;
     $lastExit = null;
     $lunchCount = 0;
     $breakCount = 0;
     $meetingCount = 0;
-    
-    $inPaidState = false;
-    $paidStartTime = null;
-    $lastPaidPunchTime = null;
-    
-    for ($i = 0; $i < count($punches); $i++) {
-        $currentPunch = $punches[$i];
-        $currentType = $currentPunch['type'];
-        $currentTime = strtotime($currentPunch['timestamp']);
-        $isPaid = (int)$currentPunch['is_paid'] === 1;
-        
+
+    foreach ($punches as $currentPunch) {
+        $currentSlug = sanitizeAttendanceTypeSlug($currentPunch['type'] ?? '');
+
         // Track first entry and last exit for display
-        if ($currentType === 'Entry' && $firstEntry === null) {
+        if ($currentSlug === 'ENTRY' && $firstEntry === null) {
             $firstEntry = $currentPunch['timestamp'];
         }
-        if ($currentType === 'Exit') {
+        if ($currentSlug === 'EXIT') {
             $lastExit = $currentPunch['timestamp'];
         }
-        
+
         // Count lunch, break, meeting
-        if ($currentType === 'Lunch') $lunchCount++;
-        if ($currentType === 'Break') $breakCount++;
-        if (in_array($currentType, ['Meeting', 'Coaching'])) $meetingCount++;
-        
-        // Interval logic for paid periods
-        if ($isPaid) {
-            $lastPaidPunchTime = $currentTime;
-            
-            if (!$inPaidState) {
-                // Start of paid period
-                $paidStartTime = $currentTime;
-                $inPaidState = true;
-            }
-        } elseif (!$isPaid && $inPaidState) {
-            // End of paid period
-            if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
-                $productiveSeconds += ($lastPaidPunchTime - $paidStartTime);
-            }
-            $inPaidState = false;
-            $paidStartTime = null;
-            $lastPaidPunchTime = null;
-        }
+        if ($currentSlug === 'LUNCH') $lunchCount++;
+        if ($currentSlug === 'BREAK') $breakCount++;
+        if (in_array($currentSlug, ['MEETING', 'COACHING'], true)) $meetingCount++;
     }
-    
-    // If day ends in paid state, count until last paid punch
-    if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
-        $productiveSeconds += ($lastPaidPunchTime - $paidStartTime);
-    }
-    
+
     // Si no hay last_exit, usar hora de salida programada
     if ($lastExit === null && count($punches) > 0) {
         $lastExit = $workDate . ' ' . $exitTime;

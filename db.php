@@ -422,7 +422,7 @@ if (!function_exists('getUserCompensation')) {
     function getUserCompensation(PDO $pdo): array
     {
         $stmt = $pdo->query("
-            SELECT 
+            SELECT
                 u.username,
                 u.hourly_rate,
                 u.monthly_salary,
@@ -431,6 +431,8 @@ if (!function_exists('getUserCompensation')) {
                 u.preferred_currency,
                 u.department_id,
                 u.overtime_multiplier,
+                u.compensation_type,
+                u.role,
                 d.name AS department_name
             FROM users u
             LEFT JOIN departments d ON d.id = u.department_id
@@ -446,9 +448,44 @@ if (!function_exists('getUserCompensation')) {
                 'department_id' => $row['department_id'] !== null ? (int) $row['department_id'] : null,
                 'department_name' => $row['department_name'] ?? null,
                 'overtime_multiplier' => $row['overtime_multiplier'] !== null ? (float) $row['overtime_multiplier'] : null,
+                // 'fixed' (sueldo mensual) o 'hourly' (tarifa por hora). Los reportes
+                // de horas lo necesitan para no inventarle una tarifa horaria a quien
+                // cobra un sueldo fijo.
+                'payment_type' => resolvePaymentType(
+                    $row['compensation_type'] ?? '',
+                    $row['role'] ?? '',
+                    max((float) $row['monthly_salary'], (float) $row['monthly_salary_dop'])
+                ),
             ];
         }
         return $data;
+    }
+}
+
+if (!function_exists('resolvePaymentType')) {
+    /**
+     * Tipo de pago del colaborador: 'fixed' (sueldo mensual) o 'hourly' (por hora).
+     *
+     * Replica la MISMA regla que aplica la nómina (hr/payroll_functions.php):
+     * se respeta users.compensation_type y, si viene vacío o dice 'hourly' pero la
+     * persona no es agente y tiene sueldo mensual configurado, se trata como fijo.
+     *
+     * Los reportes de horas lo usan para mostrar el sueldo mensual de quien cobra
+     * fijo, en vez de multiplicar horas por una tarifa horaria que en su caso no
+     * significa nada (varios administrativos tienen ambos campos llenos).
+     */
+    function resolvePaymentType(?string $compensationType, ?string $role, float $monthlySalary): string
+    {
+        $type = strtolower(trim((string) $compensationType));
+        $roleUpper = strtoupper(trim((string) $role));
+
+        if ($type === 'fixed') {
+            return 'fixed';
+        }
+        if (($type === '' || $type === 'hourly') && $roleUpper !== 'AGENT' && $monthlySalary > 0) {
+            return 'fixed';
+        }
+        return 'hourly';
     }
 }
 

@@ -48,6 +48,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permission']))
 
             $insertStmt->execute([$employeeId, $user_id, strtoupper($permissionType), $startDate, $endDate, $totalDays, $reason]);
             $successMsg = "Solicitud de permiso enviada correctamente. Será revisada por Recursos Humanos.";
+
+    // Aviso automatico a RRHH: el cliente pidio enterarse cada vez que se
+    // registra un permiso, no al dia siguiente por correo.
+    try {
+        require_once __DIR__ . '/../lib/employee_notifications.php';
+        notifyPermissionRegistered($pdo, (int) $pdo->lastInsertId());
+    } catch (Throwable $notifyEx) {
+        error_log('notifyPermissionRegistered: ' . $notifyEx->getMessage());
+    }
+
         } catch (Exception $e) {
             $errorMsg = "Error al enviar la solicitud: " . $e->getMessage();
         }

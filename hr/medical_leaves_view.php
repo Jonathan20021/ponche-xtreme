@@ -266,6 +266,29 @@
                                                 <i class="fas fa-hospital"></i> <?= htmlspecialchars($leave['medical_center']) ?>
                                             </p>
                                         <?php endif; ?>
+                                        <?php // Documentos de respaldo de la licencia ?>
+                                        <?php if (!empty($leave['medical_certificate_file']) || !empty($leave['prescription_file'])): ?>
+                                            <div class="flex flex-wrap gap-2 mt-2">
+                                                <?php if (!empty($leave['medical_certificate_file'])): ?>
+                                                    <a href="../<?= htmlspecialchars($leave['medical_certificate_file']) ?>" target="_blank"
+                                                       class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-xs hover:bg-emerald-500/30"
+                                                       title="Ver certificado médico">
+                                                        <i class="fas fa-file-medical"></i> Certificado
+                                                    </a>
+                                                <?php endif; ?>
+                                                <?php if (!empty($leave['prescription_file'])): ?>
+                                                    <a href="../<?= htmlspecialchars($leave['prescription_file']) ?>" target="_blank"
+                                                       class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-xs hover:bg-cyan-500/30"
+                                                       title="Ver récipe médico">
+                                                        <i class="fas fa-prescription"></i> Récipe
+                                                    </a>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <p class="text-amber-400/70 text-xs mt-2">
+                                                <i class="fas fa-triangle-exclamation"></i> Sin documento de respaldo
+                                            </p>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="py-3 px-4 text-center">
                                         <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold text-white <?= $statusColor ?>">

@@ -5,7 +5,7 @@
             <i class="fas fa-notes-medical text-red-400 mr-2"></i>
             Nueva Licencia Médica
         </h3>
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="create_leave" value="1">
             
             <div class="form-group mb-4">
@@ -88,9 +88,31 @@
                 </label>
             </div>
 
-            <div class="form-group mb-6">
+            <div class="form-group mb-4">
                 <label for="reason">Razón / Detalles *</label>
                 <textarea id="reason" name="reason" rows="3" required placeholder="Describa la razón de la licencia médica..."></textarea>
+            </div>
+
+            <!-- Documento de respaldo: la columna medical_certificate_file existia
+                 desde el inicio pero este formulario nunca la llenaba, asi que las
+                 licencias quedaban sin el certificado que las justifica. -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group mb-0">
+                    <label for="medical_certificate_file">
+                        <i class="fas fa-paperclip"></i> Certificado médico
+                    </label>
+                    <input type="file" id="medical_certificate_file" name="medical_certificate_file"
+                           accept=".pdf,.jpg,.jpeg,.png">
+                    <p class="text-xs text-slate-400 mt-1">PDF o imagen, hasta 10 MB.</p>
+                </div>
+                <div class="form-group mb-0">
+                    <label for="prescription_file">
+                        <i class="fas fa-prescription"></i> Récipe o indicación médica
+                    </label>
+                    <input type="file" id="prescription_file" name="prescription_file"
+                           accept=".pdf,.jpg,.jpeg,.png">
+                    <p class="text-xs text-slate-400 mt-1">Opcional.</p>
+                </div>
             </div>
 
             <div class="flex gap-3">

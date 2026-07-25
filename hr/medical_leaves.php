@@ -35,16 +35,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_leave'])) {
     $userId = $empStmt->fetchColumn();
     
     if ($userId) {
+        // Documentos de respaldo. La licencia se guarda igual aunque falle la
+        // subida: perder el archivo no puede impedir registrar la ausencia.
+        $storeLeaveFile = static function (string $field, int $employeeId): ?string {
+            if (empty($_FILES[$field]['name']) || ($_FILES[$field]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                return null;
+            }
+            $ext = strtolower(pathinfo($_FILES[$field]['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
+                return null;
+            }
+            if ((int) $_FILES[$field]['size'] > 10 * 1024 * 1024) {
+                return null;
+            }
+            $dir = __DIR__ . '/../uploads/medical_leaves';
+            if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+                return null;
+            }
+            try {
+                $name = $field . '_' . $employeeId . '_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+            } catch (Throwable $e) {
+                $name = $field . '_' . $employeeId . '_' . date('YmdHis') . '_' . mt_rand(1000, 9999) . '.' . $ext;
+            }
+            if (!move_uploaded_file($_FILES[$field]['tmp_name'], $dir . '/' . $name)) {
+                return null;
+            }
+            return 'uploads/medical_leaves/' . $name;
+        };
+
+        $certificateFile  = $storeLeaveFile('medical_certificate_file', (int) $employeeId);
+        $prescriptionFile = $storeLeaveFile('prescription_file', (int) $employeeId);
+
         $stmt = $pdo->prepare("
-            INSERT INTO medical_leaves 
-            (employee_id, user_id, leave_type, diagnosis, start_date, end_date, total_days, 
-             is_paid, payment_percentage, doctor_name, medical_center, medical_certificate_number, 
+            INSERT INTO medical_leaves
+            (employee_id, user_id, leave_type, diagnosis, start_date, end_date, total_days,
+             is_paid, payment_percentage, doctor_name, medical_center, medical_certificate_number,
+             medical_certificate_file, prescription_file,
              reason, is_work_related, expected_return_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(?, INTERVAL 1 DAY))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(?, INTERVAL 1 DAY))
         ");
         $stmt->execute([
             $employeeId, $userId, $leaveType, $diagnosis, $startDate, $endDate, $totalDays,
             $isPaid, $paymentPercentage, $doctorName, $medicalCenter, $certificateNumber,
+            $certificateFile, $prescriptionFile,
             $reason, $isWorkRelated, $endDate
         ]);
         

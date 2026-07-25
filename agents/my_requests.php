@@ -6,6 +6,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 require_once '../db.php';
+require_once '../lib/vacation_calculator.php';
 
 $user_id = (int)$_SESSION['user_id'];
 $username = $_SESSION['username'] ?? '';
@@ -64,6 +65,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_permission']) 
     ");
     $stmt->execute([$employeeId, $user_id, $requestType, $startDate, $endDate, $startTime, $endTime, $totalDays, $totalHours, $reason]);
     $successMsg = "Solicitud de permiso enviada correctamente.";
+
+    // Aviso automatico a RRHH: el cliente pidio enterarse cada vez que se
+    // registra un permiso, no al dia siguiente por correo.
+    try {
+        require_once __DIR__ . '/../lib/employee_notifications.php';
+        notifyPermissionRegistered($pdo, (int) $pdo->lastInsertId());
+    } catch (Throwable $notifyEx) {
+        error_log('notifyPermissionRegistered: ' . $notifyEx->getMessage());
+    }
+
 }
 
 // Handle vacation request
@@ -73,16 +84,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_vacation']) &&
     $vacationType = $_POST['vacation_type'];
     $reason = trim($_POST['vacation_reason'] ?? '');
     
-    $start = new DateTime($startDate);
-    $end = new DateTime($endDate);
-    $totalDays = $start->diff($end)->days + 1;
-    
-    $stmt = $pdo->prepare("
-        INSERT INTO vacation_requests (employee_id, user_id, start_date, end_date, total_days, vacation_type, reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ");
-    $stmt->execute([$employeeId, $user_id, $startDate, $endDate, $totalDays, $vacationType, $reason]);
-    $successMsg = "Solicitud de vacaciones enviada correctamente.";
+    // Mismo calculo que usa RRHH: el sabado cuenta media jornada y los domingos
+    // y feriados no consumen vacaciones (lib/vacation_calculator.php).
+    $calc = calculateVacationDays($pdo, $startDate, $endDate);
+    $totalDays = $calc['total'];
+
+    if ($endDate < $startDate) {
+        $errorMsg = 'La fecha final no puede ser anterior a la inicial.';
+    } elseif ($totalDays <= 0) {
+        $errorMsg = 'Ese periodo no consume dias de vacaciones (solo domingos o feriados). Revisa las fechas.';
+    } else {
+        $b = $calc['breakdown'];
+        $stmt = $pdo->prepare("
+            INSERT INTO vacation_requests
+                (employee_id, user_id, start_date, end_date, total_days, calendar_days,
+                 days_breakdown, vacation_type, reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $employeeId, $user_id, $startDate, $endDate, $totalDays,
+            $calc['calendar_days'],
+            sprintf('%d completos, %d medios (sabado), %d domingos, %d feriados',
+                $b['full'], $b['half'], $b['sundays'], $b['holidays']),
+            $vacationType, $reason,
+        ]);
+        $successMsg = sprintf('Solicitud enviada: %s dia(s) de vacaciones sobre %d dias calendario.',
+            rtrim(rtrim(number_format($totalDays, 1), '0'), '.'), $calc['calendar_days']);
+    }
 }
 
 // Get my permission requests

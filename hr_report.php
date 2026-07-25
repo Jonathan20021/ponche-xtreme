@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/lib/work_hours_calculator.php';
 
 ensurePermission('hr_report');
 
@@ -68,8 +69,12 @@ $departmentsList = getAllDepartments($pdo);
 // Get paid attendance types for accurate calculation
 $paidTypes = getPaidAttendanceTypeSlugs($pdo);
 
-// Calculate productive hours based on PAID punch types only (DISPONIBLE, WASAPI, DIGITACION)
-// This matches the payroll calculation logic
+// Horas productivas con la MISMA lógica que paga la nómina
+// (lib/work_hours_calculator.php). Antes este archivo tenía su propia versión
+// del recorrido de punches y solo sumaba el tramo ENTRE punches pagados, no el
+// que va del último punch pagado a la pausa/salida que lo cierra: una jornada
+// normal (DISPONIBLE -> BREAK -> DISPONIBLE -> EXIT) daba 0:00 en vez de ~8h,
+// y el pago mostrado salía igual de bajo.
 $payrollRows = [];
 $totalPunchesAnalyzed = 0;
 $totalPaidPunches = 0;
@@ -81,79 +86,41 @@ if (!empty($paidTypes)) {
     }
     $userStmt = $pdo->query($userQuery);
     $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
+    $paidTypesNormalized = normalizePaidTypeSlugs($paidTypes);
+
     foreach ($users as $user) {
         $userId = $user['id'];
         $userRole = strtoupper($user['role'] ?? 'UNKNOWN');
-        
+
         // Get department name
         $deptStmt = $pdo->prepare("SELECT name FROM departments WHERE id = ?");
         $deptStmt->execute([$user['department_id']]);
         $deptName = $deptStmt->fetchColumn();
-        
-        // Get all punches for this user in the period
-        $punchesStmt = $pdo->prepare("
-            SELECT timestamp, type, DATE(timestamp) as work_date
+
+        $dailySeconds = getPaidWorkSecondsByDateForUser(
+            $pdo,
+            (int) $userId,
+            $payrollStart,
+            $payrollEnd,
+            $paidTypes
+        );
+
+        $totalProductiveSeconds = array_sum($dailySeconds);
+        $daysWorked = count($dailySeconds);
+
+        // Métricas de diagnóstico que muestra el pie del reporte.
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN type IN (" . implode(',', array_fill(0, count($paidTypesNormalized), '?')) . ") THEN 1 ELSE 0 END) AS paid
             FROM attendance
-            WHERE user_id = ?
-            AND timestamp BETWEEN ? AND ?
-            ORDER BY timestamp ASC
+            WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
         ");
-        $punchesStmt->execute([$userId, $startBound, $endBound]);
-        $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
-        $totalPunchesAnalyzed += count($punches);
-        
-        // Group by date
-        $punchesByDate = [];
-        foreach ($punches as $punch) {
-            $date = $punch['work_date'];
-            if (!isset($punchesByDate[$date])) {
-                $punchesByDate[$date] = [];
-            }
-            $punchesByDate[$date][] = $punch;
-        }
-        
-        // Calculate productive seconds using INTERVAL logic (paid state periods)
-        $totalProductiveSeconds = 0;
-        $daysWorked = count($punchesByDate);
-        $paidTypesUpper = array_map('strtoupper', $paidTypes);
-        
-        foreach ($punchesByDate as $date => $dayPunches) {
-            $inPaidState = false;
-            $paidStartTime = null;
-            $lastPaidPunchTime = null;
-            
-            foreach ($dayPunches as $i => $punch) {
-                $punchTime = strtotime($punch['timestamp']);
-                $punchType = strtoupper($punch['type']);
-                $isPaid = in_array($punchType, $paidTypesUpper);
-                
-                if ($isPaid) {
-                    $totalPaidPunches++;
-                    $lastPaidPunchTime = $punchTime;
-                    
-                    if (!$inPaidState) {
-                        // Start of paid period
-                        $paidStartTime = $punchTime;
-                        $inPaidState = true;
-                    }
-                } elseif (!$isPaid && $inPaidState) {
-                    // End of paid period
-                    if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
-                        $totalProductiveSeconds += ($lastPaidPunchTime - $paidStartTime);
-                    }
-                    $inPaidState = false;
-                    $paidStartTime = null;
-                    $lastPaidPunchTime = null;
-                }
-            }
-            
-            // If day ends in paid state, count until last paid punch
-            if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
-                $totalProductiveSeconds += ($lastPaidPunchTime - $paidStartTime);
-            }
-        }
-        
+        $countStmt->execute(array_merge($paidTypesNormalized, [$userId, $payrollStart, $payrollEnd]));
+        $counts = $countStmt->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'paid' => 0];
+        $totalPunchesAnalyzed += (int) $counts['total'];
+        $totalPaidPunches += (int) $counts['paid'];
+
         if ($totalProductiveSeconds > 0 || $daysWorked > 0) {
             $payrollRows[] = [
                 'id' => $userId,
@@ -181,6 +148,9 @@ $totalDaysWorked = 0;
 $totalEmployees = 0;
 $sumHourlyRatesUsd = 0.0;
 $sumHourlyRatesDop = 0.0;
+// Se cuentan aparte: el promedio de tarifa solo aplica a quienes cobran por hora.
+$countHourlyRatesUsd = 0;
+$countHourlyRatesDop = 0;
 
 foreach ($payrollRows as $row) {
     $username = $row['username'];
@@ -194,25 +164,42 @@ foreach ($payrollRows as $row) {
         'department_name' => $row['department_name'],
     ];
 
-    $hourlyRateUsd = (float) $comp['hourly_rate'];
-    $hourlyRateDop = (float) $comp['hourly_rate_dop'];
     $monthlySalaryUsd = (float) $comp['monthly_salary'];
     $monthlySalaryDop = (float) $comp['monthly_salary_dop'];
+    $hourlyRateUsd = (float) $comp['hourly_rate'];
+    $hourlyRateDop = (float) $comp['hourly_rate_dop'];
+    $paymentType = $comp['payment_type'] ?? 'hourly';
+    $isFixedPay = ($paymentType === 'fixed');
     $departmentName = $row['department_name'] ?? ($comp['department_name'] ?? 'Sin departamento');
 
     $productiveSeconds = (int) $row['productive_seconds'];
     $hours = $productiveSeconds > 0 ? ($productiveSeconds / 3600) : 0.0;
-    $actualPayUsd = calculateAmountFromSeconds($productiveSeconds, $hourlyRateUsd);
-    $actualPayDop = calculateAmountFromSeconds($productiveSeconds, $hourlyRateDop);
+
+    // Quien cobra por sueldo mensual muestra SU VALOR MENSUAL, no horas × tarifa:
+    // su pago no depende de las horas y varios administrativos tienen además una
+    // tarifa horaria cargada que en su caso no aplica. Las horas se siguen
+    // mostrando igual, que es para lo que sirve el control de asistencia.
+    if ($isFixedPay) {
+        $actualPayUsd = $monthlySalaryUsd;
+        $actualPayDop = $monthlySalaryDop;
+    } else {
+        $actualPayUsd = calculateAmountFromSeconds($productiveSeconds, $hourlyRateUsd);
+        $actualPayDop = calculateAmountFromSeconds($productiveSeconds, $hourlyRateDop);
+    }
 
     if (!isset($seenUsers[$username])) {
         $totalMonthlyBaseUsd += $monthlySalaryUsd;
         $totalMonthlyBaseDop += $monthlySalaryDop;
-        if ($hourlyRateUsd > 0) {
-            $sumHourlyRatesUsd += $hourlyRateUsd;
-        }
-        if ($hourlyRateDop > 0) {
-            $sumHourlyRatesDop += $hourlyRateDop;
+        // El promedio de tarifa solo tiene sentido entre quienes cobran por hora.
+        if (!$isFixedPay) {
+            if ($hourlyRateUsd > 0) {
+                $sumHourlyRatesUsd += $hourlyRateUsd;
+                $countHourlyRatesUsd++;
+            }
+            if ($hourlyRateDop > 0) {
+                $sumHourlyRatesDop += $hourlyRateDop;
+                $countHourlyRatesDop++;
+            }
         }
         $seenUsers[$username] = true;
     }
@@ -225,12 +212,15 @@ foreach ($payrollRows as $row) {
         'department' => $departmentName,
         'days_worked' => (int) $row['days_worked'],
         'hours' => $hours,
+        'payment_type' => $paymentType,
         'hourly_rate_usd' => $hourlyRateUsd,
         'hourly_rate_dop' => $hourlyRateDop,
         'monthly_salary_usd' => $monthlySalaryUsd,
         'monthly_salary_dop' => $monthlySalaryDop,
         'actual_pay_usd' => $actualPayUsd,
         'actual_pay_dop' => $actualPayDop,
+        // En sueldo fijo el pago ES la base, así que la diferencia queda en 0:
+        // no se le "debe" ni se le "paga de más" por las horas del período.
         'difference_usd' => $actualPayUsd - $monthlySalaryUsd,
         'difference_dop' => $actualPayDop - $monthlySalaryDop,
     ];
@@ -262,8 +252,8 @@ foreach ($payrollRows as $row) {
 
 $totalEmployees = count($employeeSummaries);
 $averageHoursPerEmployee = $totalEmployees > 0 ? $totalHours / $totalEmployees : 0.0;
-$averageHourlyRateUsd = $totalEmployees > 0 ? ($sumHourlyRatesUsd / $totalEmployees) : 0.0;
-$averageHourlyRateDop = $totalEmployees > 0 ? ($sumHourlyRatesDop / $totalEmployees) : 0.0;
+$averageHourlyRateUsd = $countHourlyRatesUsd > 0 ? ($sumHourlyRatesUsd / $countHourlyRatesUsd) : 0.0;
+$averageHourlyRateDop = $countHourlyRatesDop > 0 ? ($sumHourlyRatesDop / $countHourlyRatesDop) : 0.0;
 $payrollVarianceUsd = $totalActualPayUsd - $totalMonthlyBaseUsd;
 $payrollVarianceDop = $totalActualPayDop - $totalMonthlyBaseDop;
 
@@ -330,9 +320,17 @@ if (!empty($paidTypes)) {
         $comp = $compensation[$username] ?? [
             'hourly_rate' => 0.0,
             'hourly_rate_dop' => 0.0,
+            'monthly_salary' => 0.0,
+            'monthly_salary_dop' => 0.0,
+            'payment_type' => 'hourly',
         ];
-        
-        // Get all punches for this user in the period
+
+        $dailyPaymentType = $comp['payment_type'] ?? 'hourly';
+        $dailyIsFixedPay = ($dailyPaymentType === 'fixed');
+        $dailyRateUsd = (float) ($comp['hourly_rate'] ?? 0);
+        $dailyRateDop = (float) ($comp['hourly_rate_dop'] ?? 0);
+
+        // Entrada/salida mostradas en la tabla (solo para desplegar el horario).
         $punchesStmt = $pdo->prepare("
             SELECT timestamp, type, DATE(timestamp) as work_date
             FROM attendance
@@ -342,20 +340,17 @@ if (!empty($paidTypes)) {
         ");
         $punchesStmt->execute([$userId, $startBound, $endBound]);
         $punches = $punchesStmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Group by date
+
         $punchesByDate = [];
         foreach ($punches as $punch) {
             $date = $punch['work_date'];
             if (!isset($punchesByDate[$date])) {
                 $punchesByDate[$date] = [
-                    'punches' => [],
                     'first_entry' => null,
                     'last_exit' => null
                 ];
             }
-            $punchesByDate[$date]['punches'][] = $punch;
-            
+
             // Track first Entry and last Exit for display
             $typeUpper = strtoupper($punch['type']);
             if ($typeUpper === 'ENTRY' && $punchesByDate[$date]['first_entry'] === null) {
@@ -365,52 +360,29 @@ if (!empty($paidTypes)) {
                 $punchesByDate[$date]['last_exit'] = $punch['timestamp'];
             }
         }
-        
-        $paidTypesUpper = array_map('strtoupper', $paidTypes);
-        
-        foreach ($punchesByDate as $date => $dayData) {
-            $dayPunches = $dayData['punches'];
-            $productiveSeconds = 0;
-            
-            // Calculate using INTERVAL logic (paid state periods)
-            $inPaidState = false;
-            $paidStartTime = null;
-            $lastPaidPunchTime = null;
-            
-            foreach ($dayPunches as $i => $punch) {
-                $punchTime = strtotime($punch['timestamp']);
-                $punchType = strtoupper($punch['type']);
-                $isPaid = in_array($punchType, $paidTypesUpper);
-                
-                if ($isPaid) {
-                    $lastPaidPunchTime = $punchTime;
-                    
-                    if (!$inPaidState) {
-                        // Start of paid period
-                        $paidStartTime = $punchTime;
-                        $inPaidState = true;
-                    }
-                } elseif (!$isPaid && $inPaidState) {
-                    // End of paid period
-                    if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
-                        $productiveSeconds += ($lastPaidPunchTime - $paidStartTime);
-                    }
-                    $inPaidState = false;
-                    $paidStartTime = null;
-                    $lastPaidPunchTime = null;
-                }
-            }
-            
-            // If day ends in paid state, count until last paid punch
-            if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
-                $productiveSeconds += ($lastPaidPunchTime - $paidStartTime);
-            }
-            
+
+        // Horas por día con la lógica canónica de la nómina.
+        $dailySecondsByDate = getPaidWorkSecondsByDateForUser(
+            $pdo,
+            (int) $userId,
+            $payrollStart,
+            $payrollEnd,
+            $paidTypes
+        );
+
+        foreach ($dailySecondsByDate as $date => $productiveSeconds) {
+            $dayData = $punchesByDate[$date] ?? ['first_entry' => null, 'last_exit' => null];
+
             if ($productiveSeconds > 0) {
                 $hours = $productiveSeconds / 3600;
-                $amountUsd = calculateAmountFromSeconds($productiveSeconds, (float) $comp['hourly_rate']);
-                $amountDop = calculateAmountFromSeconds($productiveSeconds, (float) $comp['hourly_rate_dop']);
-                
+
+                // A quien cobra sueldo mensual no se le parte el sueldo por día:
+                // en el detalle diario se muestran sus horas y el dinero va en
+                // blanco, marcado como mensual. Su valor mensual está en el
+                // resumen por colaborador.
+                $amountUsd = $dailyIsFixedPay ? 0.0 : calculateAmountFromSeconds($productiveSeconds, $dailyRateUsd);
+                $amountDop = $dailyIsFixedPay ? 0.0 : calculateAmountFromSeconds($productiveSeconds, $dailyRateDop);
+
                 $dailySummaries[] = [
                     'full_name' => $user['full_name'],
                     'department' => $deptName ?? 'Sin departamento',
@@ -418,11 +390,14 @@ if (!empty($paidTypes)) {
                     'first_entry' => $dayData['first_entry'],
                     'last_exit' => $dayData['last_exit'],
                     'hours' => $hours,
+                    'payment_type' => $dailyPaymentType,
+                    'monthly_salary_usd' => (float) ($comp['monthly_salary'] ?? 0),
+                    'monthly_salary_dop' => (float) ($comp['monthly_salary_dop'] ?? 0),
                     'amount_usd' => $amountUsd,
                     'amount_dop' => $amountDop,
                     'role' => $userRole,
                 ];
-                
+
                 $dailyTotalHours += $hours;
                 $dailyTotalAmountUsd += $amountUsd;
                 $dailyTotalAmountDop += $amountDop;
@@ -502,6 +477,10 @@ $adminTotals = [
     'employees' => count($adminEmployeeSummaries),
     'sum_rates_usd' => 0.0,
     'sum_rates_dop' => 0.0,
+    // Se cuentan aparte: promediar tarifas entre gente de sueldo fijo (que no
+    // tiene tarifa) hunde el promedio.
+    'count_rates_usd' => 0,
+    'count_rates_dop' => 0,
     'monthly_base_usd' => 0.0,
     'monthly_base_dop' => 0.0,
 ];
@@ -513,17 +492,22 @@ foreach ($adminEmployeeSummaries as $row) {
     $adminTotals['days_worked'] += $row['days_worked'];
     $adminTotals['monthly_base_usd'] += $row['monthly_salary_usd'];
     $adminTotals['monthly_base_dop'] += $row['monthly_salary_dop'];
+    if (($row['payment_type'] ?? 'hourly') === 'fixed') {
+        continue;
+    }
     if ($row['hourly_rate_usd'] > 0) {
         $adminTotals['sum_rates_usd'] += $row['hourly_rate_usd'];
+        $adminTotals['count_rates_usd']++;
     }
     if ($row['hourly_rate_dop'] > 0) {
         $adminTotals['sum_rates_dop'] += $row['hourly_rate_dop'];
+        $adminTotals['count_rates_dop']++;
     }
 }
 
 $adminTotals['average_hours'] = $adminTotals['employees'] > 0 ? $adminTotals['hours'] / $adminTotals['employees'] : 0.0;
-$adminTotals['average_rate_usd'] = $adminTotals['employees'] > 0 ? ($adminTotals['sum_rates_usd'] / $adminTotals['employees']) : 0.0;
-$adminTotals['average_rate_dop'] = $adminTotals['employees'] > 0 ? ($adminTotals['sum_rates_dop'] / $adminTotals['employees']) : 0.0;
+$adminTotals['average_rate_usd'] = $adminTotals['count_rates_usd'] > 0 ? ($adminTotals['sum_rates_usd'] / $adminTotals['count_rates_usd']) : 0.0;
+$adminTotals['average_rate_dop'] = $adminTotals['count_rates_dop'] > 0 ? ($adminTotals['sum_rates_dop'] / $adminTotals['count_rates_dop']) : 0.0;
 $adminTotals['variance_usd'] = $adminTotals['actual_pay_usd'] - $adminTotals['monthly_base_usd'];
 $adminTotals['variance_dop'] = $adminTotals['actual_pay_dop'] - $adminTotals['monthly_base_dop'];
 
@@ -996,7 +980,7 @@ include __DIR__ . '/header.php';
                                         <td><?= htmlspecialchars($row['department']) ?></td>
                                         <td><?= number_format($row['hours'], 1) ?> h</td>
                                         <td><?= number_format($row['days_worked']) ?></td>
-                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
+                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?><?= ($row['payment_type'] ?? 'hourly') === 'fixed' ? ' <span class="hours-muted">/mes</span>' : '' ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -1135,7 +1119,7 @@ include __DIR__ . '/header.php';
                                         <td><?= htmlspecialchars($row['department']) ?></td>
                                         <td><?= number_format($row['hours'], 1) ?> h</td>
                                         <td><?= number_format($row['days_worked']) ?></td>
-                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
+                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?><?= ($row['payment_type'] ?? 'hourly') === 'fixed' ? ' <span class="hours-muted">/mes</span>' : '' ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -1287,6 +1271,7 @@ include __DIR__ . '/header.php';
                         <tr>
                             <th>Colaborador</th>
                             <th>Departamento</th>
+                            <th>Tipo de pago</th>
                             <th>Dias</th>
                             <th>Horas</th>
                             <th>Tarifa USD</th>
@@ -1302,23 +1287,38 @@ include __DIR__ . '/header.php';
                     <tbody>
                     <?php if (empty($employeeSummaries)): ?>
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-6">No se registraron movimientos en el periodo.</td>
+                            <td colspan="13" class="text-center text-muted py-6">No se registraron movimientos en el periodo.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($employeeSummaries as $summary): ?>
+                            <?php $isFixed = ($summary['payment_type'] ?? 'hourly') === 'fixed'; ?>
                             <tr>
                                 <td class="font-semibold text-primary"><?= htmlspecialchars($summary['full_name']) ?></td>
                                 <td><?= htmlspecialchars($summary['department']) ?></td>
+                                <td>
+                                    <?php if ($isFixed): ?>
+                                        <span class="chip"><i class="fas fa-calendar-check"></i> Mensual</span>
+                                    <?php else: ?>
+                                        <span class="chip"><i class="fas fa-hourglass-half"></i> Por hora</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= number_format($summary['days_worked']) ?></td>
                                 <td><?= number_format($summary['hours'], 1) ?> h</td>
-                                <td>$<?= number_format($summary['hourly_rate_usd'], 2) ?></td>
-                                <td>RD$<?= number_format($summary['hourly_rate_dop'], 2) ?></td>
-                                <td>$<?= number_format($summary['actual_pay_usd'], 2) ?></td>
+                                <?php // A quien cobra fijo no se le muestra tarifa horaria: su pago no sale de las horas. ?>
+                                <td><?= $isFixed ? '<span class="text-muted">—</span>' : '$' . number_format($summary['hourly_rate_usd'], 2) ?></td>
+                                <td><?= $isFixed ? '<span class="text-muted">—</span>' : 'RD$' . number_format($summary['hourly_rate_dop'], 2) ?></td>
+                                <td>
+                                    $<?= number_format($summary['actual_pay_usd'], 2) ?>
+                                    <?php if ($isFixed): ?><span class="text-xs text-muted">/mes</span><?php endif; ?>
+                                </td>
                                 <td>$<?= number_format($summary['monthly_salary_usd'], 2) ?></td>
                                 <td class="<?= $summary['difference_usd'] >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
                                     <?= $summary['difference_usd'] >= 0 ? '+' : '' ?>$<?= number_format($summary['difference_usd'], 2) ?>
                                 </td>
-                                <td>RD$<?= number_format($summary['actual_pay_dop'], 2) ?></td>
+                                <td>
+                                    RD$<?= number_format($summary['actual_pay_dop'], 2) ?>
+                                    <?php if ($isFixed): ?><span class="text-xs text-muted">/mes</span><?php endif; ?>
+                                </td>
                                 <td>RD$<?= number_format($summary['monthly_salary_dop'], 2) ?></td>
                                 <td class="<?= $summary['difference_dop'] >= 0 ? 'text-emerald-400' : 'text-rose-400' ?>">
                                     <?= $summary['difference_dop'] >= 0 ? '+' : '' ?>RD$<?= number_format($summary['difference_dop'], 2) ?>
@@ -1371,6 +1371,14 @@ include __DIR__ . '/header.php';
                         </tr>
                     <?php else: ?>
                         <?php foreach ($dailySummaries as $row): ?>
+                            <?php
+                                $rowIsFixed = ($row['payment_type'] ?? 'hourly') === 'fixed';
+                                // A quien cobra fijo no se le parte el sueldo por día: se
+                                // muestra su valor mensual como referencia, no un monto diario.
+                                $fixedNote = $rowIsFixed
+                                    ? 'Sueldo mensual: RD$' . number_format((float) ($row['monthly_salary_dop'] ?? 0), 2)
+                                    : '';
+                            ?>
                             <tr>
                                 <td><?= htmlspecialchars(date('d/m/Y', strtotime($row['work_date']))) ?></td>
                                 <td><?= htmlspecialchars($row['full_name']) ?></td>
@@ -1378,8 +1386,14 @@ include __DIR__ . '/header.php';
                                 <td><?= $row['first_entry'] ? htmlspecialchars(date('H:i', strtotime($row['first_entry']))) : 'Sin registro' ?></td>
                                 <td><?= $row['last_exit'] ? htmlspecialchars(date('H:i', strtotime($row['last_exit']))) : 'Sin registro' ?></td>
                                 <td><?= number_format($row['hours'], 2) ?> h</td>
-                                <td>$<?= number_format($row['amount_usd'], 2) ?></td>
-                                <td>RD$<?= number_format($row['amount_dop'], 2) ?></td>
+                                <?php if ($rowIsFixed): ?>
+                                    <td class="text-muted" colspan="2" title="<?= htmlspecialchars($fixedNote) ?>">
+                                        <i class="fas fa-calendar-check"></i> Mensual · <?= htmlspecialchars($fixedNote) ?>
+                                    </td>
+                                <?php else: ?>
+                                    <td>$<?= number_format($row['amount_usd'], 2) ?></td>
+                                    <td>RD$<?= number_format($row['amount_dop'], 2) ?></td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -1476,7 +1490,7 @@ include __DIR__ . '/header.php';
                                         <td><?= htmlspecialchars($row['department']) ?></td>
                                         <td><?= number_format($row['hours'], 1) ?> h</td>
                                         <td><?= number_format($row['days_worked']) ?></td>
-                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
+                                        <td>$<?= number_format($row['actual_pay_usd'], 2) ?><?= ($row['payment_type'] ?? 'hourly') === 'fixed' ? ' <span class="hours-muted">/mes</span>' : '' ?></td>
                                         <td>RD$<?= number_format($row['actual_pay_dop'], 2) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -1504,6 +1518,7 @@ include __DIR__ . '/header.php';
                             <tr>
                                 <th>Colaborador</th>
                                 <th>Departamento</th>
+                                <th>Tipo de pago</th>
                                 <th>Días</th>
                                 <th>Horas</th>
                                 <th>Tarifa USD</th>
@@ -1514,18 +1529,33 @@ include __DIR__ . '/header.php';
                         </thead>
                         <tbody>
                         <?php if (empty($adminEmployeeSummaries)): ?>
-                            <tr><td colspan="8" class="text-center text-muted py-6">No hay administrativos en el periodo.</td></tr>
+                            <tr><td colspan="9" class="text-center text-muted py-6">No hay administrativos en el periodo.</td></tr>
                         <?php else: ?>
                             <?php foreach ($adminEmployeeSummaries as $row): ?>
+                                <?php $rowFixed = ($row['payment_type'] ?? 'hourly') === 'fixed'; ?>
                                 <tr>
                                     <td class="font-semibold text-primary"><?= htmlspecialchars($row['full_name']) ?></td>
                                     <td><?= htmlspecialchars($row['department']) ?></td>
+                                    <td>
+                                        <?php if ($rowFixed): ?>
+                                            <span class="chip"><i class="fas fa-calendar-check"></i> Mensual</span>
+                                        <?php else: ?>
+                                            <span class="chip"><i class="fas fa-hourglass-half"></i> Por hora</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><?= number_format($row['days_worked']) ?></td>
                                     <td><?= number_format($row['hours'], 1) ?> h</td>
-                                    <td>$<?= number_format($row['hourly_rate_usd'], 2) ?></td>
-                                    <td>$<?= number_format($row['actual_pay_usd'], 2) ?></td>
-                                    <td>RD$<?= number_format($row['hourly_rate_dop'], 2) ?></td>
-                                    <td>RD$<?= number_format($row['actual_pay_dop'], 2) ?></td>
+                                    <?php // Sueldo fijo: sin tarifa horaria y el pago es su valor mensual. ?>
+                                    <td><?= $rowFixed ? '<span class="text-muted">—</span>' : '$' . number_format($row['hourly_rate_usd'], 2) ?></td>
+                                    <td>
+                                        $<?= number_format($row['actual_pay_usd'], 2) ?>
+                                        <?php if ($rowFixed): ?><span class="text-xs text-muted">/mes</span><?php endif; ?>
+                                    </td>
+                                    <td><?= $rowFixed ? '<span class="text-muted">—</span>' : 'RD$' . number_format($row['hourly_rate_dop'], 2) ?></td>
+                                    <td>
+                                        RD$<?= number_format($row['actual_pay_dop'], 2) ?>
+                                        <?php if ($rowFixed): ?><span class="text-xs text-muted">/mes</span><?php endif; ?>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -1572,6 +1602,12 @@ include __DIR__ . '/header.php';
                             <tr><td colspan="8" class="text-center text-muted py-6">Sin registros administrativos.</td></tr>
                         <?php else: ?>
                             <?php foreach ($adminDailySummaries as $row): ?>
+                                <?php
+                                    $adminRowFixed = ($row['payment_type'] ?? 'hourly') === 'fixed';
+                                    $adminFixedNote = $adminRowFixed
+                                        ? 'Sueldo mensual: RD$' . number_format((float) ($row['monthly_salary_dop'] ?? 0), 2)
+                                        : '';
+                                ?>
                                 <tr>
                                     <td><?= htmlspecialchars(date('d/m/Y', strtotime($row['work_date']))) ?></td>
                                     <td><?= htmlspecialchars($row['full_name']) ?></td>
@@ -1579,8 +1615,15 @@ include __DIR__ . '/header.php';
                                     <td><?= $row['first_entry'] ? htmlspecialchars(date('H:i', strtotime($row['first_entry']))) : 'Sin registro' ?></td>
                                     <td><?= $row['last_exit'] ? htmlspecialchars(date('H:i', strtotime($row['last_exit']))) : 'Sin registro' ?></td>
                                     <td><?= number_format($row['hours'], 2) ?> h</td>
-                                    <td>$<?= number_format($row['amount_usd'], 2) ?></td>
-                                    <td>RD$<?= number_format($row['amount_dop'], 2) ?></td>
+                                    <?php // El sueldo mensual no se parte por día: se muestra como referencia. ?>
+                                    <?php if ($adminRowFixed): ?>
+                                        <td class="text-muted" colspan="2">
+                                            <i class="fas fa-calendar-check"></i> Mensual · <?= htmlspecialchars($adminFixedNote) ?>
+                                        </td>
+                                    <?php else: ?>
+                                        <td>$<?= number_format($row['amount_usd'], 2) ?></td>
+                                        <td>RD$<?= number_format($row['amount_dop'], 2) ?></td>
+                                    <?php endif; ?>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

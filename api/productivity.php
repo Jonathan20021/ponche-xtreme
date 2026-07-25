@@ -5,6 +5,7 @@ header('Cache-Control: no-cache, must-revalidate');
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../lib/authorization_functions.php';
+require_once __DIR__ . '/../lib/work_hours_calculator.php';
 
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);
@@ -140,11 +141,11 @@ if ($action === 'summary') {
         $placeholders = implode(',', array_fill(0, count($userIds), '?'));
         $punchParams = array_merge($userIds, [$startBound, $endBound]);
         $punchStmt = $pdo->prepare("
-            SELECT user_id, timestamp, type
+            SELECT id, user_id, timestamp, type
             FROM attendance
             WHERE user_id IN ($placeholders)
             AND timestamp BETWEEN ? AND ?
-            ORDER BY timestamp ASC
+            ORDER BY timestamp ASC, id ASC
         ");
         $punchStmt->execute($punchParams);
         foreach ($punchStmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
@@ -154,7 +155,7 @@ if ($action === 'summary') {
     }
 
     $paidTypes = getPaidAttendanceTypeSlugs($pdo);
-    $paidTypesUpper = array_map('strtoupper', $paidTypes);
+    $paidTypesNormalized = normalizePaidTypeSlugs($paidTypes);
     $nonWorkTypes = ['BREAK', 'LUNCH', 'PAUSA', 'EXIT'];
 
     $groups = [];
@@ -216,32 +217,10 @@ if ($action === 'summary') {
                 }
             }
 
-            $inPaidState = false;
-            $paidStartTime = null;
-            $lastPaidPunchTime = null;
-            foreach ($dayPunches as $punch) {
-                $punchTime = strtotime($punch['timestamp']);
-                $punchType = strtoupper($punch['type']);
-                $isPaid = in_array($punchType, $paidTypesUpper, true);
-
-                if ($isPaid) {
-                    $lastPaidPunchTime = $punchTime;
-                    if (!$inPaidState) {
-                        $paidStartTime = $punchTime;
-                        $inPaidState = true;
-                    }
-                } elseif ($inPaidState) {
-                    if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
-                        $payrollSeconds += ($lastPaidPunchTime - $paidStartTime);
-                    }
-                    $inPaidState = false;
-                    $paidStartTime = null;
-                    $lastPaidPunchTime = null;
-                }
-            }
-            if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
-                $payrollSeconds += ($lastPaidPunchTime - $paidStartTime);
-            }
+            // Horas payroll con la lógica canónica de la nómina
+            // (lib/work_hours_calculator.php), no con un recorrido propio.
+            $calc = calculateWorkSecondsFromPunches($dayPunches, $paidTypesNormalized);
+            $payrollSeconds += (int) ($calc['work_seconds'] ?? 0);
         }
 
         if ($scheduledSeconds === 0 && empty($userPunches)) {

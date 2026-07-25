@@ -168,6 +168,47 @@ $flash = $_SESSION['ph_flash'] ?? ['ok' => [], 'err' => []];
 unset($_SESSION['ph_flash']);
 
 // ---------------------------------------------------------------------------
+// Fuente que se está viendo: el ajuste de Vicidial (lo que ya existía) o el
+// historial de modificaciones del ponche (nuevo). El cliente pidió que ambos
+// se vean igual, así que comparten página.
+// ---------------------------------------------------------------------------
+require_once __DIR__ . '/../lib/attendance_audit.php';
+
+$fuente = ($_GET['fuente'] ?? 'vicidial') === 'ponche' ? 'ponche' : 'vicidial';
+
+$poncheDesde = $_GET['desde'] ?? date('Y-m-d', strtotime('-30 days'));
+$poncheHasta = $_GET['hasta'] ?? date('Y-m-d');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $poncheDesde)) { $poncheDesde = date('Y-m-d', strtotime('-30 days')); }
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $poncheHasta)) { $poncheHasta = date('Y-m-d'); }
+if ($poncheHasta < $poncheDesde) { $poncheHasta = $poncheDesde; }
+
+// Por defecto se muestran solo los cambios que MOVIERON las horas pagadas:
+// es lo que le importa a nómina. El resto queda a un clic.
+$poncheSoloHoras = !isset($_GET['fuente']) || isset($_GET['solo_horas']);
+
+$poncheAudit = [];
+$ponchePendientes = 0;
+try {
+    $ponchePendientes = (int) $pdo->query("
+        SELECT COUNT(*) FROM attendance_audit
+        WHERE old_work_seconds <> new_work_seconds
+          AND work_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+    ")->fetchColumn();
+
+    if ($fuente === 'ponche') {
+        $poncheAudit = attendanceAuditList($pdo, [
+            'from'              => $poncheDesde,
+            'to'                => $poncheHasta,
+            'only_hour_changes' => $poncheSoloHoras,
+            'limit'             => 300,
+        ]);
+    }
+} catch (Throwable $e) {
+    // La tabla puede no existir si aún no corrió run_payroll_module_migration.php
+    error_log('payroll_hours (ponche): ' . $e->getMessage());
+}
+
+// ---------------------------------------------------------------------------
 // Filtros
 // ---------------------------------------------------------------------------
 $today = date('Y-m-d');
@@ -299,6 +340,143 @@ foreach ($rows as $r) {
             </a>
         </div>
 
+        <!-- Selector de fuente: Vicidial (ajuste) vs Ponche (historial de cambios) -->
+        <div class="flex gap-2 mb-6">
+            <a href="payroll_hours.php?<?= http_build_query(array_merge($_GET, ['fuente' => 'vicidial'])) ?>"
+               class="px-4 py-2 rounded-lg text-sm font-semibold <?= $fuente === 'vicidial' ? 'bg-indigo-600 text-white' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-600/60' ?>">
+                <i class="fas fa-phone-volume mr-2"></i>Horas de Vicidial
+            </a>
+            <a href="payroll_hours.php?<?= http_build_query(array_merge($_GET, ['fuente' => 'ponche'])) ?>"
+               class="px-4 py-2 rounded-lg text-sm font-semibold <?= $fuente === 'ponche' ? 'bg-indigo-600 text-white' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-600/60' ?>">
+                <i class="fas fa-fingerprint mr-2"></i>Horas del Ponche
+                <?php if ($ponchePendientes > 0): ?>
+                    <span class="ml-1 px-2 py-0.5 rounded-full bg-white/20 text-xs"><?= (int) $ponchePendientes ?></span>
+                <?php endif; ?>
+            </a>
+        </div>
+
+        <?php if ($fuente === 'ponche'): ?>
+            <div class="glass-card mb-6">
+                <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                    <div>
+                        <h2 class="text-xl font-semibold text-white">
+                            <i class="fas fa-clock-rotate-left text-amber-400 mr-2"></i>
+                            Historial de modificaciones del ponche
+                        </h2>
+                        <p class="text-slate-400 text-sm mt-1">
+                            Cada corrección de un punch, con las horas que tenía antes, las que quedaron
+                            y quién la hizo. Mismo detalle que el ajuste de Vicidial.
+                        </p>
+                    </div>
+                    <form method="GET" class="flex flex-wrap items-end gap-2">
+                        <input type="hidden" name="fuente" value="ponche">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Desde</label>
+                            <input type="date" name="desde" value="<?= htmlspecialchars($poncheDesde) ?>"
+                                   class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Hasta</label>
+                            <input type="date" name="hasta" value="<?= htmlspecialchars($poncheHasta) ?>"
+                                   class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm">
+                        </div>
+                        <label class="flex items-center gap-2 text-xs text-slate-300 pb-1">
+                            <input type="checkbox" name="solo_horas" value="1" <?= $poncheSoloHoras ? 'checked' : '' ?>
+                                   class="w-4 h-4">
+                            Solo los que cambiaron horas
+                        </label>
+                        <button type="submit" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">
+                            <i class="fas fa-filter"></i> Filtrar
+                        </button>
+                    </form>
+                </div>
+
+                <?php if (empty($poncheAudit)): ?>
+                    <p class="text-slate-400 text-center py-8">
+                        <i class="fas fa-circle-info mr-2"></i>
+                        Sin modificaciones al ponche en el período.
+                        Aquí aparecerán las correcciones que hagan los supervisores y RRHH.
+                    </p>
+                <?php else: ?>
+                    <div class="overflow-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-slate-400 text-xs uppercase">
+                                <tr>
+                                    <th class="text-left p-2">Fecha</th>
+                                    <th class="text-left p-2">Colaborador</th>
+                                    <th class="text-right p-2">Original</th>
+                                    <th class="text-right p-2">Modificada</th>
+                                    <th class="text-right p-2">Diferencia</th>
+                                    <th class="text-left p-2">Detalle del cambio</th>
+                                    <th class="text-left p-2">Modificado por</th>
+                                    <th class="text-left p-2">Motivo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($poncheAudit as $a): ?>
+                                    <tr class="border-t border-slate-700/50">
+                                        <td class="p-2 text-white whitespace-nowrap"><?= date('Y-m-d', strtotime($a['work_date'])) ?></td>
+                                        <td class="p-2 text-white">
+                                            <?= htmlspecialchars($a['employee_name'] ?: $a['employee_username']) ?>
+                                            <?php if (!empty($a['employee_code'])): ?>
+                                                <span class="block text-xs text-slate-500"><?= htmlspecialchars($a['employee_code']) ?></span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="p-2 text-right font-mono text-slate-300"><?= htmlspecialchars($a['old_formatted']) ?></td>
+                                        <td class="p-2 text-right font-mono text-white font-semibold"><?= htmlspecialchars($a['new_formatted']) ?></td>
+                                        <td class="p-2 text-right font-mono <?= $a['diff_seconds'] > 0 ? 'text-emerald-400' : ($a['diff_seconds'] < 0 ? 'text-rose-400' : 'text-slate-500') ?>">
+                                            <?= htmlspecialchars($a['diff_formatted']) ?>
+                                            <?php if ($a['diff_seconds'] !== 0): ?>
+                                                <span class="block text-xs text-slate-500">pagadas</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="p-2 text-xs">
+                                            <?php if (empty($a['state_changes'])): ?>
+                                                <span class="text-slate-500">
+                                                    <?= htmlspecialchars(($a['action'] === 'CREATE' ? 'Punch agregado' : ($a['action'] === 'DELETE' ? 'Punch eliminado' : 'Sin efecto en las horas'))) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <?php foreach ($a['state_changes'] as $c): ?>
+                                                    <div class="text-slate-300">
+                                                        <strong><?= htmlspecialchars($c['label']) ?>:</strong>
+                                                        <?= (int) round($c['old'] / 60) ?> min registrado en ponche →
+                                                        <span class="<?= $c['diff'] > 0 ? 'text-emerald-300' : 'text-rose-300' ?>">
+                                                            <?= (int) round($c['new'] / 60) ?> min
+                                                        </span>
+                                                        registrado por <?= htmlspecialchars($a['performed_by_username'] ?: 'sistema') ?>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                            <?php if (!empty($a['old_type']) || !empty($a['new_type'])): ?>
+                                                <div class="text-slate-500 mt-1">
+                                                    <?php if ($a['action'] === 'UPDATE' && $a['old_type'] !== $a['new_type']): ?>
+                                                        Tipo: <?= htmlspecialchars($a['old_type']) ?> → <?= htmlspecialchars($a['new_type']) ?>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($a['old_timestamp']) && !empty($a['new_timestamp']) && $a['old_timestamp'] !== $a['new_timestamp']): ?>
+                                                        Hora: <?= date('H:i', strtotime($a['old_timestamp'])) ?> → <?= date('H:i', strtotime($a['new_timestamp'])) ?>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="p-2 text-slate-300 text-xs">
+                                            <?= htmlspecialchars($a['performed_by_name'] ?: 'Sistema') ?>
+                                            <span class="block text-slate-500"><?= date('d/m/Y H:i', strtotime($a['created_at'])) ?></span>
+                                        </td>
+                                        <td class="p-2 text-slate-400 text-xs"><?= htmlspecialchars($a['reason'] ?: '—') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-3">
+                        <i class="fas fa-circle-info mr-1"></i>
+                        Las horas se recalculan con la misma lógica que paga la nómina, antes y después de cada cambio.
+                        A diferencia de Vicidial, aquí no se ajusta un total: se corrige el punch y el sistema guarda el efecto.
+                    </p>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
         <?php foreach ($flash['ok'] as $m): ?>
             <div class="mb-3 px-4 py-3 rounded-lg bg-green-500/15 border border-green-500/30 text-green-200 text-sm">
                 <i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($m) ?>
@@ -310,7 +488,10 @@ foreach ($rows as $r) {
             </div>
         <?php endforeach; ?>
 
+        <?php if ($fuente === 'vicidial'): // el ajuste de Vicidial, tal cual estaba ?>
+
         <form method="get" class="mb-6 flex flex-wrap items-end gap-3 bg-slate-800/40 border border-slate-700/50 rounded-xl p-4">
+            <input type="hidden" name="fuente" value="vicidial">
             <div>
                 <label class="block text-xs text-slate-400 mb-1">Desde</label>
                 <input type="date" name="start" value="<?= htmlspecialchars($start) ?>" class="px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-700 text-slate-100 text-sm">
@@ -553,6 +734,8 @@ foreach ($rows as $r) {
         apply();
     })();
     </script>
+
+    <?php endif; // fin del bloque de Vicidial ?>
 
     <?php include '../footer.php'; ?>
 </body>

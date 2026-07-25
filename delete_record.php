@@ -128,10 +128,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Historial de modificaciones del ponche: borrar un punch cambia las horas
+    // del día, así que se guarda cómo estaban antes.
+    require_once __DIR__ . '/lib/attendance_audit.php';
+    $auditUserId   = (int) ($recordData['user_id'] ?? 0);
+    $auditWorkDate = !empty($recordData['timestamp']) ? date('Y-m-d', strtotime($recordData['timestamp'])) : date('Y-m-d');
+    $auditBefore   = attendanceAuditSnapshot($pdo, $auditUserId, $auditWorkDate);
+
     // Delete record
     $query = "DELETE FROM attendance WHERE id = ?";
     $stmt = $pdo->prepare($query);
     $stmt->execute([$id]);
+
+    attendanceAuditRecord($pdo, [
+        'attendance_id' => null, // ya no existe
+        'user_id'       => $auditUserId,
+        'work_date'     => $auditWorkDate,
+        'action'        => 'DELETE',
+        'old_type'      => $recordData['type'] ?? null,
+        'new_type'      => null,
+        'old_timestamp' => $recordData['timestamp'] ?? null,
+        'new_timestamp' => null,
+        'reason'        => trim((string) ($_POST['notes'] ?? $_POST['reason'] ?? '')) ?: 'Registro eliminado',
+        'source'        => 'delete_record',
+        'performed_by'  => $_SESSION['user_id'] ?? null,
+    ], $auditBefore);
 
     // Log the authorization code usage
     if ($authCodeId) {

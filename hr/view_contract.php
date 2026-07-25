@@ -2,6 +2,7 @@
 session_start();
 require_once '../db.php';
 require_once '../vendor/autoload.php';
+require_once '../lib/contract_documents.php';
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -21,6 +22,37 @@ $contract = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$contract) {
     die('Contrato no encontrado');
+}
+
+// ---------------------------------------------------------------------------
+// BUG CORREGIDO: esta pantalla armaba SIEMPRE el contrato de trabajo, sin mirar
+// contract_type. Como en la base hay 208 registros de CONFIDENCIALIDAD, todos se
+// abrían con el texto del contrato laboral aunque el título dijera otra cosa.
+// Ahora cada tipo se arma con su propio cuerpo, desde lib/contract_documents.php.
+// ---------------------------------------------------------------------------
+if (strtoupper((string) ($contract['contract_type'] ?? 'TRABAJO')) === 'CONFIDENCIALIDAD') {
+    $html = buildConfidentialityContractHtml([
+        'employee_name' => $contract['employee_name'],
+        'id_card'       => $contract['id_card'],
+        'id_type'       => $contract['id_type'] ?? 'CEDULA',
+        'contract_date' => $contract['contract_date'],
+    ]);
+
+    $options = new Options();
+    $options->set('isHtml5ParserEnabled', true);
+    $options->set('isRemoteEnabled', true);
+    $options->set('defaultFont', 'Times New Roman');
+
+    $dompdf = new Dompdf($options);
+    $dompdf->loadHtml($html, 'UTF-8');
+    $dompdf->setPaper('Letter', 'portrait');
+    $dompdf->render();
+
+    $filename = 'Contrato_Confidencialidad_'
+        . str_replace(' ', '_', (string) $contract['employee_name'])
+        . '_' . date('Y-m-d', strtotime((string) $contract['contract_date'])) . '.pdf';
+    $dompdf->stream($filename, ['Attachment' => false]);
+    exit;
 }
 
 // Format date for contract

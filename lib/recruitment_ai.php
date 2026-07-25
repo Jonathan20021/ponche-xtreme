@@ -331,6 +331,367 @@ if (!function_exists('screenCandidateWithAI')) {
     }
 }
 
+if (!function_exists('getRecruitmentDispositionConfig')) {
+    /**
+     * Ajustes de la revisión humana de la disposición sugerida por la IA.
+     * Todo configurable desde settings.php (política del proyecto).
+     *
+     * @return array<string,string>
+     */
+    function getRecruitmentDispositionConfig(PDO $pdo): array
+    {
+        $defaults = [
+            'recruitment_ai_require_approval'        => '1',
+            'recruitment_ai_notify_roles'            => 'HR,Admin',
+            'recruitment_ai_notify_user_ids'         => '',
+            'recruitment_ai_notify_email'            => '0',
+            'recruitment_ai_notify_email_recipients' => '',
+        ];
+        try {
+            $keys = array_keys($defaults);
+            $placeholders = implode(',', array_fill(0, count($keys), '?'));
+            $stmt = $pdo->prepare("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ($placeholders)");
+            $stmt->execute($keys);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $row) {
+                $defaults[$row['setting_key']] = (string) ($row['setting_value'] ?? '');
+            }
+        } catch (Throwable $e) {
+            error_log('getRecruitmentDispositionConfig: ' . $e->getMessage());
+        }
+        return $defaults;
+    }
+}
+
+if (!function_exists('recruitmentDispositionLabel')) {
+    function recruitmentDispositionLabel(string $status): string
+    {
+        $map = [
+            'new'                 => 'Nuevo',
+            'reviewing'           => 'En revisión',
+            'shortlisted'         => 'Preseleccionado',
+            'interview_scheduled' => 'Entrevista agendada',
+            'interviewed'         => 'Entrevistado',
+            'offer_extended'      => 'Oferta extendida',
+            'hired'               => 'Contratado',
+            'rejected'            => 'Rechazado',
+            'withdrawn'           => 'Retirado',
+        ];
+        return $map[$status] ?? ucfirst($status);
+    }
+}
+
+if (!function_exists('recruitmentAIDecideDisposition')) {
+    /**
+     * Traduce la evaluación de la IA a una disposición del pipeline.
+     *
+     * @param array{score:?int, recommendation:?string} $screen
+     * @return array{status:string, reason:string}
+     */
+    function recruitmentAIDecideDisposition(array $screen, int $minScoreShortlist): array
+    {
+        $score = isset($screen['score']) ? (int) $screen['score'] : null;
+        $rec   = strtolower(trim((string) ($screen['recommendation'] ?? '')));
+
+        if ($rec === 'reject') {
+            return [
+                'status' => 'rejected',
+                'reason' => 'La IA recomienda descartar'
+                    . ($score !== null ? " (score {$score}/100)" : '') . '.',
+            ];
+        }
+
+        if ($rec === 'shortlist' || ($score !== null && $score >= $minScoreShortlist)) {
+            return [
+                'status' => 'shortlisted',
+                'reason' => 'La IA recomienda preseleccionar'
+                    . ($score !== null ? " (score {$score}/100, mínimo configurado {$minScoreShortlist})" : '') . '.',
+            ];
+        }
+
+        return [
+            'status' => 'reviewing',
+            'reason' => 'La IA no alcanza el mínimo para preseleccionar'
+                . ($score !== null ? " (score {$score}/100 vs mínimo {$minScoreShortlist})" : '')
+                . '; queda en revisión manual.',
+        ];
+    }
+}
+
+if (!function_exists('recruitmentAIBuildJustification')) {
+    /**
+     * Texto de la notificación: qué evaluó la IA y por qué propone esa disposición.
+     *
+     * @param array<string,mixed> $app
+     * @param array<string,mixed> $screen
+     */
+    function recruitmentAIBuildJustification(array $app, array $screen, array $decision): string
+    {
+        $lines = [];
+
+        $lines[] = 'Disposición sugerida: ' . recruitmentDispositionLabel($decision['status']);
+        if (isset($screen['score']) && $screen['score'] !== null) {
+            $lines[] = 'Score de la IA: ' . (int) $screen['score'] . '/100';
+        }
+        $lines[] = 'Justificación: ' . $decision['reason'];
+
+        // Datos que el CEO pidió ver explícitamente en el aviso.
+        $ubicacion = trim(implode(', ', array_filter([
+            $app['sector_residencia'] ?? null,
+            $app['city'] ?? null,
+            $app['state'] ?? null,
+        ])));
+        if ($ubicacion !== '') {
+            $lines[] = 'Ubicación: ' . $ubicacion;
+        }
+
+        $disponibilidad = trim((string) ($app['availability_time'] ?? $app['availability_preference'] ?? ''));
+        if ($disponibilidad !== '') {
+            $lines[] = 'Disponibilidad: ' . $disponibilidad;
+        }
+
+        $perfil = [];
+        if (!empty($app['role_interest']))               { $perfil[] = 'rol ' . $app['role_interest']; }
+        if (!empty($app['has_call_center_experience']))   { $perfil[] = 'exp. call center: ' . $app['has_call_center_experience']; }
+        if (!empty($app['years_of_experience']))         { $perfil[] = $app['years_of_experience'] . ' año(s) de experiencia'; }
+        if (!empty($perfil)) {
+            $lines[] = 'Perfil: ' . implode(' · ', $perfil);
+        }
+
+        if (!empty($screen['summary'])) {
+            $lines[] = 'Resumen: ' . mb_substr((string) $screen['summary'], 0, 400);
+        }
+        if (!empty($screen['strengths']) && is_array($screen['strengths'])) {
+            $lines[] = 'Fortalezas: ' . implode('; ', array_slice(array_map('strval', $screen['strengths']), 0, 4));
+        }
+        if (!empty($screen['concerns']) && is_array($screen['concerns'])) {
+            $lines[] = 'A considerar: ' . implode('; ', array_slice(array_map('strval', $screen['concerns']), 0, 4));
+        }
+
+        return implode("\n", $lines);
+    }
+}
+
+if (!function_exists('recruitmentAIProposeDisposition')) {
+    /**
+     * Registra la disposición que sugiere la IA y AVISA a Reclutamiento con la
+     * evaluación y su justificación ANTES de aplicarla al candidato.
+     *
+     * Con recruitment_ai_require_approval = 1 (default) la disposición queda
+     * PENDIENTE: el candidato no se mueve hasta que alguien la aprueba desde la
+     * ficha. Con 0 se aplica sola, pero solo en el caso que ya existía antes
+     * (preseleccionar por score alto) — nunca se descarta a nadie sin revisión.
+     *
+     * @param array<string,mixed> $screen resultado de screenCandidateWithAI()
+     * @return array{proposed:?string, applied:bool, notification_id:?int, state:?string}
+     */
+    function recruitmentAIProposeDisposition(PDO $pdo, int $applicationId, array $screen): array
+    {
+        require_once __DIR__ . '/notifications.php';
+
+        $out = ['proposed' => null, 'applied' => false, 'notification_id' => null, 'state' => null];
+
+        $stmt = $pdo->prepare("SELECT * FROM job_applications WHERE id = ?");
+        $stmt->execute([$applicationId]);
+        $app = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$app) {
+            return $out;
+        }
+
+        // Ya no es "nueva": alguien la movió a mano, no tocar su disposición.
+        $currentStatus = (string) ($app['status'] ?? 'new');
+
+        $aiCfg    = getRecruitmentAIConfig($pdo);
+        $dispCfg  = getRecruitmentDispositionConfig($pdo);
+        $minScore = (int) ($aiCfg['recruitment_ai_min_score_shortlist'] ?? 75);
+
+        $decision = recruitmentAIDecideDisposition($screen, $minScore);
+        $proposed = $decision['status'];
+        $out['proposed'] = $proposed;
+
+        $requireApproval = ($dispCfg['recruitment_ai_require_approval'] ?? '1') === '1';
+
+        // Sin aprobación: se conserva EXACTO el comportamiento anterior
+        // (solo auto-preseleccionar por score alto desde 'new').
+        $autoApply = !$requireApproval && $proposed === 'shortlisted' && $currentStatus === 'new';
+
+        // PENDING = la sugerencia sigue esperando una decisión humana. Es también
+        // el estado cuando la aprobación está apagada pero la sugerencia no era
+        // auto-aplicable (p. ej. propone descartar): nunca se descarta a nadie solo.
+        $state = $autoApply ? 'AUTO_APPLIED' : 'PENDING';
+
+        try {
+            $upd = $pdo->prepare("
+                UPDATE job_applications
+                SET ai_proposed_status = ?, ai_proposal_state = ?, ai_proposal_reason = ?, ai_proposed_at = NOW()
+                WHERE id = ?
+            ");
+            $upd->execute([$proposed, $state, $decision['reason'], $applicationId]);
+        } catch (PDOException $e) {
+            // Si la migración de columnas aún no corrió, seguimos: la notificación
+            // es lo importante y no debe caerse por eso.
+            error_log('recruitmentAIProposeDisposition (columnas): ' . $e->getMessage());
+        }
+
+        if ($autoApply) {
+            $applyStmt = $pdo->prepare("UPDATE job_applications SET status = ? WHERE id = ? AND status = 'new'");
+            $applyStmt->execute([$proposed, $applicationId]);
+            if ($applyStmt->rowCount() > 0) {
+                $out['applied'] = true;
+                $hist = $pdo->prepare("
+                    INSERT INTO application_status_history (application_id, old_status, new_status, notes)
+                    VALUES (?, ?, ?, ?)
+                ");
+                $hist->execute([$applicationId, $currentStatus, $proposed, 'Auto-preseleccionado por IA (score alto)']);
+            }
+        }
+
+        $out['state'] = $state;
+
+        // ---- Notificación en el sistema de ponche (campana) ----
+        $candidate = trim(($app['first_name'] ?? '') . ' ' . ($app['last_name'] ?? ''));
+        $code      = (string) ($app['application_code'] ?? '');
+        $title     = $autoApply
+            ? "IA aplicó disposición: {$candidate}"
+            : "Revisar disposición de IA: {$candidate}";
+
+        $message = recruitmentAIBuildJustification($app, $screen, $decision);
+        if (!$autoApply && $requireApproval) {
+            $message .= "\nPendiente de tu aprobación: el candidato NO se ha movido todavía.";
+        }
+
+        $severity = $proposed === 'rejected' ? 'HIGH' : 'NORMAL';
+
+        $notifId = notifyCreate($pdo, [
+            'type'            => 'RECRUITMENT_AI_DISPOSITION',
+            'title'           => $title,
+            'message'         => $message,
+            'severity'        => $severity,
+            'url'             => 'hr/view_application.php?id=' . $applicationId,
+            'roles'           => $dispCfg['recruitment_ai_notify_roles'] ?? 'HR,Admin',
+            'payload'         => [
+                'application_id'   => $applicationId,
+                'application_code' => $code,
+                'candidate'        => $candidate,
+                'proposed_status'  => $proposed,
+                'score'            => $screen['score'] ?? null,
+                'recommendation'   => $screen['recommendation'] ?? null,
+                'reason'           => $decision['reason'],
+                'auto_applied'     => $autoApply,
+            ],
+            // Un aviso por postulación y disposición propuesta: si se re-procesa
+            // con el mismo resultado no se llena la campana de duplicados.
+            'dedupe_key'      => 'recruitment_ai_disp:' . $applicationId . ':' . $proposed,
+            'requires_action' => !$autoApply && $requireApproval,
+        ]);
+        $out['notification_id'] = $notifId;
+
+        // Aviso extra a personas concretas (además de los roles configurados).
+        foreach (notifyResolveTargetUserIds($pdo, $dispCfg['recruitment_ai_notify_user_ids'] ?? '') as $uid) {
+            notifyCreate($pdo, [
+                'type'            => 'RECRUITMENT_AI_DISPOSITION',
+                'title'           => $title,
+                'message'         => $message,
+                'severity'        => $severity,
+                'url'             => 'hr/view_application.php?id=' . $applicationId,
+                'user_id'         => $uid,
+                'payload'         => ['application_id' => $applicationId, 'proposed_status' => $proposed],
+                'dedupe_key'      => 'recruitment_ai_disp:' . $applicationId . ':' . $proposed . ':u' . $uid,
+                'requires_action' => !$autoApply && $requireApproval,
+            ]);
+        }
+
+        // Copia por correo, si se pidió en settings.
+        if (($dispCfg['recruitment_ai_notify_email'] ?? '0') === '1') {
+            $recipients = notificationsParseCsv($dispCfg['recruitment_ai_notify_email_recipients'] ?? '');
+            $recipients = array_values(array_filter($recipients, static fn($e) => filter_var($e, FILTER_VALIDATE_EMAIL)));
+            if (!empty($recipients)) {
+                require_once __DIR__ . '/email_functions.php';
+                if (function_exists('sendEmail')) {
+                    $html = '<p><strong>' . htmlspecialchars($title) . '</strong></p>'
+                        . '<pre style="font-family:inherit;white-space:pre-wrap">' . htmlspecialchars($message) . '</pre>';
+                    foreach ($recipients as $to) {
+                        try {
+                            sendEmail($to, $title, $html);
+                        } catch (Throwable $e) {
+                            error_log('recruitmentAIProposeDisposition email: ' . $e->getMessage());
+                        }
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+}
+
+if (!function_exists('recruitmentAIResolveDisposition')) {
+    /**
+     * Aprueba (aplica al candidato) o descarta la disposición sugerida por la IA.
+     *
+     * @return array{success:bool, error:?string, applied_status:?string}
+     */
+    function recruitmentAIResolveDisposition(PDO $pdo, int $applicationId, bool $approve, int $userId): array
+    {
+        $stmt = $pdo->prepare("SELECT id, status, ai_proposed_status, ai_proposal_state FROM job_applications WHERE id = ?");
+        $stmt->execute([$applicationId]);
+        $app = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$app) {
+            return ['success' => false, 'error' => 'Postulación no encontrada.', 'applied_status' => null];
+        }
+        if (($app['ai_proposal_state'] ?? '') !== 'PENDING') {
+            return ['success' => false, 'error' => 'Esa sugerencia ya fue resuelta.', 'applied_status' => null];
+        }
+
+        $proposed = (string) ($app['ai_proposed_status'] ?? '');
+        $oldStatus = (string) ($app['status'] ?? 'new');
+
+        if (!$approve) {
+            $upd = $pdo->prepare("
+                UPDATE job_applications
+                SET ai_proposal_state = 'REJECTED', ai_proposal_decided_by = ?, ai_proposal_decided_at = NOW()
+                WHERE id = ?
+            ");
+            $upd->execute([$userId, $applicationId]);
+            return ['success' => true, 'error' => null, 'applied_status' => null];
+        }
+
+        if ($proposed === '') {
+            return ['success' => false, 'error' => 'No hay disposición sugerida que aplicar.', 'applied_status' => null];
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $upd = $pdo->prepare("
+                UPDATE job_applications
+                SET status = ?, ai_proposal_state = 'APPROVED',
+                    ai_proposal_decided_by = ?, ai_proposal_decided_at = NOW()
+                WHERE id = ?
+            ");
+            $upd->execute([$proposed, $userId, $applicationId]);
+
+            $hist = $pdo->prepare("
+                INSERT INTO application_status_history (application_id, old_status, new_status, changed_by, notes)
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $hist->execute([
+                $applicationId,
+                $oldStatus,
+                $proposed,
+                $userId,
+                'Disposición sugerida por IA, aprobada en la revisión',
+            ]);
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            error_log('recruitmentAIResolveDisposition: ' . $e->getMessage());
+            return ['success' => false, 'error' => 'No se pudo aplicar la disposición.', 'applied_status' => null];
+        }
+
+        return ['success' => true, 'error' => null, 'applied_status' => $proposed];
+    }
+}
+
 if (!function_exists('generateJobDescriptionWithAI')) {
     /**
      * Generate description / responsibilities / requirements for a job posting.
@@ -459,12 +820,17 @@ if (!function_exists('processApplicationAI')) {
             $application_id,
         ]);
 
+        // La IA propone la disposición y avisa a Reclutamiento con la
+        // justificación; solo se aplica al candidato si la revisión está apagada.
+        $disposition = recruitmentAIProposeDisposition($pdo, $application_id, $screen);
+
         return [
             'success'        => true,
             'score'          => $screen['score'],
             'summary'        => $screen['summary'],
             'recommendation' => $screen['recommendation'],
             'error'          => null,
+            'disposition'    => $disposition,
         ];
     }
 }

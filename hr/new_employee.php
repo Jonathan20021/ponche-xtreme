@@ -172,9 +172,11 @@ if (isset($_POST['register'])) {
                     }
                 }
 
-                // Insert user with employee code and all compensation fields
-                $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role, compensation_type, hourly_rate, hourly_rate_dop, monthly_salary, monthly_salary_dop, daily_salary_usd, daily_salary_dop, preferred_currency, department_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $insert->execute([$username, $employeeCode, $full_name, $password, $role, $compensation_type, $hourly_rate, $hourly_rate_dop, $monthly_salary_usd, $monthly_salary_dop, $daily_salary_usd, $daily_salary_dop, $preferred_currency, $department_id]);
+                // Insert user with employee code and all compensation fields.
+                // payroll_source define si sus horas salen del ponche o de Vicidial.
+                $payrollSource = (($_POST['payroll_source'] ?? 'manual') === 'vicidial') ? 'vicidial' : 'manual';
+                $insert = $pdo->prepare("INSERT INTO users (username, employee_code, full_name, password, role, compensation_type, hourly_rate, hourly_rate_dop, monthly_salary, monthly_salary_dop, daily_salary_usd, daily_salary_dop, preferred_currency, department_id, payroll_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $insert->execute([$username, $employeeCode, $full_name, $password, $role, $compensation_type, $hourly_rate, $hourly_rate_dop, $monthly_salary_usd, $monthly_salary_dop, $daily_salary_usd, $daily_salary_dop, $preferred_currency, $department_id, $payrollSource]);
                 $userId = $pdo->lastInsertId();
 
                 // Insert employee record with new fields
@@ -541,6 +543,24 @@ $themeLabel = $theme === 'light' ? 'Modo Oscuro' : 'Modo Claro';
                             <option value="daily">Salario Diario</option>
                         </select>
                         <p class="text-xs text-slate-400 mt-1">Selecciona el tipo de compensación del empleado</p>
+                    </div>
+
+                    <!-- De dónde salen las horas que se le pagan a esta persona.
+                         La nómina ya lee users.payroll_source; antes solo se podía
+                         cambiar desde la pestaña Nómina de vicidial_sync.php, así
+                         que un agente nuevo del discador quedaba en 'ponche' y sus
+                         horas salían del ponche manual hasta que alguien lo notara. -->
+                    <div class="form-group">
+                        <label for="payroll_source">Cálculo de horas *</label>
+                        <select id="payroll_source" name="payroll_source" required>
+                            <option value="manual">Sistema de ponche (marcaciones)</option>
+                            <option value="vicidial">Vicidial (tiempo logueado en el discador)</option>
+                        </select>
+                        <p class="text-xs text-slate-400 mt-1">
+                            Define de dónde toma la nómina las horas pagables. Los agentes que trabajan
+                            en el discador van por <strong>Vicidial</strong>; el personal administrativo,
+                            por <strong>ponche</strong>. Se puede cambiar después.
+                        </p>
                     </div>
 
                     <!-- Campos para Salario por Hora -->

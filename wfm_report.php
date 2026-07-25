@@ -2,6 +2,7 @@
 session_start();
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/lib/authorization_functions.php';
+require_once __DIR__ . '/lib/work_hours_calculator.php';
 
 ensurePermission('wfm_report');
 
@@ -197,7 +198,7 @@ foreach ($users as $u) {
 
 // 3. Compensation & Types Data
 $paidTypes = getPaidAttendanceTypeSlugs($pdo);
-$paidTypesUpper = array_map('strtoupper', $paidTypes);
+$paidTypesNormalized = normalizePaidTypeSlugs($paidTypes);
 $nonWorkTypes = ['BREAK', 'LUNCH', 'EXIT'];
 
 // 4. Batch Fetch Schedules (Optimization)
@@ -398,33 +399,9 @@ foreach ($users as $user) {
             }
         }
 
-        // 3. Payroll (Paid Intervals)
-        $inPaidState = false;
-        $paidStartTime = null;
-        $lastPaidPunchTime = null;
-        foreach ($dayPunches as $punch) {
-            $punchTime = strtotime($punch['timestamp']);
-            $punchType = strtoupper($punch['type']);
-            $isPaid = in_array($punchType, $paidTypesUpper);
-            
-            if ($isPaid) {
-                $lastPaidPunchTime = $punchTime;
-                if (!$inPaidState) {
-                    $paidStartTime = $punchTime;
-                    $inPaidState = true;
-                }
-            } elseif (!$isPaid && $inPaidState) {
-                if ($paidStartTime !== null && $lastPaidPunchTime !== null) {
-                    $payrollSeconds += ($lastPaidPunchTime - $paidStartTime);
-                }
-                $inPaidState = false;
-                $paidStartTime = null;
-                $lastPaidPunchTime = null;
-            }
-        }
-        if ($inPaidState && $paidStartTime !== null && $lastPaidPunchTime !== null) {
-            $payrollSeconds += ($lastPaidPunchTime - $paidStartTime);
-        }
+        // 3. Payroll: lógica canónica de la nómina (lib/work_hours_calculator.php)
+        $calc = calculateWorkSecondsFromPunches($dayPunches, $paidTypesNormalized);
+        $payrollSeconds += (int) ($calc['work_seconds'] ?? 0);
     }
 
     // --- MONEY CALC ---

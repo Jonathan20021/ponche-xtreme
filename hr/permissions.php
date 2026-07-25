@@ -41,6 +41,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_request'])) {
     ");
     $stmt->execute([$employeeId, $userId, $requestType, $startDate, $endDate, $startTime, $endTime, $totalDays, $totalHours, $reason]);
     $successMsg = "Solicitud de permiso creada correctamente.";
+
+    // Aviso automatico a RRHH: el cliente pidio enterarse cada vez que se
+    // registra un permiso, no al dia siguiente por correo.
+    try {
+        require_once __DIR__ . '/../lib/employee_notifications.php';
+        notifyPermissionRegistered($pdo, (int) $pdo->lastInsertId());
+    } catch (Throwable $notifyEx) {
+        error_log('notifyPermissionRegistered: ' . $notifyEx->getMessage());
+    }
+
 }
 
 // Handle permission request review
