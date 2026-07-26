@@ -2,11 +2,20 @@
 // Establecer zona horaria para todo el sistema
 date_default_timezone_set('America/Santo_Domingo');
 
-// Configuración de base de datos
+// Configuración de base de datos (valores por defecto: app de oficina -> DB remota)
 $host = '192.185.46.27';
 $dbname = 'hhempeos_ponche';
 $username = 'hhempeos_ponche';
 $password = 'Hugo##2025#';
+
+// Override por servidor. Este archivo NO va al repo (.gitignore), así cada
+// servidor guarda sus credenciales sin ensuciar db.php. Antes había que editar
+// db.php a mano en HostGator (donde la DB es 'localhost') y eso rompía el
+// "git pull" del despliegue con "Your local changes would be overwritten".
+// Contenido típico en HostGator:  <?php $host = 'localhost';
+if (is_file(__DIR__ . '/config/db_local.php')) {
+    require __DIR__ . '/config/db_local.php';
+}
 
 // Conexión NO persistente a propósito: la DB está en HostGator (remota para la
 // app de oficina). Con PDO::ATTR_PERSISTENT la conexión quedaba "pegada" en cada
