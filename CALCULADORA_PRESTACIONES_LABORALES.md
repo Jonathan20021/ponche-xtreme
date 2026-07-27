@@ -172,19 +172,46 @@ mensual**, y esto es a propósito:
 > Liquidar con esa cifra sería inflar las prestaciones de forma grosera.
 
 En su lugar, al elegir un colaborador aparece el panel **“Devengado real según la
-nómina”**: lo que se le pagó mes a mes, sacado de `payroll_records` y repartido a
-prorrata de días entre los meses que toca cada quincena. Cada mes viene marcado:
+nómina”** con lo que devengó mes a mes, de dos fuentes:
 
-- **Mes completo** — la nómina cubre todos los días del mes; el monto es fiable.
-- **Parcial** — solo parte del mes está cubierta; el monto queda **por debajo** del
-  salario real de ese mes. Hay que revisarlo.
-- **Sin datos** — no hay nómina cargada de ese mes; va a mano.
+1. **Nómina** (`payroll_records`), repartida a prorrata de días entre los meses
+   que toca cada quincena.
+2. **Ponche**, cuando la nómina no cubre los días trabajados de ese mes: tarifa ×
+   horas marcadas, calculadas con `computePeriodHoursForUser()` — la **misma**
+   función con la que se paga la nómina, así que respeta el corte semanal de 44 h,
+   el recargo configurado y el doble de los feriados.
 
-El botón **Usar estos montos** llena la rejilla con lo que haya.
+Una sola fuente por mes, para que ningún día se cuente dos veces. Cada mes se
+marca **Completo · nómina**, **Completo · ponche**, **Parcial**, **Sin datos** o
+**No trabajó ese mes**. El botón **Usar estos montos** llena la rejilla.
 
-> **Cobertura actual:** la nómina del sistema arranca en abril de 2026, así que de
-> un año solo hay ~3 meses. Para liquidar a alguien con más antigüedad, la mayoría
-> de los meses se escriben a mano.
+### La cobertura se mide contra los días EMPLEADOS
+
+Este fue un fallo real: se exigía que la nómina cubriera los **30 días del mes**
+para dar un mes por completo. Quien entró el 3 de junio y salió el 16 no puede
+cumplir eso nunca, así que salía siempre “Parcial”. Como casi todos los
+colaboradores dados de baja cobran por hora, **43 de 63 abrían el formulario en
+blanco**. Con la cobertura medida contra los días de empleo (y el respaldo del
+ponche), bajaron a 5.
+
+Los 5 restantes son datos incompletos del sistema, no del cálculo: tres no tienen
+ninguna tarifa configurada, uno tiene la fecha de salida corrupta (`0001-01-01`)
+y otro tiene marcajes pero ninguno de un tipo pagado (la nómina también le
+pagaría 0). Para todos ellos el salario se escribe a mano.
+
+### Ojo con el alineado de las casillas
+
+La rejilla usa las casillas `0..mesesActivos-1`, y **la última ACTIVA es el mes de
+salida** — no la casilla 12. Quien trabajó siete meses usa las casillas 1 a 7 y la
+7 es su último mes. `laborBenefitsPayrollMonths()` ya devuelve los meses
+desplazados a la casilla que les toca (`lbDesplazamientoMeses()`); si se toca eso,
+los importes acaban en filas equivocadas para todo el que haya trabajado menos de
+doce meses.
+
+> **Rendimiento:** recorrer el ponche de un mes cuesta ~350 ms contra la base
+> remota. Se consulta primero qué meses tienen algún marcaje para saltarse los
+> vacíos, y aun así un caso de doce meses tarda ~2,5 s. Por eso la pantalla
+> muestra “Buscando lo devengado…” y bloquea el botón hasta que llegan los datos.
 
 ### El aviso de meses en blanco
 

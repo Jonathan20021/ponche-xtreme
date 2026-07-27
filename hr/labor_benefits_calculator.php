@@ -621,9 +621,11 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                             </button>
                         </div>
                         <p class="lbc-note mb-3">
-                            Es lo que se le pagó de verdad, mes a mes. Los meses <strong>parciales</strong>
-                            solo están cubiertos en parte por la nómina cargada: revísalos antes de liquidar,
-                            porque van a quedar por debajo del salario real de ese mes.
+                            Es lo que devengó de verdad, mes a mes. Cuando hay nómina cargada sale de ahí;
+                            si no la cubre, el mes se calcula desde el <strong>ponche</strong> (tarifa × horas
+                            marcadas, con el mismo corte semanal y recargo que aplica la nómina). Los meses
+                            <strong>parciales</strong> solo están cubiertos en parte: revísalos antes de
+                            liquidar porque quedan por debajo de lo real.
                         </p>
                         <div class="overflow-x-auto">
                             <table class="w-full lbc-grid">
@@ -1268,18 +1270,33 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                 return;
             }
 
-            var etiquetas = { completa: 'Mes completo', parcial: 'Parcial', sin_datos: 'Sin datos en nómina' };
-            var colores   = { completa: '#6ee7b7', parcial: '#fcd34d', sin_datos: '#64748b' };
+            var etiquetas = {
+                completa:  'Completo',
+                parcial:   'Parcial',
+                sin_datos: 'Sin datos',
+                no_aplica: 'No trabajó ese mes'
+            };
+            var colores = {
+                completa:  '#6ee7b7',
+                parcial:   '#fcd34d',
+                sin_datos: '#f87171',
+                no_aplica: '#475569'
+            };
+            var fuentes = { nomina: 'nómina', ponche: 'ponche' };
 
             $('lbc-nomina-filas').innerHTML = mesesNomina.map(function (m, i) {
+                var detalle = etiquetas[m.cobertura] || m.cobertura;
+                if (m.cobertura === 'completa' && fuentes[m.fuente]) {
+                    detalle += ' · ' + fuentes[m.fuente];
+                } else if (m.cobertura === 'parcial') {
+                    detalle += ' (' + m.dias_cubiertos + '/' + m.dias_empleado + ' días)';
+                }
                 return '<tr>'
                     + '<td class="text-slate-400 text-sm">' + (i + 1) + '. ' + m.etiqueta + '</td>'
                     + '<td class="lbc-money text-sm" style="color:' + colores[m.cobertura] + '">'
-                    + (m.cobertura === 'sin_datos' ? '—' : moneda(m.monto)) + '</td>'
+                    + (m.monto > 0 ? moneda(m.monto) : '—') + '</td>'
                     + '<td class="text-xs" style="text-align:left; color:' + colores[m.cobertura] + '">'
-                    + etiquetas[m.cobertura]
-                    + (m.cobertura === 'parcial' ? ' (' + m.dias_cubiertos + '/' + m.dias_mes + ' días)' : '')
-                    + '</td></tr>';
+                    + detalle + '</td></tr>';
             }).join('');
 
             $('lbc-nomina').style.display = 'block';
@@ -1287,12 +1304,15 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
 
         $('lbc-usar-nomina').addEventListener('click', function () {
             if (!mesesNomina.length) { return; }
+
+            // mesesNomina ya viene alineado con la rejilla desde el servidor:
+            // la casilla g de aquí es la casilla g de la tabla de salarios.
             $('lbc-salario-fijo').value = '';
-            for (var i = 0; i < FILAS; i++) {
-                var m = mesesNomina[i];
-                var campo = document.querySelector('.lbc-sal[data-i="' + i + '"]');
-                campo.value = (m && m.cobertura !== 'sin_datos' && m.monto > 0) ? m.monto : '';
-                actualizarTotalFila(i);
+            for (var g = 0; g < FILAS; g++) {
+                var m = mesesNomina[g];
+                var campo = document.querySelector('.lbc-sal[data-i="' + g + '"]');
+                campo.value = (m && m.monto > 0) ? m.monto : '';
+                actualizarTotalFila(g);
             }
             programarCalculo();
         });
@@ -1302,12 +1322,24 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
             $('lbc-empleado-nota').textContent = '';
             if (!id) {
                 $('lbc-nomina').style.display = 'none';
+                mesesNomina = [];
                 return;
             }
+
+            // Traer los datos puede tardar unos segundos: para quien cobra por
+            // hora hay que recorrer el ponche mes a mes. Sin este aviso parece
+            // que la pantalla no hace nada, y da tiempo a pulsar "Usar estos
+            // montos" antes de que lleguen los importes.
+            mesesNomina = [];
+            $('lbc-nomina').style.display = 'none';
+            $('lbc-usar-nomina').disabled = true;
+            $('lbc-empleado-nota').innerHTML =
+                '<i class="fas fa-circle-notch fa-spin"></i> Buscando lo devengado en nómina y ponche…';
 
             fetch('labor_benefits_calculator.php?ajax=empleado&id=' + encodeURIComponent(id))
                 .then(function (r) { return r.json(); })
                 .then(function (r) {
+                    $('lbc-usar-nomina').disabled = false;
                     if (!r || !r.ok) {
                         $('lbc-empleado-nota').textContent = (r && r.error) || 'No se pudieron traer los datos.';
                         return;
@@ -1341,7 +1373,10 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                     $('lbc-empleado-nota').textContent = nota;
                     programarCalculo();
                 })
-                .catch(function () { $('lbc-empleado-nota').textContent = 'No se pudo contactar al servidor.'; });
+                .catch(function () {
+                    $('lbc-usar-nomina').disabled = false;
+                    $('lbc-empleado-nota').textContent = 'No se pudo contactar al servidor.';
+                });
         });
 
         // ---- Salario fijo -----------------------------------------------

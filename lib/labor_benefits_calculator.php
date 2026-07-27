@@ -796,8 +796,13 @@ if (!function_exists('laborBenefitsCalculate')) {
             // Con pago mensual las casillas se pueden nombrar por su mes real;
             // con pago quincenal, semanal o diario no hay tal correspondencia y
             // se quedan numeradas.
+            //
+            // OJO con el alineado: la ÚLTIMA casilla ACTIVA es el mes de salida,
+            // no la casilla 12. Quien trabajó siete meses usa las casillas 1 a 7
+            // y la 7 es su último mes. Etiquetar de corrido pondría los nombres
+            // de mes en la fila equivocada.
             'periodos_etiquetas' => $periodoIdx === 0
-                ? array_column(lbEtiquetasMeses(lbFechaToString($salidaReal)), 'etiqueta')
+                ? lbEtiquetasAlineadas(lbFechaToString($salidaReal), $mesesActivos)
                 : [],
             'salario_acumulado'  => lbFixed2($acumulado),
             'ultimo_salario'     => lbFixed2($ultimoSalario),
@@ -854,6 +859,117 @@ if (!function_exists('lbEtiquetasMeses')) {
     }
 }
 
+if (!function_exists('lbDesplazamientoMeses')) {
+    /**
+     * Cuántas posiciones hay que saltar en la lista cronológica de 12 meses para
+     * que caiga sobre la casilla 0 de la rejilla.
+     *
+     * `lbEtiquetasMeses()` devuelve doce meses cronológicos y el último (índice
+     * 11) es el de la salida. Pero la rejilla del formulario usa las casillas 0
+     * a `mesesActivos - 1`, y la última ACTIVA es la del mes de salida. Con doce
+     * meses ambos coinciden; con menos, no, y hay que desplazar.
+     */
+    function lbDesplazamientoMeses(int $mesesActivos): int
+    {
+        return 12 - max(1, min(12, $mesesActivos));
+    }
+}
+
+if (!function_exists('lbEtiquetasAlineadas')) {
+    /**
+     * Nombres de mes ya colocados en la casilla que les toca en la rejilla.
+     * Las casillas que no se usan quedan vacías.
+     *
+     * @return array<int,string>
+     */
+    function lbEtiquetasAlineadas(string $exitDate, int $mesesActivos): array
+    {
+        $base = lbEtiquetasMeses($exitDate);
+        if (!$base) {
+            return [];
+        }
+        $salto = lbDesplazamientoMeses($mesesActivos);
+
+        $out = [];
+        for ($g = 0; $g < 12; $g++) {
+            $out[$g] = ($g < $mesesActivos && isset($base[$g + $salto]))
+                ? $base[$g + $salto]['etiqueta']
+                : '';
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('lbDevengadoDesdePonche')) {
+    /**
+     * Lo devengado en un tramo según el PONCHE: tarifa × horas trabajadas.
+     *
+     * Las horas salen de `computePeriodHoursForUser()`, que es la MISMA función
+     * con la que se paga la nómina: respeta si al colaborador se le mide por
+     * ponche o por Vicidial, aplica el corte semanal de 44 h y el doble de los
+     * feriados a quien corresponda. Al recargo de las extra se le da el mismo
+     * multiplicador que usa la nómina (el del colaborador si lo tiene, si no el
+     * global de schedule_config; por ley en RD es 1.35).
+     *
+     * Esto NO es una jornada teórica como el viejo "tarifa × 190.67 h": son las
+     * horas que la persona marcó de verdad.
+     */
+    function lbDevengadoDesdePonche(PDO $pdo, int $userId, string $desde, string $hasta, float $tarifaHora): float
+    {
+        if ($userId <= 0 || $tarifaHora <= 0 || $desde > $hasta) {
+            return 0.0;
+        }
+
+        // Carga diferida: arrastra la nómina entera y no hace falta en la
+        // mayoría de los cálculos (ni en el PDF).
+        require_once __DIR__ . '/agent_hours.php';
+
+        if (!function_exists('computePeriodHoursForUser')) {
+            return 0.0;
+        }
+
+        try {
+            $paidSlugs = array_values(array_filter(array_map(
+                'sanitizeAttendanceTypeSlug',
+                getPaidAttendanceTypeSlugs($pdo)
+            )));
+
+            $u = $pdo->prepare("SELECT COALESCE(payroll_source,'manual') AS payroll_source,
+                                       compensation_type, role, monthly_salary, monthly_salary_dop,
+                                       overtime_multiplier
+                                FROM users WHERE id = ?");
+            $u->execute([$userId]);
+            $usuario = $u->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $horas = computePeriodHoursForUser(
+                $pdo, $userId, $desde, $hasta, $paidSlugs, 44.0,
+                shouldApplyHolidayDoublePay(
+                    $usuario['compensation_type'] ?? null,
+                    $usuario['role'] ?? null,
+                    max((float) ($usuario['monthly_salary'] ?? 0), (float) ($usuario['monthly_salary_dop'] ?? 0))
+                ),
+                $usuario['payroll_source'] ?? 'manual'
+            );
+
+            $multiplicador = (float) ($usuario['overtime_multiplier'] ?? 0);
+            if ($multiplicador <= 0) {
+                $multiplicador = (float) (getScheduleConfig($pdo)['overtime_multiplier'] ?? 1.35);
+            }
+            if ($multiplicador <= 0) {
+                $multiplicador = 1.35;
+            }
+
+            $regulares = ((int) ($horas['regular_seconds'] ?? 0)) / 3600;
+            $extras    = ((int) ($horas['overtime_seconds'] ?? 0)) / 3600;
+
+            return lbFixed2($regulares * $tarifaHora + $extras * $tarifaHora * $multiplicador);
+        } catch (Throwable $e) {
+            error_log('lbDevengadoDesdePonche: ' . $e->getMessage());
+            return 0.0;
+        }
+    }
+}
+
 if (!function_exists('laborBenefitsPayrollMonths')) {
     /**
      * Salario ordinario REALMENTE devengado, mes a mes, según la nómina.
@@ -865,24 +981,60 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
      * cifra sería inflar las prestaciones. Así que el monto sale de lo que se
      * le pagó, no de una jornada teórica.
      *
-     * Las quincenas se reparten entre los meses que tocan a prorrata de días, y
-     * cada mes viene marcado con su cobertura: solo se puede confiar en los
-     * meses `completa`.
+     * Las quincenas se reparten entre los meses que tocan a prorrata de días.
+     *
+     * LA COBERTURA SE MIDE CONTRA LOS DÍAS EMPLEADOS, NO CONTRA EL MES ENTERO.
+     * Antes se exigía cubrir los 30 días del mes, y por eso quien entró el 3 de
+     * junio y salió el 16 salía siempre "parcial": era imposible que cumpliera.
+     * Con casi todos los colaboradores dados de baja cobrando por hora, eso
+     * dejaba el formulario en blanco en 43 de 63 casos.
+     *
+     * Y cuando la nómina no llega a cubrir los días trabajados de un mes, el mes
+     * se recalcula ENTERO desde el ponche (tarifa × horas, con el mismo corte
+     * semanal y el mismo recargo que aplica la nómina). Una sola fuente por mes,
+     * para que ningún día se pague dos veces.
      *
      * Devuelve 12 casillas alineadas con la rejilla del formulario: la última
      * (índice 11) es el mes de la fecha de salida.
      *
-     * @return array<int,array{mes:string,etiqueta:string,monto:float,cobertura:string,dias_cubiertos:int,dias_mes:int}>
+     * @param string|null $hireDate  Sin ella no se puede saber qué días del mes
+     *                               le correspondían, y todo se mide contra el
+     *                               mes completo (comportamiento anterior).
+     * @return array<int,array{mes:string,etiqueta:string,monto:float,cobertura:string,
+     *                         fuente:string,dias_cubiertos:int,dias_empleado:int,dias_mes:int}>
      */
-    function laborBenefitsPayrollMonths(PDO $pdo, int $employeeId, string $exitDate): array
+    function laborBenefitsPayrollMonths(PDO $pdo, int $employeeId, string $exitDate, ?string $hireDate = null): array
     {
         $slots = lbEtiquetasMeses($exitDate);
         if (!$slots) {
             return [];
         }
+        // Días de cada mes en los que el colaborador estuvo realmente empleado.
+        $empIni = $hireDate ? substr($hireDate, 0, 10) : null;
+        $empFin = substr($exitDate, 0, 10);
+
         foreach ($slots as $i => $s) {
-            $slots[$i] += ['monto' => 0.0, 'cobertura' => 'sin_datos', 'dias_cubiertos' => 0];
+            $mesIni = $s['mes'] . '-01';
+            $mesFin = date('Y-m-t', strtotime($mesIni));
+
+            $desdeMes = ($empIni && $empIni > $mesIni) ? $empIni : $mesIni;
+            $hastaMes = ($empFin < $mesFin) ? $empFin : $mesFin;
+
+            $diasEmpleado = ($desdeMes > $hastaMes)
+                ? 0
+                : (int) round((strtotime($hastaMes . ' 12:00:00') - strtotime($desdeMes . ' 12:00:00')) / 86400) + 1;
+
+            $slots[$i] += [
+                'monto'          => 0.0,
+                'cobertura'      => $diasEmpleado > 0 ? 'sin_datos' : 'no_aplica',
+                'fuente'         => '',
+                'dias_cubiertos' => 0,
+                'dias_empleado'  => $diasEmpleado,
+                'desde'          => $desdeMes,
+                'hasta'          => $hastaMes,
+            ];
         }
+
         $desde = $slots[0]['mes'] . '-01';
         $hasta = date('Y-m-t', strtotime($slots[11]['mes'] . '-01'));
 
@@ -917,28 +1069,138 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
             $porDia = ((float) $r['gross_salary']) / max(1, $diasPeriodo);
 
             for ($t = $ini; $t <= $fn; $t += 86400) {
+                $dia = date('Y-m-d', $t);
                 $mes = date('Y-m', $t);
                 if (!isset($porMes[$mes])) {
                     continue;
                 }
                 $k = $porMes[$mes];
+                // Solo cuentan los días en que además estaba empleado: una
+                // quincena puede empezar antes de su ingreso o acabar después
+                // de su salida.
+                if ($slots[$k]['dias_empleado'] <= 0
+                    || $dia < $slots[$k]['desde'] || $dia > $slots[$k]['hasta']) {
+                    continue;
+                }
                 $slots[$k]['monto'] += $porDia;
                 $slots[$k]['dias_cubiertos']++;
             }
         }
 
-        foreach ($slots as $i => $s) {
-            $slots[$i]['monto'] = lbFixed2($s['monto']);
-            if ($s['dias_cubiertos'] <= 0) {
-                $slots[$i]['cobertura'] = 'sin_datos';
-            } elseif ($s['dias_cubiertos'] >= $s['dias_mes']) {
-                $slots[$i]['cobertura'] = 'completa';
-            } else {
-                $slots[$i]['cobertura'] = 'parcial';
+        // Tarifa por hora, para poder completar desde el ponche los meses que la
+        // nómina no alcanza a cubrir.
+        $tarifaHora = 0.0;
+        $userId = 0;
+        try {
+            $st = $pdo->prepare("SELECT u.id, COALESCE(u.hourly_rate_dop, 0) FROM employees e
+                                 INNER JOIN users u ON u.id = e.user_id WHERE e.id = ?");
+            $st->execute([$employeeId]);
+            if ($fila = $st->fetch(PDO::FETCH_NUM)) {
+                $userId = (int) $fila[0];
+                $tarifaHora = (float) $fila[1];
+            }
+        } catch (Throwable $e) {
+            error_log('laborBenefitsPayrollMonths tarifa: ' . $e->getMessage());
+        }
+
+        // Qué meses tienen algún marcaje. Recorrer el ponche de un mes cuesta
+        // ~350 ms contra la base remota, así que conviene saber de antemano
+        // cuáles no tienen nada y ahorrarse la llamada entera.
+        $mesesConPonche = [];
+        if ($userId > 0 && $tarifaHora > 0) {
+            try {
+                $st = $pdo->prepare("
+                    SELECT DISTINCT DATE_FORMAT(timestamp, '%Y-%m') AS mes
+                    FROM attendance
+                    WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
+                ");
+                $st->execute([$userId, $desde, $hasta]);
+                foreach ($st->fetchAll(PDO::FETCH_COLUMN) ?: [] as $mes) {
+                    $mesesConPonche[$mes] = true;
+                }
+            } catch (Throwable $e) {
+                error_log('laborBenefitsPayrollMonths ponche: ' . $e->getMessage());
+                // Sin el atajo se consultan todos: más lento, pero correcto.
+                $mesesConPonche = null;
             }
         }
 
-        return array_values($slots);
+        foreach ($slots as $i => $s) {
+            if ($s['dias_empleado'] <= 0) {
+                $slots[$i]['monto'] = 0.0;
+                continue;
+            }
+
+            if ($s['dias_cubiertos'] >= $s['dias_empleado']) {
+                $slots[$i]['monto']     = lbFixed2($s['monto']);
+                $slots[$i]['cobertura'] = 'completa';
+                $slots[$i]['fuente']    = 'nomina';
+                continue;
+            }
+
+            // La nómina no llega: se recalcula el mes entero desde el ponche,
+            // salvo que ya sepamos que ese mes no tiene ni un marcaje.
+            $vale = $userId > 0 && $tarifaHora > 0
+                && ($mesesConPonche === null || isset($mesesConPonche[$s['mes']]));
+            $desdePonche = $vale
+                ? lbDevengadoDesdePonche($pdo, $userId, $s['desde'], $s['hasta'], $tarifaHora)
+                : 0.0;
+
+            if ($desdePonche > 0) {
+                $slots[$i]['monto']          = lbFixed2($desdePonche);
+                $slots[$i]['cobertura']      = 'completa';
+                $slots[$i]['fuente']         = 'ponche';
+                $slots[$i]['dias_cubiertos'] = $s['dias_empleado'];
+            } elseif ($s['monto'] > 0) {
+                $slots[$i]['monto']     = lbFixed2($s['monto']);
+                $slots[$i]['cobertura'] = 'parcial';
+                $slots[$i]['fuente']    = 'nomina';
+            } else {
+                $slots[$i]['monto']     = 0.0;
+                $slots[$i]['cobertura'] = 'sin_datos';
+            }
+        }
+
+        // Se devuelven ya ALINEADOS con la rejilla del formulario: la última
+        // casilla activa es el mes de salida. Hacerlo aquí y no en la pantalla
+        // evita que la pantalla tenga que saber cuántos períodos hay activos
+        // antes de haber calculado nada (que es justo cuando se pulsa "Usar
+        // estos montos", con la rejilla todavía vacía).
+        $mesesActivos = lbMesesActivos($hireDate, $empFin);
+        $salto = lbDesplazamientoMeses($mesesActivos);
+
+        $alineados = [];
+        for ($g = 0; $g < 12; $g++) {
+            $alineados[$g] = $slots[$g + $salto] ?? [
+                'mes' => '', 'etiqueta' => '', 'monto' => 0.0, 'cobertura' => 'no_aplica',
+                'fuente' => '', 'dias_cubiertos' => 0, 'dias_empleado' => 0, 'dias_mes' => 0,
+                'desde' => '', 'hasta' => '',
+            ];
+        }
+
+        return $alineados;
+    }
+}
+
+if (!function_exists('lbMesesActivos')) {
+    /**
+     * Cuántas casillas de salario usa el motor para un período de empleo.
+     * Misma regla que laborBenefitsCalculate: doce si pasó del año, si no una
+     * por mes cumplido, y como mínimo una.
+     */
+    function lbMesesActivos(?string $hireDate, string $exitDate): int
+    {
+        $ini = $hireDate ? lbParseFecha(substr($hireDate, 0, 10)) : null;
+        $fin = lbParseFecha(substr($exitDate, 0, 10));
+        if (!$ini || !$fin) {
+            return 12;
+        }
+        // El motor mide contra la salida corrida un día; aquí igual.
+        $t = lbDifFechas($ini, lbSumarDias($fin, 1));
+        if ($t['years'] > 0) {
+            return 12;
+        }
+        return $t['months'] > 0 ? min(12, $t['months']) : 1;
     }
 }
 
@@ -1004,9 +1266,11 @@ if (!function_exists('laborBenefitsEmployeeDefaults')) {
                 : 'Sin salario registrado — escríbelo a mano.';
         }
 
-        // Devengado real, para que RRHH lo aplique con un clic.
+        // Devengado real, para que RRHH lo aplique con un clic. Se pasa la fecha
+        // de ingreso para que la cobertura se mida contra los días que estuvo
+        // empleado y no contra el mes entero.
         $salida = $row['termination_date'] ?: date('Y-m-d');
-        $mesesNomina = laborBenefitsPayrollMonths($pdo, (int) $row['id'], $salida);
+        $mesesNomina = laborBenefitsPayrollMonths($pdo, (int) $row['id'], $salida, $row['hire_date']);
         $conDatos = 0;
         foreach ($mesesNomina as $m) {
             if ($m['cobertura'] === 'completa') {
