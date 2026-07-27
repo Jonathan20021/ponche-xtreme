@@ -199,6 +199,35 @@ marca **Completo · nómina**, **Completo · ponche**, **Parcial**, **Sin datos*
 tiene, y si no con el devengado real. El botón **Usar estos montos** solo hace
 falta para volver a aplicarlo después de editar a mano.
 
+### El salario que se propone es MENSUAL, no lo cobrado en días sueltos
+
+La casilla del formulario pide el *salario ordinario mensual*. Meter ahí lo que
+alguien cobró en un mes truncado subestima todo. Dos ajustes lo evitan:
+
+**1. Los meses parciales de los extremos se llevan a mes completo.** Quien
+estuvo 22 de los 31 días de julio: `monto ÷ 22 × 31`. Solo si estuvo al menos
+una semana — extrapolar un mes a partir de dos días sería inventar.
+
+**2. Si el tiempo laborado da menos casillas que meses de calendario trabajados,
+se usa el salario mensual promedio de todo el servicio.** Con 1 mes y 8 días hay
+UNA casilla, pero la persona abarca junio y julio: llenar solo julio tiraría
+junio entero. El promedio (`total devengado ÷ meses de servicio`) es justo lo que
+el motor necesita, porque con una sola casilla esa casilla **es** el promedio.
+
+> **El bruto de una quincena son HORAS TRABAJADAS, no un sueldo por día.** Si
+> alguien salió el 22 y la quincena cierra el 28, esas horas las trabajó igual
+> antes de irse. Repartir el bruto entre los 15 días y quedarse con 9 le quitaba
+> dinero **que ya le habían pagado**. El bruto se reparte solo entre sus días.
+> Ese error solo, en Juan Armando, escondía RD$4,688.78 de RD$45,830.14.
+
+La pantalla muestra siempre **ambas columnas** —lo devengado y lo que va en la
+casilla— y explica cuál de los dos ajustes se aplicó. Nada de esto toca el motor:
+el cálculo sigue siendo el del MT, solo se le da un salario mejor.
+
+**Impacto medido:** sobre los 49 colaboradores dados de baja que liquidan desde
+nómina o ponche, la liquidación pasó de RD$377,457.84 a RD$446,138.57. Se estaba
+pagando **RD$68,680.73 de menos**.
+
 ### Cuando no se puede llenar solo
 
 De los 63 colaboradores con salida registrada, **55 liquidan automáticamente**.

@@ -1158,9 +1158,17 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
             if (!$ini || !$fn || $fn < $ini) {
                 continue;
             }
-            $diasPeriodo = (int) round(($fn - $ini) / 86400) + 1;
-            $porDia = ((float) $r['gross_salary']) / max(1, $diasPeriodo);
 
+            // Primera pasada: qué días de esta quincena caen dentro de su
+            // relación laboral y en qué casilla.
+            //
+            // OJO CON EL REPARTO: el bruto de una quincena son HORAS TRABAJADAS,
+            // no un sueldo devengado día a día. Si alguien salió el 22 y la
+            // quincena termina el 28, esas horas las trabajó igual antes de
+            // irse: repartir el bruto entre los 15 días y quedarse solo con 9
+            // le quitaba dinero que SÍ le pagaron. Por eso el bruto se reparte
+            // únicamente entre los días suyos, sin perder ni un peso.
+            $dias = [];
             for ($t = $ini; $t <= $fn; $t += 86400) {
                 $dia = date('Y-m-d', $t);
                 $mes = date('Y-m', $t);
@@ -1168,13 +1176,19 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
                     continue;
                 }
                 $k = $porMes[$mes];
-                // Solo cuentan los días en que además estaba empleado: una
-                // quincena puede empezar antes de su ingreso o acabar después
-                // de su salida.
                 if ($slots[$k]['dias_empleado'] <= 0
                     || $dia < $slots[$k]['desde'] || $dia > $slots[$k]['hasta']) {
                     continue;
                 }
+                $dias[] = $k;
+            }
+
+            if (!$dias) {
+                continue;
+            }
+
+            $porDia = ((float) $r['gross_salary']) / count($dias);
+            foreach ($dias as $k) {
                 $slots[$k]['monto'] += $porDia;
                 $slots[$k]['dias_cubiertos']++;
             }
@@ -1275,6 +1289,17 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         $mesesActivos = lbMesesActivos($hireDate, $empFin);
         $salto = lbDesplazamientoMeses($mesesActivos);
 
+        // Antes de recortar: cuánto devengó en TOTAL y en cuántos meses. Hace
+        // falta para detectar si el recorte deja fuera meses con dinero.
+        $totalDevengado = 0.0;
+        $mesesConDinero = 0;
+        foreach ($slots as $s) {
+            if ($s['dias_empleado'] > 0 && $s['monto'] > 0) {
+                $totalDevengado += $s['monto'];
+                $mesesConDinero++;
+            }
+        }
+
         $alineados = [];
         for ($g = 0; $g < 12; $g++) {
             $alineados[$g] = $slots[$g + $salto] ?? [
@@ -1284,7 +1309,120 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
             ];
         }
 
+        $alineados = lbNormalizarMesesParciales($alineados);
+
+        // Los meses del formulario son de ANIVERSARIO (del 15 al 15), pero la
+        // nómina viene por mes de calendario. Cuando el tiempo laborado da menos
+        // casillas que meses de calendario con dinero, el recorte tiraría lo
+        // devengado en los meses de más: quien entró el 15 de junio y salió el
+        // 22 de julio tiene UNA casilla, y junio se perdía entero.
+        //
+        // En ese caso las casillas se llenan con el PROMEDIO MENSUAL real de todo
+        // su tiempo de servicio, que es justo lo que el motor necesita (con una
+        // sola casilla, esa casilla ES el promedio). Así no se pierde ni un peso.
+        $mesesEnCasillas = 0;
+        for ($g = 0; $g < $mesesActivos; $g++) {
+            if (($alineados[$g]['monto'] ?? 0) > 0) {
+                $mesesEnCasillas++;
+            }
+        }
+
+        if ($mesesConDinero > $mesesEnCasillas && $totalDevengado > 0) {
+            $servicio = lbMesesDeServicio($hireDate, $empFin);
+            if ($servicio > 0) {
+                $promedio = lbFixed2($totalDevengado / $servicio);
+                for ($g = 0; $g < 12; $g++) {
+                    $dentro = ($g < $mesesActivos);
+                    $alineados[$g]['monto']            = $dentro ? $promedio : 0.0;
+                    $alineados[$g]['promediado']       = $dentro;
+                    $alineados[$g]['total_devengado']  = lbFixed2($totalDevengado);
+                    $alineados[$g]['meses_servicio']   = round($servicio, 4);
+                    if ($dentro && ($alineados[$g]['cobertura'] ?? '') === 'no_aplica') {
+                        $alineados[$g]['cobertura'] = 'completa';
+                        $alineados[$g]['fuente']    = 'promedio';
+                    }
+                }
+            }
+        }
+
         return $alineados;
+    }
+}
+
+if (!function_exists('lbMesesDeServicio')) {
+    /**
+     * Tiempo de servicio expresado en meses con decimales (1 mes y 8 días =
+     * 1.258), para poder sacar el salario mensual promedio.
+     *
+     * La fracción de días se mide contra los días del mes de salida, que es la
+     * misma convención que usa el motor para prorratear el salario de Navidad.
+     */
+    function lbMesesDeServicio(?string $hireDate, string $exitDate): float
+    {
+        $ini = $hireDate ? lbParseFecha(substr($hireDate, 0, 10)) : null;
+        $fin = lbParseFecha(substr($exitDate, 0, 10));
+        if (!$ini || !$fin) {
+            return 0.0;
+        }
+
+        $t = lbDifFechas($ini, lbSumarDias($fin, 1));
+        $diasDelMes = lbDiasMes($fin['m'] + 1, $fin['y']);
+
+        return $t['years'] * 12 + $t['months'] + ($diasDelMes > 0 ? $t['days'] / $diasDelMes : 0);
+    }
+}
+
+if (!function_exists('lbNormalizarMesesParciales')) {
+    /**
+     * Lleva los meses parciales de los extremos a su equivalente de MES COMPLETO.
+     *
+     * POR QUÉ: la casilla del formulario pide el "salario del período", es decir
+     * el salario ordinario MENSUAL. Quien entró el 15 de junio y salió el 22 de
+     * julio no tiene ningún mes completo: si se mete lo que cobró en esos 22
+     * días de julio como si fuera un mes entero, el salario mensual y el diario
+     * salen subestimados y la liquidación se paga por debajo.
+     *
+     * Caso real: Juan Armando devengó RD$21,548.71 en 22 de los 31 días de
+     * julio. Tomado como mes completo daba un salario diario de RD$904.27, o
+     * sea 3.6 h/día a su tarifa de RD$250 — cuando trabajaba 6.3 h/día. Llevado
+     * a mes completo, el diario queda coherente con sus horas reales.
+     *
+     * Solo se ajustan los meses en que la persona NO estuvo el mes entero, y
+     * solo si estuvo al menos una semana: extrapolar un mes a partir de dos o
+     * tres días daría un número inventado.
+     *
+     * El monto crudo se conserva en `monto_devengado` para poder mostrar ambos.
+     *
+     * @param array<int,array<string,mixed>> $meses
+     * @return array<int,array<string,mixed>>
+     */
+    function lbNormalizarMesesParciales(array $meses, int $diasMinimos = 7): array
+    {
+        foreach ($meses as $i => $m) {
+            $crudo    = (float) ($m['monto'] ?? 0);
+            $empleado = (int) ($m['dias_empleado'] ?? 0);
+            $delMes   = (int) ($m['dias_mes'] ?? 0);
+
+            $meses[$i]['monto_devengado'] = $crudo;
+            $meses[$i]['normalizado']     = false;
+            $meses[$i]['monto_completo']  = $crudo;
+
+            if ($crudo <= 0 || $empleado <= 0 || $delMes <= 0 || $empleado >= $delMes) {
+                continue;
+            }
+            if ($empleado < $diasMinimos) {
+                // Se marca como parcial para que se vea, pero no se extrapola.
+                $meses[$i]['parcial_corto'] = true;
+                continue;
+            }
+
+            $completo = lbFixed2($crudo / $empleado * $delMes);
+            $meses[$i]['monto']          = $completo;
+            $meses[$i]['monto_completo'] = $completo;
+            $meses[$i]['normalizado']    = true;
+        }
+
+        return $meses;
     }
 }
 

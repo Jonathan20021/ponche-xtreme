@@ -315,6 +315,8 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
             font-variant-numeric: tabular-nums; letter-spacing:-.02em; }
 
         .lbc-note { font-size:.78rem; color:#94a3b8; line-height:1.5; }
+        .lbc-explica { background:rgba(59,130,246,.1); border-left:3px solid #3b82f6;
+            border-radius:.4rem; padding:.65rem .8rem; font-size:.8rem; color:#bfdbfe; line-height:1.55; }
         .lbc-error { background:rgba(244,63,94,.12); border:1px solid rgba(244,63,94,.4);
             color:#fda4af; border-radius:.6rem; padding:.7rem .9rem; font-size:.86rem; }
         .lbc-aviso { background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.45);
@@ -627,13 +629,16 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                             <strong>parciales</strong> solo están cubiertos en parte: revísalos antes de
                             liquidar porque quedan por debajo de lo real.
                         </p>
+                        <div id="lbc-nomina-explica" class="lbc-explica mb-3" style="display:none"></div>
+
                         <div class="overflow-x-auto">
                             <table class="w-full lbc-grid">
                                 <thead>
                                     <tr>
                                         <th>Mes</th>
                                         <th>Devengado</th>
-                                        <th style="text-align:left">Cobertura</th>
+                                        <th>En la casilla</th>
+                                        <th style="text-align:left">Detalle</th>
                                     </tr>
                                 </thead>
                                 <tbody id="lbc-nomina-filas"></tbody>
@@ -1297,7 +1302,10 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                 sin_datos: '#f87171',
                 no_aplica: '#475569'
             };
-            var fuentes = { nomina: 'nómina', ponche: 'ponche' };
+            var fuentes = { nomina: 'nómina', ponche: 'ponche', promedio: 'promedio' };
+
+            var promediado = mesesNomina.some(function (m) { return m.promediado; });
+            var ajustados  = mesesNomina.filter(function (m) { return m.normalizado; }).length;
 
             $('lbc-nomina-filas').innerHTML = mesesNomina.map(function (m, i) {
                 var detalle = etiquetas[m.cobertura] || m.cobertura;
@@ -1306,13 +1314,48 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                 } else if (m.cobertura === 'parcial') {
                     detalle += ' (' + m.dias_cubiertos + '/' + m.dias_empleado + ' días)';
                 }
+                // El promedio manda sobre el ajuste del mes: si se promedió, la
+                // casilla no lleva el valor de ESTE mes y decir "ajustado a mes
+                // completo" haría creer que sí.
+                if (m.promediado) {
+                    detalle += ' · en la casilla va el promedio de servicio';
+                } else if (m.normalizado) {
+                    detalle += ' · ajustado a mes completo (estuvo ' + m.dias_empleado + '/' + m.dias_mes + ' días)';
+                }
+
+                var devengado = Number(m.monto_devengado || 0);
+                var casilla   = Number(m.monto || 0);
+                var difiere   = Math.abs(devengado - casilla) > 0.005;
+
                 return '<tr>'
-                    + '<td class="text-slate-400 text-sm">' + (i + 1) + '. ' + m.etiqueta + '</td>'
+                    + '<td class="text-slate-400 text-sm">' + (i + 1) + '. ' + (m.etiqueta || '—') + '</td>'
+                    + '<td class="lbc-money text-sm text-slate-400">'
+                    + (devengado > 0 ? moneda(devengado) : '—') + '</td>'
                     + '<td class="lbc-money text-sm" style="color:' + colores[m.cobertura] + '">'
-                    + (m.monto > 0 ? moneda(m.monto) : '—') + '</td>'
+                    + (casilla > 0 ? (difiere ? '<strong>' + moneda(casilla) + '</strong>' : moneda(casilla)) : '—')
+                    + '</td>'
                     + '<td class="text-xs" style="text-align:left; color:' + colores[m.cobertura] + '">'
                     + detalle + '</td></tr>';
             }).join('');
+
+            // Cuando el tiempo laborado da menos casillas que meses de calendario
+            // con dinero, hay que decir que se usó el promedio: si no, RRHH ve un
+            // importe que no coincide con ninguna nómina suya y desconfía.
+            var explica = '';
+            if (promediado) {
+                var m0 = mesesNomina.find(function (m) { return m.promediado; }) || {};
+                explica = '<strong>Se usó su salario mensual promedio.</strong> Su tiempo laborado da '
+                    + 'menos casillas que meses de calendario trabajados, así que llenar mes a mes '
+                    + 'dejaría dinero fuera. Devengó <strong>' + moneda(m0.total_devengado || 0)
+                    + '</strong> en ' + Number(m0.meses_servicio || 0).toFixed(2) + ' meses de servicio '
+                    + '= <strong>' + moneda(m0.monto || 0) + '</strong> al mes.';
+            } else if (ajustados > 0) {
+                explica = '<strong>' + ajustados + ' mes(es) ajustado(s) a mes completo.</strong> '
+                    + 'Entró o salió a mitad de mes: si se metiera lo cobrado en esos días como si '
+                    + 'fuera un mes entero, el salario mensual y el diario saldrían por debajo.';
+            }
+            $('lbc-nomina-explica').innerHTML = explica;
+            $('lbc-nomina-explica').style.display = explica ? 'block' : 'none';
 
             $('lbc-nomina').style.display = 'block';
         }
