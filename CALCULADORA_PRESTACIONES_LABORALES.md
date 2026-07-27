@@ -102,8 +102,13 @@ Igual que la del Ministerio, deja fuera:
    Todos conservan vacaciones y salario de Navidad. Si mueves un interruptor a
    mano, el motivo pasa a *Personalizado*.
 
-1. Elige un colaborador del desplegable (trae nombre, cédula, fecha de ingreso,
-   fecha de salida y salario) o escribe los datos a mano.
+1. Elige un colaborador **escribiendo en el buscador** (filtra en vivo por nombre
+   y por código, sin distinguir tildes: «hernandez» encuentra «Hernández»), o
+   escribe los datos a mano. Trae nombre, cédula, fechas y salario.
+
+   > El buscador es un combo propio en JavaScript sin librerías. El `<select>`
+   > original sigue en el DOM y es quien manda: si el JavaScript fallara, el
+   > desplegable nativo queda visible y la página sigue siendo usable.
 2. Confirma las fechas y el salario. Si el salario fue el mismo todos los meses,
    escríbelo en *Salario del período* y pulsa **Aplicar a todos los meses**; si
    varió, llena la tabla mes por mes (el período 12 es el último antes de salir).

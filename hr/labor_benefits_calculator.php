@@ -340,6 +340,46 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
         .lbc-num { font-variant-numeric: tabular-nums; }
         .lbc-mes { font-size:.72rem; }
 
+        /* ---- Buscador de colaborador ---- */
+        .lbc-combo { position:relative; }
+        .lbc-combo-lupa {
+            position:absolute; left:.7rem; top:50%; transform:translateY(-50%);
+            color:#64748b; font-size:.82rem; pointer-events:none;
+        }
+        .lbc-combo input {
+            width:100%; padding:.55rem .7rem .55rem 2.1rem; border-radius:.55rem;
+            background:rgba(15,23,42,.7); border:1px solid rgba(148,163,184,.22);
+            color:#e2e8f0; font-size:.9rem;
+        }
+        .lbc-combo input:focus { outline:none; border-color:#10b981; }
+        .lbc-combo input::placeholder { color:#64748b; }
+        #lbc-combo-limpiar {
+            position:absolute; right:.5rem; top:50%; transform:translateY(-50%);
+            width:1.5rem; height:1.5rem; border-radius:9999px;
+            color:#94a3b8; background:transparent; border:none; cursor:pointer; font-size:.8rem;
+        }
+        #lbc-combo-limpiar:hover { color:#e2e8f0; background:rgba(148,163,184,.14); }
+
+        #lbc-combo-lista {
+            position:absolute; z-index:40; left:0; right:0; top:calc(100% + .3rem);
+            max-height:17rem; overflow-y:auto;
+            background:#0f172a; border:1px solid rgba(148,163,184,.28);
+            border-radius:.6rem; box-shadow:0 16px 40px rgba(2,6,23,.6);
+            padding:.25rem;
+        }
+        #lbc-combo-lista li {
+            padding:.45rem .6rem; border-radius:.4rem; cursor:pointer;
+            font-size:.86rem; color:#cbd5e1; line-height:1.35;
+        }
+        #lbc-combo-lista li .cod { color:#64748b; font-size:.74rem; }
+        #lbc-combo-lista li mark { background:transparent; color:#6ee7b7; font-weight:600; }
+        #lbc-combo-lista li.is-activa { background:rgba(16,185,129,.16); color:#e2e8f0; }
+        #lbc-combo-lista li.sin-resultados { color:#64748b; cursor:default; text-align:center; padding:.9rem; }
+        #lbc-combo-lista li.sin-resultados:hover { background:transparent; }
+
+        /* El <select> nativo solo se oculta si el buscador llegó a montarse. */
+        .lbc-combo-activo #lbc-empleado { display:none; }
+
         /* El panel de resultado solo se fija cuando hay dos columnas. Apilado en
            móvil, "sticky" no aporta y puede tapar el formulario. */
         @media (min-width: 1280px) {
@@ -393,7 +433,12 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div class="lbc-field md:col-span-2">
-                            <label for="lbc-empleado">Traer datos de un colaborador (opcional)</label>
+                            <label for="lbc-buscar">Traer datos de un colaborador (opcional)</label>
+
+                            <!-- El <select> sigue siendo la fuente de verdad (lo leen el
+                                 guardado, el PDF y la carga del colaborador). El buscador
+                                 de abajo solo lo maneja; si el JS falla, el desplegable
+                                 normal queda visible y utilizable. -->
                             <select id="lbc-empleado">
                                 <option value="">— Escribir los datos a mano —</option>
                                 <?php foreach ($empleados as $e): ?>
@@ -404,6 +449,19 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+
+                            <div class="lbc-combo" id="lbc-combo" hidden>
+                                <i class="fas fa-magnifying-glass lbc-combo-lupa"></i>
+                                <input type="text" id="lbc-buscar" autocomplete="off" spellcheck="false"
+                                       role="combobox" aria-expanded="false" aria-autocomplete="list"
+                                       aria-controls="lbc-combo-lista"
+                                       placeholder="Busca por nombre o código, o escribe los datos a mano">
+                                <button type="button" id="lbc-combo-limpiar" title="Limpiar" hidden>
+                                    <i class="fas fa-xmark"></i>
+                                </button>
+                                <ul id="lbc-combo-lista" role="listbox" hidden></ul>
+                            </div>
+
                             <p id="lbc-empleado-nota" class="lbc-note mt-1"></p>
                         </div>
 
@@ -1045,6 +1103,149 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                     $('lbc-guardar').disabled = false;
                 });
         });
+
+        // ---- Buscador de colaborador --------------------------------------
+        // Con casi 150 nombres, el desplegable nativo obliga a bajar a ojo. Esto
+        // filtra en vivo por nombre y por código, sin librerías: el <select>
+        // sigue existiendo y siendo quien manda, así que el resto del código no
+        // se entera y sin JavaScript el desplegable normal sigue funcionando.
+        (function montarBuscador() {
+            var selectEmp = $('lbc-empleado');
+            var caja      = $('lbc-combo');
+            var entrada   = $('lbc-buscar');
+            var lista     = $('lbc-combo-lista');
+            var limpiar   = $('lbc-combo-limpiar');
+            if (!selectEmp || !caja) { return; }
+
+            // Sin tildes y en minúsculas: buscar "hernandez" tiene que encontrar
+            // a "Hernández", que es como está escrito en la ficha.
+            function normalizar(t) {
+                // NFD separa la letra de su tilde, y el rango U+0300–U+036F borra
+                // los diacríticos ya sueltos. Va con escapes \u a propósito: esos
+                // caracteres escritos tal cual son invisibles en el editor.
+                return (t || '').toString().toLowerCase()
+                    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            }
+
+            var opciones = Array.prototype.slice.call(selectEmp.options).map(function (o, i) {
+                var texto = o.textContent.replace(/\s+/g, ' ').trim();
+                return { valor: o.value, texto: texto, busqueda: normalizar(texto), indice: i };
+            });
+
+            var visibles = opciones.slice();
+            var activa = -1;
+
+            function escapar(t) {
+                return t.replace(/[&<>"]/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+                });
+            }
+
+            // Resalta el trozo que coincide, sobre el texto original con tildes.
+            function resaltar(texto, termino) {
+                if (!termino) { return escapar(texto); }
+                var pos = normalizar(texto).indexOf(termino);
+                if (pos < 0) { return escapar(texto); }
+                return escapar(texto.slice(0, pos))
+                    + '<mark>' + escapar(texto.slice(pos, pos + termino.length)) + '</mark>'
+                    + escapar(texto.slice(pos + termino.length));
+            }
+
+            function pintarLista(termino) {
+                if (!visibles.length) {
+                    lista.innerHTML = '<li class="sin-resultados">Ningún colaborador coincide con «'
+                        + escapar(entrada.value) + '»</li>';
+                    return;
+                }
+                lista.innerHTML = visibles.map(function (o, i) {
+                    return '<li role="option" data-i="' + i + '"'
+                        + (i === activa ? ' class="is-activa" aria-selected="true"' : '')
+                        + '>' + resaltar(o.texto, termino) + '</li>';
+                }).join('');
+            }
+
+            function abrir() {
+                lista.hidden = false;
+                entrada.setAttribute('aria-expanded', 'true');
+            }
+
+            function cerrar() {
+                lista.hidden = true;
+                entrada.setAttribute('aria-expanded', 'false');
+                activa = -1;
+            }
+
+            /** Deja en la caja el texto de lo que esté seleccionado. */
+            function reflejarSeleccion() {
+                var o = selectEmp.options[selectEmp.selectedIndex];
+                entrada.value = (o && o.value) ? o.textContent.replace(/\s+/g, ' ').trim() : '';
+                limpiar.hidden = !entrada.value;
+            }
+
+            function elegir(o) {
+                selectEmp.value = o.valor;
+                selectEmp.dispatchEvent(new Event('change'));
+                reflejarSeleccion();
+                cerrar();
+            }
+
+            function filtrar() {
+                var termino = normalizar(entrada.value);
+                visibles = termino
+                    ? opciones.filter(function (o) { return o.busqueda.indexOf(termino) !== -1; })
+                    : opciones.slice();
+                activa = visibles.length ? 0 : -1;
+                pintarLista(termino);
+                abrir();
+            }
+
+            function moverActiva(paso) {
+                if (!visibles.length) { return; }
+                activa = (activa + paso + visibles.length) % visibles.length;
+                pintarLista(normalizar(entrada.value));
+                var el = lista.querySelector('.is-activa');
+                if (el) { el.scrollIntoView({ block: 'nearest' }); }
+            }
+
+            entrada.addEventListener('input', filtrar);
+            entrada.addEventListener('focus', function () { this.select(); filtrar(); });
+
+            entrada.addEventListener('keydown', function (ev) {
+                if (ev.key === 'ArrowDown')      { ev.preventDefault(); if (lista.hidden) { filtrar(); } else { moverActiva(1); } }
+                else if (ev.key === 'ArrowUp')   { ev.preventDefault(); moverActiva(-1); }
+                else if (ev.key === 'Enter')     {
+                    if (!lista.hidden && activa >= 0) { ev.preventDefault(); elegir(visibles[activa]); }
+                }
+                else if (ev.key === 'Escape')    { cerrar(); reflejarSeleccion(); entrada.blur(); }
+            });
+
+            lista.addEventListener('mousedown', function (ev) {
+                // mousedown y no click: el blur de la caja cerraría la lista antes.
+                var li = ev.target.closest('li[data-i]');
+                if (!li) { return; }
+                ev.preventDefault();
+                elegir(visibles[parseInt(li.dataset.i, 10)]);
+            });
+
+            limpiar.addEventListener('click', function () {
+                entrada.value = '';
+                elegir(opciones[0]);          // "— Escribir los datos a mano —"
+                entrada.focus();
+            });
+
+            document.addEventListener('click', function (ev) {
+                if (!caja.contains(ev.target)) { cerrar(); reflejarSeleccion(); }
+            });
+
+            // Si se elige desde otro sitio (o sin JS se usó el select), refleja.
+            selectEmp.addEventListener('change', reflejarSeleccion);
+
+            // Solo ahora se oculta el <select>: si algo hubiera fallado antes,
+            // el desplegable nativo sigue a la vista y la página es usable.
+            caja.parentElement.classList.add('lbc-combo-activo');
+            caja.hidden = false;
+            reflejarSeleccion();
+        })();
 
         // ---- Colaborador ------------------------------------------------
         var mesesNomina = [];
