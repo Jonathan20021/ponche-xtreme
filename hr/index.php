@@ -564,6 +564,16 @@ $recentVacations = $pdo->query("
                 <p class="text-slate-400 text-sm">Pronóstico de demanda y dimensionamiento</p>
             </div>
 
+            <div class="module-card" onclick="window.location.href='labor_benefits_calculator.php'">
+                <div class="flex items-center mb-3">
+                    <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); width: 40px; height: 40px; font-size: 1.2rem;">
+                        <i class="fas fa-scale-balanced text-white"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white">Prestaciones Laborales</h3>
+                </div>
+                <p class="text-slate-400 text-sm">Preaviso, cesantía, vacaciones y regalía pascual, igual que el Ministerio de Trabajo</p>
+            </div>
+
             <div class="module-card" onclick="window.location.href='service_level_calculator.php'">
                 <div class="flex items-center mb-3">
                     <div class="stat-icon mr-3" style="background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); width: 40px; height: 40px; font-size: 1.2rem;">

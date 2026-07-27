@@ -2,6 +2,7 @@
 session_start();
 require_once '../db.php';
 require_once 'payroll_functions.php';
+require_once '../lib/labor_benefits_calculator.php';
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
@@ -102,6 +103,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_deductions']))
     } catch (Exception $e) {
         $pdo->rollBack();
         $errorMsg = "Error al actualizar: " . $e->getMessage();
+    }
+}
+
+// Escalas legales de prestaciones laborales (las usa la calculadora de
+// prestaciones y el motor de lib/labor_benefits_calculator.php).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_benefits'])) {
+    try {
+        $upsert = $pdo->prepare("
+            INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+            VALUES (?, ?, 'string', 'labor_benefits')
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ");
+        foreach (array_keys(laborBenefitsDefaults()) as $key) {
+            if (!isset($_POST['benefits'][$key])) {
+                continue;
+            }
+            $valor = trim((string) $_POST['benefits'][$key]);
+            if ($valor === '') {
+                continue; // vacío = dejar el valor actual, no borrarlo
+            }
+            $upsert->execute([$key, mb_substr($valor, 0, 100)]);
+        }
+
+        // Datos de la empresa que encabezan el PDF de liquidación. Aquí el vacío
+        // SÍ se guarda: el teléfono o el correo pueden quedar en blanco a propósito.
+        $upsertEmpresa = $pdo->prepare("
+            INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+            VALUES (?, ?, 'string', 'company')
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+        ");
+        foreach (array_keys(laborBenefitsCompanyDefaults()) as $key) {
+            if (!isset($_POST['empresa'][$key])) {
+                continue;
+            }
+            $upsertEmpresa->execute([$key, mb_substr(trim((string) $_POST['empresa'][$key]), 0, 200)]);
+        }
+
+        $successMsg = 'Escalas de prestaciones y datos de la empresa actualizados.';
+    } catch (Throwable $e) {
+        $errorMsg = 'Error al guardar las escalas de prestaciones: ' . $e->getMessage();
+    }
+}
+
+$benefitsCfg = laborBenefitsConfig($pdo);
+$empresaCfg  = laborBenefitsCompany($pdo);
+
+// Si acabamos de guardar, las funciones ya venían cacheadas de antes: se
+// releen los valores para que la pantalla muestre lo que quedó grabado.
+if (!empty($successMsg) && isset($_POST['update_benefits'])) {
+    foreach (array_keys(laborBenefitsDefaults()) as $key) {
+        if (isset($_POST['benefits'][$key]) && trim((string) $_POST['benefits'][$key]) !== '') {
+            $benefitsCfg[$key] = trim((string) $_POST['benefits'][$key]);
+        }
+    }
+    foreach (array_keys(laborBenefitsCompanyDefaults()) as $key) {
+        if (isset($_POST['empresa'][$key])) {
+            $empresaCfg[$key] = trim((string) $_POST['empresa'][$key]);
+        }
     }
 }
 
@@ -268,6 +327,114 @@ $holidays = $pdo->query("SELECT id, holiday_date, name, multiplier, is_active FR
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- Escalas legales de prestaciones laborales -->
+        <div class="glass-card mt-8">
+            <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
+                <div>
+                    <h2 class="text-xl font-semibold mb-1">
+                        <i class="fas fa-scale-balanced text-emerald-400 mr-2"></i>
+                        Escalas de Prestaciones Laborales
+                    </h2>
+                    <p class="text-sm text-slate-400">
+                        Las usa la <a href="labor_benefits_calculator.php" class="text-emerald-400 underline">Calculadora de Prestaciones</a>.
+                        Vienen ajustadas al Código de Trabajo (Ley 16-92) y dan el mismo resultado que
+                        calculo.mt.gob.do. Solo cámbialas si la ley cambia.
+                    </p>
+                </div>
+            </div>
+
+            <form method="POST">
+                <input type="hidden" name="update_benefits" value="1">
+
+                <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-1">Identificación de la empresa</h3>
+                <p class="text-xs text-slate-500 mb-3">
+                    Encabeza el PDF de liquidación, junto al logo de <code>assets/logo.png</code>.
+                    Teléfono y correo pueden quedar en blanco.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <?php
+                    $camposEmpresa = [
+                        'company_name'                 => ['Razón social', 'Como debe aparecer en el documento.'],
+                        'company_rnc'                  => ['RNC', ''],
+                        'company_city'                 => ['Ciudad', ''],
+                        'company_address'              => ['Dirección', 'Domicilio social completo.'],
+                        'company_phone'                => ['Teléfono', 'Opcional.'],
+                        'company_email'                => ['Correo', 'Opcional.'],
+                        'company_representative'       => ['Firma por la empresa', 'Nombre que va sobre la línea de firma.'],
+                        'company_representative_title' => ['Cargo del firmante', ''],
+                    ];
+                    foreach ($camposEmpresa as $key => [$label, $ayuda]):
+                    ?>
+                        <div class="form-group">
+                            <label for="emp_<?= htmlspecialchars($key) ?>"><?= htmlspecialchars($label) ?></label>
+                            <input type="text"
+                                   id="emp_<?= htmlspecialchars($key) ?>"
+                                   name="empresa[<?= htmlspecialchars($key) ?>]"
+                                   value="<?= htmlspecialchars($empresaCfg[$key] ?? '') ?>"
+                                   class="form-control"
+                                   maxlength="200">
+                            <?php if ($ayuda !== ''): ?>
+                                <p class="text-xs text-slate-500 mt-1"><?= htmlspecialchars($ayuda) ?></p>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <?php
+                $gruposBenefits = [
+                    'Salario diario' => [
+                        'benefits_divisores_ordinario'    => ['Divisores — trabajo ordinario', 'Mensual, Quincenal, Semanal, Diario. El 23.83 es el divisor del Reglamento 258-93.'],
+                        'benefits_divisores_intermitente' => ['Divisores — intermitente y doméstico', 'Mismo orden que el anterior.'],
+                        'benefits_semanas_por_mes'        => ['Semanas por mes', 'Para llevar un salario semanal a mensual.'],
+                    ],
+                    'Preaviso (art. 76)' => [
+                        'benefits_preaviso_3_6_meses'    => ['De 3 a 6 meses', 'Días de salario.'],
+                        'benefits_preaviso_6_12_meses'   => ['De 6 a 12 meses', 'Días de salario.'],
+                        'benefits_preaviso_12_meses_mas' => ['Desde 1 año', 'Días de salario.'],
+                    ],
+                    'Auxilio de cesantía (arts. 80 y 81)' => [
+                        'benefits_cesantia_1_5_anios'     => ['De 1 a 5 años', 'Días por cada año trabajado.'],
+                        'benefits_cesantia_5_anios_mas'   => ['Desde 5 años', 'Días por cada año trabajado.'],
+                        'benefits_cesantia_fraccion_3_6'  => ['Fracción de 3 a 6 meses', 'Días de salario.'],
+                        'benefits_cesantia_fraccion_6_12' => ['Fracción mayor de 6 meses', 'Días de salario.'],
+                        'benefits_cesantia_antes_codigo'  => ['Años anteriores a 1992', 'Días por año trabajado antes del Código.'],
+                        'benefits_fecha_codigo_trabajo'   => ['Vigencia del Código', 'Formato AAAA-MM-DD.'],
+                    ],
+                    'Vacaciones (art. 177)' => [
+                        'benefits_vacaciones_1_5_anios'   => ['De 1 a 5 años', 'Días laborables.'],
+                        'benefits_vacaciones_5_anios_mas' => ['Desde 5 años', 'Días laborables.'],
+                        'benefits_vacaciones_domestico'   => ['Trabajo doméstico', 'Días laborables.'],
+                    ],
+                ];
+                ?>
+
+                <?php foreach ($gruposBenefits as $titulo => $campos): ?>
+                    <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mt-6 mb-3"><?= htmlspecialchars($titulo) ?></h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <?php foreach ($campos as $key => [$label, $ayuda]): ?>
+                            <div class="form-group">
+                                <label for="bf_<?= htmlspecialchars($key) ?>"><?= htmlspecialchars($label) ?></label>
+                                <input type="text"
+                                       id="bf_<?= htmlspecialchars($key) ?>"
+                                       name="benefits[<?= htmlspecialchars($key) ?>]"
+                                       value="<?= htmlspecialchars($benefitsCfg[$key] ?? '') ?>"
+                                       class="form-control"
+                                       maxlength="100">
+                                <p class="text-xs text-slate-500 mt-1"><?= htmlspecialchars($ayuda) ?></p>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endforeach; ?>
+
+                <div class="mt-6 flex justify-end">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Escalas
+                    </button>
+                </div>
+            </form>
         </div>
 
         <!-- Días Festivos (pago doble) -->

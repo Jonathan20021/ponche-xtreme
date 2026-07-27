@@ -84,6 +84,12 @@ $navItems = [
                 'icon' => 'fa-envelope-open-text',
             ],
             [
+                'section' => 'hr_labor_benefits',
+                'label' => 'Prestaciones Laborales',
+                'href' => $baseHref . 'hr/labor_benefits_calculator.php',
+                'icon' => 'fa-scale-balanced',
+            ],
+            [
                 'section' => 'hr_birthdays',
                 'label' => 'Cumpleaños',
                 'href' => $baseHref . 'hr/birthdays.php',
