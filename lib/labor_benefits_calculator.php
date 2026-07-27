@@ -900,6 +900,99 @@ if (!function_exists('lbEtiquetasAlineadas')) {
     }
 }
 
+if (!function_exists('lbTarifasDelColaborador')) {
+    /**
+     * Tarifas por hora del colaborador ordenadas por fecha de vigencia, para
+     * poder valorar cada mes con la tarifa QUE TENÍA ENTONCES y no con la de hoy.
+     *
+     * Si alguien entró a RD$115/h y terminó a RD$150/h, valorar sus primeros
+     * meses a RD$150 infla la liquidación. Los meses que ya pasaron por nómina
+     * no sufren esto (ahí se usa el bruto realmente pagado), pero los que se
+     * reconstruyen desde el ponche sí.
+     *
+     * Fuentes, de más fiable a menos:
+     *   1. hourly_rate_history — el histórico explícito de cambios de tarifa.
+     *   2. employment_contracts — el salario pactado, si el contrato es por hora.
+     *   3. users.hourly_rate_dop — la tarifa actual, como último recurso.
+     *
+     * @return array<int,array{desde:string,tarifa:float,origen:string}> ordenado por fecha
+     */
+    function lbTarifasDelColaborador(PDO $pdo, int $userId, int $employeeId, float $tarifaActual): array
+    {
+        $tramos = [];
+
+        try {
+            $st = $pdo->prepare("
+                SELECT effective_date, hourly_rate_dop
+                FROM hourly_rate_history
+                WHERE user_id = ? AND hourly_rate_dop > 0
+                ORDER BY effective_date
+            ");
+            $st->execute([$userId]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                $tramos[] = [
+                    'desde'  => (string) $r['effective_date'],
+                    'tarifa' => (float) $r['hourly_rate_dop'],
+                    'origen' => 'historico',
+                ];
+            }
+        } catch (Throwable $e) {
+            error_log('lbTarifasDelColaborador historico: ' . $e->getMessage());
+        }
+
+        if (!$tramos) {
+            try {
+                $st = $pdo->prepare("
+                    SELECT contract_date, salary
+                    FROM employment_contracts
+                    WHERE employee_id = ? AND salary > 0 AND payment_type = 'por_hora'
+                    ORDER BY contract_date
+                ");
+                $st->execute([$employeeId]);
+                foreach ($st->fetchAll(PDO::FETCH_ASSOC) ?: [] as $r) {
+                    $tramos[] = [
+                        'desde'  => (string) $r['contract_date'],
+                        'tarifa' => (float) $r['salary'],
+                        'origen' => 'contrato',
+                    ];
+                }
+            } catch (Throwable $e) {
+                error_log('lbTarifasDelColaborador contrato: ' . $e->getMessage());
+            }
+        }
+
+        if ($tarifaActual > 0) {
+            // Vale desde siempre: es la que se usa si no hay nada anterior.
+            array_unshift($tramos, ['desde' => '0000-01-01', 'tarifa' => $tarifaActual, 'origen' => 'ficha']);
+        }
+
+        return $tramos;
+    }
+}
+
+if (!function_exists('lbTarifaVigente')) {
+    /**
+     * La tarifa que estaba vigente en una fecha, según los tramos.
+     *
+     * @param array<int,array{desde:string,tarifa:float,origen:string}> $tramos
+     */
+    function lbTarifaVigente(array $tramos, string $fecha): float
+    {
+        $tarifa = 0.0;
+        foreach ($tramos as $t) {
+            if ($t['desde'] <= $fecha) {
+                $tarifa = $t['tarifa'];
+            }
+        }
+        // Antes del primer tramo conocido se usa el más antiguo que haya: es
+        // mejor aproximación que dejarlo en cero y no poder calcular nada.
+        if ($tarifa <= 0 && $tramos) {
+            $tarifa = $tramos[0]['tarifa'];
+        }
+        return $tarifa;
+    }
+}
+
 if (!function_exists('lbDevengadoDesdePonche')) {
     /**
      * Lo devengado en un tramo según el PONCHE: tarifa × horas trabajadas.
@@ -1103,6 +1196,18 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
             error_log('laborBenefitsPayrollMonths tarifa: ' . $e->getMessage());
         }
 
+        // Tramos de tarifa, para valorar cada mes con la que estaba vigente
+        // ENTONCES. Con la de hoy, a quien tuvo un aumento se le inflarían los
+        // meses viejos.
+        $tramosTarifa = ($userId > 0)
+            ? lbTarifasDelColaborador($pdo, $userId, $employeeId, $tarifaHora)
+            : [];
+        if ($tramosTarifa && $tarifaHora <= 0) {
+            // La ficha está en cero pero el histórico o el contrato sí tienen
+            // tarifa: se puede calcular igual.
+            $tarifaHora = $tramosTarifa[0]['tarifa'];
+        }
+
         // Qué meses tienen algún marcaje. Recorrer el ponche de un mes cuesta
         // ~350 ms contra la base remota, así que conviene saber de antemano
         // cuáles no tienen nada y ahorrarse la llamada entera.
@@ -1140,10 +1245,11 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
 
             // La nómina no llega: se recalcula el mes entero desde el ponche,
             // salvo que ya sepamos que ese mes no tiene ni un marcaje.
-            $vale = $userId > 0 && $tarifaHora > 0
+            $tarifaDelMes = $tramosTarifa ? lbTarifaVigente($tramosTarifa, $s['hasta']) : 0.0;
+            $vale = $userId > 0 && $tarifaDelMes > 0
                 && ($mesesConPonche === null || isset($mesesConPonche[$s['mes']]));
             $desdePonche = $vale
-                ? lbDevengadoDesdePonche($pdo, $userId, $s['desde'], $s['hasta'], $tarifaHora)
+                ? lbDevengadoDesdePonche($pdo, $userId, $s['desde'], $s['hasta'], $tarifaDelMes)
                 : 0.0;
 
             if ($desdePonche > 0) {
@@ -1227,9 +1333,19 @@ if (!function_exists('lbDiagnosticoSinDatos')) {
         }
 
         if ($tarifaHora <= 0) {
-            return 'No tiene tarifa por hora ni sueldo mensual en su ficha, así que no hay con qué '
-                . 'convertir sus horas en dinero. Cárgale la tarifa en Empleados, o escribe los '
-                . 'montos a mano aquí abajo.';
+            // Se buscó en todas partes: conviene decirlo, o RRHH se va a poner a
+            // rebuscar en el histórico creyendo que ahí está.
+            $tramos = lbTarifasDelColaborador(
+                $pdo, (int) ($row['user_id'] ?? 0), (int) ($row['id'] ?? 0), 0.0
+            );
+            if ($tramos) {
+                return 'Su ficha no tiene tarifa, pero sí hay una en su histórico o contrato. '
+                    . 'Si el cálculo sigue vacío, revisa sus marcajes.';
+            }
+            return 'Nunca se le registró un salario: no hay tarifa por hora ni sueldo mensual en su '
+                . 'ficha, ni en el histórico de tarifas, ni en un contrato. Por eso tampoco se le '
+                . 'pudo generar nómina. Cárgale la tarifa en Empleados y vuelve a entrar, o escribe '
+                . 'los montos a mano aquí abajo.';
         }
 
         try {

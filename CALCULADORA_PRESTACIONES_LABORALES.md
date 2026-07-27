@@ -181,6 +181,16 @@ nómina”** con lo que devengó mes a mes, de dos fuentes:
    función con la que se paga la nómina, así que respeta el corte semanal de 44 h,
    el recargo configurado y el doble de los feriados.
 
+   Cada mes se valora con **la tarifa que estaba vigente entonces**, no con la de
+   hoy: quien entró a RD$115/h y salió a RD$150/h no puede tener sus primeros
+   meses valorados a RD$150. La tarifa sale de `hourly_rate_history`, y si no hay
+   histórico, del contrato por hora, y si tampoco, de la ficha
+   (`lbTarifasDelColaborador()` / `lbTarifaVigente()`).
+
+   > Hoy `hourly_rate_history` tiene 1 fila y `salary_history` está vacía, así que
+   > en la práctica se usa la tarifa de la ficha. El día que el sistema empiece a
+   > registrar los cambios de tarifa, la calculadora ya los respeta sin tocar nada.
+
 Una sola fuente por mes, para que ningún día se cuente dos veces. Cada mes se
 marca **Completo · nómina**, **Completo · ponche**, **Parcial**, **Sin datos** o
 **No trabajó ese mes**.
@@ -197,7 +207,7 @@ y la pantalla lo dice en ámbar con qué hay que corregir y dónde:
 
 | Situación | Qué se muestra |
 |---|---|
-| Sin tarifa ni sueldo en la ficha (4 casos) | «No tiene tarifa por hora ni sueldo mensual… Cárgale la tarifa en Empleados» |
+| Nunca se le registró salario (4 casos) | «No hay tarifa ni en su ficha, ni en el histórico, ni en un contrato. Por eso tampoco se le pudo generar nómina» |
 | Sin ningún marcaje en su período (2 casos) | «No tiene ningún marcaje entre el X y el Y, ni nómina generada» |
 | Solo marcajes ENTRY/EXIT (1 caso) | «Tiene N marcajes, pero ninguno de un tipo pagado, así que la nómina también le pagaría cero» |
 | Fechas corruptas, p. ej. salida `0001-01-01` (1 caso) | «Sus fechas están mal en la ficha… Corrígelas en Empleados» |
