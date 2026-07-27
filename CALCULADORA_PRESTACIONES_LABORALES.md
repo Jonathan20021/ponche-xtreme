@@ -183,7 +183,27 @@ nómina”** con lo que devengó mes a mes, de dos fuentes:
 
 Una sola fuente por mes, para que ningún día se cuente dos veces. Cada mes se
 marca **Completo · nómina**, **Completo · ponche**, **Parcial**, **Sin datos** o
-**No trabajó ese mes**. El botón **Usar estos montos** llena la rejilla.
+**No trabajó ese mes**.
+
+**La rejilla se llena sola** al elegir al colaborador — con el sueldo fijo si lo
+tiene, y si no con el devengado real. El botón **Usar estos montos** solo hace
+falta para volver a aplicarlo después de editar a mano.
+
+### Cuando no se puede llenar solo
+
+De los 63 colaboradores con salida registrada, **55 liquidan automáticamente**.
+Los 8 restantes no son un fallo del cálculo sino datos que faltan en el sistema,
+y la pantalla lo dice en ámbar con qué hay que corregir y dónde:
+
+| Situación | Qué se muestra |
+|---|---|
+| Sin tarifa ni sueldo en la ficha (4 casos) | «No tiene tarifa por hora ni sueldo mensual… Cárgale la tarifa en Empleados» |
+| Sin ningún marcaje en su período (2 casos) | «No tiene ningún marcaje entre el X y el Y, ni nómina generada» |
+| Solo marcajes ENTRY/EXIT (1 caso) | «Tiene N marcajes, pero ninguno de un tipo pagado, así que la nómina también le pagaría cero» |
+| Fechas corruptas, p. ej. salida `0001-01-01` (1 caso) | «Sus fechas están mal en la ficha… Corrígelas en Empleados» |
+
+Antes todos ellos mostraban «Debes registrar al menos un salario mayor que cero»,
+que parece un fallo del sistema. El motivo lo arma `lbDiagnosticoSinDatos()`.
 
 ### La cobertura se mide contra los días EMPLEADOS
 

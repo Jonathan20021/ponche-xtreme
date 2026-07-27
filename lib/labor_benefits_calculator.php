@@ -1204,6 +1204,65 @@ if (!function_exists('lbMesesActivos')) {
     }
 }
 
+if (!function_exists('lbDiagnosticoSinDatos')) {
+    /**
+     * Por qué no se pudo rellenar ni un solo período, en cristiano y diciendo
+     * quién lo arregla.
+     *
+     * Los casos son siempre datos que faltan en el sistema, nunca del cálculo:
+     * sin tarifa no hay con qué convertir horas en dinero; sin marcajes no hay
+     * horas; y con marcajes que no son de un tipo pagado, la nómina también
+     * pagaría cero.
+     *
+     * @param array<string,mixed> $row fila de employees + users
+     */
+    function lbDiagnosticoSinDatos(PDO $pdo, array $row, string $salida, float $tarifaHora): string
+    {
+        $ingreso = (string) ($row['hire_date'] ?? '');
+
+        if ($ingreso === '' || $salida < $ingreso) {
+            return 'Sus fechas están mal en la ficha: ingresó el '
+                . ($ingreso ?: '¿?') . ' y figura saliendo el ' . $salida . '. '
+                . 'Corrígelas en Empleados antes de liquidar.';
+        }
+
+        if ($tarifaHora <= 0) {
+            return 'No tiene tarifa por hora ni sueldo mensual en su ficha, así que no hay con qué '
+                . 'convertir sus horas en dinero. Cárgale la tarifa en Empleados, o escribe los '
+                . 'montos a mano aquí abajo.';
+        }
+
+        try {
+            $st = $pdo->prepare("
+                SELECT COUNT(*) AS total,
+                       SUM(CASE WHEN type IN ('ENTRY','EXIT') THEN 0 ELSE 1 END) AS actividad
+                FROM attendance
+                WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
+            ");
+            $st->execute([(int) ($row['user_id'] ?? 0), $ingreso, $salida]);
+            $m = $st->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'actividad' => 0];
+        } catch (Throwable $e) {
+            error_log('lbDiagnosticoSinDatos: ' . $e->getMessage());
+            return 'No se encontró nómina ni ponche de su período. Escribe los montos a mano.';
+        }
+
+        if ((int) $m['total'] === 0) {
+            return 'No tiene ningún marcaje de asistencia entre el ' . date('d/m/Y', strtotime($ingreso))
+                . ' y el ' . date('d/m/Y', strtotime($salida)) . ', ni nómina generada. '
+                . 'Escribe los montos a mano.';
+        }
+
+        if ((int) $m['actividad'] === 0) {
+            return 'Tiene ' . (int) $m['total'] . ' marcajes, pero solo de entrada y salida: ninguno de '
+                . 'un tipo pagado, así que la nómina también le pagaría cero. Revisa su ponche o '
+                . 'escribe los montos a mano.';
+        }
+
+        return 'Sus marcajes no arrojan horas pagables en ningún mes. Revisa su ponche o escribe '
+            . 'los montos a mano.';
+    }
+}
+
 if (!function_exists('laborBenefitsEmployeeDefaults')) {
     /**
      * Datos del colaborador para precargar el formulario: fecha de ingreso,
@@ -1220,7 +1279,7 @@ if (!function_exists('laborBenefitsEmployeeDefaults')) {
     {
         try {
             $stmt = $pdo->prepare("
-                SELECT e.id, e.employee_code, e.first_name, e.last_name, e.position,
+                SELECT e.id, e.user_id, e.employee_code, e.first_name, e.last_name, e.position,
                        e.hire_date, e.termination_date, e.termination_reason,
                        e.identification_number, e.id_card_number,
                        d.name AS department_name,
@@ -1266,16 +1325,24 @@ if (!function_exists('laborBenefitsEmployeeDefaults')) {
                 : 'Sin salario registrado — escríbelo a mano.';
         }
 
-        // Devengado real, para que RRHH lo aplique con un clic. Se pasa la fecha
+        // Devengado real, para que la pantalla lo aplique sola. Se pasa la fecha
         // de ingreso para que la cobertura se mida contra los días que estuvo
         // empleado y no contra el mes entero.
         $salida = $row['termination_date'] ?: date('Y-m-d');
         $mesesNomina = laborBenefitsPayrollMonths($pdo, (int) $row['id'], $salida, $row['hire_date']);
         $conDatos = 0;
+        $conMonto = 0;
         foreach ($mesesNomina as $m) {
-            if ($m['cobertura'] === 'completa') {
-                $conDatos++;
-            }
+            if ($m['cobertura'] === 'completa') { $conDatos++; }
+            if ($m['monto'] > 0) { $conMonto++; }
+        }
+
+        // Cuando no se puede rellenar nada, hay que decir POR QUÉ y quién lo
+        // arregla. Un "no se pudo calcular" a secas parece un fallo del sistema
+        // cuando en realidad falta un dato en la ficha del colaborador.
+        $diagnostico = '';
+        if (!$fijo && $conMonto === 0) {
+            $diagnostico = lbDiagnosticoSinDatos($pdo, $row, $salida, $porHora);
         }
 
         return [
@@ -1293,6 +1360,8 @@ if (!function_exists('laborBenefitsEmployeeDefaults')) {
             'tarifa_hora'      => $porHora,
             'meses_nomina'     => $mesesNomina,
             'meses_completos'  => $conDatos,
+            'meses_con_monto'  => $conMonto,
+            'diagnostico'      => $diagnostico,
         ];
     }
 }

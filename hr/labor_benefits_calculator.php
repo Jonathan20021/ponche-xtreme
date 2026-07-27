@@ -948,6 +948,17 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
         function mostrarError(msg) {
             limpiarPanel();
             $('lbc-vacio').style.display = 'none';
+
+            // "Falta el salario" no es un fallo del sistema cuando ya sabemos
+            // exactamente qué dato falta en la ficha: en ese caso se explica en
+            // ámbar, con qué hay que corregir y dónde.
+            if (diagnosticoEmpleado) {
+                $('lbc-error').style.display = 'none';
+                $('lbc-aviso').innerHTML = '<strong>No se pudo llenar solo.</strong> ' + diagnosticoEmpleado;
+                $('lbc-aviso').style.display = 'block';
+                return;
+            }
+
             $('lbc-error').textContent = msg;
             $('lbc-error').style.display = 'block';
         }
@@ -1105,6 +1116,10 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                     $('lbc-guardar').disabled = false;
                 });
         });
+
+        // Motivo concreto por el que un colaborador no se pudo rellenar solo.
+        // Lo pone el servidor al cargar la ficha; se limpia al cambiar de persona.
+        var diagnosticoEmpleado = '';
 
         // ---- Buscador de colaborador --------------------------------------
         // Con casi 150 nombres, el desplegable nativo obliga a bajar a ojo. Esto
@@ -1302,24 +1317,40 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
             $('lbc-nomina').style.display = 'block';
         }
 
-        $('lbc-usar-nomina').addEventListener('click', function () {
-            if (!mesesNomina.length) { return; }
+        /**
+         * Vuelca el devengado en la rejilla. Devuelve cuántos períodos llenó.
+         *
+         * mesesNomina ya viene alineado con la rejilla desde el servidor: la
+         * casilla g de aquí es la casilla g de la tabla de salarios.
+         */
+        function aplicarMontosDeNomina() {
+            if (!mesesNomina.length) { return 0; }
 
-            // mesesNomina ya viene alineado con la rejilla desde el servidor:
-            // la casilla g de aquí es la casilla g de la tabla de salarios.
+            var llenos = 0;
             $('lbc-salario-fijo').value = '';
             for (var g = 0; g < FILAS; g++) {
                 var m = mesesNomina[g];
                 var campo = document.querySelector('.lbc-sal[data-i="' + g + '"]');
-                campo.value = (m && m.monto > 0) ? m.monto : '';
+                if (m && m.monto > 0) {
+                    campo.value = m.monto;
+                    llenos++;
+                } else {
+                    campo.value = '';
+                }
                 actualizarTotalFila(g);
             }
             programarCalculo();
-        });
+            return llenos;
+        }
+
+        $('lbc-usar-nomina').addEventListener('click', aplicarMontosDeNomina);
 
         $('lbc-empleado').addEventListener('change', function () {
             var id = this.value;
             $('lbc-empleado-nota').textContent = '';
+            // Se limpia ya: si no, al cambiar de colaborador se quedaría en
+            // pantalla el motivo del anterior.
+            diagnosticoEmpleado = '';
             if (!id) {
                 $('lbc-nomina').style.display = 'none';
                 mesesNomina = [];
@@ -1351,26 +1382,39 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                     $('lbc-salida').value = e.termination_date || new Date().toISOString().slice(0, 10);
 
                     limpiarSalarios();
-                    // Solo se rellena solo cuando el salario es FIJO. A quien cobra
-                    // por hora se le ofrece el devengado de nómina, porque su
-                    // salario mensual varía y una jornada teórica lo desvía muchísimo.
+                    pintarNomina(e.meses_nomina);
+
+                    // La rejilla se llena SOLA. Con salario fijo, del sueldo
+                    // registrado; si cobra por hora, del devengado real que
+                    // acabamos de traer. Lo que nunca se hace es inventar un
+                    // salario teórico cuando no hay ningún dato.
+                    var llenadosDeNomina = 0;
                     if (e.salario_fijo && e.salario_mensual > 0) {
                         $('lbc-salario-fijo').value = e.salario_mensual;
                         aplicarSalarioFijo();
+                    } else {
+                        llenadosDeNomina = aplicarMontosDeNomina();
                     }
 
-                    pintarNomina(e.meses_nomina);
-
-                    var nota = e.salario_origen;
+                    var nota;
+                    if (e.salario_fijo && e.salario_mensual > 0) {
+                        nota = e.salario_origen + ' · aplicado a los 12 períodos.';
+                    } else if (llenadosDeNomina > 0) {
+                        nota = 'Cobra por hora (RD$' + Number(e.tarifa_hora || 0).toFixed(2) + '/h). '
+                             + 'Se llenaron ' + llenadosDeNomina + ' período(s) con lo que devengó de verdad '
+                             + '(ver el detalle abajo). Revísalos antes de liquidar.';
+                    } else {
+                        nota = e.salario_origen;
+                    }
                     if (!e.termination_date) {
-                        nota += ' · sin fecha de salida registrada, se usó la de hoy';
-                    }
-                    if (!e.salario_fijo) {
-                        nota += e.meses_completos > 0
-                            ? ' · hay ' + e.meses_completos + ' mes(es) completo(s) en la nómina, abajo.'
-                            : ' · no hay nómina cargada de su último año: los montos van a mano.';
+                        nota += ' Sin fecha de salida registrada, se usó la de hoy.';
                     }
                     $('lbc-empleado-nota').textContent = nota;
+
+                    // Si no se pudo rellenar nada, el motivo concreto se muestra
+                    // donde va el resultado, para que no parezca un fallo del
+                    // sistema cuando lo que falta es un dato de la ficha.
+                    diagnosticoEmpleado = e.diagnostico || '';
                     programarCalculo();
                 })
                 .catch(function () {
