@@ -1674,6 +1674,33 @@ try {
                 }
                 break;
 
+            case 'update_employment_verification_config':
+                $evEnabled         = isset($_POST['employment_verification_enabled']) ? '1' : '0';
+                $evIncludePosition = isset($_POST['employment_verification_include_position']) ? '1' : '0';
+                $evKeyRaw          = trim($_POST['employment_verification_api_key'] ?? '');
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, 'text', 'integrations')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+                    $stmt->execute(['employment_verification_enabled', $evEnabled]);
+                    $stmt->execute(['employment_verification_include_position', $evIncludePosition]);
+
+                    // Mismo protocolo de enmascarado que la API key global de Claude
+                    if ($evKeyRaw === '__CLEAR__') {
+                        $stmt->execute(['employment_verification_api_key', '']);
+                    } elseif ($evKeyRaw !== '' && strpos($evKeyRaw, '••••') === false) {
+                        $stmt->execute(['employment_verification_api_key', $evKeyRaw]);
+                    }
+
+                    $successMessages[] = 'Configuración de verificación de empleo actualizada.';
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al actualizar la configuración de verificación de empleo.';
+                }
+                break;
+
             case 'update_recruitment_ai_config':
                 $rcEnabled        = isset($_POST['recruitment_ai_enabled']) ? '1' : '0';
                 $rcModel          = trim($_POST['recruitment_ai_model'] ?? 'claude-sonnet-4-6');
@@ -2519,6 +2546,41 @@ try {
 } catch (Exception $e) {
     error_log('Error loading global AI settings: ' . $e->getMessage());
 }
+
+// Get Employment Verification webhook config (GHL AI Voice Agent / bancos)
+$employmentVerification = [
+    'enabled'          => false,
+    'api_key_masked'   => '',
+    'api_key_set'      => false,
+    'include_position' => true,
+];
+try {
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('employment_verification_enabled','employment_verification_api_key','employment_verification_include_position')");
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $val = (string) ($row['setting_value'] ?? '');
+        switch ($row['setting_key']) {
+            case 'employment_verification_enabled':
+                $employmentVerification['enabled'] = filter_var($val, FILTER_VALIDATE_BOOLEAN);
+                break;
+            case 'employment_verification_api_key':
+                if ($val !== '') {
+                    $employmentVerification['api_key_set'] = true;
+                    $employmentVerification['api_key_masked'] = substr($val, 0, 4) . str_repeat('•', 8) . substr($val, -4);
+                }
+                break;
+            case 'employment_verification_include_position':
+                $employmentVerification['include_position'] = filter_var($val, FILTER_VALIDATE_BOOLEAN);
+                break;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error loading employment verification settings: ' . $e->getMessage());
+}
+
+$employmentVerificationWebhookUrl = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http')
+    . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
+    . rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/')
+    . '/api/employment_verification.php';
 
 // Recruitment AI configuration
 $recruitmentAi = [
@@ -5703,6 +5765,101 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
         </section>
 
+        <!-- Employment Verification Webhook (GHL AI Voice Agent / bancos) -->
+        <section id="employment-verification-config" class="glass-card space-y-6">
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-landmark text-emerald-400"></i>
+                        Verificación de Empleo (IA de voz / bancos)
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Webhook para que el agente de IA de voz de GoHighLevel (Custom Action) responda en
+                        automático cuando un banco llama a verificar si alguien es colaborador activo de la empresa.
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $employmentVerification['enabled'] ? 'check-circle text-green-400' : 'times-circle text-red-400' ?>"></i>
+                    <?= $employmentVerification['enabled'] ? 'Activo' : 'Inactivo' ?>
+                </span>
+            </div>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_employment_verification_config">
+
+                <div>
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="employment_verification_enabled" value="1" class="w-5 h-5 accent-emerald-500"
+                            <?= $employmentVerification['enabled'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Habilitar el webhook de verificación</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Si está apagado, el webhook responde 503 aunque tenga API key configurada.</p>
+                </div>
+
+                <div>
+                    <label class="form-label"><i class="fas fa-key"></i> API Key del webhook</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="employment-verification-api-key" name="employment_verification_api_key"
+                            value="<?= htmlspecialchars($employmentVerification['api_key_masked']) ?>"
+                            placeholder="Genera una clave nueva con el botón"
+                            class="input-control font-mono text-xs flex-1">
+                        <button type="button" class="btn-secondary whitespace-nowrap" onclick="generateEmploymentVerificationKey()">
+                            <i class="fas fa-dice"></i> Generar clave
+                        </button>
+                    </div>
+                    <p class="text-xs text-muted mt-1">
+                        <?php if ($employmentVerification['api_key_set']): ?>
+                            Ya configurada. Deja el valor enmascarado para conservarla, o genera una nueva para reemplazarla. Escribe <code>__CLEAR__</code> para borrarla.
+                        <?php else: ?>
+                            Sin configurar todavía: el webhook rechazará todas las consultas hasta que generes y guardes una clave.
+                        <?php endif; ?>
+                        Esta es la clave que va en el header <code>X-Api-Key</code> configurado en la Custom Action de GHL.
+                    </p>
+                </div>
+
+                <div>
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="employment_verification_include_position" value="1" class="w-5 h-5 accent-emerald-500"
+                            <?= $employmentVerification['include_position'] ? 'checked' : '' ?>>
+                        <span class="font-semibold">Incluir cargo y fecha de ingreso en la respuesta</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">
+                        Apágalo si solo quieres confirmar "activo / no activo" por voz, sin revelar cargo ni antigüedad.
+                    </p>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i> Guardar configuración
+                </button>
+            </form>
+
+            <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 space-y-3">
+                <h3 class="text-emerald-300 font-semibold flex items-center gap-2">
+                    <i class="fas fa-plug"></i> Cómo conectarlo en GHL (Custom Action 2.0)
+                </h3>
+                <div>
+                    <label class="text-xs text-emerald-200 font-semibold uppercase tracking-wide">URL del webhook</label>
+                    <div class="flex gap-2 mt-1">
+                        <input type="text" readonly class="input-control font-mono text-xs flex-1"
+                            value="<?= htmlspecialchars($employmentVerificationWebhookUrl) ?>"
+                            id="employment-verification-url" onclick="this.select()">
+                        <button type="button" class="btn-secondary" onclick="copyEmploymentVerificationField('employment-verification-url')">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+                <ul class="text-sm text-emerald-200 space-y-1 list-disc list-inside">
+                    <li>Método: <code>POST</code></li>
+                    <li>Header: <code>X-Api-Key</code> = la clave generada arriba</li>
+                    <li>Parámetro que debe llenar la IA: <code>cedula</code> (string, solo dígitos — pídele al agente que la confirme con el que llama)</li>
+                    <li>La respuesta trae un campo <code>message</code> ya redactado en español, listo para que la IA lo lea tal cual al que llama</li>
+                </ul>
+                <p class="text-xs text-emerald-200/80">
+                    Respuesta de ejemplo: <code>{"success":true,"found":true,"active":true,"employee_name":"...","message":"Sí, ... es colaborador activo..."}</code>
+                </p>
+            </div>
+        </section>
+
         <!-- Executive Dashboard Daily Closing Report Configuration -->
         <section id="executive-dashboard-report-config" class="glass-card space-y-6">
             <div class="panel-heading">
@@ -7621,6 +7778,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 selectors: ['#ghl-report-config']
             },
             {
+                key: 'employment_verification',
+                label: 'Verificación de Empleo (IA/Bancos)',
+                icon: 'fas fa-landmark',
+                selectors: ['#employment-verification-config']
+            },
+            {
                 key: 'executive_dashboard_report',
                 label: 'Cierre Ejecutivo',
                 icon: 'fas fa-chart-line',
@@ -8611,6 +8774,31 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
+        }
+    }
+
+    // ---------- Employment Verification webhook handlers ----------
+
+    function generateEmploymentVerificationKey() {
+        const input = document.getElementById('employment-verification-api-key');
+        if (!input) return;
+        const bytes = new Uint8Array(24);
+        (window.crypto || window.msCrypto).getRandomValues(bytes);
+        const key = 'ev_' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        input.value = key;
+        input.focus();
+        input.select();
+    }
+
+    function copyEmploymentVerificationField(elementId) {
+        const input = document.getElementById(elementId);
+        if (!input) return;
+        input.select();
+        input.setSelectionRange(0, 99999);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(input.value).catch(() => document.execCommand('copy'));
+        } else {
+            document.execCommand('copy');
         }
     }
 
