@@ -382,6 +382,32 @@ $holidays = $pdo->query("SELECT id, holiday_date, name, multiplier, is_active FR
                     <?php endforeach; ?>
                 </div>
 
+                <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wide mt-6 mb-1">Cómo se propone el salario</h3>
+                <p class="text-xs text-slate-500 mb-3">
+                    Decide qué monto se carga solo en la rejilla al elegir a un colaborador.
+                    El cálculo en sí no cambia: es siempre el del Ministerio de Trabajo.
+                </p>
+                <div class="form-group" style="max-width:560px">
+                    <label for="bf_benefits_metodo_salario">Método</label>
+                    <select id="bf_benefits_metodo_salario" name="benefits[benefits_metodo_salario]" class="form-control">
+                        <option value="quincenal_nomina" <?= ($benefitsCfg['benefits_metodo_salario'] ?? '') === 'quincenal_nomina' ? 'selected' : '' ?>>
+                            Promedio por quincena (método de nómina)
+                        </option>
+                        <option value="mensual_devengado" <?= ($benefitsCfg['benefits_metodo_salario'] ?? '') === 'mensual_devengado' ? 'selected' : '' ?>>
+                            Salario mensual devengado
+                        </option>
+                    </select>
+                    <p class="text-xs text-slate-500 mt-2">
+                        <strong>Por quincena</strong> suma el bruto de las quincenas que tocan la relación laboral
+                        y lo divide entre cuántas son, cargándolo como <em>Quincenal</em>. Es el método que usa
+                        la encargada de nómina.
+                        <br>
+                        <strong>Mensual devengado</strong> divide lo devengado entre los meses realmente
+                        trabajados. Da una cifra más alta porque no cuenta quincenas que la persona no trabajó
+                        completas.
+                    </p>
+                </div>
+
                 <?php
                 $gruposBenefits = [
                     'Salario diario' => [

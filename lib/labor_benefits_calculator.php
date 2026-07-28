@@ -70,6 +70,21 @@ if (!function_exists('laborBenefitsDefaults')) {
             'benefits_cesantia_antes_codigo'  => '15',  // por año anterior al Código
             'benefits_fecha_codigo_trabajo'   => '1992-06-17',
 
+            // Cómo se propone el salario al traer a un colaborador.
+            //
+            //   quincenal_nomina  -> el método de la encargada de nómina: se suma
+            //                        el bruto de las quincenas que tocan su
+            //                        relación laboral, se divide entre el NÚMERO
+            //                        de quincenas y se carga como Quincenal.
+            //   mensual_devengado -> salario mensual real (devengado ÷ meses de
+            //                        servicio), cargado como Mensual.
+            //
+            // El primero es el que se usa en la empresa. Da una cifra más baja
+            // que el segundo porque divide entre quincenas completas aunque la
+            // persona no las haya trabajado enteras; queda documentado en
+            // CALCULADORA_PRESTACIONES_LABORALES.md.
+            'benefits_metodo_salario'         => 'quincenal_nomina',
+
             // Vacaciones, art. 177.
             'benefits_vacaciones_1_5_anios'   => '14',
             'benefits_vacaciones_5_anios_mas' => '18',
@@ -1096,8 +1111,13 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
      * @return array<int,array{mes:string,etiqueta:string,monto:float,cobertura:string,
      *                         fuente:string,dias_cubiertos:int,dias_empleado:int,dias_mes:int}>
      */
-    function laborBenefitsPayrollMonths(PDO $pdo, int $employeeId, string $exitDate, ?string $hireDate = null): array
-    {
+    function laborBenefitsPayrollMonths(
+        PDO $pdo,
+        int $employeeId,
+        string $exitDate,
+        ?string $hireDate = null,
+        string $metodo = 'quincenal_nomina'
+    ): array {
         $slots = lbEtiquetasMeses($exitDate);
         if (!$slots) {
             return [];
@@ -1309,6 +1329,34 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
             ];
         }
 
+        // ---------------------------------------------------------------
+        // Método de la encargada de nómina (el que se usa en la empresa)
+        // ---------------------------------------------------------------
+        // Se suma el bruto de TODAS las quincenas que tocan su relación laboral
+        // y se divide entre el NÚMERO de quincenas, no entre el tiempo que
+        // realmente estuvo. El resultado se carga como "Quincenal", que es lo
+        // que el MT multiplica por 2 para el salario mensual.
+        if ($metodo === 'quincenal_nomina') {
+            $quincenas = lbQuincenasDelPeriodo($pdo, $empIni, $empFin);
+            if ($quincenas > 0 && $totalDevengado > 0) {
+                $porQuincena = lbFixed2($totalDevengado / $quincenas);
+                foreach ($alineados as $g => $a) {
+                    $dentro = ($g < $mesesActivos);
+                    $alineados[$g]['monto_devengado'] = $a['monto'];
+                    $alineados[$g]['monto']           = $dentro ? $porQuincena : 0.0;
+                    $alineados[$g]['metodo']          = 'quincenal_nomina';
+                    $alineados[$g]['quincenas']       = $quincenas;
+                    $alineados[$g]['total_devengado'] = lbFixed2($totalDevengado);
+                    $alineados[$g]['periodo_sugerido'] = 1; // Quincenal
+                    if ($dentro && $a['cobertura'] === 'no_aplica') {
+                        $alineados[$g]['cobertura'] = 'completa';
+                        $alineados[$g]['fuente']    = 'quincenal';
+                    }
+                }
+                return $alineados;
+            }
+        }
+
         $alineados = lbNormalizarMesesParciales($alineados);
 
         // Los meses del formulario son de ANIVERSARIO (del 15 al 15), pero la
@@ -1346,6 +1394,45 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         }
 
         return $alineados;
+    }
+}
+
+if (!function_exists('lbQuincenasDelPeriodo')) {
+    /**
+     * Cuántas quincenas de nómina tocan la relación laboral.
+     *
+     * Es el denominador del método de la encargada: ella suma el bruto de las
+     * quincenas que le aparecen al colaborador y divide entre cuántas son. Basta
+     * con que la quincena SOLAPE aunque sea un día, aunque él no la trabajara
+     * entera — de ahí que el salario salga más bajo que el devengado real.
+     *
+     * Si no hay períodos cargados que cubran esas fechas (la nómina del sistema
+     * arranca en abril de 2026), se estima con dos quincenas por mes de servicio.
+     */
+    function lbQuincenasDelPeriodo(PDO $pdo, ?string $desde, string $hasta): int
+    {
+        if (!$desde) {
+            return 0;
+        }
+
+        try {
+            $st = $pdo->prepare("
+                SELECT COUNT(*) FROM payroll_periods
+                WHERE end_date >= ? AND start_date <= ?
+            ");
+            $st->execute([$desde, $hasta]);
+            $n = (int) $st->fetchColumn();
+        } catch (Throwable $e) {
+            error_log('lbQuincenasDelPeriodo: ' . $e->getMessage());
+            $n = 0;
+        }
+
+        if ($n > 0) {
+            return $n;
+        }
+
+        $meses = lbMesesDeServicio($desde, $hasta);
+        return $meses > 0 ? max(1, (int) ceil($meses * 2)) : 0;
     }
 }
 
@@ -1583,7 +1670,8 @@ if (!function_exists('laborBenefitsEmployeeDefaults')) {
         // de ingreso para que la cobertura se mida contra los días que estuvo
         // empleado y no contra el mes entero.
         $salida = $row['termination_date'] ?: date('Y-m-d');
-        $mesesNomina = laborBenefitsPayrollMonths($pdo, (int) $row['id'], $salida, $row['hire_date']);
+        $metodo = laborBenefitsConfig($pdo)['benefits_metodo_salario'] ?? 'quincenal_nomina';
+        $mesesNomina = laborBenefitsPayrollMonths($pdo, (int) $row['id'], $salida, $row['hire_date'], $metodo);
         $conDatos = 0;
         $conMonto = 0;
         foreach ($mesesNomina as $m) {

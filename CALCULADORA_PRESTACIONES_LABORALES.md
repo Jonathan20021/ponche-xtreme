@@ -199,7 +199,37 @@ marca **Completo · nómina**, **Completo · ponche**, **Parcial**, **Sin datos*
 tiene, y si no con el devengado real. El botón **Usar estos montos** solo hace
 falta para volver a aplicarlo después de editar a mano.
 
-### El salario que se propone es MENSUAL, no lo cobrado en días sueltos
+### Método de salario: por quincena (el de la encargada de nómina)
+
+**Es el que usa la empresa y viene activado por defecto.** Se suma el bruto de
+todas las quincenas que *tocan* la relación laboral, se divide entre el **número
+de quincenas** y se carga como **Quincenal** — que es lo que el Ministerio
+multiplica por 2 para el salario mensual.
+
+Reproduce al centavo el papel del MT. Caso Juan Armando (EMP-2026-0076):
+
+| | Papel del MT | La calculadora |
+|---|---|---|
+| Salario actual | RD$15,276.71 Quincenal | RD$15,276.71 Quincenal |
+| Salario promedio mensual | RD$30,553.42 | RD$30,553.42 |
+| Salario promedio diario | RD$1,282.68 | RD$1,282.68 |
+| Salario de Navidad | RD$3,203.46 | RD$3,203.46 |
+
+> **Lo que hay que saber de este método:** divide entre quincenas **completas**
+> aunque la persona no las haya trabajado enteras. Juan Armando estuvo 38 días
+> (15/06–22/07) pero sus 3 quincenas abarcan 45, así que el salario sale diluido.
+> La lectura literal del art. 219 (devengado ÷ 12 = RD$45,830.14 ÷ 12) daría
+> **RD$3,819.18**, es decir RD$615.72 más. Es una decisión tomada a conciencia,
+> no un descuido.
+
+El otro método (**Salario mensual devengado**) sigue disponible en
+Nómina → Configuración → *Cómo se propone el salario*. Divide lo devengado entre
+los meses realmente trabajados y hace que la regalía caiga exacta en el art. 219.
+
+El **motor no cambia con ninguno de los dos**: sigue siendo el algoritmo del MT.
+Lo único que cambia es el salario que se propone.
+
+### Salario mensual devengado (método alternativo)
 
 La casilla del formulario pide el *salario ordinario mensual*. Meter ahí lo que
 alguien cobró en un mes truncado subestima todo. Dos ajustes lo evitan:

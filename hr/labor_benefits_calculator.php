@@ -1317,7 +1317,9 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                 // El promedio manda sobre el ajuste del mes: si se promedió, la
                 // casilla no lleva el valor de ESTE mes y decir "ajustado a mes
                 // completo" haría creer que sí.
-                if (m.promediado) {
+                if (m.metodo === 'quincenal_nomina') {
+                    detalle += ' · en la casilla va el promedio por quincena';
+                } else if (m.promediado) {
                     detalle += ' · en la casilla va el promedio de servicio';
                 } else if (m.normalizado) {
                     detalle += ' · ajustado a mes completo (estuvo ' + m.dias_empleado + '/' + m.dias_mes + ' días)';
@@ -1342,7 +1344,14 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
             // con dinero, hay que decir que se usó el promedio: si no, RRHH ve un
             // importe que no coincide con ninguna nómina suya y desconfía.
             var explica = '';
-            if (promediado) {
+            var quincenal = mesesNomina.find(function (m) { return m.metodo === 'quincenal_nomina'; });
+            if (quincenal) {
+                explica = '<strong>Método de nómina (por quincena).</strong> Devengó <strong>'
+                    + moneda(quincenal.total_devengado || 0) + '</strong> en <strong>'
+                    + quincenal.quincenas + ' quincenas</strong> que tocan su relación laboral = <strong>'
+                    + moneda(quincenal.monto || 0) + '</strong> por quincena. La frecuencia queda en '
+                    + '<strong>Quincenal</strong> y el Ministerio la multiplica por 2 para el salario mensual.';
+            } else if (promediado) {
                 var m0 = mesesNomina.find(function (m) { return m.promediado; }) || {};
                 explica = '<strong>Se usó su salario mensual promedio.</strong> Su tiempo laborado da '
                     + 'menos casillas que meses de calendario trabajados, así que llenar mes a mes '
@@ -1368,6 +1377,20 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
          */
         function aplicarMontosDeNomina() {
             if (!mesesNomina.length) { return 0; }
+
+            // El método de nómina entrega el salario POR QUINCENA, así que la
+            // frecuencia de pago tiene que quedar en Quincenal: es lo que hace
+            // que el motor lo multiplique por 2 para el salario mensual.
+            var sugerido = mesesNomina[0] && mesesNomina[0].periodo_sugerido;
+            if (sugerido !== undefined && sugerido !== null) {
+                var radio = document.querySelector('input[name="periodo_idx"][value="' + sugerido + '"]');
+                if (radio && !radio.checked) {
+                    radio.checked = true;
+                    Array.prototype.forEach.call($('lbc-periodos').querySelectorAll('.lbc-radio'), function (l) {
+                        l.classList.toggle('is-active', l.querySelector('input').checked);
+                    });
+                }
+            }
 
             var llenos = 0;
             $('lbc-salario-fijo').value = '';
