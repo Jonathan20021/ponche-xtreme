@@ -398,9 +398,10 @@ $holidays = $pdo->query("SELECT id, holiday_date, name, multiplier, is_active FR
                         </option>
                     </select>
                     <p class="text-xs text-slate-500 mt-2">
-                        <strong>Por quincena</strong> suma el bruto de las quincenas que tocan la relación laboral
-                        y lo divide entre cuántas son, cargándolo como <em>Quincenal</em>. Es el método que usa
-                        la encargada de nómina.
+                        <strong>Por quincena</strong> suma el bruto de las quincenas que tocan la relación laboral,
+                        lo divide entre cuántas son y lo carga como <em>Mensual</em> (× 2). Es el método que usa
+                        la encargada de nómina. Se carga mensual y no quincenal porque el divisor legal es
+                        23.83 y el quincenal del MT (11.91) es su mitad mal redondeada.
                         <br>
                         <strong>Mensual devengado</strong> divide lo devengado entre los meses realmente
                         trabajados. Da una cifra más alta porque no cuenta quincenas que la persona no trabajó

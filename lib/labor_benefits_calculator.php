@@ -1339,15 +1339,31 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         if ($metodo === 'quincenal_nomina') {
             $quincenas = lbQuincenasDelPeriodo($pdo, $empIni, $empFin);
             if ($quincenas > 0 && $totalDevengado > 0) {
-                $porQuincena = lbFixed2($totalDevengado / $quincenas);
+                $porQuincena = $totalDevengado / $quincenas;
+
+                // El salario se deriva por quincena pero se CARGA COMO MENSUAL.
+                //
+                // La tabla de divisores del MT no es coherente consigo misma:
+                // el quincenal es 11.91 y el mensual 23.83, pero 11.91 × 2 = 23.82.
+                // Por eso el mismo sueldo da un salario diario distinto según
+                // cómo se cargue (RD$562.11 vs RD$561.87 en un caso real), y de
+                // ahí salían diferencias de céntimos en la regalía.
+                //
+                // Se usa el mensual porque 23.83 es el divisor que fija el
+                // Reglamento 258-93; el 11.91 es solo su mitad mal redondeada.
+                // Además da el mismo resultado tenga la persona 2, 3 o 7
+                // quincenas.
+                $mensual = lbFixed2($porQuincena * 2);
+
                 foreach ($alineados as $g => $a) {
                     $dentro = ($g < $mesesActivos);
-                    $alineados[$g]['monto_devengado'] = $a['monto'];
-                    $alineados[$g]['monto']           = $dentro ? $porQuincena : 0.0;
-                    $alineados[$g]['metodo']          = 'quincenal_nomina';
-                    $alineados[$g]['quincenas']       = $quincenas;
-                    $alineados[$g]['total_devengado'] = lbFixed2($totalDevengado);
-                    $alineados[$g]['periodo_sugerido'] = 1; // Quincenal
+                    $alineados[$g]['monto_devengado']  = $a['monto'];
+                    $alineados[$g]['monto']            = $dentro ? $mensual : 0.0;
+                    $alineados[$g]['metodo']           = 'quincenal_nomina';
+                    $alineados[$g]['quincenas']        = $quincenas;
+                    $alineados[$g]['por_quincena']     = lbFixed2($porQuincena);
+                    $alineados[$g]['total_devengado']  = lbFixed2($totalDevengado);
+                    $alineados[$g]['periodo_sugerido'] = 0; // Mensual
                     if ($dentro && $a['cobertura'] === 'no_aplica') {
                         $alineados[$g]['cobertura'] = 'completa';
                         $alineados[$g]['fuente']    = 'quincenal';

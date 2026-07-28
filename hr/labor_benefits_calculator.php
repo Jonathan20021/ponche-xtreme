@@ -1325,7 +1325,7 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                 // casilla no lleva el valor de ESTE mes y decir "ajustado a mes
                 // completo" haría creer que sí.
                 if (m.metodo === 'quincenal_nomina') {
-                    detalle += ' · en la casilla va el promedio por quincena';
+                    detalle += ' · en la casilla va el mensual del método de nómina';
                 } else if (m.promediado) {
                     detalle += ' · en la casilla va el promedio de servicio';
                 } else if (m.normalizado) {
@@ -1353,11 +1353,12 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
             var explica = '';
             var quincenal = mesesNomina.find(function (m) { return m.metodo === 'quincenal_nomina'; });
             if (quincenal) {
-                explica = '<strong>Método de nómina (por quincena).</strong> Devengó <strong>'
+                explica = '<strong>Método de nómina.</strong> Devengó <strong>'
                     + moneda(quincenal.total_devengado || 0) + '</strong> en <strong>'
-                    + quincenal.quincenas + ' quincenas</strong> que tocan su relación laboral = <strong>'
-                    + moneda(quincenal.monto || 0) + '</strong> por quincena. La frecuencia queda en '
-                    + '<strong>Quincenal</strong> y el Ministerio la multiplica por 2 para el salario mensual.';
+                    + quincenal.quincenas + ' quincenas</strong> que tocan su relación laboral = '
+                    + moneda(quincenal.por_quincena || 0) + ' por quincena, o sea <strong>'
+                    + moneda(quincenal.monto || 0) + ' al mes</strong>. Se carga como '
+                    + '<strong>Mensual</strong>, que es el divisor legal de 23.83.';
             } else if (promediado) {
                 var m0 = mesesNomina.find(function (m) { return m.promediado; }) || {};
                 explica = '<strong>Se usó su salario mensual promedio.</strong> Su tiempo laborado da '
@@ -1385,9 +1386,10 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
         function aplicarMontosDeNomina() {
             if (!mesesNomina.length) { return 0; }
 
-            // El método de nómina entrega el salario POR QUINCENA, así que la
-            // frecuencia de pago tiene que quedar en Quincenal: es lo que hace
-            // que el motor lo multiplique por 2 para el salario mensual.
+            // El servidor dice con qué frecuencia hay que cargar el importe. Se
+            // respeta siempre: si el valor es mensual y la frecuencia quedara en
+            // quincenal (o al revés), el salario diario saldría al doble o a la
+            // mitad.
             var sugerido = mesesNomina[0] && mesesNomina[0].periodo_sugerido;
             if (sugerido !== undefined && sugerido !== null) {
                 var radio = document.querySelector('input[name="periodo_idx"][value="' + sugerido + '"]');

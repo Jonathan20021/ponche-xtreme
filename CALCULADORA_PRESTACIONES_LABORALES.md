@@ -203,17 +203,29 @@ falta para volver a aplicarlo después de editar a mano.
 
 **Es el que usa la empresa y viene activado por defecto.** Se suma el bruto de
 todas las quincenas que *tocan* la relación laboral, se divide entre el **número
-de quincenas** y se carga como **Quincenal** — que es lo que el Ministerio
-multiplica por 2 para el salario mensual.
+de quincenas**, se multiplica por 2 y se carga como **Mensual**.
 
-Reproduce al centavo el papel del MT. Caso Juan Armando (EMP-2026-0076):
+### Por qué Mensual y no Quincenal
 
-| | Papel del MT | La calculadora |
+La tabla de divisores del MT **no es coherente consigo misma**: el quincenal es
+`11.91` y el mensual `23.83`, pero `11.91 × 2 = 23.82`. El mismo sueldo da un
+salario diario distinto según cómo se cargue:
+
+| Richely Ventura (EMP-2026-0080) | Quincenal | Mensual |
 |---|---|---|
-| Salario actual | RD$15,276.71 Quincenal | RD$15,276.71 Quincenal |
-| Salario promedio mensual | RD$30,553.42 | RD$30,553.42 |
-| Salario promedio diario | RD$1,282.68 | RD$1,282.68 |
-| Salario de Navidad | RD$3,203.46 | RD$3,203.46 |
+| Valor en la casilla | RD$6,694.70 | RD$13,389.40 |
+| Salario mensual | RD$13,389.40 | RD$13,389.40 |
+| Salario **diario** | RD$562.11 | **RD$561.87** |
+| Regalía | RD$1,008.23 | **RD$1,007.80** |
+
+Se usa **Mensual** porque `23.83` es el divisor que fija el Reglamento 258-93 y
+`11.91` es solo su mitad mal redondeada. Además da el mismo resultado tenga la
+persona 2, 3 o 7 quincenas.
+
+> La encargada usó Quincenal en un caso (Juan Armando) y Mensual en otro
+> (Richely), así que **ningún ajuste reproduce los dos papeles a la vez**. Con
+> Mensual, Richely cuadra exacto y Juan Armando queda en RD$3,203.18 en lugar de
+> RD$3,203.46: **28 centavos**. Decisión tomada el 27/07/2026.
 
 > **Lo que hay que saber de este método:** divide entre quincenas **completas**
 > aunque la persona no las haya trabajado enteras. Juan Armando estuvo 38 días
