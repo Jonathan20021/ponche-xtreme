@@ -119,6 +119,13 @@ $accion = $_GET['ajax'] ?? '';
 if ($accion !== '') {
     header('Content-Type: application/json; charset=utf-8');
 
+    // NADA de caché. `empleado` es un GET, y el navegador lo estaba guardando:
+    // después de cambiar el método de cálculo la pantalla seguía mostrando los
+    // importes viejos aunque el servidor ya devolvía los nuevos.
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
     if ($accion === 'calcular') {
         echo json_encode(laborBenefitsCalculate(entradaDesdePost($_POST), laborBenefitsConfig($pdo)));
         exit;
@@ -1433,7 +1440,10 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
             $('lbc-empleado-nota').innerHTML =
                 '<i class="fas fa-circle-notch fa-spin"></i> Buscando lo devengado en nómina y ponche…';
 
-            fetch('labor_benefits_calculator.php?ajax=empleado&id=' + encodeURIComponent(id))
+            // cache:'no-store' además de las cabeceras del servidor: entre las dos
+            // no hay forma de que quede una respuesta vieja en el navegador.
+            fetch('labor_benefits_calculator.php?ajax=empleado&id=' + encodeURIComponent(id),
+                  { cache: 'no-store' })
                 .then(function (r) { return r.json(); })
                 .then(function (r) {
                     $('lbc-usar-nomina').disabled = false;
@@ -1466,9 +1476,12 @@ $divisoresOrd = lbDivisores($cfg['benefits_divisores_ordinario']);
                     if (e.salario_fijo && e.salario_mensual > 0) {
                         nota = e.salario_origen + ' · aplicado a los 12 períodos.';
                     } else if (llenadosDeNomina > 0) {
-                        nota = 'Cobra por hora (RD$' + Number(e.tarifa_hora || 0).toFixed(2) + '/h). '
-                             + 'Se llenaron ' + llenadosDeNomina + ' período(s) con lo que devengó de verdad '
-                             + '(ver el detalle abajo). Revísalos antes de liquidar.';
+                        var q = (e.meses_nomina || []).find(function (m) { return m.metodo === 'quincenal_nomina'; });
+                        nota = 'Cobra por hora (RD$' + Number(e.tarifa_hora || 0).toFixed(2) + '/h). ';
+                        nota += q
+                            ? 'Se cargó su promedio por quincena, con el método de nómina (ver el detalle abajo).'
+                            : 'Se llenaron ' + llenadosDeNomina + ' período(s) con lo que devengó de verdad '
+                              + '(ver el detalle abajo). Revísalos antes de liquidar.';
                     } else {
                         nota = e.salario_origen;
                     }
