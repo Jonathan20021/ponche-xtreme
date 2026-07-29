@@ -16,6 +16,11 @@ if (!$employeeId) {
 // Se piden TODAS las columnas de compensación: antes solo venía u.hourly_rate
 // (la tarifa en USD) y como el personal cobra en pesos ese campo está en 0, así
 // que el perfil mostraba "RD$0.00" a todo el mundo.
+// La exención de ISR vive en employees; se garantiza la columna antes del e.*
+// para que el perfil no reviente en una base que aún no la tenga.
+require_once __DIR__ . '/payroll_functions.php';
+ensureEmployeeIsrExemptColumns($pdo);
+
 $stmt = $pdo->prepare("
     SELECT e.*, u.username, u.role, u.overtime_multiplier,
            u.hourly_rate, u.hourly_rate_dop,
@@ -326,6 +331,33 @@ if ($signatureLink) {
                             <p class="text-xs text-slate-400 mt-1">
                                 Horas por <?= $employee['payroll_source'] === 'vicidial' ? 'Vicidial' : 'ponche' ?>
                             </p>
+                            <?php $isrExento = !empty($employee['isr_exempt']); ?>
+                            <details class="mt-2">
+                                <summary class="text-xs cursor-pointer <?= $isrExento ? 'text-amber-300' : 'text-slate-500' ?>">
+                                    <?= $isrExento ? 'Exento de ISR' : 'Retiene ISR' ?>
+                                </summary>
+                                <form method="POST" action="employee_profile_actions.php" class="mt-2 space-y-2">
+                                    <input type="hidden" name="employee_id" value="<?= (int) $employee['id'] ?>">
+                                    <input type="hidden" name="action" value="set_isr_exempt">
+                                    <label class="flex items-center gap-2 text-xs text-slate-300">
+                                        <input type="checkbox" name="isr_exempt" value="1" <?= $isrExento ? 'checked' : '' ?>>
+                                        No retenerle ISR
+                                    </label>
+                                    <input type="text" name="isr_exempt_reason" maxlength="255"
+                                           value="<?= htmlspecialchars((string) ($employee['isr_exempt_reason'] ?? '')) ?>"
+                                           placeholder="Motivo (obligatorio)"
+                                           class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs">
+                                    <button type="submit" class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-2 py-1">
+                                        Guardar
+                                    </button>
+                                    <?php if ($isrExento && !empty($employee['isr_exempt_at'])): ?>
+                                        <p class="text-[10px] text-slate-500">
+                                            Desde <?= htmlspecialchars(date('d/m/Y', strtotime($employee['isr_exempt_at']))) ?>.
+                                            Recalcula las quincenas para que aplique.
+                                        </p>
+                                    <?php endif; ?>
+                                </form>
+                            </details>
                         </div>
                         <div class="bg-slate-800/50 rounded-lg p-4">
                             <p class="text-slate-400 text-sm">Tiempo laborando</p>

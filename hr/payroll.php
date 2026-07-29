@@ -318,6 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 'other_income' => 0,
                 'cooperative_deduction' => (float)($manualIncentivesMap[$employeeId]['cooperative_deduction'] ?? 0),
                 'additional_deduction' => (float)($manualIncentivesMap[$employeeId]['additional_deduction'] ?? 0),
+                'isr_exempt' => (int)($manualIncentivesMap[$employeeId]['isr_exempt'] ?? 0),
             ];
             
             $payrollData = calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData);
@@ -504,9 +505,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
             $upsertStmt = $pdo->prepare("
                 INSERT INTO payroll_manual_incentives (
                     payroll_period_id, employee_id, sales_incentive, night_incentive,
-                    use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction
+                    use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction, isr_exempt
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     sales_incentive = VALUES(sales_incentive),
                     night_incentive = VALUES(night_incentive),
@@ -515,7 +516,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                     manual_overtime_hours = VALUES(manual_overtime_hours),
                     notes = VALUES(notes),
                     cooperative_deduction = VALUES(cooperative_deduction),
-                    additional_deduction = VALUES(additional_deduction)
+                    additional_deduction = VALUES(additional_deduction),
+                    isr_exempt = VALUES(isr_exempt)
             ");
 
             foreach ($rows as $employeeId => $values) {
@@ -538,8 +540,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                 $notes = $notes !== '' ? mb_substr($notes, 0, 255) : null;
                 $cooperative = isset($values['cooperative']) ? round(max((float)$values['cooperative'], 0), 2) : 0.00;
                 $additional = isset($values['additional']) ? round(max((float)$values['additional'], 0), 2) : 0.00;
+                $isrExempt = !empty($values['isr_exempt']) ? 1 : 0;
 
-                if ($sales == 0.0 && $night == 0.0 && $useManualHours === 0 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0 && $notes === null && $cooperative == 0.0 && $additional == 0.0) {
+                if ($sales == 0.0 && $night == 0.0 && $useManualHours === 0 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0 && $notes === null && $cooperative == 0.0 && $additional == 0.0 && $isrExempt === 0) {
                     $deleteStmt->execute([$periodId, $employeeId]);
                     continue;
                 }
@@ -554,7 +557,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                     $manualOvertimeHours,
                     $notes,
                     $cooperative,
-                    $additional
+                    $additional,
+                    $isrExempt
                 ]);
             }
 
@@ -597,10 +601,11 @@ if ($selectedPeriodId) {
     
     if ($selectedPeriod) {
         $manualIncentives = getPayrollManualIncentivesMap($pdo, $selectedPeriodId);
+        ensureEmployeeIsrExemptColumns($pdo); // la columna se lee justo abajo
 
         $agentsStmt = $pdo->prepare("
             SELECT e.id, e.employee_code, e.first_name, e.last_name, e.position, u.role,
-                   e.employment_status, e.termination_date
+                   e.employment_status, e.termination_date, COALESCE(e.isr_exempt, 0) AS isr_exempt
             FROM employees e
             JOIN users u ON u.id = e.user_id
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
@@ -922,6 +927,7 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                         <th class="text-right py-2 px-2">Incentivo Nocturno</th>
                                         <th class="text-right py-2 px-2">Cooperativa</th>
                                         <th class="text-right py-2 px-2">Descuento</th>
+                                        <th class="text-center py-2 px-2" title="Exonerar el ISR solo en esta quincena. La marca permanente se pone en la ficha del colaborador.">Sin ISR</th>
                                         <th class="text-left py-2 px-2">Nota</th>
                                     </tr>
                                 </thead>
@@ -1043,6 +1049,20 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                     class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
                                                     placeholder="0.00"
                                                 >
+                                            </td>
+                                            <td class="py-2 px-2 text-center">
+                                                <?php $exentoFicha = !empty($agent['isr_exempt']); ?>
+                                                <input
+                                                    type="checkbox"
+                                                    name="manual_incentives[<?= (int)$agent['id'] ?>][isr_exempt]"
+                                                    value="1"
+                                                    <?= (!empty($agentIncentive['isr_exempt']) || $exentoFicha) ? 'checked' : '' ?>
+                                                    <?= $exentoFicha ? 'disabled title="Exento de forma permanente en su ficha"' : 'title="Exonerar el ISR solo en esta quincena"' ?>
+                                                    class="h-4 w-4"
+                                                >
+                                                <?php if ($exentoFicha): ?>
+                                                    <div class="text-[10px] text-emerald-400 mt-0.5">fijo</div>
+                                                <?php endif; ?>
                                             </td>
                                             <td class="py-2 px-2">
                                                 <input

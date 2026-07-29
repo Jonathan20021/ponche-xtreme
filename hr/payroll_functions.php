@@ -128,15 +128,26 @@ function calculateISR($monthlyGrossSalary)
  * calcula el ISR mensual y se re-prorratea al período (× fracción). Con 1.0 el
  * comportamiento es idéntico al anterior (períodos mensuales).
  */
-function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [], $periodFraction = 1.0)
+function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [], $periodFraction = 1.0, $isrExempt = false)
 {
     $periodFraction = (float) $periodFraction;
     if ($periodFraction <= 0 || $periodFraction > 1.0) {
         $periodFraction = 1.0;
     }
-    $isrPeriod = ($periodFraction < 1.0)
-        ? round(calculateISR($grossSalary / $periodFraction) * $periodFraction, 2)
-        : calculateISR($grossSalary);
+    // El ISR se puede apagar desde Nómina → Configuración, igual que AFP, SFS,
+    // SRL e INFOTEP. Antes era el ÚNICO que no miraba su casilla "Activo": se
+    // podía desmarcar, guardar y regenerar la nómina, y seguía reteniendo. La
+    // encargada de nómina lo desactivó, no pasó nada, y el descuento siguió
+    // saliendo en los recibos.
+    $rates = getDeductionRates($pdo);
+    $isrActivo = !isset($rates['ISR']) || (int) $rates['ISR']['is_active'] === 1;
+
+    $isrPeriod = 0.00;
+    if ($isrActivo && !$isrExempt) {
+        $isrPeriod = ($periodFraction < 1.0)
+            ? round(calculateISR($grossSalary / $periodFraction) * $periodFraction, 2)
+            : calculateISR($grossSalary);
+    }
 
     $deductions = [
         'afp_employee' => calculateAFP($pdo, $grossSalary, false),
@@ -406,8 +417,81 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
     if (!in_array('additional_deduction', $columns, true)) {
         $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN additional_deduction DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER cooperative_deduction");
     }
+    // Exonerar el ISR de UNA quincena suelta, sin tocar la marca permanente de
+    // la ficha del colaborador.
+    if (!in_array('isr_exempt', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN isr_exempt TINYINT(1) NOT NULL DEFAULT 0 AFTER additional_deduction");
+    }
 
     $ensured = true;
+}
+
+/**
+ * Marca permanente de exención de ISR en la ficha del colaborador.
+ *
+ * Se guarda quién la puso y cuándo: dejar de retenerle un impuesto a alguien es
+ * una decisión que después hay que poder justificar ante la DGII.
+ */
+function ensureEmployeeIsrExemptColumns(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM employees")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('isr_exempt', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN isr_exempt TINYINT(1) NOT NULL DEFAULT 0");
+        }
+        if (!in_array('isr_exempt_reason', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN isr_exempt_reason VARCHAR(255) NULL AFTER isr_exempt");
+        }
+        if (!in_array('isr_exempt_by', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN isr_exempt_by INT NULL AFTER isr_exempt_reason");
+        }
+        if (!in_array('isr_exempt_at', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN isr_exempt_at DATETIME NULL AFTER isr_exempt_by");
+        }
+    } catch (Throwable $e) {
+        error_log('ensureEmployeeIsrExemptColumns: ' . $e->getMessage());
+    }
+
+    $ensured = true;
+}
+
+/**
+ * ¿A este colaborador se le retiene ISR en este período?
+ *
+ * Tres puertas, y basta que una cierre: el interruptor global de Nómina →
+ * Configuración, la marca permanente de su ficha, o la exoneración de esa
+ * quincena en concreto.
+ */
+function isEmployeeIsrExempt(PDO $pdo, int $employeeId, bool $periodExempt = false): bool
+{
+    if ($periodExempt) {
+        return true;
+    }
+    if ($employeeId <= 0) {
+        return false;
+    }
+
+    // El set completo se lee UNA vez: generar la nómina recorre ~150 empleados y
+    // la base es remota, así que una consulta por cabeza se notaría.
+    static $exentos = null;
+    if ($exentos === null) {
+        ensureEmployeeIsrExemptColumns($pdo);
+        $exentos = [];
+        try {
+            foreach ($pdo->query("SELECT id FROM employees WHERE isr_exempt = 1")->fetchAll(PDO::FETCH_COLUMN) as $id) {
+                $exentos[(int) $id] = true;
+            }
+        } catch (Throwable $e) {
+            error_log('isEmployeeIsrExempt: ' . $e->getMessage());
+        }
+    }
+
+    return isset($exentos[$employeeId]);
 }
 
 /**
@@ -555,7 +639,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
     ensurePayrollManualIncentivesTable($pdo);
 
     $stmt = $pdo->prepare("
-        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction
+        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction, isr_exempt
         FROM payroll_manual_incentives
         WHERE payroll_period_id = ?
     ");
@@ -572,6 +656,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
             'notes' => $row['notes'] ?? null,
             'cooperative_deduction' => (float) ($row['cooperative_deduction'] ?? 0),
             'additional_deduction' => (float) ($row['additional_deduction'] ?? 0),
+            'isr_exempt' => (int) ($row['isr_exempt'] ?? 0),
         ];
     }
 
@@ -739,8 +824,16 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     // MENSUAL del ISR al período). Aplica a todo tipo de compensación.
     $isrPeriodFraction = getPeriodMonthFraction($period);
 
+    // Exención de ISR: la marca permanente de su ficha o la exoneración de esta
+    // quincena en concreto.
+    $isrExempt = isEmployeeIsrExempt(
+        $pdo,
+        (int) $employeeId,
+        !empty($hoursData['isr_exempt'])
+    );
+
     // Calcular descuentos
-    $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions, $isrPeriodFraction);
+    $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions, $isrPeriodFraction, $isrExempt);
 
     // Aplicar descuento de cooperativa (monto fijo manual)
     $cooperativeDeduction = round((float)($hoursData['cooperative_deduction'] ?? 0), 2);

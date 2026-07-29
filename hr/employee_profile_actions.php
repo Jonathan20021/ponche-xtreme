@@ -356,6 +356,39 @@ try {
             break;
 
         // ------------------------------------------------------------------
+        // Exención permanente de ISR. Se guarda quién y cuándo: dejar de
+        // retenerle un impuesto a alguien hay que poder justificarlo después.
+        case 'set_isr_exempt':
+            require_once __DIR__ . '/payroll_functions.php';
+            ensureEmployeeIsrExemptColumns($pdo);
+
+            $exento = !empty($_POST['isr_exempt']) ? 1 : 0;
+            $motivo = trim((string) ($_POST['isr_exempt_reason'] ?? ''));
+            if ($exento === 1 && $motivo === '') {
+                profileBack($employeeId, 'Escribe el motivo de la exención de ISR.', false);
+            }
+
+            $pdo->prepare("
+                UPDATE employees
+                SET isr_exempt = ?, isr_exempt_reason = ?, isr_exempt_by = ?, isr_exempt_at = ?
+                WHERE id = ?
+            ")->execute([
+                $exento,
+                $exento ? mb_substr($motivo, 0, 255) : null,
+                $exento ? ($userId ?: null) : null,
+                $exento ? date('Y-m-d H:i:s') : null,
+                $employeeId,
+            ]);
+
+            profileBack(
+                $employeeId,
+                $exento
+                    ? 'Exención de ISR activada para ' . $employeeName . '. Recalcula las quincenas donde deba aplicar.'
+                    : 'Exención de ISR retirada. Recalcula las quincenas donde deba volver a retenerse.'
+            );
+            break;
+
+        // ------------------------------------------------------------------
         default:
             profileBack($employeeId, 'Acción no reconocida.', false);
     }
