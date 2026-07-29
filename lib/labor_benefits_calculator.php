@@ -85,15 +85,20 @@ if (!function_exists('laborBenefitsDefaults')) {
             // CALCULADORA_PRESTACIONES_LABORALES.md.
             'benefits_metodo_salario'         => 'quincenal_nomina',
 
-            // ¿Las horas extras entran en el salario que se propone?
+            // Qué parte de la nómina forma el salario que se propone.
             //
-            // NO, y por eso viene en '0'. La base de las prestaciones es el
-            // SALARIO ORDINARIO (art. 192 CT), que es lo que se recibe de forma
-            // habitual: las horas extraordinarias quedan fuera por definición,
-            // igual que quedan fuera de la regalía del art. 219. Contarlas
-            // inflaba la base a quien hizo extras: a un caso real le sumaba
-            // RD$523.03 de extras y le subía el mensual RD$174.
-            'benefits_incluir_horas_extra'    => '0',
+            //   ordinario   -> solo el salario por horas ordinarias. Es la base
+            //                  de las prestaciones (art. 192 CT): lo que se
+            //                  recibe de forma habitual. Fuera quedan las horas
+            //                  extras y los incentivos (bonos y comisiones).
+            //   sin_extras  -> el bruto menos las horas extras, pero con los
+            //                  incentivos dentro.
+            //   bruto       -> el bruto completo, tal como lo suma la nómina.
+            //
+            // Viene en 'ordinario' por decisión de la empresa. En un caso real
+            // la diferencia entre los tres es grande: RD$18,749.50, RD$19,335.53
+            // y RD$19,509.87 al mes para la misma persona.
+            'benefits_base_salario'           => 'ordinario',
 
             // Vacaciones, art. 177.
             'benefits_vacaciones_1_5_anios'   => '14',
@@ -1082,10 +1087,10 @@ if (!function_exists('lbDevengadoDesdePonche')) {
             $regulares = ((int) ($horas['regular_seconds'] ?? 0)) / 3600;
             $extras    = ((int) ($horas['overtime_seconds'] ?? 0)) / 3600;
 
-            // Las extras solo entran si la empresa lo pide expresamente. La base
-            // de las prestaciones es el salario ORDINARIO (art. 192 CT) y las
-            // horas extraordinarias no lo son: ni las horas ni su recargo.
-            if (($cfg['benefits_incluir_horas_extra'] ?? '0') !== '1') {
+            // Las extras solo entran si la empresa pide el bruto completo. La
+            // base de las prestaciones es el salario ORDINARIO (art. 192 CT) y
+            // las horas extraordinarias no lo son: ni las horas ni su recargo.
+            if (($cfg['benefits_base_salario'] ?? 'ordinario') !== 'bruto') {
                 $extras = 0.0;
             }
 
@@ -1170,12 +1175,11 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         $desde = $slots[0]['mes'] . '-01';
         $hasta = date('Y-m-t', strtotime($slots[11]['mes'] . '-01'));
 
-        // El bruto de la quincena incluye el recargo de las horas extras, y esas
-        // NO son salario ordinario (art. 192 CT), que es la base de las
-        // prestaciones. Se descuentan salvo que la empresa pida lo contrario.
-        $columnaBruto = (laborBenefitsConfig($pdo)['benefits_incluir_horas_extra'] ?? '0') === '1'
-            ? 'pr.gross_salary'
-            : 'GREATEST(pr.gross_salary - COALESCE(pr.overtime_amount, 0), 0)';
+        // El bruto de la quincena trae dentro las horas extras y los incentivos
+        // (bonos y comisiones), y nada de eso es salario ordinario (art. 192
+        // CT), que es la base de las prestaciones. Qué se toma lo decide la
+        // empresa desde Nómina → Configuración.
+        $columnaBruto = lbColumnaBrutoNomina(laborBenefitsConfig($pdo));
 
         try {
             $stmt = $pdo->prepare("
@@ -1454,6 +1458,30 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         }
 
         return $alineados;
+    }
+}
+
+if (!function_exists('lbColumnaBrutoNomina')) {
+    /**
+     * Expresión SQL del monto de cada quincena que cuenta como salario, según lo
+     * que la empresa haya configurado.
+     *
+     * Se usa `base_salary` y no una resta sobre el bruto porque en 19 de los 437
+     * registros el bruto no cuadra al centavo con la suma de sus partes
+     * (redondeo de las horas al guardar). Restar arrastra ese centavo; tomar la
+     * columna del salario ordinario, no.
+     */
+    function lbColumnaBrutoNomina(array $cfg): string
+    {
+        switch ($cfg['benefits_base_salario'] ?? 'ordinario') {
+            case 'bruto':
+                return 'pr.gross_salary';
+            case 'sin_extras':
+                return 'GREATEST(pr.gross_salary - COALESCE(pr.overtime_amount, 0), 0)';
+            case 'ordinario':
+            default:
+                return 'COALESCE(pr.base_salary, 0)';
+        }
     }
 }
 

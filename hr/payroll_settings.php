@@ -409,21 +409,28 @@ $holidays = $pdo->query("SELECT id, holiday_date, name, multiplier, is_active FR
                     </p>
                 </div>
 
+                <?php $baseSal = $benefitsCfg['benefits_base_salario'] ?? 'ordinario'; ?>
                 <div class="form-group" style="max-width:560px">
-                    <label for="bf_benefits_incluir_horas_extra">Horas extras en el salario propuesto</label>
-                    <select id="bf_benefits_incluir_horas_extra" name="benefits[benefits_incluir_horas_extra]" class="form-control">
-                        <option value="0" <?= ($benefitsCfg['benefits_incluir_horas_extra'] ?? '0') !== '1' ? 'selected' : '' ?>>
-                            No sumarlas (salario ordinario)
+                    <label for="bf_benefits_base_salario">Qué entra en el salario propuesto</label>
+                    <select id="bf_benefits_base_salario" name="benefits[benefits_base_salario]" class="form-control">
+                        <option value="ordinario" <?= $baseSal === 'ordinario' ? 'selected' : '' ?>>
+                            Solo el salario ordinario (sin extras ni incentivos)
                         </option>
-                        <option value="1" <?= ($benefitsCfg['benefits_incluir_horas_extra'] ?? '0') === '1' ? 'selected' : '' ?>>
-                            Sumarlas al salario
+                        <option value="sin_extras" <?= $baseSal === 'sin_extras' ? 'selected' : '' ?>>
+                            Sin horas extras, pero con incentivos
+                        </option>
+                        <option value="bruto" <?= $baseSal === 'bruto' ? 'selected' : '' ?>>
+                            El bruto completo de la quincena
                         </option>
                     </select>
                     <p class="text-xs text-slate-500 mt-2">
                         La base de las prestaciones es el <strong>salario ordinario</strong> (art. 192 del Código
-                        de Trabajo): lo que se recibe de forma habitual. Las horas extraordinarias no entran,
-                        ni las horas ni su recargo. Dejar esto en <em>No sumarlas</em> descuenta del bruto de
-                        cada quincena lo pagado por extras antes de proponer el salario.
+                        de Trabajo): lo que se recibe de forma habitual. Ni las horas extraordinarias ni los
+                        incentivos (bonos y comisiones) lo son, así que la opción de fábrica los deja fuera.
+                        <br>
+                        Cambiarlo mueve el salario propuesto de forma apreciable: en un caso real las tres
+                        opciones dan RD$18,749.50, RD$19,335.53 y RD$19,509.87 al mes para la misma persona.
+                        No toca la nómina ni lo ya pagado, solo lo que se carga en la rejilla de la calculadora.
                     </p>
                 </div>
 
