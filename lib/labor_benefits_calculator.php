@@ -1362,9 +1362,27 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         // y se divide entre el NÚMERO de quincenas, no entre el tiempo que
         // realmente estuvo. El resultado se carga como "Quincenal", que es lo
         // que el MT multiplica por 2 para el salario mensual.
+        //
+        // NUMERADOR Y DIVISOR SALEN DE LA MISMA FUENTE: las quincenas de nómina.
+        // Antes el numerador era la suma de las 12 casillas del mes, que incluye
+        // los meses reconstruidos desde el ponche cuando no hay nómina — y la
+        // nómina del sistema arranca en abril de 2026. A un veterano se le
+        // sumaban 12 meses de dinero y se le dividía entre 7 quincenas: a
+        // Francheska le proponía RD$47,306 al mes en vez de RD$20,292, y a
+        // Yuniely RD$42,650 en vez de RD$18,235. Más del doble.
+        //
+        // Y para quien sí tiene la nómina completa, mezclar fuentes duplicaba
+        // dinero en los bordes: la quincena 29/06→13/07 se reparte por días de
+        // calendario, junio se quedaba con 2/15 del bruto y julio, ya
+        // reconstruido desde el ponche, volvía a cobrar sus horas reales del 1
+        // al 13. Eso se disparaba con solo poner la salida un día después del
+        // cierre de la última quincena, que es el caso de toda liquidación
+        // calculada "con salida hoy".
         if ($metodo === 'quincenal_nomina') {
-            $quincenas = lbQuincenasDelPeriodo($pdo, $empIni, $empFin);
-            if ($quincenas > 0 && $totalDevengado > 0) {
+            $nomina    = lbNominaDeQuincenas($pdo, $employeeId, $empIni, $empFin, $columnaBruto);
+            $quincenas = $nomina['quincenas'] ?: lbQuincenasDelPeriodo($pdo, $empIni, $empFin);
+            if ($quincenas > 0 && $nomina['total'] > 0) {
+                $totalDevengado = $nomina['total'];
                 $porQuincena = $totalDevengado / $quincenas;
 
                 // El salario se deriva por quincena pero se CARGA COMO MENSUAL.
@@ -1436,6 +1454,58 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         }
 
         return $alineados;
+    }
+}
+
+if (!function_exists('lbNominaDeQuincenas')) {
+    /**
+     * Lo que la nómina le pagó y en cuántas quincenas, que es exactamente lo que
+     * hace la encargada de nómina a mano: sumar el bruto de las quincenas de la
+     * persona y contarlas.
+     *
+     * El bruto de cada quincena ya viene medido por las horas que trabajó, así
+     * que NO se prorratea por días de calendario. Prorratear no cambia el total
+     * (los días se reparten y se vuelven a sumar) pero sí desplaza dinero entre
+     * meses, y de ahí salía el descuadre de los bordes.
+     *
+     * Solo cuenta las quincenas de las que hay registro suyo: si un período
+     * existe pero todavía no se le ha generado la nómina, contarlo en el divisor
+     * sin sumar nada al numerador le bajaría el salario sin razón.
+     *
+     * @param string $columnaBruto expresión SQL del bruto (con o sin las horas
+     *                             extras, según el ajuste de la empresa).
+     * @return array{total:float,quincenas:int}
+     */
+    function lbNominaDeQuincenas(
+        PDO $pdo,
+        int $employeeId,
+        ?string $desde,
+        string $hasta,
+        string $columnaBruto = 'pr.gross_salary'
+    ): array {
+        if (!$desde) {
+            return ['total' => 0.0, 'quincenas' => 0];
+        }
+
+        try {
+            $st = $pdo->prepare("
+                SELECT COALESCE(SUM($columnaBruto), 0) AS total, COUNT(*) AS quincenas
+                FROM payroll_records pr
+                INNER JOIN payroll_periods p ON p.id = pr.payroll_period_id
+                WHERE pr.employee_id = ?
+                  AND p.end_date >= ? AND p.start_date <= ?
+            ");
+            $st->execute([$employeeId, $desde, $hasta]);
+            $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $e) {
+            error_log('lbNominaDeQuincenas: ' . $e->getMessage());
+            return ['total' => 0.0, 'quincenas' => 0];
+        }
+
+        return [
+            'total'     => (float) ($r['total'] ?? 0),
+            'quincenas' => (int) ($r['quincenas'] ?? 0),
+        ];
     }
 }
 
