@@ -85,6 +85,16 @@ if (!function_exists('laborBenefitsDefaults')) {
             // CALCULADORA_PRESTACIONES_LABORALES.md.
             'benefits_metodo_salario'         => 'quincenal_nomina',
 
+            // ¿Las horas extras entran en el salario que se propone?
+            //
+            // NO, y por eso viene en '0'. La base de las prestaciones es el
+            // SALARIO ORDINARIO (art. 192 CT), que es lo que se recibe de forma
+            // habitual: las horas extraordinarias quedan fuera por definición,
+            // igual que quedan fuera de la regalía del art. 219. Contarlas
+            // inflaba la base a quien hizo extras: a un caso real le sumaba
+            // RD$523.03 de extras y le subía el mensual RD$174.
+            'benefits_incluir_horas_extra'    => '0',
+
             // Vacaciones, art. 177.
             'benefits_vacaciones_1_5_anios'   => '14',
             'benefits_vacaciones_5_anios_mas' => '18',
@@ -1037,6 +1047,8 @@ if (!function_exists('lbDevengadoDesdePonche')) {
         }
 
         try {
+            $cfg = laborBenefitsConfig($pdo);
+
             $paidSlugs = array_values(array_filter(array_map(
                 'sanitizeAttendanceTypeSlug',
                 getPaidAttendanceTypeSlugs($pdo)
@@ -1069,6 +1081,13 @@ if (!function_exists('lbDevengadoDesdePonche')) {
 
             $regulares = ((int) ($horas['regular_seconds'] ?? 0)) / 3600;
             $extras    = ((int) ($horas['overtime_seconds'] ?? 0)) / 3600;
+
+            // Las extras solo entran si la empresa lo pide expresamente. La base
+            // de las prestaciones es el salario ORDINARIO (art. 192 CT) y las
+            // horas extraordinarias no lo son: ni las horas ni su recargo.
+            if (($cfg['benefits_incluir_horas_extra'] ?? '0') !== '1') {
+                $extras = 0.0;
+            }
 
             return lbFixed2($regulares * $tarifaHora + $extras * $tarifaHora * $multiplicador);
         } catch (Throwable $e) {
@@ -1151,9 +1170,16 @@ if (!function_exists('laborBenefitsPayrollMonths')) {
         $desde = $slots[0]['mes'] . '-01';
         $hasta = date('Y-m-t', strtotime($slots[11]['mes'] . '-01'));
 
+        // El bruto de la quincena incluye el recargo de las horas extras, y esas
+        // NO son salario ordinario (art. 192 CT), que es la base de las
+        // prestaciones. Se descuentan salvo que la empresa pida lo contrario.
+        $columnaBruto = (laborBenefitsConfig($pdo)['benefits_incluir_horas_extra'] ?? '0') === '1'
+            ? 'pr.gross_salary'
+            : 'GREATEST(pr.gross_salary - COALESCE(pr.overtime_amount, 0), 0)';
+
         try {
             $stmt = $pdo->prepare("
-                SELECT p.start_date, p.end_date, pr.gross_salary
+                SELECT p.start_date, p.end_date, $columnaBruto AS gross_salary
                 FROM payroll_records pr
                 INNER JOIN payroll_periods p ON p.id = pr.payroll_period_id
                 WHERE pr.employee_id = ?
