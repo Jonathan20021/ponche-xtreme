@@ -39,20 +39,31 @@ try {
 
     // Compact field set
     $nombres            = trim($_POST['nombres'] ?? '');
+    $apellido_paterno   = trim($_POST['apellido_paterno'] ?? '');
+    $apellido_materno   = trim($_POST['apellido_materno'] ?? '');
+    // Compatibilidad con la version anterior del formulario, que enviaba un solo campo
     $apellidos          = trim($_POST['apellidos'] ?? '');
+    if ($apellido_paterno === '' && $apellidos !== '') {
+        $apellido_paterno = $apellidos;
+    }
+    $apellidos          = trim($apellido_paterno . ' ' . $apellido_materno);
+    $apodo              = trim($_POST['apodo'] ?? '');
     $cedula             = trim($_POST['cedula'] ?? '');
     $telefono           = trim($_POST['telefono'] ?? '');
     $email              = trim($_POST['email'] ?? '');
     $direccion          = trim($_POST['direccion'] ?? '');
-    $current_position   = trim($_POST['current_position'] ?? '');
-    $current_company    = trim($_POST['current_company'] ?? '');
     $years_experience   = trim($_POST['years_of_experience'] ?? '');
     $expected_salary    = trim($_POST['expected_salary'] ?? '');
     $education_level    = trim($_POST['education_level'] ?? '');
+    $education_detail   = trim($_POST['education_level_detail'] ?? '');
     $availability_pref  = trim($_POST['availability_preference'] ?? '');
     $availability_details = trim($_POST['availability_details'] ?? '');
+    $work_modality      = trim($_POST['work_modality'] ?? '');
+    $work_modality_details = trim($_POST['work_modality_details'] ?? '');
     $transport_method   = trim($_POST['transport_method'] ?? '');
     $transport_details  = trim($_POST['transport_details'] ?? '');
+    $transport_routes   = trim($_POST['transport_routes'] ?? '');
+    $transport_time     = trim($_POST['transport_time'] ?? '');
     $currently_studying = trim($_POST['currently_studying'] ?? '');
     $study_subject      = trim($_POST['study_subject'] ?? '');
     $study_place        = trim($_POST['study_place'] ?? '');
@@ -63,14 +74,23 @@ try {
     $weekend_holiday_available = trim($_POST['weekend_holiday_available'] ?? '');
     $role_interest      = trim($_POST['role_interest'] ?? '');
     $source             = trim($_POST['source'] ?? '');
+    $source_other       = trim($_POST['source_other'] ?? '');
     $linkedin_url       = trim($_POST['linkedin_url'] ?? '');
     $puesto_aplicado    = trim($_POST['puesto_aplicado'] ?? '');
+    $mayor_logro        = trim($_POST['mayor_logro'] ?? '');
+    $incapacidad        = trim($_POST['incapacidad'] ?? '');
+    $incapacidad_cual   = trim($_POST['incapacidad_cual'] ?? '');
+    $conoce_empleado    = trim($_POST['conoce_empleado'] ?? '');
+    $conoce_empleado_nombre = trim($_POST['conoce_empleado_nombre'] ?? '');
+    $firma              = trim($_POST['firma'] ?? '');
     $acepta             = !empty($_POST['acepta_datos']) ? 'SI' : 'NO';
-    $form_version       = trim($_POST['form_version'] ?? '2026-07-23-extended');
+    $form_version       = trim($_POST['form_version'] ?? '2026-08-04-solicitud-completa');
 
     // Datos personales que RRHH necesita para la validación inicial y que muchos
     // candidatos no traen en el CV.
     $fecha_nacimiento   = trim($_POST['fecha_nacimiento'] ?? '');
+    $lugar_nacimiento   = trim($_POST['lugar_nacimiento'] ?? '');
+    $pais_nacimiento    = trim($_POST['pais_nacimiento'] ?? '');
     $nacionalidad       = trim($_POST['nacionalidad'] ?? '');
     $estado_civil       = trim($_POST['estado_civil'] ?? '');
     $tipo_sangre        = trim($_POST['tipo_sangre'] ?? '');
@@ -108,12 +128,18 @@ try {
 
     // Cursos e idiomas: filas repetibles del formulario -> se guardan tal cual las
     // renderiza hr/view_application.php.
-    $normalizeRows = function ($rows, array $fields) {
+    // $maxRows acota el tamaño del snapshot: cover_letter es TEXT (65.535 bytes) y en
+    // producción MySQL NO corre en modo STRICT, así que un JSON más largo se truncaría
+    // en silencio y la postulación completa se vería vacía en Reclutamiento.
+    $normalizeRows = function ($rows, array $fields, int $maxRows = 20) {
         $out = [];
         if (!is_array($rows)) {
             return $out;
         }
         foreach ($rows as $row) {
+            if (count($out) >= $maxRows) {
+                break;
+            }
             if (!is_array($row)) {
                 continue;
             }
@@ -132,8 +158,28 @@ try {
         }
         return $out;
     };
-    $cursos  = $normalizeRows($_POST['cursos']  ?? [], ['curso', 'institucion', 'fecha']);
-    $idiomas = $normalizeRows($_POST['idiomas'] ?? [], ['idioma', 'habla', 'lee', 'escribe']);
+    $cursos  = $normalizeRows($_POST['cursos']  ?? [], ['curso', 'institucion', 'fecha'], 20);
+    $idiomas = $normalizeRows($_POST['idiomas'] ?? [], ['idioma', 'habla', 'lee', 'escribe'], 10);
+
+    // Experiencias laborales: mismas columnas que la solicitud fisica. La ficha de
+    // Reclutamiento las lee de experiencias.N.*, asi que se guardan tal cual.
+    $experiencias = $normalizeRows(
+        $_POST['experiencias'] ?? [],
+        ['empresa', 'superior', 'tiempo', 'telefono', 'cargo', 'sueldo', 'tareas', 'razon_salida'],
+        4
+    );
+
+    // Las columnas current_position / current_company alimentan el listado de
+    // Reclutamiento y el analisis de IA: se derivan del empleo mas reciente para no
+    // pedirle al candidato la misma informacion dos veces.
+    $current_company  = $experiencias[0]['empresa'] ?? '';
+    $current_position = $experiencias[0]['cargo']   ?? '';
+
+    // La firma es el nombre completo escrito por el candidato; si el navegador trae
+    // una version vieja del formulario en cache, se reconstruye con sus datos.
+    if ($firma === '') {
+        $firma = trim($nombres . ' ' . $apellidos);
+    }
 
     // Required fields
     $required = [
@@ -269,8 +315,30 @@ try {
     if ($transport_method === 'propio') {
         $transportOtroTexto = 'Vehículo propio';
     } elseif ($transport_method === 'otro') {
-        $transportOtroTexto = 'Otro';
+        $transportOtroTexto = $transport_details !== '' ? $transport_details : 'Otro';
     }
+
+    // "Indique cual" del nivel academico: la solicitud fisica solo lo pide para
+    // tecnico, carrera universitaria y postgrado.
+    $educationLower = mb_strtolower($education_level, 'UTF-8');
+    $nivelTecnicoDetalle   = '';
+    $nivelCarreraDetalle   = '';
+    $nivelPostgradoDetalle = '';
+    if ($education_detail !== '') {
+        if (mb_strpos($educationLower, 'técnico') !== false || mb_strpos($educationLower, 'tecnico') !== false) {
+            $nivelTecnicoDetalle = $education_detail;
+        } elseif (mb_strpos($educationLower, 'carrera') !== false) {
+            $nivelCarreraDetalle = $education_detail;
+        } elseif (mb_strpos($educationLower, 'postgrado') !== false || mb_strpos($educationLower, 'maestría') !== false) {
+            $nivelPostgradoDetalle = $education_detail;
+        }
+    }
+
+    // Medio por el que se entero de la vacante: la ficha muestra la lista + el "otro"
+    $medioVacante = $source !== '' && $source !== 'Otro' ? [$source] : [];
+    $medioVacanteOtro = $source === 'Otro' ? $source_other : '';
+    // La columna source alimenta los reportes: guarda el texto especifico, no "Otro"
+    $sourceColumn = ($source === 'Otro' && $source_other !== '') ? $source_other : $source;
 
     // Persist a compact JSON snapshot in cover_letter (so view_application.php form-payload renderers keep working)
     $formPayload = [
@@ -278,14 +346,17 @@ try {
         'puesto_aplicado'   => $puesto_aplicado,
         'rol_interes'       => $role_interest,
         'nombres'           => $nombres,
-        'apellido_paterno'  => $apellidos,   // map for legacy renderer
-        'apellido_materno'  => '',
+        'apellido_paterno'  => $apellido_paterno,
+        'apellido_materno'  => $apellido_materno,
+        'apodo'             => $apodo,
         'cedula'            => $cedula,
         'telefono'          => $telefono,
         'direccion'         => $direccion,
         'email'             => $email,
         'fecha_nacimiento'  => $dob_sql ?? $fecha_nacimiento,
         'edad'              => $edad,
+        'lugar_nacimiento'  => $lugar_nacimiento,
+        'pais_nacimiento'   => $pais_nacimiento,
         'nacionalidad'      => $nacionalidad,
         'estado_civil'      => $estado_civil,
         'tipo_sangre'       => $tipo_sangre,
@@ -300,14 +371,19 @@ try {
         'edad_hijos'        => $edad_hijos,
         'casa_propia'       => $casa_propia,
         'idiomas'           => $idiomas,
-        'experiencias'      => [
-            ['empresa' => $current_company, 'cargo' => $current_position, 'tiempo' => $years_experience, 'sueldo' => '', 'tareas' => '', 'razon_salida' => '']
-        ],
+        'experiencias'      => $experiencias,
         'disponibilidad'    => [
             'turno_rotativo' => $availability_pref === 'rotating' ? 'SI' : 'NO',
             'lunes_viernes'  => $availability_pref === 'weekdays' ? 'SI' : 'NO',
             'otro'           => !empty($dispOtroParts) ? 'SI' : 'NO',
             'otro_texto'     => implode(' — ', $dispOtroParts),
+        ],
+        'modalidad'         => [
+            'presencial' => $work_modality === 'presencial' ? 'SI' : 'NO',
+            'hibrida'    => $work_modality === 'hibrida' ? 'SI' : 'NO',
+            'remota'     => $work_modality === 'remota' ? 'SI' : 'NO',
+            'otro'       => $work_modality === 'otro' ? 'SI' : 'NO',
+            'otro_texto' => $work_modality === 'otro' ? $work_modality_details : '',
         ],
         'transporte'        => [
             'carro_publico' => $transport_method === 'publico' ? 'SI' : 'NO',
@@ -316,24 +392,36 @@ try {
             'otro'          => in_array($transport_method, ['propio', 'otro'], true) ? 'SI' : 'NO',
             'otro_texto'    => $transportOtroTexto,
             'detalles'      => $transport_details,
+            'rutas'         => $transport_routes,
+            'tiempo_llegada' => $transport_time,
         ],
         'adicional'         => [
+            'mayor_logro'             => $mayor_logro,
             'expectativas_salariales' => $expected_salary,
-            'medio_vacante'           => $source !== '' ? [$source] : [],
+            'incapacidad'             => $incapacidad,
+            'incapacidad_cual'        => $incapacidad_cual,
+            'medio_vacante'           => $medioVacante,
+            'medio_vacante_otro'      => $medioVacanteOtro,
             'horas_extras'            => $overtime_available,
             'dias_fiestas'            => $weekend_holiday_available,
             'otro_empleo'             => $other_commitments,
             'otro_empleo_detalle'     => $other_commitments_details,
-            'firma'                   => trim($nombres . ' ' . $apellidos),
+            'conoce_empleado'         => $conoce_empleado,
+            'conoce_empleado_nombre'  => $conoce_empleado_nombre,
+            'firma'                   => $firma,
+            'firma_fecha'             => date('Y-m-d H:i:s'),
             'acepta_datos'            => $acepta,
         ],
         'educacion'         => [
-            'nivel'               => $education_level !== '' ? [$education_level] : [],
-            'estudia_actualmente' => $currently_studying !== '' ? $currently_studying : 'NO',
-            'que_estudia'         => $study_subject,
-            'donde_estudia'       => $study_place,
-            'horario_clases'      => $study_schedule,
-            'otros_cursos'        => $cursos,
+            'nivel'                    => $education_level !== '' ? [$education_level] : [],
+            'nivel_tecnico_detalle'    => $nivelTecnicoDetalle,
+            'nivel_carrera_detalle'    => $nivelCarreraDetalle,
+            'nivel_postgrado_detalle'  => $nivelPostgradoDetalle,
+            'estudia_actualmente'      => $currently_studying !== '' ? $currently_studying : 'NO',
+            'que_estudia'              => $study_subject,
+            'donde_estudia'            => $study_place,
+            'horario_clases'           => $study_schedule,
+            'otros_cursos'             => $cursos,
         ],
     ];
 
@@ -346,6 +434,21 @@ try {
     }
     if ($coverLetterJson === false) {
         $coverLetterJson = null;
+    }
+
+    // Ultima red: si aun asi el snapshot no cabe en la columna TEXT, MySQL lo cortaria
+    // en silencio (produccion no usa modo STRICT) y la ficha quedaria vacia. Preferimos
+    // guardar una version recortada -pero VALIDA- de los campos largos y dejar rastro.
+    if ($coverLetterJson !== null && strlen($coverLetterJson) > 60000) {
+        error_log('submit_application: snapshot de ' . strlen($coverLetterJson) . ' bytes, recortando campos largos');
+        foreach ($formPayload['experiencias'] as $i => $exp) {
+            $formPayload['experiencias'][$i]['tareas'] = mb_substr((string) ($exp['tareas'] ?? ''), 0, 300);
+        }
+        $formPayload['adicional']['mayor_logro'] = mb_substr((string) $formPayload['adicional']['mayor_logro'], 0, 300);
+        $trimmed = json_encode($formPayload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($trimmed !== false && strlen($trimmed) <= 60000) {
+            $coverLetterJson = $trimmed;
+        }
     }
 
     $insert = $pdo->prepare("
@@ -382,7 +485,7 @@ try {
         'cover_letter'            => $coverLetterJson,
         'linkedin_url'            => $linkedin_url !== '' ? $linkedin_url : null,
         'cedula'                  => $cedula,
-        'source'                  => $source !== '' ? $source : null,
+        'source'                  => $sourceColumn !== '' ? $sourceColumn : null,
         'availability_preference' => $availability_pref !== '' ? $availability_pref : null,
         'date_of_birth'           => $dob_sql,
         'role_interest'           => $role_interest !== '' ? $role_interest : null,

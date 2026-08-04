@@ -186,10 +186,17 @@ require_once '../header.php';
 <div class="container mx-auto px-4 py-8">
     <!-- Header -->
     <div class="mb-6">
-        <a href="<?php echo htmlspecialchars($backUrl); ?>" class="btn-secondary inline-flex items-center gap-2 mb-4">
-            <i class="fas fa-arrow-left"></i>
-            Volver a Solicitudes
-        </a>
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+            <a href="<?php echo htmlspecialchars($backUrl); ?>" class="btn-secondary inline-flex items-center gap-2">
+                <i class="fas fa-arrow-left"></i>
+                Volver a Solicitudes
+            </a>
+            <a href="print_application.php?id=<?php echo (int) $application_id; ?>" target="_blank"
+               class="btn-secondary inline-flex items-center gap-2">
+                <i class="fas fa-print"></i>
+                Imprimir solicitud
+            </a>
+        </div>
 
         <div class="glass-card p-6">
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -853,6 +860,16 @@ require_once '../header.php';
                                         <p class="font-medium">
                                             <?php echo htmlspecialchars($display($value('transporte.detalles'))); ?></p>
                                     </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Rutas o letras de conchos</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('transporte.rutas'))); ?></p>
+                                    </div>
+                                    <div>
+                                        <label class="text-sm text-slate-400">Tiempo estimado de llegada</label>
+                                        <p class="font-medium">
+                                            <?php echo htmlspecialchars($display($value('transporte.tiempo_llegada'))); ?></p>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1011,29 +1028,32 @@ require_once '../header.php';
                                 <h4 class="text-lg font-semibold text-indigo-200 mb-3">Experiencias laborales</h4>
                                 <div class="space-y-4">
                                     <?php
-                                    $experiencias = [
-                                        [
-                                            'empresa' => $value('experiencias.0.empresa'),
-                                            'superior' => $value('experiencias.0.superior'),
-                                            'tiempo' => $value('experiencias.0.tiempo'),
-                                            'telefono' => $value('experiencias.0.telefono'),
-                                            'cargo' => $value('experiencias.0.cargo'),
-                                            'sueldo' => $value('experiencias.0.sueldo'),
-                                            'tareas' => $value('experiencias.0.tareas'),
-                                            'razon' => $value('experiencias.0.razon_salida'),
-                                        ],
-                                        [
-                                            'empresa' => $value('experiencias.1.empresa'),
-                                            'superior' => $value('experiencias.1.superior'),
-                                            'tiempo' => $value('experiencias.1.tiempo'),
-                                            'telefono' => $value('experiencias.1.telefono'),
-                                            'cargo' => $value('experiencias.1.cargo'),
-                                            'sueldo' => $value('experiencias.1.sueldo'),
-                                            'tareas' => $value('experiencias.1.tareas'),
-                                            'razon' => $value('experiencias.1.razon_salida'),
-                                        ]
-                                    ];
+                                    // El candidato puede declarar varias experiencias; antes solo se
+                                    // mostraban las dos primeras aunque el formulario enviara mas.
+                                    $rawExperiencias = $value('experiencias', []);
+                                    if (!is_array($rawExperiencias)) {
+                                        $rawExperiencias = [];
+                                    }
+                                    $experiencias = [];
+                                    foreach ($rawExperiencias as $rawExp) {
+                                        if (!is_array($rawExp)) {
+                                            continue;
+                                        }
+                                        $experiencias[] = [
+                                            'empresa'  => $rawExp['empresa'] ?? '',
+                                            'superior' => $rawExp['superior'] ?? '',
+                                            'tiempo'   => $rawExp['tiempo'] ?? '',
+                                            'telefono' => $rawExp['telefono'] ?? '',
+                                            'cargo'    => $rawExp['cargo'] ?? '',
+                                            'sueldo'   => $rawExp['sueldo'] ?? '',
+                                            'tareas'   => $rawExp['tareas'] ?? '',
+                                            'razon'    => $rawExp['razon_salida'] ?? '',
+                                        ];
+                                    }
                                     ?>
+                                    <?php if (empty(array_filter($experiencias, fn($e) => implode('', $e) !== ''))): ?>
+                                            <p class="text-slate-400">El candidato no declaró experiencias laborales.</p>
+                                    <?php endif; ?>
                                     <?php foreach ($experiencias as $idx => $exp): ?>
                                             <?php if (empty($exp['empresa']) && empty($exp['cargo']) && empty($exp['superior']) && empty($exp['tiempo']))
                                                 continue; ?>

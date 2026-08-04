@@ -407,7 +407,7 @@ $employment_types = [
                         <form id="applicationForm" class="p-6 space-y-5" enctype="multipart/form-data">
                             <input type="hidden" name="job_posting_id" id="job_posting_id">
                             <input type="hidden" name="puesto_aplicado" id="puesto_aplicado">
-                            <input type="hidden" name="form_version" value="2026-07-23-extended">
+                            <input type="hidden" name="form_version" value="2026-08-04-solicitud-completa">
 
                             <!-- AI banner -->
                             <div class="ai-banner rounded-2xl p-5 text-white relative overflow-hidden">
@@ -442,12 +442,20 @@ $employment_types = [
                                         <input type="text" name="nombres" class="form-input" required>
                                     </div>
                                     <div>
-                                        <label class="form-label req">Apellidos</label>
-                                        <input type="text" name="apellidos" class="form-input" required>
+                                        <label class="form-label req">Apellido paterno</label>
+                                        <input type="text" name="apellido_paterno" class="form-input" required>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Apellido materno</label>
+                                        <input type="text" name="apellido_materno" class="form-input">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Apodo</label>
+                                        <input type="text" name="apodo" class="form-input" placeholder="Cómo prefieres que te llamen">
                                     </div>
                                     <div>
                                         <label class="form-label req">Cédula / Documento</label>
-                                        <input type="text" name="cedula" class="form-input" required>
+                                        <input type="text" name="cedula" class="form-input" required placeholder="Ej: 001-1234567-8">
                                     </div>
                                     <div>
                                         <label class="form-label req">Teléfono / WhatsApp</label>
@@ -468,6 +476,14 @@ $employment_types = [
                                     <div>
                                         <label class="form-label">Edad</label>
                                         <input type="text" name="edad" id="edadCalculada" class="form-input bg-slate-100" readonly placeholder="Se calcula sola">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Lugar de nacimiento</label>
+                                        <input type="text" name="lugar_nacimiento" class="form-input" placeholder="Ciudad / provincia">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">País de nacimiento</label>
+                                        <input type="text" name="pais_nacimiento" class="form-input" value="República Dominicana">
                                     </div>
                                     <div>
                                         <label class="form-label req">Nacionalidad</label>
@@ -564,32 +580,41 @@ $employment_types = [
                                 <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">2. Tu perfil</legend>
                                 <div class="grid sm:grid-cols-2 gap-4 mt-3">
                                     <div>
-                                        <label class="form-label">Puesto o cargo actual</label>
-                                        <input type="text" name="current_position" class="form-input" placeholder="Ej: Agente de soporte">
+                                        <label class="form-label req">Último nivel académico completado</label>
+                                        <select name="education_level" id="educationLevel" class="form-input" required onchange="toggleEducationDetail()">
+                                            <option value="">Selecciona...</option>
+                                            <option value="Educación básica (Primaria)">Educación básica (Primaria)</option>
+                                            <option value="Educación media (Bachillerato)">Educación media (Bachillerato)</option>
+                                            <option value="Estudiante universitario (en curso)">Estudiante universitario (en curso)</option>
+                                            <option value="Técnico o curso especializado">Técnico o curso especializado</option>
+                                            <option value="Carrera universitaria completa">Carrera universitaria completa</option>
+                                            <option value="Postgrado / Maestría">Postgrado / Maestría</option>
+                                        </select>
+                                    </div>
+                                    <div id="educationDetailWrap" class="hidden">
+                                        <label class="form-label" id="educationDetailLabel">Indique cuál</label>
+                                        <input type="text" name="education_level_detail" class="form-input" placeholder="Ej: Contabilidad">
                                     </div>
                                     <div>
-                                        <label class="form-label">Empresa actual</label>
-                                        <input type="text" name="current_company" class="form-input">
-                                    </div>
-                                    <div>
-                                        <label class="form-label">Años de experiencia</label>
+                                        <label class="form-label">Años de experiencia laboral (total)</label>
                                         <input type="number" min="0" max="60" name="years_of_experience" class="form-input" placeholder="Ej: 3">
                                     </div>
                                     <div>
                                         <label class="form-label">Expectativa salarial</label>
                                         <input type="text" name="expected_salary" class="form-input" placeholder="Ej: RD$25,000">
                                     </div>
-                                    <div>
-                                        <label class="form-label">Nivel educativo</label>
-                                        <select name="education_level" class="form-input">
-                                            <option value="">Selecciona...</option>
-                                            <option>Bachillerato</option>
-                                            <option>Estudiante universitario</option>
-                                            <option>Técnico</option>
-                                            <option>Universitario</option>
-                                            <option>Postgrado / Maestría</option>
-                                        </select>
+                                </div>
+
+                                <!-- Experiencias laborales: mismas columnas que la solicitud fisica -->
+                                <div class="mt-5">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h5 class="text-sm font-bold text-slate-800"><i class="fas fa-briefcase text-brand-600 mr-1"></i> Experiencias laborales</h5>
+                                        <button type="button" onclick="addExperiencia()" class="text-xs font-semibold text-brand-700 hover:text-brand-800 px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 transition-colors">
+                                            <i class="fas fa-plus mr-1"></i> Agregar experiencia
+                                        </button>
                                     </div>
+                                    <p class="text-xs text-slate-500 mb-2">Comienza por el empleo más reciente. Si nunca has trabajado, deja los campos vacíos.</p>
+                                    <div id="experienciasList" class="space-y-3"></div>
                                 </div>
                             </fieldset>
 
@@ -602,8 +627,8 @@ $employment_types = [
                                         <label class="form-label req">Disponibilidad de horario</label>
                                         <select name="availability_preference" class="form-input" required>
                                             <option value="">Selecciona...</option>
-                                            <option value="rotating">Turno rotativo</option>
-                                            <option value="weekdays">Solo Lunes a Viernes</option>
+                                            <option value="rotating">Cualquier turno rotativo (7:30 a.m. a 10:30 p.m., con 1 día libre)</option>
+                                            <option value="weekdays">Solo Lunes a Viernes de 8:30 a.m. a 5:30 p.m.</option>
                                             <option value="weekends">Fines de semana</option>
                                             <option value="flexible">Flexible / Tiempo completo</option>
                                         </select>
@@ -613,19 +638,41 @@ $employment_types = [
                                         <input type="text" name="availability_details" class="form-input" placeholder="Ej: disponible desde las 7am, no sábados...">
                                     </div>
                                     <div>
-                                        <label class="form-label req">Medio de transporte</label>
-                                        <select name="transport_method" class="form-input" required>
+                                        <label class="form-label req">Modalidad de trabajo solicitada</label>
+                                        <select name="work_modality" id="workModality" class="form-input" required onchange="toggleModalityField()">
                                             <option value="">Selecciona...</option>
-                                            <option value="propio">Vehículo propio</option>
-                                            <option value="publico">Transporte público (guagua / concho)</option>
+                                            <option value="presencial">Prefiero trabajar en la empresa (presencial)</option>
+                                            <option value="hibrida">No tengo inconveniente (presencial o desde casa)</option>
+                                            <option value="remota">Solo me interesa trabajar desde casa (remota)</option>
+                                            <option value="otro">Tengo otra disponibilidad</option>
+                                        </select>
+                                    </div>
+                                    <div id="workModalityWrap" class="hidden">
+                                        <label class="form-label">Especifica tu modalidad</label>
+                                        <input type="text" name="work_modality_details" class="form-input" placeholder="Ej: presencial 3 días a la semana">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Cómo te trasladarías a Evallish?</label>
+                                        <select name="transport_method" id="transportMethod" class="form-input" required onchange="toggleTransportFields()">
+                                            <option value="">Selecciona...</option>
+                                            <option value="publico">Carro público</option>
                                             <option value="motoconcho">Motoconcho</option>
                                             <option value="a_pie">A pie</option>
+                                            <option value="propio">Vehículo propio</option>
                                             <option value="otro">Otro</option>
                                         </select>
                                     </div>
+                                    <div id="transportOtherWrap" class="hidden">
+                                        <label class="form-label">Especifica el medio</label>
+                                        <input type="text" name="transport_details" class="form-input" placeholder="Ej: me lleva un familiar">
+                                    </div>
+                                    <div id="transportRoutesWrap" class="hidden">
+                                        <label class="form-label">¿Cuáles rutas o letras de conchos utilizas?</label>
+                                        <input type="text" name="transport_routes" class="form-input" placeholder="Ej: Ruta A, corredor Independencia">
+                                    </div>
                                     <div>
-                                        <label class="form-label">Detalle de transporte</label>
-                                        <input type="text" name="transport_details" class="form-input" placeholder="Opcional. Tiempo aprox. de traslado, ruta...">
+                                        <label class="form-label">¿Cuánto tiempo te tomaría llegar desde tu casa?</label>
+                                        <input type="text" name="transport_time" class="form-input" placeholder="Ej: 35 minutos">
                                     </div>
                                     <div>
                                         <label class="form-label req">¿Estudias actualmente?</label>
@@ -717,17 +764,50 @@ $employment_types = [
                                             <option value="APPOINT">APPOINT</option>
                                         </select>
                                     </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="form-label">¿Cuál ha sido su mayor logro?</label>
+                                        <textarea name="mayor_logro" rows="2" maxlength="500" class="form-input" placeholder="Personal o profesional"></textarea>
+                                    </div>
                                     <div>
-                                        <label class="form-label">¿Cómo te enteraste?</label>
-                                        <select name="source" class="form-input">
+                                        <label class="form-label req">¿Tienes algún problema de incapacidad o limitación?</label>
+                                        <select name="incapacidad" id="incapacidad" class="form-input" required onchange="toggleIncapacidadField()">
                                             <option value="">Selecciona...</option>
-                                            <option>WhatsApp</option>
-                                            <option>Instagram</option>
-                                            <option>Facebook</option>
-                                            <option>Referido</option>
-                                            <option>Página web</option>
-                                            <option>Otro</option>
+                                            <option value="NO">No</option>
+                                            <option value="SI">Sí</option>
                                         </select>
+                                    </div>
+                                    <div id="incapacidadWrap" class="hidden">
+                                        <label class="form-label">¿Cuál?</label>
+                                        <input type="text" name="incapacidad_cual" class="form-input" placeholder="Descríbela brevemente">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Conoces a algún empleado de la empresa?</label>
+                                        <select name="conoce_empleado" id="conoceEmpleado" class="form-input" required onchange="toggleConoceEmpleadoField()">
+                                            <option value="">Selecciona...</option>
+                                            <option value="NO">No</option>
+                                            <option value="SI">Sí</option>
+                                        </select>
+                                    </div>
+                                    <div id="conoceEmpleadoWrap" class="hidden">
+                                        <label class="form-label">Indica su nombre</label>
+                                        <input type="text" name="conoce_empleado_nombre" class="form-input" placeholder="Nombre y apellido">
+                                    </div>
+                                    <div>
+                                        <label class="form-label req">¿Por cuál medio te enteraste de la vacante?</label>
+                                        <select name="source" id="sourceSelect" class="form-input" required onchange="toggleSourceField()">
+                                            <option value="">Selecciona...</option>
+                                            <option value="WhatsApp">WhatsApp</option>
+                                            <option value="Instagram">Instagram</option>
+                                            <option value="Telegrama">Telegrama</option>
+                                            <option value="Internet">Internet</option>
+                                            <option value="Portal de empleos">Portal de empleos</option>
+                                            <option value="Amigo que trabaja en la empresa">Amigo que trabaja en la empresa</option>
+                                            <option value="Otro">Otro</option>
+                                        </select>
+                                    </div>
+                                    <div id="sourceOtherWrap" class="hidden">
+                                        <label class="form-label">Especifica</label>
+                                        <input type="text" name="source_other" class="form-input" placeholder="¿Por cuál medio?">
                                     </div>
                                     <div>
                                         <label class="form-label">LinkedIn / Portafolio</label>
@@ -736,10 +816,19 @@ $employment_types = [
                                 </div>
                             </fieldset>
 
-                            <label class="flex items-start gap-3 px-2 text-sm text-slate-600 cursor-pointer">
-                                <input type="checkbox" name="acepta_datos" value="SI" required class="mt-1 rounded text-brand-600">
-                                <span>Confirmo que la información provista es veraz y autorizo su uso para fines de reclutamiento.</span>
-                            </label>
+                            <!-- Declaracion y firma: equivalente al bloque "DATOS DEL SOLICITANTE" de la solicitud fisica -->
+                            <fieldset class="bg-white rounded-2xl border border-slate-200 p-5">
+                                <legend class="px-2 text-xs font-bold uppercase tracking-widest text-brand-700">6. Declaración y firma</legend>
+                                <p class="text-sm text-slate-600 mt-2">Doy fe de que todos los datos suministrados en esta solicitud son verdaderos y autorizo cualquier investigación sobre mis declaraciones.</p>
+                                <div class="mt-3">
+                                    <label class="form-label req">Firma del solicitante (escribe tu nombre completo)</label>
+                                    <input type="text" name="firma" class="form-input" required placeholder="Nombre y apellidos tal como aparecen en tu cédula">
+                                </div>
+                                <label class="flex items-start gap-3 mt-4 text-sm text-slate-600 cursor-pointer">
+                                    <input type="checkbox" name="acepta_datos" value="SI" required class="mt-1 rounded text-brand-600">
+                                    <span>Confirmo que la información provista es veraz y autorizo su uso para fines de reclutamiento.</span>
+                                </label>
+                            </fieldset>
                         </form>
 
                         <div class="bg-white border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:justify-between gap-3 sticky bottom-0">
@@ -875,6 +964,73 @@ $employment_types = [
             el.classList.toggle('hidden', !hasCommitment);
             if (!hasCommitment) el.querySelectorAll('input').forEach(i => { i.value = ''; });
         }
+        // "Indique cual" del nivel academico: la solicitud fisica solo lo pide para
+        // tecnico, carrera universitaria y postgrado.
+        const educationDetailLabels = {
+            'Técnico o curso especializado': 'Indique el técnico o curso',
+            'Carrera universitaria completa': 'Indique la carrera',
+            'Postgrado / Maestría': 'Indique el postgrado o maestría'
+        };
+        function toggleEducationDetail() {
+            const level = document.getElementById('educationLevel')?.value || '';
+            const wrap = document.getElementById('educationDetailWrap');
+            const label = document.getElementById('educationDetailLabel');
+            if (!wrap) return;
+            const needsDetail = Object.prototype.hasOwnProperty.call(educationDetailLabels, level);
+            wrap.classList.toggle('hidden', !needsDetail);
+            if (needsDetail && label) label.textContent = educationDetailLabels[level];
+            if (!needsDetail) wrap.querySelectorAll('input').forEach(i => { i.value = ''; });
+        }
+
+        function toggleModalityField() {
+            const isOther = document.getElementById('workModality')?.value === 'otro';
+            const el = document.getElementById('workModalityWrap');
+            if (!el) return;
+            el.classList.toggle('hidden', !isOther);
+            if (!isOther) el.querySelectorAll('input').forEach(i => { i.value = ''; });
+        }
+
+        // Las rutas de concho solo aplican a transporte publico / motoconcho
+        function toggleTransportFields() {
+            const method = document.getElementById('transportMethod')?.value || '';
+            const routes = document.getElementById('transportRoutesWrap');
+            const other = document.getElementById('transportOtherWrap');
+            const needsRoutes = method === 'publico' || method === 'motoconcho';
+            const needsOther = method === 'otro';
+            if (routes) {
+                routes.classList.toggle('hidden', !needsRoutes);
+                if (!needsRoutes) routes.querySelectorAll('input').forEach(i => { i.value = ''; });
+            }
+            if (other) {
+                other.classList.toggle('hidden', !needsOther);
+                if (!needsOther) other.querySelectorAll('input').forEach(i => { i.value = ''; });
+            }
+        }
+
+        function toggleIncapacidadField() {
+            const tiene = document.getElementById('incapacidad')?.value === 'SI';
+            const el = document.getElementById('incapacidadWrap');
+            if (!el) return;
+            el.classList.toggle('hidden', !tiene);
+            if (!tiene) el.querySelectorAll('input').forEach(i => { i.value = ''; });
+        }
+
+        function toggleConoceEmpleadoField() {
+            const conoce = document.getElementById('conoceEmpleado')?.value === 'SI';
+            const el = document.getElementById('conoceEmpleadoWrap');
+            if (!el) return;
+            el.classList.toggle('hidden', !conoce);
+            if (!conoce) el.querySelectorAll('input').forEach(i => { i.value = ''; });
+        }
+
+        function toggleSourceField() {
+            const isOther = document.getElementById('sourceSelect')?.value === 'Otro';
+            const el = document.getElementById('sourceOtherWrap');
+            if (!el) return;
+            el.classList.toggle('hidden', !isOther);
+            if (!isOther) el.querySelectorAll('input').forEach(i => { i.value = ''; });
+        }
+
         function toggleHijosFields() {
             const tiene = document.getElementById('tieneHijos')?.value === 'SI';
             ['cantidadHijosWrap', 'edadHijosWrap'].forEach(id => {
@@ -901,9 +1057,18 @@ $employment_types = [
         }
 
         // Filas repetibles: el candidato puede declarar todos los cursos e idiomas de su CV
+        // Los topes coinciden con los del servidor (submit_application.php): el snapshot
+        // del formulario debe caber en la columna TEXT de cover_letter.
+        const MAX_CURSOS = 20;
+        const MAX_IDIOMAS = 10;
+
         let cursoIdx = 0;
         function addCurso(focus = true) {
             const list = document.getElementById('cursosList');
+            if (list.children.length >= MAX_CURSOS) {
+                Swal.fire({ title: 'Máximo alcanzado', text: `Puedes registrar hasta ${MAX_CURSOS} cursos.`, icon: 'info', confirmButtonColor: '#3a63f5' });
+                return;
+            }
             const i = cursoIdx++;
             const row = document.createElement('div');
             row.className = 'grid sm:grid-cols-12 gap-2 items-start bg-slate-50 border border-slate-200 rounded-xl p-3';
@@ -932,6 +1097,10 @@ $employment_types = [
         let idiomaIdx = 0;
         function addIdioma(focus = true) {
             const list = document.getElementById('idiomasList');
+            if (list.children.length >= MAX_IDIOMAS) {
+                Swal.fire({ title: 'Máximo alcanzado', text: `Puedes registrar hasta ${MAX_IDIOMAS} idiomas.`, icon: 'info', confirmButtonColor: '#3a63f5' });
+                return;
+            }
             const i = idiomaIdx++;
             const niveles = ['', 'Básico', 'Intermedio', 'Avanzado', 'Nativo'];
             const opts = niveles.map(n => `<option value="${n}">${n === '' ? 'Nivel...' : n}</option>`).join('');
@@ -963,12 +1132,84 @@ $employment_types = [
             if (focus) row.querySelector('input')?.focus();
         }
 
+        // Experiencias laborales con las mismas columnas de la solicitud fisica
+        let expIdx = 0;
+        const MAX_EXPERIENCIAS = 4;
+        function addExperiencia(focus = true) {
+            const list = document.getElementById('experienciasList');
+            if (!list) return;
+            if (list.children.length >= MAX_EXPERIENCIAS) {
+                Swal.fire({ title: 'Máximo alcanzado', text: `Puedes registrar hasta ${MAX_EXPERIENCIAS} experiencias laborales.`, icon: 'info', confirmButtonColor: '#3a63f5' });
+                return;
+            }
+            const i = expIdx++;
+            const row = document.createElement('div');
+            row.className = 'exp-row bg-slate-50 border border-slate-200 rounded-xl p-3';
+            row.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Experiencia ${list.children.length + 1}</span>
+                    <button type="button" onclick="removeExperiencia(this)" class="px-2.5 py-1 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Quitar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="grid sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="form-label">Empresa</label>
+                        <input type="text" name="experiencias[${i}][empresa]" class="form-input" placeholder="Nombre de la empresa">
+                    </div>
+                    <div>
+                        <label class="form-label">Cargo</label>
+                        <input type="text" name="experiencias[${i}][cargo]" class="form-input" placeholder="Ej: Agente de servicio">
+                    </div>
+                    <div>
+                        <label class="form-label">Superior inmediato</label>
+                        <input type="text" name="experiencias[${i}][superior]" class="form-input" placeholder="Nombre de tu supervisor">
+                    </div>
+                    <div>
+                        <label class="form-label">Tiempo trabajado</label>
+                        <input type="text" name="experiencias[${i}][tiempo]" class="form-input" placeholder="Ej: 2 años y 3 meses">
+                    </div>
+                    <div>
+                        <label class="form-label">Teléfono de la empresa</label>
+                        <input type="tel" name="experiencias[${i}][telefono]" class="form-input" placeholder="Ej: 809-000-0000">
+                    </div>
+                    <div>
+                        <label class="form-label">Sueldo</label>
+                        <input type="text" name="experiencias[${i}][sueldo]" class="form-input" placeholder="Ej: RD$22,000">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="form-label">Tareas principales</label>
+                        <textarea name="experiencias[${i}][tareas]" rows="2" maxlength="600" class="form-input" placeholder="Describe brevemente tus funciones"></textarea>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="form-label">Razón de la salida</label>
+                        <input type="text" name="experiencias[${i}][razon_salida]" class="form-input" maxlength="300" placeholder="Ej: renuncia voluntaria">
+                    </div>
+                </div>`;
+            list.appendChild(row);
+            if (focus) row.querySelector('input')?.focus();
+        }
+
+        function removeExperiencia(btn) {
+            btn.closest('.exp-row')?.remove();
+            renumberExperiencias();
+        }
+
+        function renumberExperiencias() {
+            document.querySelectorAll('#experienciasList .exp-row').forEach((row, idx) => {
+                const label = row.querySelector('span');
+                if (label) label.textContent = `Experiencia ${idx + 1}`;
+            });
+        }
+
         function resetRepeatables() {
             document.getElementById('cursosList').innerHTML = '';
             document.getElementById('idiomasList').innerHTML = '';
-            cursoIdx = 0; idiomaIdx = 0;
+            document.getElementById('experienciasList').innerHTML = '';
+            cursoIdx = 0; idiomaIdx = 0; expIdx = 0;
             addCurso(false);
             addIdioma(false);
+            addExperiencia(false);
         }
 
         function backToJobInfo() {
@@ -985,6 +1226,12 @@ $employment_types = [
                 toggleStudyFields();
                 toggleCommitmentField();
                 toggleHijosFields();
+                toggleEducationDetail();
+                toggleModalityField();
+                toggleTransportFields();
+                toggleIncapacidadField();
+                toggleConoceEmpleadoField();
+                toggleSourceField();
                 calcularEdad();
                 resetRepeatables();
                 document.getElementById('cvFileName').textContent = 'Adjuntar CV (PDF, DOC, DOCX)';
