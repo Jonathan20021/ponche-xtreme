@@ -1458,92 +1458,107 @@ if ($signatureLink) {
     </div>
 
     <!-- Detalle de una amonestación (incluye el documento adjunto) -->
-    <div id="warningDetailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.7);">
-        <!-- Columna flexible: el encabezado queda SIEMPRE fijo y solo el cuerpo
-             hace scroll. Con overflow en toda la tarjeta, al bajar a ver el PDF se
-             perdía de vista de quién era la amonestación. -->
-        <div class="glass-card w-full max-w-5xl" style="max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;">
-            <div class="flex justify-between items-start gap-3 pb-3 mb-4 border-b border-slate-700" style="flex: 0 0 auto;">
-                <div>
-                    <h3 class="text-lg font-semibold text-white">
+    <div id="warningDetailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" style="background: rgba(2,6,23,.82); backdrop-filter: blur(3px);">
+        <!-- Dos columnas: a la izquierda el expediente (con su propio scroll) y a
+             la derecha el documento a altura completa. Antes iban uno debajo del
+             otro y el PDF quedaba aplastado al fondo, peleando el scroll con el
+             modal. -->
+        <div id="wdCard" class="glass-card" style="width: min(1180px, 96vw); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
+
+            <!-- Encabezado fijo -->
+            <div class="flex justify-between items-start gap-4 px-5 py-4 border-b border-slate-700" style="flex: 0 0 auto;">
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2 mb-1">
+                        <span id="wdStatus" class="px-2 py-0.5 rounded-full text-xs font-semibold">—</span>
+                        <span id="wdSeverity" class="px-2 py-0.5 rounded-full text-xs font-semibold">—</span>
+                    </div>
+                    <h3 class="text-lg font-semibold text-white truncate">
                         <i class="fas fa-gavel text-rose-400 mr-2"></i>
                         <span id="wdSubject">Amonestación</span>
                     </h3>
                     <p class="text-slate-400 text-xs mt-1" id="wdMeta"></p>
                 </div>
-                <button type="button" onclick="closeWarningDetail()"
-                        class="text-slate-400 hover:text-white text-xl leading-none"><i class="fas fa-xmark"></i></button>
+                <button type="button" onclick="closeWarningDetail()" title="Cerrar (Esc)"
+                        class="text-slate-400 hover:text-white text-xl leading-none px-2 py-1 rounded hover:bg-slate-700/60"
+                        style="flex: 0 0 auto;">
+                    <i class="fas fa-xmark"></i>
+                </button>
             </div>
 
-            <div style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
+            <!-- Cuerpo -->
+            <div id="wdLayout" class="grid grid-cols-1" style="flex: 1 1 auto; min-height: 0;">
 
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <div class="bg-slate-800/60 rounded p-3">
-                    <p class="text-slate-400 text-xs">Estado</p>
-                    <p class="text-sm font-semibold" id="wdStatus">—</p>
-                </div>
-                <div class="bg-slate-800/60 rounded p-3">
-                    <p class="text-slate-400 text-xs">Gravedad</p>
-                    <p class="text-sm font-semibold" id="wdSeverity">—</p>
-                </div>
-                <div class="bg-slate-800/60 rounded p-3">
-                    <p class="text-slate-400 text-xs">Fecha del hecho</p>
-                    <p class="text-white text-sm font-semibold" id="wdIncident">—</p>
-                </div>
-                <div class="bg-slate-800/60 rounded p-3">
-                    <p class="text-slate-400 text-xs">Suspensión</p>
-                    <p class="text-white text-sm font-semibold" id="wdSuspension">—</p>
-                </div>
-            </div>
-
-            <div class="space-y-4">
-                <div id="wdDescriptionBlock">
-                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">Descripción del hecho</p>
-                    <p class="text-slate-200 text-sm whitespace-pre-line" id="wdDescription"></p>
-                </div>
-                <div id="wdCorrectiveBlock">
-                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">Medida correctiva acordada</p>
-                    <p class="text-slate-200 text-sm whitespace-pre-line" id="wdCorrective"></p>
-                </div>
-                <div id="wdCommentsBlock">
-                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">Comentarios del colaborador</p>
-                    <p class="text-slate-200 text-sm whitespace-pre-line" id="wdComments"></p>
-                </div>
-                <div id="wdAckBlock" class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                    <p class="text-emerald-200 text-sm">
-                        <i class="fas fa-signature mr-1"></i>
-                        Acusada por el colaborador el <span id="wdAck"></span>
-                    </p>
-                </div>
-
-                <!-- Documento adjunto -->
-                <div>
-                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-2">Documento adjunto</p>
-                    <div id="wdNoAttachment" class="text-slate-400 text-sm">
-                        <i class="fas fa-file-circle-xmark mr-1"></i>
-                        No se adjuntó ningún documento a esta amonestación.
+                <!-- Columna izquierda: el expediente -->
+                <div class="px-5 py-4 space-y-4" style="overflow-y: auto; min-height: 0;">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-slate-800/60 rounded-lg p-3">
+                            <p class="text-slate-400 text-xs mb-0.5">Fecha del hecho</p>
+                            <p class="text-white text-sm font-semibold" id="wdIncident">—</p>
+                        </div>
+                        <div class="bg-slate-800/60 rounded-lg p-3">
+                            <p class="text-slate-400 text-xs mb-0.5">Suspensión</p>
+                            <p class="text-white text-sm font-semibold" id="wdSuspension">—</p>
+                        </div>
                     </div>
-                    <div id="wdAttachmentBlock" class="hidden">
-                        <div class="flex flex-wrap items-center gap-2 mb-3">
+
+                    <div id="wdDescriptionBlock">
+                        <p class="text-slate-400 text-xs uppercase tracking-wide mb-1 font-semibold">Descripción del hecho</p>
+                        <p class="text-slate-200 text-sm leading-relaxed whitespace-pre-line" id="wdDescription"></p>
+                    </div>
+                    <div id="wdCorrectiveBlock" class="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                        <p class="text-amber-300 text-xs uppercase tracking-wide mb-1 font-semibold">
+                            <i class="fas fa-clipboard-check mr-1"></i>Medida correctiva acordada
+                        </p>
+                        <p class="text-slate-200 text-sm leading-relaxed whitespace-pre-line" id="wdCorrective"></p>
+                    </div>
+                    <div id="wdCommentsBlock">
+                        <p class="text-slate-400 text-xs uppercase tracking-wide mb-1 font-semibold">Comentarios del colaborador</p>
+                        <p class="text-slate-200 text-sm leading-relaxed whitespace-pre-line" id="wdComments"></p>
+                    </div>
+                    <div id="wdAckBlock" class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                        <p class="text-emerald-200 text-sm">
+                            <i class="fas fa-signature mr-1"></i>
+                            Acusada por el colaborador el <span id="wdAck"></span>
+                        </p>
+                    </div>
+
+                    <!-- Solo se ve cuando NO hay documento; si lo hay, vive en el panel derecho -->
+                    <div id="wdNoAttachment" class="p-4 rounded-lg border border-dashed border-slate-700 text-center">
+                        <i class="fas fa-file-circle-xmark text-slate-600 text-2xl mb-2"></i>
+                        <p class="text-slate-400 text-sm">Esta amonestación no tiene documento adjunto.</p>
+                    </div>
+                </div>
+
+                <!-- Columna derecha: el documento -->
+                <div id="wdDocPanel" class="hidden border-l border-slate-700 bg-slate-900/40" style="min-height: 0; display: none; flex-direction: column;">
+                    <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-700" style="flex: 0 0 auto;">
+                        <p class="text-slate-300 text-xs uppercase tracking-wide font-semibold">
+                            <i class="fas fa-paperclip text-emerald-400 mr-1"></i>Documento adjunto
+                        </p>
+                        <div class="flex items-center gap-2">
                             <a id="wdViewLink" href="#" target="_blank" rel="noopener"
-                               class="btn-primary text-sm inline-flex items-center gap-2">
-                                <i class="fas fa-up-right-from-square"></i> Abrir a pantalla completa
+                               class="text-xs px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 text-white inline-flex items-center gap-1.5"
+                               title="Abrir en una pestaña nueva para acercar o imprimir">
+                                <i class="fas fa-up-right-from-square"></i> Pantalla completa
                             </a>
                             <a id="wdDownloadLink" href="#"
-                               class="btn-secondary text-sm inline-flex items-center gap-2">
+                               class="text-xs px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 text-white inline-flex items-center gap-1.5"
+                               title="Descargar el documento">
                                 <i class="fas fa-download"></i> Descargar
                             </a>
-                            <span class="text-slate-500 text-xs ml-1">Para acercar o imprimir, ábrelo a pantalla completa.</span>
                         </div>
-                        <div id="wdPreview" class="rounded-lg overflow-hidden border border-slate-700 bg-slate-900"></div>
                     </div>
+                    <div id="wdPreview" style="flex: 1 1 auto; min-height: 0; overflow: hidden; background: #1e293b;"></div>
                 </div>
+
             </div>
 
-            </div><!-- /cuerpo con scroll -->
-
-            <div class="flex justify-end pt-3 mt-4 border-t border-slate-700" style="flex: 0 0 auto;">
-                <button type="button" onclick="closeWarningDetail()" class="btn-secondary">Cerrar</button>
+            <!-- Pie fijo -->
+            <div class="flex justify-between items-center gap-3 px-5 py-3 border-t border-slate-700" style="flex: 0 0 auto;">
+                <p class="text-slate-500 text-xs hidden sm:block">
+                    <i class="fas fa-lock mr-1"></i>Documento privado del expediente disciplinario.
+                </p>
+                <button type="button" onclick="closeWarningDetail()" class="btn-secondary text-sm">Cerrar</button>
             </div>
         </div>
     </div>
@@ -1700,14 +1715,18 @@ if ($signatureLink) {
             setText('wdIncident', w.incident_date);
             setText('wdSuspension', w.suspension_days ? w.suspension_days + ' día(s)' : 'No aplica');
 
+            const pill = 'px-2 py-0.5 rounded-full text-xs font-semibold ';
             const status = document.getElementById('wdStatus');
             status.textContent = w.status;
-            status.className = 'text-sm font-semibold ' + (w.status_key === 'ACTIVA' ? 'text-rose-300' : 'text-slate-300');
+            status.className = pill + (w.status_key === 'ACTIVA'
+                ? 'bg-rose-500/20 text-rose-300'
+                : 'bg-slate-600/40 text-slate-300');
 
             const severity = document.getElementById('wdSeverity');
-            severity.textContent = w.severity;
-            severity.className = 'text-sm font-semibold ' + (
-                w.severity_key === 'MUY_GRAVE' ? 'text-rose-300' : (w.severity_key === 'GRAVE' ? 'text-amber-300' : 'text-slate-300')
+            severity.textContent = 'Gravedad: ' + w.severity;
+            severity.className = pill + (
+                w.severity_key === 'MUY_GRAVE' ? 'bg-rose-500/20 text-rose-300'
+                    : (w.severity_key === 'GRAVE' ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-600/40 text-slate-300')
             );
 
             setText('wdDescription', w.description);
@@ -1719,14 +1738,29 @@ if ($signatureLink) {
             setText('wdAck', w.acknowledged_at);
             showBlock('wdAckBlock', !!w.acknowledged_at);
 
-            // Adjunto: PDF e imágenes se previsualizan ahí mismo; cualquier otra
-            // cosa se ofrece solo para descargar.
+            // El documento vive en su propia columna. Si no hay adjunto, el modal
+            // se queda en UNA sola columna y no se ve un panel vacío al lado.
             const preview = document.getElementById('wdPreview');
+            const docPanel = document.getElementById('wdDocPanel');
+            const layout = document.getElementById('wdLayout');
+            const card = document.getElementById('wdCard');
+            const wide = window.matchMedia('(min-width: 1024px)').matches;
+
             preview.innerHTML = '';
-            showBlock('wdAttachmentBlock', w.has_attachment);
             showBlock('wdNoAttachment', !w.has_attachment);
 
             if (w.has_attachment) {
+                docPanel.classList.remove('hidden');
+                docPanel.style.display = 'flex';
+                // A pantalla ancha, expediente | documento (2 de 5 / 3 de 5).
+                // En pantalla angosta van apilados a mitad y mitad, cada uno con su
+                // propio scroll: sin filas explícitas el documento se desbordaba.
+                layout.style.gridTemplateColumns = wide ? 'minmax(0, 2fr) minmax(0, 3fr)' : '';
+                layout.style.gridTemplateRows = wide ? '' : 'minmax(0, 1fr) minmax(0, 1fr)';
+                // Altura fija para que el visor ocupe toda la columna: con altura
+                // automática el PDF colapsaba a unos pocos centímetros.
+                card.style.height = '92vh';
+
                 const url = 'download_warning_attachment.php?id=' + w.id;
                 document.getElementById('wdViewLink').href = url;
                 document.getElementById('wdDownloadLink').href = url + '&dl=1';
@@ -1734,13 +1768,24 @@ if ($signatureLink) {
                 if (w.attachment_ext === 'pdf') {
                     // toolbar=0 y navpanes=0 quitan la barra y el panel de miniaturas
                     // del visor de Chrome, que se comían media ventana; view=FitH
-                    // ajusta el documento al ancho para que se lea de una vez.
+                    // ajusta el documento al ancho de la columna.
                     preview.innerHTML = '<iframe src="' + url + '#toolbar=0&navpanes=0&view=FitH" '
-                        + 'style="width:100%;height:62vh;min-height:22rem;border:0;display:block;"></iframe>';
+                        + 'style="width:100%;height:100%;border:0;display:block;"></iframe>';
                 } else if (['jpg', 'jpeg', 'png'].indexOf(w.attachment_ext) !== -1) {
-                    preview.innerHTML = '<img src="' + url + '" alt="Documento de la amonestación" '
-                        + 'style="max-width:100%;max-height:62vh;display:block;margin:0 auto;">';
+                    preview.innerHTML = '<div style="width:100%;height:100%;overflow:auto;padding:1rem;">'
+                        + '<img src="' + url + '" alt="Documento de la amonestación" style="max-width:100%;display:block;margin:0 auto;">'
+                        + '</div>';
+                } else {
+                    preview.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;">'
+                        + '<p class="text-slate-400 text-sm">Este tipo de archivo no se puede previsualizar. Usa el botón <strong>Descargar</strong>.</p>'
+                        + '</div>';
                 }
+            } else {
+                docPanel.classList.add('hidden');
+                docPanel.style.display = 'none';
+                layout.style.gridTemplateColumns = '';
+                layout.style.gridTemplateRows = '';
+                card.style.height = '';   // sin documento, el modal se ajusta al texto
             }
 
             document.getElementById('warningDetailModal').classList.remove('hidden');
