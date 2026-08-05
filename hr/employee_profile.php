@@ -161,6 +161,34 @@ $terminationLabels = employeeTerminationLabels();
 
 $activeWarnings = count(array_filter($warnings, static fn($w) => ($w['status'] ?? '') === 'ACTIVA'));
 
+// Detalle de cada amonestación para el modal. Se manda ya traducido (tipo,
+// gravedad, estado) y con las fechas en formato local, para que el JS solo pinte
+// y no tenga que repetir la lógica de etiquetas que ya vive en PHP.
+$warningsDetail = [];
+foreach ($warnings as $w) {
+    $warningsDetail[(int) $w['id']] = [
+        'id'                => (int) $w['id'],
+        'subject'           => (string) $w['subject'],
+        'type'              => $warningLabels['types'][$w['warning_type']] ?? (string) $w['warning_type'],
+        'severity'          => $warningLabels['severities'][$w['severity']] ?? (string) $w['severity'],
+        'severity_key'      => (string) $w['severity'],
+        'status'            => $warningLabels['statuses'][$w['status']] ?? (string) $w['status'],
+        'status_key'        => (string) $w['status'],
+        'incident_date'     => $w['incident_date'] ? date('d/m/Y', strtotime($w['incident_date'])) : '—',
+        'created_at'        => !empty($w['created_at']) ? date('d/m/Y h:i A', strtotime($w['created_at'])) : '—',
+        'issued_by'         => (string) ($w['issued_by_name'] ?? '') ?: '—',
+        'description'       => (string) ($w['description'] ?? ''),
+        'corrective_action' => (string) ($w['corrective_action'] ?? ''),
+        'suspension_days'   => !empty($w['suspension_days'])
+            ? rtrim(rtrim(number_format((float) $w['suspension_days'], 1), '0'), '.')
+            : '',
+        'employee_comments' => (string) ($w['employee_comments'] ?? ''),
+        'acknowledged_at'   => !empty($w['acknowledged_at']) ? date('d/m/Y h:i A', strtotime($w['acknowledged_at'])) : '',
+        'has_attachment'    => !empty($w['attachment']),
+        'attachment_ext'    => !empty($w['attachment']) ? strtolower(pathinfo((string) $w['attachment'], PATHINFO_EXTENSION)) : '',
+    ];
+}
+
 // Catálogo de campañas para los formularios de asignación
 $allCampaigns = [];
 try {
@@ -615,7 +643,10 @@ if ($signatureLink) {
                 <?php else: ?>
                     <div class="space-y-2" style="max-height: 20rem; overflow-y: auto;">
                         <?php foreach ($warnings as $w): ?>
-                            <div class="bg-slate-800/50 rounded p-3 border-l-4 <?= $w['severity'] === 'MUY_GRAVE' ? 'border-rose-500' : ($w['severity'] === 'GRAVE' ? 'border-amber-500' : 'border-slate-500') ?>">
+                            <?php $hasMore = !empty($w['attachment']) || !empty($w['corrective_action']) || !empty($w['employee_comments']) || mb_strlen((string) $w['description']) > 220; ?>
+                            <div class="bg-slate-800/50 hover:bg-slate-800 transition rounded p-3 border-l-4 cursor-pointer <?= $w['severity'] === 'MUY_GRAVE' ? 'border-rose-500' : ($w['severity'] === 'GRAVE' ? 'border-amber-500' : 'border-slate-500') ?>"
+                                 onclick="openWarningDetail(<?= (int) $w['id'] ?>)"
+                                 title="Ver el detalle completo de la amonestación">
                                 <div class="flex justify-between items-start gap-2">
                                     <p class="text-white text-sm font-semibold"><?= htmlspecialchars($w['subject']) ?></p>
                                     <span class="px-2 py-0.5 rounded text-xs whitespace-nowrap <?= $w['status'] === 'ACTIVA' ? 'bg-rose-500/20 text-rose-300' : 'bg-slate-600/30 text-slate-300' ?>">
@@ -629,11 +660,21 @@ if ($signatureLink) {
                                     <?php if (!empty($w['issued_by_name'])): ?> · por <?= htmlspecialchars($w['issued_by_name']) ?><?php endif; ?>
                                 </p>
                                 <?php if (!empty($w['description'])): ?>
-                                    <p class="text-slate-300 text-xs mt-2"><?= nl2br(htmlspecialchars(mb_substr($w['description'], 0, 220))) ?></p>
+                                    <p class="text-slate-300 text-xs mt-2"><?= nl2br(htmlspecialchars(mb_substr($w['description'], 0, 220))) ?><?= mb_strlen((string) $w['description']) > 220 ? '…' : '' ?></p>
                                 <?php endif; ?>
                                 <?php if (!empty($w['suspension_days'])): ?>
                                     <p class="text-amber-300 text-xs mt-1">Suspensión: <?= rtrim(rtrim(number_format((float) $w['suspension_days'], 1), '0'), '.') ?> día(s)</p>
                                 <?php endif; ?>
+                                <div class="flex items-center gap-3 mt-2">
+                                    <span class="text-indigo-300 text-xs font-semibold">
+                                        <i class="fas fa-up-right-from-square mr-1"></i>Ver detalle
+                                    </span>
+                                    <?php if (!empty($w['attachment'])): ?>
+                                        <span class="text-emerald-300 text-xs" title="Tiene documento adjunto">
+                                            <i class="fas fa-paperclip mr-1"></i>Documento
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -1416,6 +1457,88 @@ if ($signatureLink) {
         </div>
     </div>
 
+    <!-- Detalle de una amonestación (incluye el documento adjunto) -->
+    <div id="warningDetailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.7);">
+        <div class="glass-card w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start gap-3 mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">
+                        <i class="fas fa-gavel text-rose-400 mr-2"></i>
+                        <span id="wdSubject">Amonestación</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs mt-1" id="wdMeta"></p>
+                </div>
+                <button type="button" onclick="document.getElementById('warningDetailModal').classList.add('hidden')"
+                        class="text-slate-400 hover:text-white"><i class="fas fa-xmark"></i></button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div class="bg-slate-800/60 rounded p-3">
+                    <p class="text-slate-400 text-xs">Estado</p>
+                    <p class="text-sm font-semibold" id="wdStatus">—</p>
+                </div>
+                <div class="bg-slate-800/60 rounded p-3">
+                    <p class="text-slate-400 text-xs">Gravedad</p>
+                    <p class="text-sm font-semibold" id="wdSeverity">—</p>
+                </div>
+                <div class="bg-slate-800/60 rounded p-3">
+                    <p class="text-slate-400 text-xs">Fecha del hecho</p>
+                    <p class="text-white text-sm font-semibold" id="wdIncident">—</p>
+                </div>
+                <div class="bg-slate-800/60 rounded p-3">
+                    <p class="text-slate-400 text-xs">Suspensión</p>
+                    <p class="text-white text-sm font-semibold" id="wdSuspension">—</p>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div id="wdDescriptionBlock">
+                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">Descripción del hecho</p>
+                    <p class="text-slate-200 text-sm whitespace-pre-line" id="wdDescription"></p>
+                </div>
+                <div id="wdCorrectiveBlock">
+                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">Medida correctiva acordada</p>
+                    <p class="text-slate-200 text-sm whitespace-pre-line" id="wdCorrective"></p>
+                </div>
+                <div id="wdCommentsBlock">
+                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">Comentarios del colaborador</p>
+                    <p class="text-slate-200 text-sm whitespace-pre-line" id="wdComments"></p>
+                </div>
+                <div id="wdAckBlock" class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                    <p class="text-emerald-200 text-sm">
+                        <i class="fas fa-signature mr-1"></i>
+                        Acusada por el colaborador el <span id="wdAck"></span>
+                    </p>
+                </div>
+
+                <!-- Documento adjunto -->
+                <div>
+                    <p class="text-slate-400 text-xs uppercase tracking-wide mb-2">Documento adjunto</p>
+                    <div id="wdNoAttachment" class="text-slate-400 text-sm">
+                        <i class="fas fa-file-circle-xmark mr-1"></i>
+                        No se adjuntó ningún documento a esta amonestación.
+                    </div>
+                    <div id="wdAttachmentBlock" class="hidden">
+                        <div class="flex flex-wrap gap-2 mb-3">
+                            <a id="wdViewLink" href="#" target="_blank" rel="noopener" class="btn-primary text-sm">
+                                <i class="fas fa-eye"></i> Abrir en pestaña nueva
+                            </a>
+                            <a id="wdDownloadLink" href="#" class="btn-secondary text-sm">
+                                <i class="fas fa-download"></i> Descargar
+                            </a>
+                        </div>
+                        <div id="wdPreview" class="rounded-lg overflow-hidden border border-slate-700 bg-slate-900"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-4">
+                <button type="button" onclick="document.getElementById('warningDetailModal').classList.add('hidden')"
+                        class="btn-secondary">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Cambiar salario (con fecha efectiva) -->
     <div id="compensationModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.7);">
         <div class="glass-card w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -1521,7 +1644,7 @@ if ($signatureLink) {
 
     <script>
         // Cerrar modales con Escape o clic fuera
-        const profileModals = ['warningModal', 'leaveModal', 'campaignModal', 'compensationModal', 'terminateModal'];
+        const profileModals = ['warningModal', 'warningDetailModal', 'leaveModal', 'campaignModal', 'compensationModal', 'terminateModal'];
         profileModals.forEach(function (id) {
             const el = document.getElementById(id);
             if (!el) return;
@@ -1536,6 +1659,70 @@ if ($signatureLink) {
                 if (el) el.classList.add('hidden');
             });
         });
+
+        // Detalle de la amonestación. El listado solo cabe en una tarjeta chica, así
+        // que el texto completo, la medida correctiva y el documento adjunto se ven
+        // aquí — antes no había forma de abrir una amonestación ya registrada.
+        const warningsDetail = <?= json_encode($warningsDetail, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+        function openWarningDetail(id) {
+            const w = warningsDetail[id];
+            if (!w) return;
+
+            const setText = (elId, value) => {
+                const el = document.getElementById(elId);
+                if (el) el.textContent = value;
+            };
+            const showBlock = (elId, visible) => {
+                const el = document.getElementById(elId);
+                if (el) el.classList.toggle('hidden', !visible);
+            };
+
+            setText('wdSubject', w.subject);
+            setText('wdMeta', w.type + ' · registrada el ' + w.created_at + ' por ' + w.issued_by);
+            setText('wdIncident', w.incident_date);
+            setText('wdSuspension', w.suspension_days ? w.suspension_days + ' día(s)' : 'No aplica');
+
+            const status = document.getElementById('wdStatus');
+            status.textContent = w.status;
+            status.className = 'text-sm font-semibold ' + (w.status_key === 'ACTIVA' ? 'text-rose-300' : 'text-slate-300');
+
+            const severity = document.getElementById('wdSeverity');
+            severity.textContent = w.severity;
+            severity.className = 'text-sm font-semibold ' + (
+                w.severity_key === 'MUY_GRAVE' ? 'text-rose-300' : (w.severity_key === 'GRAVE' ? 'text-amber-300' : 'text-slate-300')
+            );
+
+            setText('wdDescription', w.description);
+            showBlock('wdDescriptionBlock', !!w.description);
+            setText('wdCorrective', w.corrective_action);
+            showBlock('wdCorrectiveBlock', !!w.corrective_action);
+            setText('wdComments', w.employee_comments);
+            showBlock('wdCommentsBlock', !!w.employee_comments);
+            setText('wdAck', w.acknowledged_at);
+            showBlock('wdAckBlock', !!w.acknowledged_at);
+
+            // Adjunto: PDF e imágenes se previsualizan ahí mismo; cualquier otra
+            // cosa se ofrece solo para descargar.
+            const preview = document.getElementById('wdPreview');
+            preview.innerHTML = '';
+            showBlock('wdAttachmentBlock', w.has_attachment);
+            showBlock('wdNoAttachment', !w.has_attachment);
+
+            if (w.has_attachment) {
+                const url = 'download_warning_attachment.php?id=' + w.id;
+                document.getElementById('wdViewLink').href = url;
+                document.getElementById('wdDownloadLink').href = url + '&dl=1';
+
+                if (w.attachment_ext === 'pdf') {
+                    preview.innerHTML = '<iframe src="' + url + '" style="width:100%;height:26rem;border:0;"></iframe>';
+                } else if (['jpg', 'jpeg', 'png'].indexOf(w.attachment_ext) !== -1) {
+                    preview.innerHTML = '<img src="' + url + '" alt="Documento de la amonestación" style="max-width:100%;display:block;margin:0 auto;">';
+                }
+            }
+
+            document.getElementById('warningDetailModal').classList.remove('hidden');
+        }
 
         // Solo se muestran los montos del tipo de compensación elegido; así no se
         // manda un sueldo mensual cuando en realidad se paga por hora.
