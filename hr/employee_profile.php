@@ -1459,8 +1459,11 @@ if ($signatureLink) {
 
     <!-- Detalle de una amonestación (incluye el documento adjunto) -->
     <div id="warningDetailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.7);">
-        <div class="glass-card w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div class="flex justify-between items-start gap-3 mb-4">
+        <!-- Columna flexible: el encabezado queda SIEMPRE fijo y solo el cuerpo
+             hace scroll. Con overflow en toda la tarjeta, al bajar a ver el PDF se
+             perdía de vista de quién era la amonestación. -->
+        <div class="glass-card w-full max-w-5xl" style="max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="flex justify-between items-start gap-3 pb-3 mb-4 border-b border-slate-700" style="flex: 0 0 auto;">
                 <div>
                     <h3 class="text-lg font-semibold text-white">
                         <i class="fas fa-gavel text-rose-400 mr-2"></i>
@@ -1468,9 +1471,11 @@ if ($signatureLink) {
                     </h3>
                     <p class="text-slate-400 text-xs mt-1" id="wdMeta"></p>
                 </div>
-                <button type="button" onclick="document.getElementById('warningDetailModal').classList.add('hidden')"
-                        class="text-slate-400 hover:text-white"><i class="fas fa-xmark"></i></button>
+                <button type="button" onclick="closeWarningDetail()"
+                        class="text-slate-400 hover:text-white text-xl leading-none"><i class="fas fa-xmark"></i></button>
             </div>
+
+            <div style="flex: 1 1 auto; overflow-y: auto; min-height: 0;">
 
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 <div class="bg-slate-800/60 rounded p-3">
@@ -1519,22 +1524,26 @@ if ($signatureLink) {
                         No se adjuntó ningún documento a esta amonestación.
                     </div>
                     <div id="wdAttachmentBlock" class="hidden">
-                        <div class="flex flex-wrap gap-2 mb-3">
-                            <a id="wdViewLink" href="#" target="_blank" rel="noopener" class="btn-primary text-sm">
-                                <i class="fas fa-eye"></i> Abrir en pestaña nueva
+                        <div class="flex flex-wrap items-center gap-2 mb-3">
+                            <a id="wdViewLink" href="#" target="_blank" rel="noopener"
+                               class="btn-primary text-sm inline-flex items-center gap-2">
+                                <i class="fas fa-up-right-from-square"></i> Abrir a pantalla completa
                             </a>
-                            <a id="wdDownloadLink" href="#" class="btn-secondary text-sm">
+                            <a id="wdDownloadLink" href="#"
+                               class="btn-secondary text-sm inline-flex items-center gap-2">
                                 <i class="fas fa-download"></i> Descargar
                             </a>
+                            <span class="text-slate-500 text-xs ml-1">Para acercar o imprimir, ábrelo a pantalla completa.</span>
                         </div>
                         <div id="wdPreview" class="rounded-lg overflow-hidden border border-slate-700 bg-slate-900"></div>
                     </div>
                 </div>
             </div>
 
-            <div class="flex justify-end pt-4">
-                <button type="button" onclick="document.getElementById('warningDetailModal').classList.add('hidden')"
-                        class="btn-secondary">Cerrar</button>
+            </div><!-- /cuerpo con scroll -->
+
+            <div class="flex justify-end pt-3 mt-4 border-t border-slate-700" style="flex: 0 0 auto;">
+                <button type="button" onclick="closeWarningDetail()" class="btn-secondary">Cerrar</button>
             </div>
         </div>
     </div>
@@ -1645,19 +1654,27 @@ if ($signatureLink) {
     <script>
         // Cerrar modales con Escape o clic fuera
         const profileModals = ['warningModal', 'warningDetailModal', 'leaveModal', 'campaignModal', 'compensationModal', 'terminateModal'];
+        function hideProfileModal(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.add('hidden');
+            // El detalle de amonestación limpia además su vista previa.
+            if (id === 'warningDetailModal') {
+                const preview = document.getElementById('wdPreview');
+                if (preview) preview.innerHTML = '';
+            }
+        }
+
         profileModals.forEach(function (id) {
             const el = document.getElementById(id);
             if (!el) return;
             el.addEventListener('click', function (e) {
-                if (e.target === el) el.classList.add('hidden');
+                if (e.target === el) hideProfileModal(id);
             });
         });
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return;
-            profileModals.forEach(function (id) {
-                const el = document.getElementById(id);
-                if (el) el.classList.add('hidden');
-            });
+            profileModals.forEach(hideProfileModal);
         });
 
         // Detalle de la amonestación. El listado solo cabe en una tarjeta chica, así
@@ -1715,13 +1732,26 @@ if ($signatureLink) {
                 document.getElementById('wdDownloadLink').href = url + '&dl=1';
 
                 if (w.attachment_ext === 'pdf') {
-                    preview.innerHTML = '<iframe src="' + url + '" style="width:100%;height:26rem;border:0;"></iframe>';
+                    // toolbar=0 y navpanes=0 quitan la barra y el panel de miniaturas
+                    // del visor de Chrome, que se comían media ventana; view=FitH
+                    // ajusta el documento al ancho para que se lea de una vez.
+                    preview.innerHTML = '<iframe src="' + url + '#toolbar=0&navpanes=0&view=FitH" '
+                        + 'style="width:100%;height:62vh;min-height:22rem;border:0;display:block;"></iframe>';
                 } else if (['jpg', 'jpeg', 'png'].indexOf(w.attachment_ext) !== -1) {
-                    preview.innerHTML = '<img src="' + url + '" alt="Documento de la amonestación" style="max-width:100%;display:block;margin:0 auto;">';
+                    preview.innerHTML = '<img src="' + url + '" alt="Documento de la amonestación" '
+                        + 'style="max-width:100%;max-height:62vh;display:block;margin:0 auto;">';
                 }
             }
 
             document.getElementById('warningDetailModal').classList.remove('hidden');
+        }
+
+        // Al cerrar se vacía la vista previa: si no, el PDF sigue cargado en memoria
+        // y al abrir otra amonestación se alcanza a ver el documento anterior.
+        function closeWarningDetail() {
+            const preview = document.getElementById('wdPreview');
+            if (preview) preview.innerHTML = '';
+            document.getElementById('warningDetailModal').classList.add('hidden');
         }
 
         // Solo se muestran los montos del tipo de compensación elegido; así no se
