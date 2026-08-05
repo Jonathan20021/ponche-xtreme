@@ -131,7 +131,31 @@ $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
 // Resolve effective compensation type and base rate (in DOP) for an employee row.
 // Mirrors the rate-selection logic from calculateEmployeePayroll() so the report
 // shows what the employee is actually paid by.
+// Si el período se pagó con MÁS DE UN salario (cambio de campaña a mitad de
+// quincena), el desglose quedó guardado en pr.salary_segments: se muestra el
+// último salario vigente y se avisa en la etiqueta, en vez de dar a entender que
+// toda la quincena se pagó a esa tarifa.
 $resolveBaseRate = function (array $r) use ($pdo) {
+    $segments = [];
+    if (!empty($r['salary_segments'])) {
+        $decoded = json_decode((string) $r['salary_segments'], true);
+        if (is_array($decoded)) {
+            $segments = $decoded;
+        }
+    }
+    if (count($segments) > 1) {
+        $last = $segments[count($segments) - 1];
+        $type = $last['type'] ?? 'hourly';
+        $rate = $type === 'fixed'
+            ? (float) ($last['monthly_salary'] ?? 0)
+            : ($type === 'daily' ? (float) ($last['daily_salary'] ?? 0) : (float) ($last['hourly_rate'] ?? 0));
+        $typeLabel = $type === 'fixed' ? 'Fijo (mensual)' : ($type === 'daily' ? 'Diario' : 'Por Hora');
+        return [
+            'label' => $typeLabel . ' · ' . count($segments) . ' salarios en el período',
+            'rate'  => $rate,
+        ];
+    }
+
     $hourlyRateUsd = (float)($r['hourly_rate'] ?? 0);
     $hourlyRateDop = (float)($r['hourly_rate_dop'] ?? 0);
     $monthlySalaryUsd = (float)($r['monthly_salary'] ?? 0);

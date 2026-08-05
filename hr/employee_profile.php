@@ -45,6 +45,14 @@ if (!$employee) {
     exit;
 }
 
+// Cambios de salario programados cuya fecha ya llegó: se vuelcan a `users` antes
+// de pintar la ficha, para que lo que se ve sea lo que de verdad está vigente.
+require_once __DIR__ . '/../lib/compensation_history.php';
+if (applyDueCompensationChanges($pdo, (int) $employee['user_id']) > 0) {
+    $stmt->execute([$employeeId]);
+    $employee = $stmt->fetch(PDO::FETCH_ASSOC) ?: $employee;
+}
+
 $prevStmt = $pdo->prepare("SELECT id FROM employees WHERE id < ? ORDER BY id DESC LIMIT 1");
 $prevStmt->execute([$employeeId]);
 $prevId = $prevStmt->fetchColumn();
@@ -135,6 +143,12 @@ require_once __DIR__ . '/../lib/salary_history.php';
 $paymentHistory = getPaymentHistoryForEmployee($pdo, $employeeId, 24);
 $paymentTotals  = getPaymentHistoryTotals($paymentHistory);
 $salaryHistory  = getSalaryHistoryForEmployee($pdo, $employeeId, (int) $employee['user_id'], 30);
+
+// Compensación con fecha efectiva: la vigente, los cambios ya aplicados y los
+// que están programados para una fecha futura.
+$currentCompensation  = getCurrentCompensation($pdo, (int) $employee['user_id']);
+$compensationTimeline = getCompensationChangeTimeline($pdo, (int) $employee['user_id'], 30);
+$pendingCompensation  = array_values(array_filter($compensationTimeline, static fn($c) => !empty($c['is_pending'])));
 
 $campaignHistory = employeeCampaignHistory($pdo, $employeeId);
 $activeCampaigns = array_values(array_filter($campaignHistory, static fn($c) => empty($c['end_date'])));
@@ -792,6 +806,107 @@ if ($signatureLink) {
             </div>
         </div>
 
+        <!-- ============ Compensación y fechas efectivas ============ -->
+        <div class="glass-card mb-8">
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-money-check-dollar text-emerald-400 mr-2"></i>
+                    Compensación
+                </h3>
+                <button type="button" onclick="document.getElementById('compensationModal').classList.remove('hidden')"
+                        class="btn-primary text-sm">
+                    <i class="fas fa-pen"></i> Cambiar salario
+                </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 mb-4">
+                <span class="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-sm font-semibold">
+                    Vigente hoy: <?= htmlspecialchars(formatCompensationLabel($currentCompensation)) ?>
+                </span>
+                <span class="text-slate-400 text-xs">
+                    Los cambios se registran con la fecha desde la que aplican: la nómina paga los días
+                    anteriores con el salario viejo y los posteriores con el nuevo.
+                </span>
+            </div>
+
+            <?php if (!empty($pendingCompensation)): ?>
+                <div class="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                    <p class="text-amber-200 text-sm font-semibold mb-2">
+                        <i class="fas fa-clock mr-1"></i> Cambios programados
+                    </p>
+                    <div class="space-y-2">
+                        <?php foreach ($pendingCompensation as $pc): ?>
+                            <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                <span class="text-slate-200">
+                                    Desde el <strong><?= date('d/m/Y', strtotime($pc['effective_date'])) ?></strong>:
+                                    <?= htmlspecialchars($pc['prev_label']) ?>
+                                    <i class="fas fa-arrow-right text-slate-500 mx-1"></i>
+                                    <span class="text-emerald-300 font-semibold"><?= htmlspecialchars($pc['new_label']) ?></span>
+                                    <?php if (!empty($pc['reason'])): ?>
+                                        <span class="text-slate-400 text-xs">· <?= htmlspecialchars($pc['reason']) ?></span>
+                                    <?php endif; ?>
+                                </span>
+                                <form method="POST" action="employee_profile_actions.php" class="inline"
+                                      onsubmit="return confirm('¿Anular este cambio de salario programado?');">
+                                    <input type="hidden" name="action" value="cancel_compensation_change">
+                                    <input type="hidden" name="employee_id" value="<?= (int) $employeeId ?>">
+                                    <input type="hidden" name="change_id" value="<?= (int) $pc['id'] ?>">
+                                    <button type="submit" class="text-slate-400 hover:text-rose-300 text-xs" title="Anular">
+                                        <i class="fas fa-xmark"></i> Anular
+                                    </button>
+                                </form>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (empty($compensationTimeline)): ?>
+                <p class="text-slate-400 text-center py-4 text-sm">
+                    Sin cambios de salario registrados con fecha efectiva.
+                </p>
+            <?php else: ?>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-slate-400 border-b border-slate-700">
+                                <th class="text-left py-2 px-2">Aplica desde</th>
+                                <th class="text-left py-2 px-2">Antes</th>
+                                <th class="text-left py-2 px-2">Después</th>
+                                <th class="text-left py-2 px-2">Motivo</th>
+                                <th class="text-left py-2 px-2">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($compensationTimeline as $ch): ?>
+                                <tr class="border-b border-slate-800">
+                                    <td class="py-2 px-2 text-white font-medium"><?= date('d/m/Y', strtotime($ch['effective_date'])) ?></td>
+                                    <td class="py-2 px-2 text-slate-300"><?= htmlspecialchars($ch['prev_label']) ?></td>
+                                    <td class="py-2 px-2 text-emerald-300 font-semibold"><?= htmlspecialchars($ch['new_label']) ?></td>
+                                    <td class="py-2 px-2 text-slate-400">
+                                        <?= htmlspecialchars($ch['reason'] ?? '—') ?>
+                                        <?php if (!empty($ch['campaign_name'])): ?>
+                                            <span class="ml-1 px-2 py-0.5 rounded-full text-xs text-white"
+                                                  style="background: <?= htmlspecialchars($ch['campaign_color'] ?: '#6366f1') ?>;">
+                                                <?= htmlspecialchars($ch['campaign_name']) ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="py-2 px-2">
+                                        <?php if (!empty($ch['is_pending'])): ?>
+                                            <span class="px-2 py-1 rounded text-xs bg-amber-500/20 text-amber-300">Programado</span>
+                                        <?php else: ?>
+                                            <span class="px-2 py-1 rounded text-xs bg-emerald-500/20 text-emerald-300">Vigente</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+
         <!-- ================= Historial de campañas ================= -->
         <div class="glass-card mb-8">
             <div class="flex justify-between items-center mb-4">
@@ -1040,6 +1155,71 @@ if ($signatureLink) {
     <?php
         $modalInput = 'w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white';
         $modalLabel = 'block text-slate-300 text-sm mb-1';
+
+        /**
+         * Campos de salario. Se usan igual en "Cambiar salario" y dentro de
+         * "Asignar campaña", para que un cambio de campaña con cambio de sueldo
+         * se registre en un solo paso y con una sola fecha efectiva.
+         */
+        $renderCompensationFields = static function (string $prefix, array $comp) use ($modalInput, $modalLabel): void {
+            ?>
+            <div>
+                <label class="<?= $modalLabel ?>">Tipo de compensación</label>
+                <select name="compensation_type" class="<?= $modalInput ?>"
+                        onchange="toggleCompFields('<?= $prefix ?>', this.value)">
+                    <option value="hourly" <?= $comp['compensation_type'] === 'hourly' ? 'selected' : '' ?>>Por hora</option>
+                    <option value="fixed"  <?= $comp['compensation_type'] === 'fixed'  ? 'selected' : '' ?>>Fijo (mensual)</option>
+                    <option value="daily"  <?= $comp['compensation_type'] === 'daily'  ? 'selected' : '' ?>>Diario</option>
+                </select>
+            </div>
+            <div>
+                <label class="<?= $modalLabel ?>">Moneda en la que cobra</label>
+                <select name="preferred_currency" class="<?= $modalInput ?>">
+                    <option value="DOP" <?= $comp['preferred_currency'] === 'DOP' ? 'selected' : '' ?>>DOP (pesos)</option>
+                    <option value="USD" <?= $comp['preferred_currency'] === 'USD' ? 'selected' : '' ?>>USD (dólares)</option>
+                </select>
+            </div>
+
+            <div id="<?= $prefix ?>_hourly" class="comp-fields-<?= $prefix ?> grid grid-cols-2 gap-3 <?= $comp['compensation_type'] === 'hourly' ? '' : 'hidden' ?>">
+                <div>
+                    <label class="<?= $modalLabel ?>">Tarifa/hora (DOP)</label>
+                    <input type="number" step="0.01" min="0" name="hourly_rate_dop"
+                           value="<?= htmlspecialchars((string) $comp['hourly_rate_dop']) ?>" class="<?= $modalInput ?>">
+                </div>
+                <div>
+                    <label class="<?= $modalLabel ?>">Tarifa/hora (USD)</label>
+                    <input type="number" step="0.01" min="0" name="hourly_rate"
+                           value="<?= htmlspecialchars((string) $comp['hourly_rate']) ?>" class="<?= $modalInput ?>">
+                </div>
+            </div>
+
+            <div id="<?= $prefix ?>_fixed" class="comp-fields-<?= $prefix ?> grid grid-cols-2 gap-3 <?= $comp['compensation_type'] === 'fixed' ? '' : 'hidden' ?>">
+                <div>
+                    <label class="<?= $modalLabel ?>">Sueldo mensual (DOP)</label>
+                    <input type="number" step="0.01" min="0" name="monthly_salary_dop"
+                           value="<?= htmlspecialchars((string) $comp['monthly_salary_dop']) ?>" class="<?= $modalInput ?>">
+                </div>
+                <div>
+                    <label class="<?= $modalLabel ?>">Sueldo mensual (USD)</label>
+                    <input type="number" step="0.01" min="0" name="monthly_salary"
+                           value="<?= htmlspecialchars((string) $comp['monthly_salary']) ?>" class="<?= $modalInput ?>">
+                </div>
+            </div>
+
+            <div id="<?= $prefix ?>_daily" class="comp-fields-<?= $prefix ?> grid grid-cols-2 gap-3 <?= $comp['compensation_type'] === 'daily' ? '' : 'hidden' ?>">
+                <div>
+                    <label class="<?= $modalLabel ?>">Sueldo diario (DOP)</label>
+                    <input type="number" step="0.01" min="0" name="daily_salary_dop"
+                           value="<?= htmlspecialchars((string) $comp['daily_salary_dop']) ?>" class="<?= $modalInput ?>">
+                </div>
+                <div>
+                    <label class="<?= $modalLabel ?>">Sueldo diario (USD)</label>
+                    <input type="number" step="0.01" min="0" name="daily_salary_usd"
+                           value="<?= htmlspecialchars((string) $comp['daily_salary_usd']) ?>" class="<?= $modalInput ?>">
+                </div>
+            </div>
+            <?php
+        };
     ?>
 
     <!-- Amonestación -->
@@ -1203,9 +1383,77 @@ if ($signatureLink) {
                     Marcar como campaña principal
                 </label>
                 <p class="text-xs text-slate-400">La principal es la que se muestra en los monitores y reportes.</p>
+
+                <!-- Cambio de salario que acompaña al cambio de campaña -->
+                <div class="pt-3 mt-2 border-t border-slate-700">
+                    <label class="inline-flex items-center gap-2 text-slate-300 text-sm font-semibold">
+                        <input type="checkbox" name="change_salary" value="1" class="w-4 h-4"
+                               onchange="document.getElementById('campaignSalaryBlock').classList.toggle('hidden', !this.checked)">
+                        Esta campaña cambia el salario
+                    </label>
+                    <div id="campaignSalaryBlock" class="hidden space-y-3 mt-3">
+                        <div class="p-3 rounded-lg bg-slate-800/60 border border-slate-700">
+                            <p class="text-xs text-slate-300">
+                                Salario vigente: <strong class="text-emerald-300"><?= htmlspecialchars(formatCompensationLabel($currentCompensation)) ?></strong>.
+                                Los días de la quincena trabajados <em>antes</em> de la fecha que elijas se
+                                pagan con ese salario; los de esa fecha en adelante, con el nuevo.
+                            </p>
+                        </div>
+                        <div>
+                            <label class="<?= $modalLabel ?>">El nuevo salario aplica desde *</label>
+                            <input type="date" name="salary_effective_date" value="<?= date('Y-m-d') ?>" class="<?= $modalInput ?>">
+                            <p class="text-xs text-slate-400 mt-1">Si lo dejas vacío se usa la fecha de inicio de la campaña.</p>
+                        </div>
+                        <?php $renderCompensationFields('camp', $currentCompensation); ?>
+                    </div>
+                </div>
+
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" onclick="document.getElementById('campaignModal').classList.add('hidden')" class="btn-secondary">Cancelar</button>
                     <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Asignar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cambiar salario (con fecha efectiva) -->
+    <div id="compensationModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,.7);">
+        <div class="glass-card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white"><i class="fas fa-money-check-dollar text-emerald-400 mr-2"></i>Cambiar salario</h3>
+                <button type="button" onclick="document.getElementById('compensationModal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fas fa-xmark"></i></button>
+            </div>
+            <form method="POST" action="employee_profile_actions.php" class="space-y-3">
+                <input type="hidden" name="action" value="change_compensation">
+                <input type="hidden" name="employee_id" value="<?= (int) $employeeId ?>">
+
+                <div class="p-3 rounded-lg bg-slate-800/60 border border-slate-700">
+                    <p class="text-xs text-slate-300">
+                        Salario vigente: <strong class="text-emerald-300"><?= htmlspecialchars(formatCompensationLabel($currentCompensation)) ?></strong>.
+                        La nómina paga cada día con el salario que estaba vigente ese día, así que un cambio a
+                        mitad de quincena no altera lo ya trabajado.
+                    </p>
+                </div>
+
+                <div>
+                    <label class="<?= $modalLabel ?>">Aplica desde *</label>
+                    <input type="date" name="effective_date" required value="<?= date('Y-m-d') ?>" class="<?= $modalInput ?>">
+                    <p class="text-xs text-slate-400 mt-1">
+                        Puede ser una fecha futura (queda programado) o pasada (recalcula la quincena al regenerarla).
+                    </p>
+                </div>
+
+                <?php $renderCompensationFields('comp', $currentCompensation); ?>
+
+                <div>
+                    <label class="<?= $modalLabel ?>">Motivo</label>
+                    <input type="text" name="reason" maxlength="255" class="<?= $modalInput ?>"
+                           placeholder="Ej: Cambio a campaña Inbound / Aumento por desempeño">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="document.getElementById('compensationModal').classList.add('hidden')" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Guardar</button>
                 </div>
             </form>
         </div>
@@ -1273,7 +1521,8 @@ if ($signatureLink) {
 
     <script>
         // Cerrar modales con Escape o clic fuera
-        ['warningModal', 'leaveModal', 'campaignModal', 'terminateModal'].forEach(function (id) {
+        const profileModals = ['warningModal', 'leaveModal', 'campaignModal', 'compensationModal', 'terminateModal'];
+        profileModals.forEach(function (id) {
             const el = document.getElementById(id);
             if (!el) return;
             el.addEventListener('click', function (e) {
@@ -1282,11 +1531,20 @@ if ($signatureLink) {
         });
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return;
-            ['warningModal', 'leaveModal', 'campaignModal', 'terminateModal'].forEach(function (id) {
+            profileModals.forEach(function (id) {
                 const el = document.getElementById(id);
                 if (el) el.classList.add('hidden');
             });
         });
+
+        // Solo se muestran los montos del tipo de compensación elegido; así no se
+        // manda un sueldo mensual cuando en realidad se paga por hora.
+        function toggleCompFields(prefix, type) {
+            ['hourly', 'fixed', 'daily'].forEach(function (kind) {
+                const el = document.getElementById(prefix + '_' + kind);
+                if (el) el.classList.toggle('hidden', kind !== type);
+            });
+        }
     </script>
 
     <?php include '../footer.php'; ?>

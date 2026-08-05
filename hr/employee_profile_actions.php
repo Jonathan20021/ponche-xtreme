@@ -5,8 +5,11 @@
  * Acciones que se disparan desde el perfil del colaborador:
  *   - add_warning        : registrar una amonestación
  *   - add_medical_leave  : registrar una licencia médica
- *   - assign_campaign    : asignar una campaña (puede tener varias a la vez)
+ *   - assign_campaign    : asignar una campaña (puede tener varias a la vez), con
+ *                          cambio de salario opcional y su fecha efectiva
  *   - end_campaign       : finalizar una asignación de campaña
+ *   - change_compensation: cambiar el salario indicando desde qué día aplica
+ *   - cancel_compensation_change : anular un cambio de salario aún pendiente
  *   - request_signature  : generar el enlace de firma electrónica de un documento
  *   - terminate          : registrar la salida con motivo y elegibilidad de recontratación
  *
@@ -17,6 +20,7 @@ session_start();
 require_once '../db.php';
 require_once '../lib/employee_record.php';
 require_once '../lib/notifications.php';
+require_once '../lib/compensation_history.php';
 
 ensurePermission('hr_employees', '../unauthorized.php');
 
@@ -80,6 +84,67 @@ function profileStoreUpload(string $field, string $subdir, int $employeeId): ?st
     }
 
     return 'uploads/' . $subdir . '/' . $name;
+}
+
+/**
+ * Arma la compensación NUEVA a partir del formulario, partiendo de la vigente:
+ * lo que el formulario no manda, se queda como está. Los campos que no aplican al
+ * tipo elegido se limpian para que la nómina no lea un monto viejo por error.
+ *
+ * @param array<string,mixed> $post
+ * @param array<string,mixed> $current
+ * @return array<string,mixed>
+ */
+function compensationFromPost(array $post, array $current): array
+{
+    $comp = $current;
+
+    if (isset($post['compensation_type'])) {
+        $comp['compensation_type'] = (string) $post['compensation_type'];
+    }
+    if (isset($post['preferred_currency'])) {
+        $comp['preferred_currency'] = (string) $post['preferred_currency'];
+    }
+    foreach (['hourly_rate', 'hourly_rate_dop', 'monthly_salary', 'monthly_salary_dop', 'daily_salary_usd', 'daily_salary_dop'] as $field) {
+        if (isset($post[$field]) && trim((string) $post[$field]) !== '') {
+            $comp[$field] = (float) $post[$field];
+        } elseif (isset($post[$field])) {
+            $comp[$field] = 0.0;
+        }
+    }
+
+    $comp = normalizeCompensation($comp);
+
+    // Limpiar lo que no corresponde al tipo elegido.
+    if ($comp['compensation_type'] === 'hourly') {
+        $comp['monthly_salary'] = 0.0;
+        $comp['monthly_salary_dop'] = 0.0;
+        $comp['daily_salary_usd'] = 0.0;
+        $comp['daily_salary_dop'] = 0.0;
+    } elseif ($comp['compensation_type'] === 'fixed') {
+        $comp['daily_salary_usd'] = 0.0;
+        $comp['daily_salary_dop'] = 0.0;
+    } elseif ($comp['compensation_type'] === 'daily') {
+        $comp['monthly_salary'] = 0.0;
+        $comp['monthly_salary_dop'] = 0.0;
+    }
+
+    return $comp;
+}
+
+/**
+ * Mensaje humano para confirmar un cambio de salario: si la fecha ya pasó, dice
+ * desde cuándo cuenta; si es futura, avisa que queda programado.
+ */
+function compensationChangeMessage(string $effectiveDate, array $newComp): string
+{
+    $label = formatCompensationLabel($newComp);
+    $human = date('d/m/Y', strtotime($effectiveDate));
+
+    if ($effectiveDate > date('Y-m-d')) {
+        return "Salario programado: {$label} a partir del {$human}. Hasta ese día se sigue pagando el salario actual.";
+    }
+    return "Salario actualizado a {$label}, vigente desde el {$human}. Los días anteriores de la quincena se pagan con el salario anterior.";
 }
 
 try {
@@ -209,7 +274,90 @@ try {
                 throw $e;
             }
 
-            profileBack($employeeId, 'Campaña asignada.');
+            // Cambio de salario que viene con la campaña. Se registra APARTE de la
+            // transacción de arriba: si el salario falla, la campaña ya quedó
+            // asignada y el mensaje lo dice, en vez de deshacer todo en silencio.
+            $message = 'Campaña asignada.';
+            if (!empty($_POST['change_salary']) && !empty($employee['user_id'])) {
+                $effectiveDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['salary_effective_date'] ?? '')
+                    ? $_POST['salary_effective_date']
+                    : $startDate;
+
+                $current = getCurrentCompensation($pdo, (int) $employee['user_id']);
+                $newComp = compensationFromPost($_POST, $current);
+
+                $campaignName = '';
+                try {
+                    $cst = $pdo->prepare("SELECT name FROM campaigns WHERE id = ?");
+                    $cst->execute([$campaignId]);
+                    $campaignName = (string) ($cst->fetchColumn() ?: '');
+                } catch (Throwable $e) { /* el nombre es solo para el motivo */ }
+
+                $changeId = recordCompensationChange(
+                    $pdo,
+                    (int) $employee['user_id'],
+                    $newComp,
+                    $effectiveDate,
+                    [
+                        'employee_id'          => $employeeId,
+                        'campaign_id'          => $campaignId,
+                        'previous_campaign_id' => $employee['campaign_id'] ? (int) $employee['campaign_id'] : null,
+                        'source'               => 'campaign_change',
+                        'reason'               => trim('Cambio de campaña' . ($campaignName !== '' ? ' a ' . $campaignName : '')),
+                        'created_by'           => $userId ?: null,
+                    ]
+                );
+
+                $message .= ' ' . ($changeId
+                    ? compensationChangeMessage($effectiveDate, $newComp)
+                    : 'El salario indicado es igual al vigente, no se registró cambio.');
+            }
+
+            profileBack($employeeId, $message);
+            break;
+
+        // ------------------------------------------------------------------
+        case 'change_compensation':
+            if (empty($employee['user_id'])) {
+                profileBack($employeeId, 'Este colaborador no tiene usuario asociado; no se le puede fijar salario.', false);
+            }
+
+            $effectiveDate = (string) ($_POST['effective_date'] ?? '');
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $effectiveDate)) {
+                profileBack($employeeId, 'Indica desde qué fecha aplica el nuevo salario.', false);
+            }
+
+            $current = getCurrentCompensation($pdo, (int) $employee['user_id']);
+            $newComp = compensationFromPost($_POST, $current);
+
+            $changeId = recordCompensationChange(
+                $pdo,
+                (int) $employee['user_id'],
+                $newComp,
+                $effectiveDate,
+                [
+                    'employee_id' => $employeeId,
+                    'campaign_id' => $employee['campaign_id'] ? (int) $employee['campaign_id'] : null,
+                    'source'      => 'profile',
+                    'reason'      => trim((string) ($_POST['reason'] ?? '')) ?: 'Cambio de salario',
+                    'created_by'  => $userId ?: null,
+                ]
+            );
+
+            if (!$changeId) {
+                profileBack($employeeId, 'No se registró nada: el salario indicado es igual al que ya tenía en esa fecha.', false);
+            }
+
+            profileBack($employeeId, compensationChangeMessage($effectiveDate, $newComp));
+            break;
+
+        // ------------------------------------------------------------------
+        case 'cancel_compensation_change':
+            $changeId = (int) ($_POST['change_id'] ?? 0);
+            if ($changeId <= 0 || !cancelCompensationChange($pdo, $changeId)) {
+                profileBack($employeeId, 'Solo se pueden anular cambios de salario que aún no han entrado en vigencia.', false);
+            }
+            profileBack($employeeId, 'Cambio de salario programado anulado.');
             break;
 
         // ------------------------------------------------------------------

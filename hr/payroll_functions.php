@@ -4,6 +4,8 @@
  * Incluye: AFP, SFS, ISR según normativas vigentes 2025
  */
 
+require_once __DIR__ . '/../lib/compensation_history.php';
+
 /**
  * Obtiene las tasas de descuentos desde la base de datos
  */
@@ -632,6 +634,30 @@ function ensureUserPayrollSourceColumn(PDO $pdo): void
 }
 
 /**
+ * Garantiza la columna payroll_records.salary_segments, donde queda guardado el
+ * desglose cuando un período se pagó con más de un salario (cambio de campaña a
+ * mitad de quincena). Se asegura en caliente para no depender de una migración.
+ */
+function ensurePayrollSalarySegmentsColumn(PDO $pdo): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM payroll_records")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('salary_segments', $columns, true)) {
+            $pdo->exec("ALTER TABLE payroll_records ADD COLUMN salary_segments TEXT NULL COMMENT 'JSON: desglose por tramo cuando hubo cambio de salario en el período'");
+        }
+        $ready = true;
+    } catch (PDOException $e) {
+        error_log('ensurePayrollSalarySegmentsColumn: ' . $e->getMessage());
+        $ready = false;
+    }
+    return $ready;
+}
+
+/**
  * Obtiene incentivos manuales por empleado dentro de un periodo.
  */
 function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
@@ -664,7 +690,179 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
 }
 
 /**
+ * Traduce una compensación (la foto de `users` o la de un tramo del historial) a
+ * los tres montos que usa el cálculo: tarifa/hora, sueldo mensual y sueldo diario,
+ * ya resueltos en la moneda preferida y con el respaldo de conversión.
+ *
+ * Se extrajo de calculateEmployeePayroll() para que el camino normal y el camino
+ * por tramos (cambio de salario a mitad de período) usen EXACTAMENTE la misma
+ * regla y no se puedan desincronizar.
+ *
+ * @param array<string,mixed> $comp claves de compensationColumns()
+ * @return array{type:string,hourly:float,monthly:float,daily:float,currency:string}
+ */
+function resolvePayrollCompensationAmounts(PDO $pdo, array $comp, string $role): array
+{
+    $comp = normalizeCompensation($comp);
+
+    $preferredCurrency = $comp['preferred_currency'];
+    $hourlyRateUsd     = (float) $comp['hourly_rate'];
+    $hourlyRateDop     = (float) $comp['hourly_rate_dop'];
+    $monthlySalaryUsd  = (float) $comp['monthly_salary'];
+    $monthlySalaryDop  = (float) $comp['monthly_salary_dop'];
+    $dailySalaryUsd    = (float) $comp['daily_salary_usd'];
+    $dailySalaryDop    = (float) $comp['daily_salary_dop'];
+
+    if ($preferredCurrency === 'DOP') {
+        $hourlyRate    = $hourlyRateDop;
+        $monthlySalary = $monthlySalaryDop;
+        $dailySalary   = $dailySalaryDop;
+    } else {
+        $hourlyRate    = $hourlyRateUsd;
+        $monthlySalary = $monthlySalaryUsd;
+        $dailySalary   = $dailySalaryUsd;
+    }
+
+    // Fallback de moneda si el valor preferido está en 0 pero existe en la otra moneda
+    if ($monthlySalary <= 0) {
+        if ($preferredCurrency === 'DOP' && $monthlySalaryUsd > 0) {
+            $monthlySalary = convertCurrency($pdo, $monthlySalaryUsd, 'USD', 'DOP');
+        } elseif ($preferredCurrency === 'USD' && $monthlySalaryDop > 0) {
+            $monthlySalary = convertCurrency($pdo, $monthlySalaryDop, 'DOP', 'USD');
+        }
+    }
+    if ($hourlyRate <= 0) {
+        if ($preferredCurrency === 'DOP' && $hourlyRateUsd > 0) {
+            $hourlyRate = convertCurrency($pdo, $hourlyRateUsd, 'USD', 'DOP');
+        } elseif ($preferredCurrency === 'USD' && $hourlyRateDop > 0) {
+            $hourlyRate = convertCurrency($pdo, $hourlyRateDop, 'DOP', 'USD');
+        }
+    }
+    if ($dailySalary <= 0) {
+        if ($preferredCurrency === 'DOP' && $dailySalaryUsd > 0) {
+            $dailySalary = convertCurrency($pdo, $dailySalaryUsd, 'USD', 'DOP');
+        } elseif ($preferredCurrency === 'USD' && $dailySalaryDop > 0) {
+            $dailySalary = convertCurrency($pdo, $dailySalaryDop, 'DOP', 'USD');
+        }
+    }
+
+    $compensationType = $comp['compensation_type'];
+    if ($compensationType === '' || $compensationType === 'hourly') {
+        if (strtoupper(trim($role)) !== 'AGENT' && $monthlySalary > 0) {
+            $compensationType = 'fixed';
+        }
+    }
+
+    // Si es sueldo fijo y la tarifa/hora no tiene sentido, se deriva del mensual
+    // (23.83 días/mes × 8 h/día) para poder pagar horas extra.
+    if ($compensationType === 'fixed' && ($hourlyRate <= 0 || $hourlyRate >= $monthlySalary)) {
+        $hourlyRate = round($monthlySalary / 23.83 / 8, 2);
+    }
+
+    return [
+        'type'     => $compensationType,
+        'hourly'   => (float) $hourlyRate,
+        'monthly'  => (float) $monthlySalary,
+        'daily'    => (float) $dailySalary,
+        'currency' => $preferredCurrency,
+    ];
+}
+
+/**
+ * Reparte las horas de un tramo cuando NO se conoce el detalle día por día.
+ * Se prorratea por días calendario del tramo — aproximación honesta, solo se usa
+ * si quien llama no pasó `hours_by_date`.
+ *
+ * @param array<int,array<string,mixed>> $segments
+ * @return array<int,array{regular:float,overtime:float}>
+ */
+function distributeHoursAcrossSegments(array $segments, float $regularHours, float $overtimeHours): array
+{
+    $totalDays = 0;
+    foreach ($segments as $seg) {
+        $totalDays += max(1, (int) $seg['days']);
+    }
+    if ($totalDays <= 0) {
+        return [];
+    }
+
+    $out = [];
+    foreach ($segments as $i => $seg) {
+        $share = max(1, (int) $seg['days']) / $totalDays;
+        $out[$i] = [
+            'regular'  => $regularHours * $share,
+            'overtime' => $overtimeHours * $share,
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Reparte un total de horas corregidas a mano sobre el calendario del período.
+ *
+ * Se respeta la FORMA del ponche (cada día conserva su peso relativo). Si no hubo
+ * marcaciones, se reparte parejo entre los días del período: sin esto, unas horas
+ * corregidas a mano no sabrían de qué lado de un cambio de salario caen.
+ *
+ * @param array<string,array{regular:float,overtime:float}> $hoursByDate
+ * @return array<string,array{regular:float,overtime:float}>
+ */
+function redistributeHoursByDate(array $hoursByDate, float $regularTotal, float $overtimeTotal, string $startDate, string $endDate): array
+{
+    $sumRegular = 0.0;
+    $sumOvertime = 0.0;
+    foreach ($hoursByDate as $h) {
+        $sumRegular  += (float) ($h['regular'] ?? 0);
+        $sumOvertime += (float) ($h['overtime'] ?? 0);
+    }
+
+    if (!empty($hoursByDate) && ($sumRegular > 0 || $sumOvertime > 0)) {
+        $out = [];
+        $dayCount = count($hoursByDate);
+        foreach ($hoursByDate as $date => $h) {
+            $rShare = $sumRegular  > 0 ? ((float) $h['regular']  / $sumRegular)  : (1 / $dayCount);
+            $oShare = $sumOvertime > 0 ? ((float) $h['overtime'] / $sumOvertime) : (1 / $dayCount);
+            $out[$date] = [
+                'regular'  => $regularTotal  * $rShare,
+                'overtime' => $overtimeTotal * $oShare,
+            ];
+        }
+        return $out;
+    }
+
+    // Sin ponche: parejo entre los días calendario del período.
+    $days = [];
+    try {
+        $cursor = new DateTime($startDate);
+        $limit  = new DateTime($endDate);
+        while ($cursor <= $limit) {
+            $days[] = $cursor->format('Y-m-d');
+            $cursor->modify('+1 day');
+        }
+    } catch (Throwable $e) {
+        return $hoursByDate;
+    }
+    if (empty($days)) {
+        return $hoursByDate;
+    }
+
+    $out = [];
+    foreach ($days as $d) {
+        $out[$d] = [
+            'regular'  => $regularTotal / count($days),
+            'overtime' => $overtimeTotal / count($days),
+        ];
+    }
+    return $out;
+}
+
+/**
  * Calcula nómina completa para un empleado
+ *
+ * $hoursData['hours_by_date'] (opcional) permite pagar cada día con el salario
+ * que de verdad le tocaba: si hubo un cambio de compensación con fecha efectiva
+ * dentro del período (típicamente por cambio de campaña), el período se parte en
+ * tramos y se paga cada tramo con su propia tarifa.
  */
 function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
 {
@@ -693,48 +891,45 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     }
     $period = $periodCache[$periodId];
 
-    // Calcular salario base usando la moneda preferida del empleado
-    $preferredCurrency = $employee['preferred_currency'] ?? 'USD';
-    $preferredCurrency = strtoupper(trim($preferredCurrency));
-    $hourlyRateUsd = (float) $employee['hourly_rate'];
-    $hourlyRateDop = (float) $employee['hourly_rate_dop'];
-    $monthlySalaryUsd = (float) $employee['monthly_salary'];
-    $monthlySalaryDop = (float) $employee['monthly_salary_dop'];
-    $dailySalaryUsd = (float) $employee['daily_salary_usd'];
-    $dailySalaryDop = (float) $employee['daily_salary_dop'];
+    $role = strtoupper(trim($employee['role'] ?? ''));
 
-    if ($preferredCurrency === 'DOP') {
-        $hourlyRate = $hourlyRateDop;
-        $monthlySalary = $monthlySalaryDop;
-        $dailySalary = $dailySalaryDop;
-    } else {
-        $hourlyRate = $hourlyRateUsd;
-        $monthlySalary = $monthlySalaryUsd;
-        $dailySalary = $dailySalaryUsd;
+    // === Compensación del período (con fecha efectiva) ===
+    // Un colaborador que cambia de campaña a mitad de quincena y con eso de
+    // salario NO puede cobrar toda la quincena a la tarifa nueva: los días
+    // anteriores a la fecha efectiva se pagan con la tarifa vieja. Los tramos
+    // salen del historial (lib/compensation_history.php); si no hay cambios
+    // registrados dentro del período, sale un solo tramo = la compensación de
+    // `users` y el cálculo es idéntico al de siempre.
+    $compensationSegments = [];
+    if ($period && !empty($period['start_date']) && !empty($period['end_date'])) {
+        $compensationSegments = getCompensationSegments(
+            $pdo,
+            (int) $employee['user_id'],
+            $period['start_date'],
+            $period['end_date']
+        );
+    }
+    if (empty($compensationSegments)) {
+        $compensationSegments = [[
+            'start'       => $period['start_date'] ?? null,
+            'end'         => $period['end_date'] ?? null,
+            'days'        => 0,
+            'comp'        => normalizeCompensation($employee),
+            'change_id'   => null,
+            'reason'      => null,
+            'campaign_id' => null,
+        ]];
     }
 
-    // Fallback de moneda si el valor preferido está en 0 pero existe en la otra moneda
-    if ($monthlySalary <= 0) {
-        if ($preferredCurrency === 'DOP' && $monthlySalaryUsd > 0) {
-            $monthlySalary = convertCurrency($pdo, $monthlySalaryUsd, 'USD', 'DOP');
-        } elseif ($preferredCurrency === 'USD' && $monthlySalaryDop > 0) {
-            $monthlySalary = convertCurrency($pdo, $monthlySalaryDop, 'DOP', 'USD');
-        }
-    }
-    if ($hourlyRate <= 0) {
-        if ($preferredCurrency === 'DOP' && $hourlyRateUsd > 0) {
-            $hourlyRate = convertCurrency($pdo, $hourlyRateUsd, 'USD', 'DOP');
-        } elseif ($preferredCurrency === 'USD' && $hourlyRateDop > 0) {
-            $hourlyRate = convertCurrency($pdo, $hourlyRateDop, 'DOP', 'USD');
-        }
-    }
-    if ($dailySalary <= 0) {
-        if ($preferredCurrency === 'DOP' && $dailySalaryUsd > 0) {
-            $dailySalary = convertCurrency($pdo, $dailySalaryUsd, 'USD', 'DOP');
-        } elseif ($preferredCurrency === 'USD' && $dailySalaryDop > 0) {
-            $dailySalary = convertCurrency($pdo, $dailySalaryDop, 'DOP', 'USD');
-        }
-    }
+    // El tramo vigente al final del período es el que representa "la" compensación
+    // del empleado en los campos de salida (tarifa mostrada, tipo de compensación).
+    $lastSegment = $compensationSegments[count($compensationSegments) - 1];
+    $resolved = resolvePayrollCompensationAmounts($pdo, $lastSegment['comp'], $role);
+    $preferredCurrency = $resolved['currency'];
+    $hourlyRate    = $resolved['hourly'];
+    $monthlySalary = $resolved['monthly'];
+    $dailySalary   = $resolved['daily'];
+
     // Multiplicador de horas extra: prioridad al valor por empleado
     // (users.overtime_multiplier) si está definido; si no, se usa el multiplicador
     // GLOBAL configurado en settings.php (schedule_config.overtime_multiplier), el
@@ -751,60 +946,137 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     $overtimeMultiplier = ($empOvertimeMultiplier !== null && (float) $empOvertimeMultiplier > 0)
         ? (float) $empOvertimeMultiplier
         : $defaultOvertimeMultiplier;
-    $compensationType = strtolower(trim($employee['compensation_type'] ?? 'hourly'));
-    $role = strtoupper(trim($employee['role'] ?? ''));
-    if ($compensationType === '' || $compensationType === 'hourly') {
-        if ($role !== 'AGENT' && $monthlySalary > 0) {
-            $compensationType = 'fixed';
-        }
-    }
 
-    // Safeguard: Ensure hourly rate is reasonable if compensation is fixed
-    // If hourly rate is 0 or >= monthly salary, calculate it based on standard factor (23.83 days/month, 8 hours/day)
-    if ($compensationType === 'fixed' && ($hourlyRate <= 0 || $hourlyRate >= $monthlySalary)) {
-        $hourlyRate = round($monthlySalary / 23.83 / 8, 2);
-    }
+    $compensationType = $resolved['type'];
 
     // Calcular ingresos
     $regularHours = (float) ($hoursData['regular_hours'] ?? 0);
     $overtimeHours = (float) ($hoursData['overtime_hours'] ?? 0);
     $daysWorked = (int) ($hoursData['days_worked'] ?? 0);
 
-    $regularPay = 0.0;
-    $baseSalary = 0.0;
-
-    if ($compensationType === 'fixed') {
-        $prorationFactor = 1.0;
-        if ($period) {
-            if ($period['period_type'] === 'BIWEEKLY') {
-                $prorationFactor = 0.5;
-            } elseif ($period['period_type'] === 'WEEKLY') {
-                $prorationFactor = 0.25;
-            } elseif (
-                $period['period_type'] !== 'MONTHLY'
-                && !empty($period['start_date'])
-                && !empty($period['end_date'])
-            ) {
-                $startDate = new DateTime($period['start_date']);
-                $endDate = new DateTime($period['end_date']);
-                $periodDays = $startDate->diff($endDate)->days + 1;
-                $daysInMonth = (int) $startDate->format('t');
-                if ($periodDays > 0 && $daysInMonth > 0) {
-                    $prorationFactor = $periodDays / $daysInMonth;
-                }
+    // Factor de prorrateo del sueldo FIJO al período (idéntico al de siempre).
+    $prorationFactor = 1.0;
+    $periodDays = 0;
+    if ($period) {
+        if (!empty($period['start_date']) && !empty($period['end_date'])) {
+            $periodDays = (new DateTime($period['start_date']))->diff(new DateTime($period['end_date']))->days + 1;
+        }
+        if ($period['period_type'] === 'BIWEEKLY') {
+            $prorationFactor = 0.5;
+        } elseif ($period['period_type'] === 'WEEKLY') {
+            $prorationFactor = 0.25;
+        } elseif ($period['period_type'] !== 'MONTHLY' && $periodDays > 0) {
+            $daysInMonth = (int) (new DateTime($period['start_date']))->format('t');
+            if ($daysInMonth > 0) {
+                $prorationFactor = $periodDays / $daysInMonth;
             }
         }
+    }
+
+    $regularPay = 0.0;
+    $baseSalary = 0.0;
+    $overtimePay = 0.0;
+    $salarySegments = [];
+
+    if (count($compensationSegments) > 1) {
+        // === Período con cambio de salario a mitad de camino ===
+        // Cada tramo se paga con SU compensación. Las horas del tramo salen del
+        // detalle día por día (hours_by_date); si quien llama no lo pasó, se
+        // prorratean por días calendario del tramo.
+        $hoursByDate = is_array($hoursData['hours_by_date'] ?? null) ? $hoursData['hours_by_date'] : [];
+
+        $segHours = [];
+        if (!empty($hoursByDate)) {
+            foreach ($compensationSegments as $i => $seg) {
+                $r = 0.0;
+                $o = 0.0;
+                foreach ($hoursByDate as $date => $h) {
+                    if ($date >= $seg['start'] && $date <= $seg['end']) {
+                        $r += (float) ($h['regular'] ?? 0);
+                        $o += (float) ($h['overtime'] ?? 0);
+                    }
+                }
+                $segHours[$i] = ['regular' => $r, 'overtime' => $o];
+            }
+        } else {
+            $segHours = distributeHoursAcrossSegments($compensationSegments, $regularHours, $overtimeHours);
+        }
+
+        // Días trabajados por tramo (solo lo usa la compensación DIARIA). Se
+        // reparte el total ya calculado para que la suma cuadre exactamente.
+        $totalSegHours = 0.0;
+        foreach ($segHours as $h) {
+            $totalSegHours += $h['regular'] + $h['overtime'];
+        }
+        $segDays = [];
+        $assignedDays = 0;
+        foreach ($compensationSegments as $i => $seg) {
+            if ($i === count($compensationSegments) - 1) {
+                $segDays[$i] = max(0, $daysWorked - $assignedDays);
+            } else {
+                $share = $totalSegHours > 0
+                    ? (($segHours[$i]['regular'] + $segHours[$i]['overtime']) / $totalSegHours)
+                    : (max(1, (int) $seg['days']) / max(1, $periodDays));
+                $segDays[$i] = (int) round($daysWorked * $share);
+                $assignedDays += $segDays[$i];
+            }
+        }
+
+        foreach ($compensationSegments as $i => $seg) {
+            $segResolved = resolvePayrollCompensationAmounts($pdo, $seg['comp'], $role);
+            $sr = (float) ($segHours[$i]['regular'] ?? 0);
+            $so = (float) ($segHours[$i]['overtime'] ?? 0);
+
+            if ($segResolved['type'] === 'fixed') {
+                // El sueldo fijo se reparte por días CALENDARIO del tramo dentro
+                // del período: 5 días con el sueldo viejo + 10 con el nuevo.
+                $segShare = $periodDays > 0 ? ((int) $seg['days'] / $periodDays) : 1.0;
+                $segRegularPay = round($segResolved['monthly'] * $prorationFactor * $segShare, 2);
+            } elseif ($segResolved['type'] === 'daily') {
+                $segRegularPay = round($segResolved['daily'] * (int) ($segDays[$i] ?? 0), 2);
+            } else {
+                $segRegularPay = $sr * $segResolved['hourly'];
+            }
+
+            $segOvertimePay = $so * $segResolved['hourly'] * $overtimeMultiplier;
+
+            $regularPay  += $segRegularPay;
+            $overtimePay += $segOvertimePay;
+
+            $salarySegments[] = [
+                'start'          => $seg['start'],
+                'end'            => $seg['end'],
+                'days'           => (int) $seg['days'],
+                'type'           => $segResolved['type'],
+                'currency'       => $segResolved['currency'],
+                'hourly_rate'    => round($segResolved['hourly'], 4),
+                'monthly_salary' => round($segResolved['monthly'], 2),
+                'daily_salary'   => round($segResolved['daily'], 2),
+                'regular_hours'  => round($sr, 2),
+                'overtime_hours' => round($so, 2),
+                'days_worked'    => (int) ($segDays[$i] ?? 0),
+                'regular_pay'    => round($segRegularPay, 2),
+                'overtime_pay'   => round($segOvertimePay, 2),
+                'reason'         => $seg['reason'],
+                'label'          => formatCompensationLabel($seg['comp']),
+            ];
+        }
+
+        $regularPay = round($regularPay, 2);
+        $baseSalary = $regularPay;
+    } elseif ($compensationType === 'fixed') {
         $baseSalary = round($monthlySalary * $prorationFactor, 2);
         $regularPay = $baseSalary;
+        $overtimePay = $overtimeHours * $hourlyRate * $overtimeMultiplier;
     } elseif ($compensationType === 'daily') {
         $baseSalary = round($dailySalary * $daysWorked, 2);
         $regularPay = $baseSalary;
+        $overtimePay = $overtimeHours * $hourlyRate * $overtimeMultiplier;
     } else {
         $regularPay = $regularHours * $hourlyRate;
         $baseSalary = $regularPay;
+        $overtimePay = $overtimeHours * $hourlyRate * $overtimeMultiplier;
     }
-
-    $overtimePay = $overtimeHours * $hourlyRate * $overtimeMultiplier;
     $bonuses = $hoursData['bonuses'] ?? 0;
     $commissions = $hoursData['commissions'] ?? 0;
     $otherIncome = $hoursData['other_income'] ?? 0;
@@ -900,7 +1172,12 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
         'infotep_employer' => $employerContributions['infotep_employer'],
         'total_employer_contributions' => $employerContributions['total_employer'],
         'net_salary' => $netSalary,
-        'total_hours' => $regularHours + $overtimeHours
+        'total_hours' => $regularHours + $overtimeHours,
+        // Vacío cuando el período se pagó con una sola compensación. Con contenido,
+        // el período tuvo un cambio de salario y aquí está el desglose tramo a tramo.
+        'salary_segments' => $salarySegments,
+        'compensation_type' => $compensationType,
+        'hourly_rate_used' => round($hourlyRate, 4),
     ];
 }
 

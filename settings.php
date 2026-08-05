@@ -357,6 +357,22 @@ try {
                 // sueldos y tarifas sin dejar rastro (salary_history estaba vacía),
                 // así que no se podía saber qué cobraba alguien antes ni desde cuándo.
                 require_once __DIR__ . '/lib/salary_history.php';
+
+                // Compensación con fecha efectiva: si el cambio de sueldo aplica
+                // desde una fecha concreta (típico al mover a alguien de campaña),
+                // la nómina paga los días previos con el salario anterior. Sin
+                // fecha, se asume hoy y todo funciona como siempre.
+                // El ensure va ANTES de beginTransaction: un CREATE TABLE dentro de
+                // una transacción provoca commit implícito en MySQL.
+                require_once __DIR__ . '/lib/compensation_history.php';
+                ensureCompensationChangesTable($pdo);
+                $salaryEffectiveDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['salary_effective_date'] ?? '')
+                    ? $_POST['salary_effective_date']
+                    : date('Y-m-d');
+                $salaryIsScheduled = $salaryEffectiveDate > date('Y-m-d');
+                $scheduledSalaryCount = 0;
+                $failedSchedules = [];
+
                 $salaryBefore = [];
                 try {
                     $ids = array_values(array_filter(array_map('intval', array_keys($hourlyRatesUsd)), static fn($i) => $i > 0));
@@ -417,15 +433,59 @@ try {
                         $overtimeMultiplierValue = max(1.0, (float) $overtimeMultipliers[$userId]);
                     }
 
+                    // Compensación objetivo vs. la vigente. Si el cambio está
+                    // programado para una fecha futura, `users` conserva la actual
+                    // y el salario nuevo queda pendiente hasta ese día.
+                    $currentComp = getCurrentCompensation($pdo, $userId);
+                    $targetComp = normalizeCompensation(array_merge($currentComp, [
+                        'hourly_rate'        => (float) $rateUsd,
+                        'hourly_rate_dop'    => (float) $rateDop,
+                        'monthly_salary'     => (float) $monthlyUsd,
+                        'monthly_salary_dop' => (float) $monthlyDop,
+                        'preferred_currency' => $preferredCurrency,
+                    ]));
+                    $compChanged = !compensationEquals($currentComp, $targetComp);
+                    $writeComp = ($compChanged && $salaryIsScheduled) ? $currentComp : $targetComp;
+
+                    $compParams = [
+                        $writeComp['hourly_rate'],
+                        $writeComp['monthly_salary'],
+                        $writeComp['hourly_rate_dop'],
+                        $writeComp['monthly_salary_dop'],
+                        $writeComp['preferred_currency'],
+                    ];
+
                     if ($newRole !== '') {
                         ensureRoleExists($pdo, $newRole, $newRole);
-                        $updateWithRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $newRole, $userId]);
+                        $updateWithRoleStmt->execute(array_merge($compParams, [$departmentId, $exitTimeValue, $overtimeMultiplierValue, $newRole, $userId]));
                         // If the current logged-in user's role changed, update the session immediately
                         if ((int) $userId === (int) ($_SESSION['user_id'] ?? 0)) {
                             $_SESSION['role'] = $newRole;
                         }
                     } else {
-                        $updateWithoutRoleStmt->execute([$rateUsd, $monthlyUsd, $rateDop, $monthlyDop, $preferredCurrency, $departmentId, $exitTimeValue, $overtimeMultiplierValue, $userId]);
+                        $updateWithoutRoleStmt->execute(array_merge($compParams, [$departmentId, $exitTimeValue, $overtimeMultiplierValue, $userId]));
+                    }
+
+                    if ($compChanged) {
+                        $changeId = recordCompensationChange(
+                            $pdo,
+                            $userId,
+                            $targetComp,
+                            $salaryEffectiveDate,
+                            [
+                                'source'     => 'settings_bulk',
+                                'reason'     => 'Actualizado desde Ajustes (edición de usuarios)',
+                                'created_by' => $_SESSION['user_id'] ?? null,
+                            ]
+                        );
+                        if ($changeId && $salaryIsScheduled) {
+                            $scheduledSalaryCount++;
+                        } elseif (!$changeId && $salaryIsScheduled) {
+                            // No se pudo programar: la edición NUNCA se pierde,
+                            // se aplica de inmediato en vez de quedar en la nada.
+                            writeCurrentCompensation($pdo, $userId, $targetComp);
+                            $failedSchedules[] = $userId;
+                        }
                     }
 
                     // Sync department_id to employees table if employee record exists
@@ -456,6 +516,19 @@ try {
 
                 $pdo->commit();
                 $successMessages[] = 'Usuarios actualizados correctamente.';
+                if ($salaryIsScheduled && $scheduledSalaryCount > 0) {
+                    $successMessages[] = $scheduledSalaryCount . ' cambio(s) de salario quedaron PROGRAMADOS para el '
+                        . date('d/m/Y', strtotime($salaryEffectiveDate))
+                        . '. Hasta ese día se sigue pagando el salario actual.';
+                } elseif ($salaryEffectiveDate < date('Y-m-d')) {
+                    $successMessages[] = 'Los cambios de salario se registraron con vigencia desde el '
+                        . date('d/m/Y', strtotime($salaryEffectiveDate))
+                        . '. Regenera las quincenas afectadas para que el pago se ajuste.';
+                }
+                if (!empty($failedSchedules)) {
+                    $errorMessages[] = count($failedSchedules) . ' cambio(s) de salario NO se pudieron programar '
+                        . 'y se aplicaron de inmediato. Revisa el error_log.';
+                }
                 break;
 
             case 'update_schedule':
@@ -6917,6 +6990,24 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
             </div>
             <form method="POST" class="space-y-4">
                 <input type="hidden" name="action" value="update_users">
+
+                <!-- Fecha efectiva de los cambios de salario de este guardado.
+                     Sin esto, subir una tarifa a mitad de quincena repagaba toda la
+                     quincena con la tarifa nueva. -->
+                <div class="rounded-lg p-3 flex flex-col sm:flex-row sm:items-center gap-3"
+                     style="background: rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25);">
+                    <label class="text-sm font-semibold" for="salary_effective_date">
+                        <i class="fas fa-calendar-day mr-1"></i> Los cambios de salario aplican desde
+                    </label>
+                    <input type="date" id="salary_effective_date" name="salary_effective_date"
+                           value="<?= date('Y-m-d') ?>" class="input-field" style="max-width: 200px;">
+                    <p class="text-muted text-xs">
+                        Los días trabajados antes de esta fecha se pagan con el salario anterior.
+                        Si eliges una fecha futura, el cambio queda <strong>programado</strong> y el salario actual
+                        se mantiene hasta ese día.
+                    </p>
+                </div>
+
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <p class="text-muted text-xs">
                         Mostrando <?= (int) $usersRangeStart ?>-<?= (int) $usersRangeEnd ?> de <?= (int) $usersTotal ?>

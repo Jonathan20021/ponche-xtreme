@@ -13,6 +13,12 @@ ensurePayrollManualIncentivesTable($pdo);
 ensurePayrollPeriodsVisibilityColumn($pdo);
 ensurePayrollHolidaysTable($pdo);
 ensureUserPayrollSourceColumn($pdo);
+ensurePayrollSalarySegmentsColumn($pdo);
+
+// Cambios de salario programados cuya fecha ya llegó: se vuelcan a `users` antes
+// de tocar nada, para que la compensación vigente esté al día aunque el cron no
+// haya corrido.
+applyDueCompensationChanges($pdo);
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
@@ -194,6 +200,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $totalRegularHours = 0;
             $totalOvertimeHours = 0;
             $daysWorked = 0;
+            // Horas día por día: es lo que permite pagar cada día con el salario
+            // que le tocaba cuando hubo un cambio a mitad de período.
+            $hoursByDate = [];
 
             // Determine if this employee qualifies for holiday double pay
             // (fixed-salary employees are excluded — their salary already covers everything).
@@ -273,6 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
 
                 $totalRegularHours += $dayRegular;
                 $totalOvertimeHours += $dayOvertime;
+                $hoursByDate[$date] = ['regular' => $dayRegular, 'overtime' => $dayOvertime];
             }
 
             $manualRegularHours = max(0, round((float) ($manualInput['manual_regular_hours'] ?? 0), 2));
@@ -284,6 +294,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $hasManualOverride = !empty($manualInput['use_manual_hours'])
                 && ($manualRegularHours > 0 || $manualOvertimeHours > 0);
             if ($hasManualOverride) {
+                // Las horas corregidas a mano reemplazan el total, pero hay que
+                // repartirlas en el calendario para que un cambio de salario a
+                // mitad de período siga pagando cada día con su tarifa. Se
+                // conserva la FORMA del ponche (proporcional a lo marcado); si no
+                // hay marcaciones, se reparte parejo entre los días del período.
+                $hoursByDate = redistributeHoursByDate(
+                    $hoursByDate,
+                    $manualRegularHours,
+                    $manualOvertimeHours,
+                    $period['start_date'],
+                    $period['end_date']
+                );
                 $totalRegularHours = $manualRegularHours;
                 $totalOvertimeHours = $manualOvertimeHours;
             }
@@ -304,6 +326,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             if ($compTypeForOt === 'fixed' && !$hasManualOverride && $totalOvertimeHours > 0) {
                 $totalRegularHours += $totalOvertimeHours;
                 $totalOvertimeHours = 0;
+                foreach ($hoursByDate as $d => $h) {
+                    $hoursByDate[$d] = ['regular' => $h['regular'] + $h['overtime'], 'overtime' => 0.0];
+                }
             }
 
             $daysWorked = (int) ceil(max($totalRegularHours + $totalOvertimeHours, 0) / max($scheduledHours, 0.01));
@@ -313,6 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 'regular_hours' => $totalRegularHours,
                 'overtime_hours' => $totalOvertimeHours,
                 'days_worked' => $daysWorked,
+                'hours_by_date' => $hoursByDate,
                 'bonuses' => (float)($manualIncentivesMap[$employeeId]['night_incentive'] ?? 0),
                 'commissions' => (float)($manualIncentivesMap[$employeeId]['sales_incentive'] ?? 0),
                 'other_income' => 0,
@@ -324,6 +350,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             $payrollData = calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData);
             
             if ($payrollData) {
+                // Desglose por tramo cuando el período se pagó con más de un
+                // salario. NULL cuando fue uno solo (el caso normal).
+                $salarySegmentsJson = !empty($payrollData['salary_segments'])
+                    ? json_encode($payrollData['salary_segments'], JSON_UNESCAPED_UNICODE)
+                    : null;
+
                 // Check if record exists
                 $checkStmt = $pdo->prepare("SELECT id FROM payroll_records WHERE payroll_period_id = ? AND employee_id = ?");
                 $checkStmt->execute([$periodId, $employeeId]);
@@ -337,7 +369,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                             bonuses = ?, commissions = ?, other_income = ?, gross_salary = ?,
                             afp_employee = ?, sfs_employee = ?, isr = ?, other_deductions = ?, total_deductions = ?,
                             afp_employer = ?, sfs_employer = ?, srl_employer = ?, infotep_employer = ?, total_employer_contributions = ?,
-                            net_salary = ?, total_hours = ?, updated_at = NOW()
+                            net_salary = ?, total_hours = ?, salary_segments = ?, updated_at = NOW()
                         WHERE id = ?
                     ");
                     $updateStmt->execute([
@@ -345,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                         $payrollData['bonuses'], $payrollData['commissions'], $payrollData['other_income'], $payrollData['gross_salary'],
                         $payrollData['afp_employee'], $payrollData['sfs_employee'], $payrollData['isr'], $payrollData['other_deductions'], $payrollData['total_deductions'],
                         $payrollData['afp_employer'], $payrollData['sfs_employer'], $payrollData['srl_employer'], $payrollData['infotep_employer'], $payrollData['total_employer_contributions'],
-                        $payrollData['net_salary'], $payrollData['total_hours'],
+                        $payrollData['net_salary'], $payrollData['total_hours'], $salarySegmentsJson,
                         $existing['id']
                     ]);
                 } else {
@@ -357,8 +389,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                             bonuses, commissions, other_income, gross_salary,
                             afp_employee, sfs_employee, isr, other_deductions, total_deductions,
                             afp_employer, sfs_employer, srl_employer, infotep_employer, total_employer_contributions,
-                            net_salary, total_hours
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            net_salary, total_hours, salary_segments
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ");
                     $insertStmt->execute([
                         $periodId, $employeeId,
@@ -366,7 +398,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                         $payrollData['bonuses'], $payrollData['commissions'], $payrollData['other_income'], $payrollData['gross_salary'],
                         $payrollData['afp_employee'], $payrollData['sfs_employee'], $payrollData['isr'], $payrollData['other_deductions'], $payrollData['total_deductions'],
                         $payrollData['afp_employer'], $payrollData['sfs_employer'], $payrollData['srl_employer'], $payrollData['infotep_employer'], $payrollData['total_employer_contributions'],
-                        $payrollData['net_salary'], $payrollData['total_hours']
+                        $payrollData['net_salary'], $payrollData['total_hours'], $salarySegmentsJson
                     ]);
                 }
             }
@@ -1178,10 +1210,33 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                 $totals['deductions'] += $record['total_deductions'];
                                 $totals['net'] += $record['net_salary'];
                             ?>
+                                <?php
+                                // Desglose por tramo: el período se pagó con más de un salario
+                                // (cambio de campaña / de sueldo a mitad de quincena).
+                                $segs = [];
+                                if (!empty($record['salary_segments'])) {
+                                    $decoded = json_decode((string) $record['salary_segments'], true);
+                                    if (is_array($decoded)) {
+                                        $segs = $decoded;
+                                    }
+                                }
+                                $segTooltip = '';
+                                foreach ($segs as $s) {
+                                    $segTooltip .= date('d/m', strtotime($s['start'])) . '–' . date('d/m', strtotime($s['end']))
+                                        . ': ' . ($s['label'] ?? '')
+                                        . ' → ' . formatDOP((float) $s['regular_pay'] + (float) $s['overtime_pay']) . "\n";
+                                }
+                                ?>
                                 <tr class="border-b border-slate-800 hover:bg-slate-800/50">
                                     <td class="py-2 px-2">
                                         <div class="font-medium"><?= htmlspecialchars($record['first_name'] . ' ' . $record['last_name']) ?></div>
                                         <div class="text-xs text-slate-400"><?= htmlspecialchars($record['employee_code']) ?></div>
+                                        <?php if (!empty($segs)): ?>
+                                            <span class="mt-1 inline-block px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs font-semibold cursor-help"
+                                                  title="<?= htmlspecialchars(rtrim($segTooltip)) ?>">
+                                                <i class="fas fa-scale-balanced mr-1"></i><?= count($segs) ?> salarios
+                                            </span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="py-2 px-2 text-center"><?= number_format($record['total_hours'], 2) ?></td>
                                     <td class="py-2 px-2 text-center"><?= number_format($record['overtime_hours'], 2) ?></td>

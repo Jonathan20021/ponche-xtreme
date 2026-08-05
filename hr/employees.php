@@ -2,9 +2,15 @@
 session_start();
 require_once '../db.php';
 require_once '../lib/logging_functions.php';
+require_once '../lib/compensation_history.php';
 
 // Check permissions
 ensurePermission('hr_employees', '../unauthorized.php');
+
+// La tabla del historial se crea aquí, FUERA de cualquier transacción: un CREATE
+// TABLE dentro de una transacción provoca commit implícito en MySQL.
+ensureCompensationChangesTable($pdo);
+applyDueCompensationChanges($pdo);
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
@@ -274,32 +280,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
             throw $e;
         }
 
-        // Sync to users table with all compensation fields
+        // Sync to users table.
+        //
+        // La COMPENSACIÓN ya no se escribe a ciegas: pasa por el historial con
+        // fecha efectiva (lib/compensation_history.php). Así, si a alguien le
+        // cambian el salario a mitad de quincena, la nómina paga los días
+        // anteriores con el salario viejo. Si la fecha elegida es futura, `users`
+        // no se toca hasta que llegue el día.
         $fullName = $data['first_name'] . ' ' . $data['last_name'];
-        $compensationType = !empty($_POST['compensation_type']) ? trim($_POST['compensation_type']) : 'hourly';
-        $hourlyRate = !empty($_POST['hourly_rate']) ? (float) $_POST['hourly_rate'] : 0.00;
-        $hourlyRateDop = !empty($_POST['hourly_rate_dop']) ? (float) $_POST['hourly_rate_dop'] : 0.00;
-        $monthlySalaryUsd = !empty($_POST['monthly_salary_usd']) ? (float) $_POST['monthly_salary_usd'] : 0.00;
-        $monthlySalaryDop = !empty($_POST['monthly_salary_dop']) ? (float) $_POST['monthly_salary_dop'] : 0.00;
-        $dailySalaryUsd = !empty($_POST['daily_salary_usd']) ? (float) $_POST['daily_salary_usd'] : 0.00;
-        $dailySalaryDop = !empty($_POST['daily_salary_dop']) ? (float) $_POST['daily_salary_dop'] : 0.00;
-        $preferredCurrency = !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD';
+        $newCompensation = normalizeCompensation([
+            'compensation_type'  => !empty($_POST['compensation_type']) ? trim($_POST['compensation_type']) : 'hourly',
+            'hourly_rate'        => !empty($_POST['hourly_rate']) ? (float) $_POST['hourly_rate'] : 0.00,
+            'hourly_rate_dop'    => !empty($_POST['hourly_rate_dop']) ? (float) $_POST['hourly_rate_dop'] : 0.00,
+            'monthly_salary'     => !empty($_POST['monthly_salary_usd']) ? (float) $_POST['monthly_salary_usd'] : 0.00,
+            'monthly_salary_dop' => !empty($_POST['monthly_salary_dop']) ? (float) $_POST['monthly_salary_dop'] : 0.00,
+            'daily_salary_usd'   => !empty($_POST['daily_salary_usd']) ? (float) $_POST['daily_salary_usd'] : 0.00,
+            'daily_salary_dop'   => !empty($_POST['daily_salary_dop']) ? (float) $_POST['daily_salary_dop'] : 0.00,
+            'preferred_currency' => !empty($_POST['preferred_currency']) ? strtoupper(trim($_POST['preferred_currency'])) : 'USD',
+        ]);
+
+        $salaryEffectiveDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['salary_effective_date'] ?? '')
+            ? $_POST['salary_effective_date']
+            : date('Y-m-d');
 
         $userStmt = $pdo->prepare("
-            UPDATE users SET 
-                full_name = ?, 
-                compensation_type = ?,
-                hourly_rate = ?, 
-                hourly_rate_dop = ?,
-                monthly_salary = ?,
-                monthly_salary_dop = ?,
-                daily_salary_usd = ?,
-                daily_salary_dop = ?,
-                preferred_currency = ?,
-                department_id = ?
+            UPDATE users SET full_name = ?, department_id = ?
             WHERE id = (SELECT user_id FROM employees WHERE id = ?)
         ");
-        $userStmt->execute([$fullName, $compensationType, $hourlyRate, $hourlyRateDop, $monthlySalaryUsd, $monthlySalaryDop, $dailySalaryUsd, $dailySalaryDop, $preferredCurrency, $data['department_id'], $employeeId]);
+        $userStmt->execute([$fullName, $data['department_id'], $employeeId]);
+
+        $compUserId = (int) ($oldData['user_id'] ?? 0);
+        $salaryChangeMsg = '';
+        if ($compUserId > 0) {
+            $currentCompensation = getCurrentCompensation($pdo, $compUserId);
+            if (!compensationEquals($currentCompensation, $newCompensation)) {
+                $changeId = recordCompensationChange(
+                    $pdo,
+                    $compUserId,
+                    $newCompensation,
+                    $salaryEffectiveDate,
+                    [
+                        'employee_id' => $employeeId,
+                        'campaign_id' => $data['campaign_id'],
+                        'source'      => 'employee_edit',
+                        'reason'      => trim((string) ($_POST['salary_change_reason'] ?? '')) ?: 'Edición de ficha del colaborador',
+                        'created_by'  => $_SESSION['user_id'] ?? null,
+                    ]
+                );
+
+                if (!$changeId) {
+                    // El historial no pudo registrar el cambio (o la foto de esa
+                    // fecha ya era esta). La edición NUNCA se pierde: se aplica.
+                    writeCurrentCompensation($pdo, $compUserId, $newCompensation);
+                    $salaryChangeMsg = " El nuevo salario se aplicó de inmediato (no se pudo programar para el "
+                        . date('d/m/Y', strtotime($salaryEffectiveDate)) . ").";
+                } else {
+                    $salaryChangeMsg = $salaryEffectiveDate > date('Y-m-d')
+                        ? " El nuevo salario (" . formatCompensationLabel($newCompensation) . ") queda programado para el " . date('d/m/Y', strtotime($salaryEffectiveDate)) . "."
+                        : " El nuevo salario aplica desde el " . date('d/m/Y', strtotime($salaryEffectiveDate)) . "; los días anteriores de la quincena se pagan con el salario previo.";
+                }
+            }
+        }
 
         // Update employee schedule if changed
         $scheduleTemplateId = !empty($_POST['schedule_template_id']) ? (int) $_POST['schedule_template_id'] : null;
@@ -396,10 +437,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_employee'])) {
 
         $pdo->commit();
         if (!empty($photoErrorMsg)) {
-            $successMsg = "Datos del empleado actualizados, PERO la foto NO se pudo guardar: {$photoErrorMsg}";
+            $successMsg = "Datos del empleado actualizados, PERO la foto NO se pudo guardar: {$photoErrorMsg}" . ($salaryChangeMsg ?? '');
             $warningMsg = $photoErrorMsg;
         } else {
-            $successMsg = "Empleado actualizado correctamente. Los cambios se sincronizaron con el usuario.";
+            $successMsg = "Empleado actualizado correctamente. Los cambios se sincronizaron con el usuario." . ($salaryChangeMsg ?? '');
         }
     } catch (Exception $e) {
         $pdo->rollBack();
@@ -2082,6 +2123,25 @@ $terminatedEmployees = $pdo->query("
                         <option value="USD">USD (Dólares)</option>
                         <option value="DOP">DOP (Pesos Dominicanos)</option>
                     </select>
+                </div>
+
+                <!-- Fecha desde la que aplica el salario: sin esto, un cambio a
+                     mitad de quincena repagaría toda la quincena a la tarifa nueva. -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="edit_salary_effective_date">
+                            El salario aplica desde
+                            <i class="fas fa-circle-info text-blue-400 ml-1"
+                               title="Solo se usa si cambias algún monto. Los días trabajados antes de esta fecha se pagan con el salario anterior. Una fecha futura deja el cambio programado."></i>
+                        </label>
+                        <input type="date" id="edit_salary_effective_date" name="salary_effective_date"
+                               value="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_salary_change_reason">Motivo del cambio de salario</label>
+                        <input type="text" id="edit_salary_change_reason" name="salary_change_reason" maxlength="255"
+                               placeholder="Ej: Cambio de campaña / Aumento">
+                    </div>
                 </div>
 
                 <div class="form-group mb-4">
