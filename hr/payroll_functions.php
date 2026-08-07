@@ -130,7 +130,7 @@ function calculateISR($monthlyGrossSalary)
  * calcula el ISR mensual y se re-prorratea al período (× fracción). Con 1.0 el
  * comportamiento es idéntico al anterior (períodos mensuales).
  */
-function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [], $periodFraction = 1.0, $isrExempt = false)
+function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [], $periodFraction = 1.0, $isrExempt = false, array $tssExempt = [])
 {
     $periodFraction = (float) $periodFraction;
     if ($periodFraction <= 0 || $periodFraction > 1.0) {
@@ -151,9 +151,15 @@ function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [], $per
             : calculateISR($grossSalary);
     }
 
+    // Exenciones de seguridad social por colaborador (ficha o quincena suelta).
+    // Existen casos reales: un pensionado no cotiza AFP pero sí SFS, y alguien
+    // que no está registrado en la TSS no cotiza ninguna de las dos.
+    $afpExento = !empty($tssExempt['afp']);
+    $sfsExento = !empty($tssExempt['sfs']);
+
     $deductions = [
-        'afp_employee' => calculateAFP($pdo, $grossSalary, false),
-        'sfs_employee' => calculateSFS($pdo, $grossSalary, false),
+        'afp_employee' => $afpExento ? 0.00 : calculateAFP($pdo, $grossSalary, false),
+        'sfs_employee' => $sfsExento ? 0.00 : calculateSFS($pdo, $grossSalary, false),
         'isr' => $isrPeriod,
         'custom_deductions' => 0,
         'total_deductions' => 0
@@ -181,13 +187,18 @@ function calculateAllDeductions($pdo, $grossSalary, $customDeductions = [], $per
 }
 
 /**
- * Calcula todos los aportes del empleador
+ * Calcula todos los aportes del empleador.
+ *
+ * Si el colaborador está exento de AFP o SFS, la empresa tampoco cotiza ese
+ * concepto por él: la exención significa que no está cotizando en la TSS por
+ * ese renglón, no que la empresa asuma la parte del empleado. SRL e INFOTEP
+ * son conceptos aparte y no se tocan.
  */
-function calculateEmployerContributions($pdo, $grossSalary)
+function calculateEmployerContributions($pdo, $grossSalary, array $tssExempt = [])
 {
     return [
-        'afp_employer' => calculateAFP($pdo, $grossSalary, true),
-        'sfs_employer' => calculateSFS($pdo, $grossSalary, true),
+        'afp_employer' => !empty($tssExempt['afp']) ? 0.00 : calculateAFP($pdo, $grossSalary, true),
+        'sfs_employer' => !empty($tssExempt['sfs']) ? 0.00 : calculateSFS($pdo, $grossSalary, true),
         'srl_employer' => calculateSRL($pdo, $grossSalary),
         'infotep_employer' => calculateINFOTEP($pdo, $grossSalary),
         'total_employer' => 0
@@ -424,6 +435,14 @@ function ensurePayrollManualIncentivesTable(PDO $pdo): void
     if (!in_array('isr_exempt', $columns, true)) {
         $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN isr_exempt TINYINT(1) NOT NULL DEFAULT 0 AFTER additional_deduction");
     }
+    // Igual que el ISR, pero para la seguridad social: exonerar AFP y/o SFS de
+    // UNA quincena suelta sin tocar la marca permanente de la ficha.
+    if (!in_array('afp_exempt', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN afp_exempt TINYINT(1) NOT NULL DEFAULT 0 AFTER isr_exempt");
+    }
+    if (!in_array('sfs_exempt', $columns, true)) {
+        $pdo->exec("ALTER TABLE payroll_manual_incentives ADD COLUMN sfs_exempt TINYINT(1) NOT NULL DEFAULT 0 AFTER afp_exempt");
+    }
 
     $ensured = true;
 }
@@ -494,6 +513,84 @@ function isEmployeeIsrExempt(PDO $pdo, int $employeeId, bool $periodExempt = fal
     }
 
     return isset($exentos[$employeeId]);
+}
+
+/**
+ * Marca permanente de exención de seguridad social (AFP / SFS) en la ficha.
+ *
+ * Se guardan por separado porque en la práctica no siempre van juntas: un
+ * pensionado no cotiza AFP pero sí SFS. Igual que con el ISR, se registra quién
+ * la puso y cuándo: dejar de cotizarle a alguien hay que poder justificarlo
+ * después ante la TSS.
+ */
+function ensureEmployeeTssExemptColumns(PDO $pdo): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    try {
+        $columns = $pdo->query("SHOW COLUMNS FROM employees")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('afp_exempt', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN afp_exempt TINYINT(1) NOT NULL DEFAULT 0");
+        }
+        if (!in_array('sfs_exempt', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN sfs_exempt TINYINT(1) NOT NULL DEFAULT 0 AFTER afp_exempt");
+        }
+        if (!in_array('tss_exempt_reason', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN tss_exempt_reason VARCHAR(255) NULL AFTER sfs_exempt");
+        }
+        if (!in_array('tss_exempt_by', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN tss_exempt_by INT NULL AFTER tss_exempt_reason");
+        }
+        if (!in_array('tss_exempt_at', $columns, true)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN tss_exempt_at DATETIME NULL AFTER tss_exempt_by");
+        }
+    } catch (Throwable $e) {
+        error_log('ensureEmployeeTssExemptColumns: ' . $e->getMessage());
+    }
+
+    $ensured = true;
+}
+
+/**
+ * ¿A este colaborador se le descuenta AFP y SFS en este período?
+ *
+ * Devuelve ['afp' => bool, 'sfs' => bool] donde true significa EXENTO. Manda
+ * cualquiera de las dos puertas: la marca permanente de su ficha o la
+ * exoneración de esa quincena en concreto.
+ */
+function getEmployeeTssExemptions(PDO $pdo, int $employeeId, bool $periodAfpExempt = false, bool $periodSfsExempt = false): array
+{
+    // El set completo se lee UNA vez: generar la nómina recorre ~150 empleados
+    // y la base es remota, así que una consulta por cabeza se notaría.
+    static $exentos = null;
+    if ($exentos === null) {
+        ensureEmployeeTssExemptColumns($pdo);
+        $exentos = [];
+        try {
+            $rows = $pdo->query("SELECT id, afp_exempt, sfs_exempt FROM employees WHERE afp_exempt = 1 OR sfs_exempt = 1")
+                ->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                $exentos[(int) $row['id']] = [
+                    'afp' => (int) $row['afp_exempt'] === 1,
+                    'sfs' => (int) $row['sfs_exempt'] === 1,
+                ];
+            }
+        } catch (Throwable $e) {
+            error_log('getEmployeeTssExemptions: ' . $e->getMessage());
+        }
+    }
+
+    $ficha = ($employeeId > 0 && isset($exentos[$employeeId]))
+        ? $exentos[$employeeId]
+        : ['afp' => false, 'sfs' => false];
+
+    return [
+        'afp' => $ficha['afp'] || $periodAfpExempt,
+        'sfs' => $ficha['sfs'] || $periodSfsExempt,
+    ];
 }
 
 /**
@@ -665,7 +762,7 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
     ensurePayrollManualIncentivesTable($pdo);
 
     $stmt = $pdo->prepare("
-        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction, isr_exempt
+        SELECT employee_id, sales_incentive, night_incentive, use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction, isr_exempt, afp_exempt, sfs_exempt
         FROM payroll_manual_incentives
         WHERE payroll_period_id = ?
     ");
@@ -683,6 +780,8 @@ function getPayrollManualIncentivesMap(PDO $pdo, int $periodId): array
             'cooperative_deduction' => (float) ($row['cooperative_deduction'] ?? 0),
             'additional_deduction' => (float) ($row['additional_deduction'] ?? 0),
             'isr_exempt' => (int) ($row['isr_exempt'] ?? 0),
+            'afp_exempt' => (int) ($row['afp_exempt'] ?? 0),
+            'sfs_exempt' => (int) ($row['sfs_exempt'] ?? 0),
         ];
     }
 
@@ -1104,8 +1203,17 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
         !empty($hoursData['isr_exempt'])
     );
 
+    // Exención de seguridad social (AFP / SFS): igual que el ISR, manda la marca
+    // permanente de la ficha o la exoneración de esta quincena en concreto.
+    $tssExempt = getEmployeeTssExemptions(
+        $pdo,
+        (int) $employeeId,
+        !empty($hoursData['afp_exempt']),
+        !empty($hoursData['sfs_exempt'])
+    );
+
     // Calcular descuentos
-    $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions, $isrPeriodFraction, $isrExempt);
+    $deductions = calculateAllDeductions($pdo, $grossSalary, $customDeductions, $isrPeriodFraction, $isrExempt, $tssExempt);
 
     // Aplicar descuento de cooperativa (monto fijo manual)
     $cooperativeDeduction = round((float)($hoursData['cooperative_deduction'] ?? 0), 2);
@@ -1139,7 +1247,7 @@ function calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData)
     }
 
     // Calcular aportes empleador
-    $employerContributions = calculateEmployerContributions($pdo, $grossSalary);
+    $employerContributions = calculateEmployerContributions($pdo, $grossSalary, $tssExempt);
     $employerContributions['total_employer'] =
         $employerContributions['afp_employer'] +
         $employerContributions['sfs_employer'] +

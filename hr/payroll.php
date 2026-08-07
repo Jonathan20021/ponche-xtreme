@@ -345,6 +345,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 'cooperative_deduction' => (float)($manualIncentivesMap[$employeeId]['cooperative_deduction'] ?? 0),
                 'additional_deduction' => (float)($manualIncentivesMap[$employeeId]['additional_deduction'] ?? 0),
                 'isr_exempt' => (int)($manualIncentivesMap[$employeeId]['isr_exempt'] ?? 0),
+                'afp_exempt' => (int)($manualIncentivesMap[$employeeId]['afp_exempt'] ?? 0),
+                'sfs_exempt' => (int)($manualIncentivesMap[$employeeId]['sfs_exempt'] ?? 0),
             ];
             
             $payrollData = calculateEmployeePayroll($pdo, $employeeId, $periodId, $hoursData);
@@ -537,9 +539,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
             $upsertStmt = $pdo->prepare("
                 INSERT INTO payroll_manual_incentives (
                     payroll_period_id, employee_id, sales_incentive, night_incentive,
-                    use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction, isr_exempt
+                    use_manual_hours, manual_regular_hours, manual_overtime_hours, notes, cooperative_deduction, additional_deduction, isr_exempt, afp_exempt, sfs_exempt
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     sales_incentive = VALUES(sales_incentive),
                     night_incentive = VALUES(night_incentive),
@@ -549,7 +551,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                     notes = VALUES(notes),
                     cooperative_deduction = VALUES(cooperative_deduction),
                     additional_deduction = VALUES(additional_deduction),
-                    isr_exempt = VALUES(isr_exempt)
+                    isr_exempt = VALUES(isr_exempt),
+                    afp_exempt = VALUES(afp_exempt),
+                    sfs_exempt = VALUES(sfs_exempt)
             ");
 
             foreach ($rows as $employeeId => $values) {
@@ -573,8 +577,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                 $cooperative = isset($values['cooperative']) ? round(max((float)$values['cooperative'], 0), 2) : 0.00;
                 $additional = isset($values['additional']) ? round(max((float)$values['additional'], 0), 2) : 0.00;
                 $isrExempt = !empty($values['isr_exempt']) ? 1 : 0;
+                $afpExempt = !empty($values['afp_exempt']) ? 1 : 0;
+                $sfsExempt = !empty($values['sfs_exempt']) ? 1 : 0;
 
-                if ($sales == 0.0 && $night == 0.0 && $useManualHours === 0 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0 && $notes === null && $cooperative == 0.0 && $additional == 0.0 && $isrExempt === 0) {
+                if ($sales == 0.0 && $night == 0.0 && $useManualHours === 0 && $manualRegularHours == 0.0 && $manualOvertimeHours == 0.0 && $notes === null && $cooperative == 0.0 && $additional == 0.0 && $isrExempt === 0 && $afpExempt === 0 && $sfsExempt === 0) {
                     $deleteStmt->execute([$periodId, $employeeId]);
                     continue;
                 }
@@ -590,7 +596,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_manual_incentive
                     $notes,
                     $cooperative,
                     $additional,
-                    $isrExempt
+                    $isrExempt,
+                    $afpExempt,
+                    $sfsExempt
                 ]);
             }
 
@@ -634,10 +642,12 @@ if ($selectedPeriodId) {
     if ($selectedPeriod) {
         $manualIncentives = getPayrollManualIncentivesMap($pdo, $selectedPeriodId);
         ensureEmployeeIsrExemptColumns($pdo); // la columna se lee justo abajo
+        ensureEmployeeTssExemptColumns($pdo); // idem para AFP / SFS
 
         $agentsStmt = $pdo->prepare("
             SELECT e.id, e.employee_code, e.first_name, e.last_name, e.position, u.role,
-                   e.employment_status, e.termination_date, COALESCE(e.isr_exempt, 0) AS isr_exempt
+                   e.employment_status, e.termination_date, COALESCE(e.isr_exempt, 0) AS isr_exempt,
+                   COALESCE(e.afp_exempt, 0) AS afp_exempt, COALESCE(e.sfs_exempt, 0) AS sfs_exempt
             FROM employees e
             JOIN users u ON u.id = e.user_id
             WHERE e.employment_status IN ('ACTIVE', 'TRIAL')
@@ -960,6 +970,8 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                         <th class="text-right py-2 px-2">Cooperativa</th>
                                         <th class="text-right py-2 px-2">Descuento</th>
                                         <th class="text-center py-2 px-2" title="Exonerar el ISR solo en esta quincena. La marca permanente se pone en la ficha del colaborador.">Sin ISR</th>
+                                        <th class="text-center py-2 px-2" title="No descontarle AFP solo en esta quincena. La marca permanente se pone en la ficha del colaborador.">Sin AFP</th>
+                                        <th class="text-center py-2 px-2" title="No descontarle SFS solo en esta quincena. La marca permanente se pone en la ficha del colaborador.">Sin SFS</th>
                                         <th class="text-left py-2 px-2">Nota</th>
                                     </tr>
                                 </thead>
@@ -974,6 +986,9 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                             'notes' => '',
                                             'cooperative_deduction' => 0,
                                             'additional_deduction' => 0,
+                                            'isr_exempt' => 0,
+                                            'afp_exempt' => 0,
+                                            'sfs_exempt' => 0,
                                         ];
                                         // Inputs always show the stored manual override value (or 0 if none).
                                         // Pre-filling with punched hours caused doubled-hours bugs because old
@@ -1093,6 +1108,34 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                     class="h-4 w-4"
                                                 >
                                                 <?php if ($exentoFicha): ?>
+                                                    <div class="text-[10px] text-emerald-400 mt-0.5">fijo</div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="py-2 px-2 text-center">
+                                                <?php $afpFicha = !empty($agent['afp_exempt']); ?>
+                                                <input
+                                                    type="checkbox"
+                                                    name="manual_incentives[<?= (int)$agent['id'] ?>][afp_exempt]"
+                                                    value="1"
+                                                    <?= (!empty($agentIncentive['afp_exempt']) || $afpFicha) ? 'checked' : '' ?>
+                                                    <?= $afpFicha ? 'disabled title="Exento de AFP de forma permanente en su ficha"' : 'title="No descontarle AFP solo en esta quincena"' ?>
+                                                    class="h-4 w-4"
+                                                >
+                                                <?php if ($afpFicha): ?>
+                                                    <div class="text-[10px] text-emerald-400 mt-0.5">fijo</div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="py-2 px-2 text-center">
+                                                <?php $sfsFicha = !empty($agent['sfs_exempt']); ?>
+                                                <input
+                                                    type="checkbox"
+                                                    name="manual_incentives[<?= (int)$agent['id'] ?>][sfs_exempt]"
+                                                    value="1"
+                                                    <?= (!empty($agentIncentive['sfs_exempt']) || $sfsFicha) ? 'checked' : '' ?>
+                                                    <?= $sfsFicha ? 'disabled title="Exento de SFS de forma permanente en su ficha"' : 'title="No descontarle SFS solo en esta quincena"' ?>
+                                                    class="h-4 w-4"
+                                                >
+                                                <?php if ($sfsFicha): ?>
                                                     <div class="text-[10px] text-emerald-400 mt-0.5">fijo</div>
                                                 <?php endif; ?>
                                             </td>

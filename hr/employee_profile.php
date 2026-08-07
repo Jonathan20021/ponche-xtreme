@@ -20,6 +20,7 @@ if (!$employeeId) {
 // para que el perfil no reviente en una base que aún no la tenga.
 require_once __DIR__ . '/payroll_functions.php';
 ensureEmployeeIsrExemptColumns($pdo);
+ensureEmployeeTssExemptColumns($pdo); // exenciones de AFP / SFS, mismo motivo
 
 $stmt = $pdo->prepare("
     SELECT e.*, u.username, u.role, u.overtime_multiplier,
@@ -398,6 +399,45 @@ if ($signatureLink) {
                                             Recalcula las quincenas para que aplique.
                                         </p>
                                     <?php endif; ?>
+                                </form>
+                            </details>
+
+                            <?php
+                            $afpExento = !empty($employee['afp_exempt']);
+                            $sfsExento = !empty($employee['sfs_exempt']);
+                            $tssLabel = ($afpExento && $sfsExento)
+                                ? 'Exento de AFP y SFS'
+                                : ($afpExento ? 'Exento de AFP' : ($sfsExento ? 'Exento de SFS' : 'Cotiza AFP y SFS'));
+                            ?>
+                            <details class="mt-2">
+                                <summary class="text-xs cursor-pointer <?= ($afpExento || $sfsExento) ? 'text-amber-300' : 'text-slate-500' ?>">
+                                    <?= htmlspecialchars($tssLabel) ?>
+                                </summary>
+                                <form method="POST" action="employee_profile_actions.php" class="mt-2 space-y-2">
+                                    <input type="hidden" name="employee_id" value="<?= (int) $employee['id'] ?>">
+                                    <input type="hidden" name="action" value="set_tss_exempt">
+                                    <label class="flex items-center gap-2 text-xs text-slate-300">
+                                        <input type="checkbox" name="afp_exempt" value="1" <?= $afpExento ? 'checked' : '' ?>>
+                                        No descontarle AFP
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-slate-300">
+                                        <input type="checkbox" name="sfs_exempt" value="1" <?= $sfsExento ? 'checked' : '' ?>>
+                                        No descontarle SFS
+                                    </label>
+                                    <input type="text" name="tss_exempt_reason" maxlength="255"
+                                           value="<?= htmlspecialchars((string) ($employee['tss_exempt_reason'] ?? '')) ?>"
+                                           placeholder="Motivo (obligatorio)"
+                                           class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs">
+                                    <button type="submit" class="text-xs bg-slate-700 hover:bg-slate-600 rounded px-2 py-1">
+                                        Guardar
+                                    </button>
+                                    <p class="text-[10px] text-slate-500">
+                                        Tampoco se cotiza la parte del empleador de ese concepto.
+                                        <?php if (($afpExento || $sfsExento) && !empty($employee['tss_exempt_at'])): ?>
+                                            Desde <?= htmlspecialchars(date('d/m/Y', strtotime($employee['tss_exempt_at']))) ?>.
+                                            Recalcula las quincenas para que aplique.
+                                        <?php endif; ?>
+                                    </p>
                                 </form>
                             </details>
                         </div>

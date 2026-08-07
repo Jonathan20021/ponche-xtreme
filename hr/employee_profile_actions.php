@@ -537,6 +537,49 @@ try {
             break;
 
         // ------------------------------------------------------------------
+        // Exención permanente de seguridad social (AFP / SFS). Van por separado
+        // porque no siempre coinciden: un pensionado no cotiza AFP pero sí SFS.
+        case 'set_tss_exempt':
+            require_once __DIR__ . '/payroll_functions.php';
+            ensureEmployeeTssExemptColumns($pdo);
+
+            $afpExento = !empty($_POST['afp_exempt']) ? 1 : 0;
+            $sfsExento = !empty($_POST['sfs_exempt']) ? 1 : 0;
+            $motivo = trim((string) ($_POST['tss_exempt_reason'] ?? ''));
+            if (($afpExento === 1 || $sfsExento === 1) && $motivo === '') {
+                profileBack($employeeId, 'Escribe el motivo de la exención de AFP/SFS.', false);
+            }
+
+            $algunaExencion = ($afpExento === 1 || $sfsExento === 1);
+
+            $pdo->prepare("
+                UPDATE employees
+                SET afp_exempt = ?, sfs_exempt = ?, tss_exempt_reason = ?, tss_exempt_by = ?, tss_exempt_at = ?
+                WHERE id = ?
+            ")->execute([
+                $afpExento,
+                $sfsExento,
+                $algunaExencion ? mb_substr($motivo, 0, 255) : null,
+                $algunaExencion ? ($userId ?: null) : null,
+                $algunaExencion ? date('Y-m-d H:i:s') : null,
+                $employeeId,
+            ]);
+
+            if ($algunaExencion) {
+                $conceptos = [];
+                if ($afpExento) { $conceptos[] = 'AFP'; }
+                if ($sfsExento) { $conceptos[] = 'SFS'; }
+                profileBack(
+                    $employeeId,
+                    'A ' . $employeeName . ' ya no se le descuenta ' . implode(' ni ', $conceptos)
+                        . '. Recalcula las quincenas donde deba aplicar.'
+                );
+            }
+
+            profileBack($employeeId, 'Exención de AFP/SFS retirada. Recalcula las quincenas donde deba volver a descontarse.');
+            break;
+
+        // ------------------------------------------------------------------
         default:
             profileBack($employeeId, 'Acción no reconocida.', false);
     }
