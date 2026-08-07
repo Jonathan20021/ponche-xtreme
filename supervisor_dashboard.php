@@ -2026,11 +2026,14 @@ async function submitPunchEdit(punchId) {
     const numericPunchId = parseInt(punchId, 10);
     const numericUserId = parseInt(currentAgentId, 10);
     
+    const reasonInput = document.getElementById(`punch-reason-${punchId}`);
+
     const payload = {
         punch_id: numericPunchId,
         user_id: numericUserId,
         new_type: newType,
-        new_time: newTime
+        new_time: newTime,
+        reason: reasonInput ? reasonInput.value.trim() : ''
     };
     
     console.log('Enviando datos:', payload);
@@ -2133,6 +2136,12 @@ function openPunchCreate(event) {
         setupInteractionListeners(timeInput);
     }
 
+    const reasonInput = document.getElementById('punch-create-reason');
+    if (reasonInput) {
+        reasonInput.value = '';
+        setupInteractionListeners(reasonInput);
+    }
+
     const hint = document.getElementById('punch-create-hint');
     if (hint) {
         const dateLabel = currentModalDate || getLocalTodayISO();
@@ -2204,11 +2213,14 @@ async function submitPunchCreate() {
     // Asegurar que currentAgentId sea número
     const numericUserId = parseInt(currentAgentId, 10);
 
+    const createReasonInput = document.getElementById('punch-create-reason');
+
     const payload = {
         user_id: numericUserId,
         punch_type: newType,
         new_date: targetDate,
-        new_time: newTime
+        new_time: newTime,
+        reason: createReasonInput ? createReasonInput.value.trim() : ''
     };
     
     console.log('Creando punch:', payload);
@@ -2309,6 +2321,10 @@ function updatePunchTimeline(punches, preserveEditorState = false) {
                     <button type="button" onclick="submitPunchCreate()">Registrar</button>
                     <button type="button" class="punch-edit-cancel" onclick="cancelPunchCreate()">Cancelar</button>
                 </div>
+                <div class="punch-edit-row">
+                    <input type="text" id="punch-create-reason" maxlength="255"
+                           placeholder="Motivo (queda en el historial con tu nombre)" />
+                </div>
                 <div class="punch-edit-status" id="punch-create-status"></div>
                 <div class="punch-edit-hint" id="punch-create-hint"></div>
             </div>
@@ -2347,6 +2363,10 @@ function updatePunchTimeline(punches, preserveEditorState = false) {
                         <input type="time" id="punch-time-${punch.id}" value="${punchTime}" />
                         <button type="button" onclick="submitPunchEdit(${punch.id})">Aplicar</button>
                         <button type="button" class="punch-edit-cancel" onclick="cancelPunchEdit(${punch.id})">Cancelar</button>
+                    </div>
+                    <div class="punch-edit-row">
+                        <input type="text" id="punch-reason-${punch.id}" maxlength="255"
+                               placeholder="Motivo (queda en el historial con tu nombre)" />
                     </div>
                     <div class="punch-edit-status" id="punch-edit-status-${punch.id}"></div>
                 </div>

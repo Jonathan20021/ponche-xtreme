@@ -84,10 +84,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
     $authorizationCode = $_POST['authorization_code'] ?? '';
+    $deleteReason = trim((string) ($_POST['notes'] ?? $_POST['reason'] ?? ''));
 
     // Validar ID
     if ($id <= 0) {
         $_SESSION['error'] = "ID de registro inválido.";
+        header('Location: records.php');
+        exit;
+    }
+
+    // El motivo es obligatorio: borrar un punch cambia las horas pagadas y tiene
+    // que quedar justificado en la bitácora, igual que el ajuste de Vicidial.
+    if ($deleteReason === '') {
+        $_SESSION['error'] = 'El motivo es obligatorio para eliminar un registro: queda en la bitácora de auditoría del ponche.';
         header('Location: records.php');
         exit;
     }
@@ -149,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'new_type'      => null,
         'old_timestamp' => $recordData['timestamp'] ?? null,
         'new_timestamp' => null,
-        'reason'        => trim((string) ($_POST['notes'] ?? $_POST['reason'] ?? '')) ?: 'Registro eliminado',
+        'reason'        => $deleteReason,
         'source'        => 'delete_record',
         'performed_by'  => $_SESSION['user_id'] ?? null,
     ], $auditBefore);

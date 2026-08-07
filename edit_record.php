@@ -145,6 +145,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($type === '' || $timestamp === '') {
         $message = 'Por favor completa los campos obligatorios (tipo y fecha/hora).';
         $messageType = 'error';
+    } elseif ($notes === '') {
+        // El motivo es obligatorio: es lo que queda en el historial de
+        // modificaciones del ponche junto a quién hizo el cambio.
+        $message = 'El motivo del ajuste es obligatorio: queda en la bitácora de auditoría.';
+        $messageType = 'error';
     } elseif (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $timestamp)) {
         $message = 'Formato de fecha y hora inválido.';
         $messageType = 'error';
@@ -368,16 +373,18 @@ $isPast = $recordDate !== '' && $recordDate < date('Y-m-d');
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="notes">Motivo / Notas del ajuste</label>
+                    <label class="form-label" for="notes">Motivo / Notas del ajuste *</label>
                     <input
                         type="text"
                         name="notes"
                         id="notes"
                         class="input-control"
                         maxlength="255"
+                        required
+                        value="<?= htmlspecialchars((string) ($_POST['notes'] ?? '')) ?>"
                         placeholder="Ej: Olvidó marcar salida, corrección por cuadre de nómina…"
                     >
-                    <p class="text-muted text-xs mt-1">Se guarda en el historial de auditoría junto al cambio.</p>
+                    <p class="text-muted text-xs mt-1">Obligatorio. Se guarda en el historial de auditoría junto a tu nombre y la hora del cambio.</p>
                 </div>
             </div>
 

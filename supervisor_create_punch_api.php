@@ -39,6 +39,8 @@ $targetUserId = isset($input['user_id']) ? (int)$input['user_id'] : 0;
 $typeSlug = sanitizeAttendanceTypeSlug($input['punch_type'] ?? '');
 $newDate = isset($input['new_date']) ? trim($input['new_date']) : '';
 $newTime = isset($input['new_time']) ? trim($input['new_time']) : '';
+// Igual que en la edición: el motivo viene en el JSON, no en $_POST.
+$auditReason = trim((string) ($input['reason'] ?? $input['notes'] ?? $_POST['reason'] ?? $_POST['notes'] ?? ''));
 
 error_log("CREATE - Parsed values - targetUserId: $targetUserId, typeSlug: $typeSlug, newDate: $newDate, newTime: $newTime");
 
@@ -172,7 +174,7 @@ try {
         'new_type'      => $typeSlug,
         'old_timestamp' => null,
         'new_timestamp' => $auditNewTimestamp,
-        'reason'        => trim((string) ($_POST['reason'] ?? $_POST['notes'] ?? '')) ?: 'Punch agregado por supervisor',
+        'reason'        => $auditReason ?: 'Punch agregado por supervisor',
         'source'        => 'monitor supervisor',
         'performed_by'  => $_SESSION['user_id'] ?? null,
     ], $auditBeforeCreate);

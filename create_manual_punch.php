@@ -40,6 +40,14 @@ if ($typeSlug === '') {
     exit;
 }
 
+// El motivo es obligatorio: es lo que se ve después en el historial de
+// modificaciones del ponche, igual que en el ajuste de horas de Vicidial.
+if ($notes === '') {
+    $_SESSION['punch_error'] = 'El motivo es obligatorio: queda en la bitácora de auditoría del ponche.';
+    header('Location: ' . $redirectUrl);
+    exit;
+}
+
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $punchDate)) {
     $_SESSION['punch_error'] = 'Formato de fecha inválido. Usa YYYY-MM-DD.';
     header('Location: ' . $redirectUrl);
@@ -185,6 +193,11 @@ if ($authRequired) {
     $authorizationCodeId = $validation['code_id'] ?? null;
 }
 
+// Foto de las horas del día ANTES de agregar el punch: es lo que permite
+// mostrar "original vs modificado" en el historial, como en Vicidial.
+require_once __DIR__ . '/lib/attendance_audit.php';
+$auditBefore = attendanceAuditSnapshot($pdo, $targetUserId, $punchDate);
+
 try {
     $hasAuthColumn = false;
     try {
@@ -209,6 +222,22 @@ try {
     }
 
     $recordId = (int) $pdo->lastInsertId();
+
+    // Historial de modificaciones del ponche: agregar un punch a mano mueve las
+    // horas del día, así que queda con autor, hora y motivo.
+    attendanceAuditRecord($pdo, [
+        'attendance_id' => $recordId,
+        'user_id'       => $targetUserId,
+        'work_date'     => $punchDate,
+        'action'        => 'CREATE',
+        'old_type'      => null,
+        'new_type'      => $typeSlug,
+        'old_timestamp' => null,
+        'new_timestamp' => $customTimestamp,
+        'reason'        => $notes,
+        'source'        => 'registro manual',
+        'performed_by'  => $currentUserId ?: null,
+    ], $auditBefore);
 
     if ($authorizationCodeId) {
         logAuthorizationCodeUsage(

@@ -494,6 +494,38 @@ foreach ($records as &$record) {
 }
 unset($record);
 
+// Historial de modificaciones de cada punch (quién lo tocó y por qué), para
+// mostrarlo aquí igual que el ajuste de horas de Vicidial. Lo alimentan los
+// cinco puntos de edición del ponche a través de lib/attendance_audit.php.
+$recordAuditMap = [];
+if (!empty($records)) {
+    $recordIds = array_values(array_unique(array_filter(array_map(
+        static fn(array $r): int => (int) ($r['id'] ?? 0),
+        $records
+    ))));
+
+    if (!empty($recordIds)) {
+        $auditPlaceholders = implode(',', array_fill(0, count($recordIds), '?'));
+        try {
+            $auditStmt = $pdo->prepare("
+                SELECT aa.attendance_id, aa.action, aa.reason, aa.source, aa.created_at,
+                       COALESCE(NULLIF(TRIM(pu.full_name), ''), pu.username) AS performed_by_name
+                FROM attendance_audit aa
+                LEFT JOIN users pu ON pu.id = aa.performed_by
+                WHERE aa.attendance_id IN ($auditPlaceholders)
+                ORDER BY aa.id ASC
+            ");
+            $auditStmt->execute($recordIds);
+            foreach ($auditStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $auditRow) {
+                $recordAuditMap[(int) $auditRow['attendance_id']][] = $auditRow;
+            }
+        } catch (Throwable $e) {
+            // Si aún no existe attendance_audit la columna sale vacía, sin romper la vista.
+            error_log('records.php historial de modificaciones: ' . $e->getMessage());
+        }
+    }
+}
+
 // Usuarios unicos para filtro
 $usersQuery = "
     SELECT DISTINCT users.username
@@ -1141,6 +1173,7 @@ $tardinessTotal = count($tardiness_data);
                         <th>Fecha</th>
                         <th>Hora</th>
                         <th>IP</th>
+                        <th title="Quién modificó o creó el registro y por qué">Modificación</th>
                         <?php if ($canModifyRecords): ?>
                             <th class="text-center">Acciones</th>
                         <?php endif; ?>
@@ -1173,6 +1206,50 @@ $tardinessTotal = count($tardiness_data);
                             <td><?= htmlspecialchars($record['record_date']) ?></td>
                             <td><?= htmlspecialchars($record['record_time']) ?></td>
                             <td><?= htmlspecialchars($record['ip_address']) ?></td>
+                            <td>
+                                <?php
+                                    $auditTrail = $recordAuditMap[(int) $record['id']] ?? [];
+                                ?>
+                                <?php if (empty($auditTrail)): ?>
+                                    <span class="text-muted">—</span>
+                                <?php else: ?>
+                                    <?php
+                                        $lastAudit = end($auditTrail);
+                                        $auditActions = [
+                                            'CREATE' => 'Creado',
+                                            'UPDATE' => 'Editado',
+                                            'DELETE' => 'Eliminado',
+                                        ];
+                                        $auditAction = strtoupper((string) ($lastAudit['action'] ?? 'UPDATE'));
+                                        $auditLabel = $auditActions[$auditAction] ?? 'Modificado';
+                                        $auditAuthor = trim((string) ($lastAudit['performed_by_name'] ?? '')) ?: 'Sistema';
+                                        $auditReasonText = trim((string) ($lastAudit['reason'] ?? ''));
+                                        $auditWhen = !empty($lastAudit['created_at'])
+                                            ? date('Y-m-d H:i', strtotime((string) $lastAudit['created_at']))
+                                            : '';
+                                        $auditCount = count($auditTrail);
+                                    ?>
+                                    <div class="text-sm leading-tight">
+                                        <div>
+                                            <span class="badge" style="background: rgba(148, 163, 184, 0.18); color: inherit; border: none; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; text-transform: none; letter-spacing: 0;">
+                                                <?= htmlspecialchars($auditLabel) ?>
+                                            </span>
+                                            <?= htmlspecialchars($auditAuthor) ?>
+                                        </div>
+                                        <?php if ($auditWhen !== ''): ?>
+                                            <div class="text-muted text-xs"><?= htmlspecialchars($auditWhen) ?></div>
+                                        <?php endif; ?>
+                                        <?php if ($auditReasonText !== ''): ?>
+                                            <div class="text-muted text-xs" title="<?= htmlspecialchars($auditReasonText) ?>">
+                                                <i class="fas fa-comment-alt"></i> <?= htmlspecialchars($auditReasonText) ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        <?php if ($auditCount > 1): ?>
+                                            <div class="text-muted text-xs"><?= (int) $auditCount ?> cambios registrados</div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
                             <?php if ($canModifyRecords): ?>
                                 <td class="text-center">
                                     <div class="flex items-center justify-center gap-3 text-sm">
@@ -2132,9 +2209,24 @@ $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
             </div>
             <?php endif; ?>
             
+            <div class="modal-input-group">
+                <label for="delete_notes">
+                    <i class="fas fa-comment-alt"></i> Motivo de la eliminación *
+                </label>
+                <input
+                    type="text"
+                    id="delete_notes"
+                    placeholder="Ej: Punch duplicado, marcación de prueba…"
+                    maxlength="255"
+                    required
+                >
+                <small class="text-muted">Se guarda en el historial con tu nombre y la hora del cambio.</small>
+            </div>
+
             <form id="deleteForm" method="POST" action="delete_record.php">
                 <input type="hidden" name="id" id="delete_record_id">
                 <input type="hidden" name="authorization_code" id="delete_auth_code_hidden">
+                <input type="hidden" name="notes" id="delete_notes_hidden">
             </form>
         </div>
         <div class="modal-footer">
@@ -2240,7 +2332,7 @@ $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
 
                 <div class="modal-input-group">
                     <label for="manual_notes">
-                        <i class="fas fa-comment-alt"></i> Motivo / Notas (opcional)
+                        <i class="fas fa-comment-alt"></i> Motivo / Notas *
                     </label>
                     <input
                         type="text"
@@ -2248,7 +2340,9 @@ $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
                         name="notes"
                         placeholder="Ej: Olvidó marcar salida, corrección por cuadre de nómina…"
                         maxlength="255"
+                        required
                     >
+                    <small class="text-muted">Se guarda en el historial junto a tu nombre y la hora del cambio.</small>
                 </div>
 
                 <?php if ($manualAuthRequired): ?>
@@ -2311,10 +2405,13 @@ function submitEdit() {
 // Delete modal functions
 function openDeleteModal(recordId) {
     document.getElementById('delete_record_id').value = recordId;
+    document.getElementById('delete_notes').value = '';
     document.getElementById('deleteModal').style.display = 'block';
     <?php if ($deleteAuthRequired): ?>
     document.getElementById('delete_auth_code').value = '';
     document.getElementById('delete_auth_code').focus();
+    <?php else: ?>
+    document.getElementById('delete_notes').focus();
     <?php endif; ?>
 }
 
@@ -2331,7 +2428,16 @@ function submitDelete() {
     }
     document.getElementById('delete_auth_code_hidden').value = authCode;
     <?php endif; ?>
-    
+
+    // Motivo obligatorio: es lo que aparece luego en el historial junto a tu nombre.
+    const deleteNotes = document.getElementById('delete_notes').value.trim();
+    if (!deleteNotes) {
+        alert('Escribe el motivo de la eliminación: queda en el historial de auditoría.');
+        document.getElementById('delete_notes').focus();
+        return;
+    }
+    document.getElementById('delete_notes_hidden').value = deleteNotes;
+
     document.getElementById('deleteForm').submit();
 }
 
@@ -2379,9 +2485,18 @@ function closeManualPunchModal() {
             const type = document.getElementById('manual_punch_type').value;
             const date = document.getElementById('manual_punch_date').value;
             const time = document.getElementById('manual_punch_time').value;
+            const notesInput = document.getElementById('manual_notes');
             if (!userId || !type || !date || !time) {
                 e.preventDefault();
                 alert('Completa los campos obligatorios (colaborador, tipo, fecha y hora).');
+                return;
+            }
+            // Motivo obligatorio: es lo que se ve en el historial de modificaciones
+            // del ponche junto a quién lo registró.
+            if (notesInput && !notesInput.value.trim()) {
+                e.preventDefault();
+                alert('Escribe el motivo del registro manual: queda en el historial de auditoría.');
+                notesInput.focus();
                 return;
             }
             const today = new Date();

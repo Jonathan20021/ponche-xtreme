@@ -38,6 +38,9 @@ $punchId = isset($input['punch_id']) ? (int) $input['punch_id'] : 0;
 $targetUserId = isset($input['user_id']) ? (int) $input['user_id'] : 0;
 $newTypeSlug = sanitizeAttendanceTypeSlug($input['new_type'] ?? '');
 $newTime = isset($input['new_time']) ? trim($input['new_time']) : null;
+// El motivo viaja en el JSON del monitor. Antes se leía de $_POST y por eso
+// nunca llegaba: la petición es application/json y $_POST siempre venía vacío.
+$auditReason = trim((string) ($input['reason'] ?? $input['notes'] ?? $_POST['reason'] ?? $_POST['notes'] ?? ''));
 
 error_log("Parsed values - punchId: $punchId, targetUserId: $targetUserId, newTypeSlug: $newTypeSlug, newTime: $newTime");
 
@@ -169,7 +172,7 @@ try {
         'new_type'      => $newTypeSlug,
         'old_timestamp' => $punch['timestamp'],
         'new_timestamp' => $auditNewTimestamp,
-        'reason'        => trim((string) ($_POST['reason'] ?? $_POST['notes'] ?? '')) ?: null,
+        'reason'        => $auditReason ?: 'Corrección de punch desde el monitor de supervisión',
         'source'        => 'monitor supervisor',
         'performed_by'  => $_SESSION['user_id'] ?? null,
     ], $auditBefore);
