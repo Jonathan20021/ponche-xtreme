@@ -1080,6 +1080,105 @@ if (!function_exists('vicidialGetUserMap')) {
     }
 }
 
+if (!function_exists('vicidialCountOrphanTimesheetDays')) {
+    /**
+     * Días ya importados de una cuenta de Vicidial que NO están atribuidos a
+     * ningún empleado vivo: user_id NULL (nunca se mapeó) o user_id apuntando a
+     * un usuario borrado (se mapeó a un empleado que luego RRHH eliminó/recreó).
+     *
+     * Esas horas quedan huérfanas: la nómina y el portal buscan por user_id, así
+     * que el agente sale en 0 horas aunque Vicidial tenga sus días completos.
+     *
+     * @return array{days:int, hours:float, first:?string, last:?string}
+     */
+    function vicidialCountOrphanTimesheetDays(PDO $pdo, string $vicidialUser): array
+    {
+        $out = ['days' => 0, 'hours' => 0.0, 'first' => null, 'last' => null];
+        try {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) AS days, COALESCE(SUM(t.total_logged_seconds), 0) AS secs,
+                       MIN(t.report_date) AS first_d, MAX(t.report_date) AS last_d
+                FROM vicidial_agent_timesheet t
+                LEFT JOIN users u ON u.id = t.user_id
+                WHERE t.vicidial_user = ? AND (t.user_id IS NULL OR u.id IS NULL)
+            ");
+            $stmt->execute([$vicidialUser]);
+            $r = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $out['days']  = (int) ($r['days'] ?? 0);
+            $out['hours'] = round(((int) ($r['secs'] ?? 0)) / 3600, 2);
+            $out['first'] = $r['first_d'] ?? null;
+            $out['last']  = $r['last_d'] ?? null;
+        } catch (Throwable $e) {
+            error_log('vicidialCountOrphanTimesheetDays: ' . $e->getMessage());
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('vicidialRestampTimesheetUserId')) {
+    /**
+     * Re-estampa el user_id del histórico ya importado de una cuenta de Vicidial.
+     *
+     * El importador guarda el user_id del mapeo VIGENTE al momento de importar
+     * (es una copia, no un JOIN), y la nómina lee `WHERE user_id = ?`. Por eso
+     * corregir el mapeo después NO rescataba los días viejos: seguían apuntando
+     * al user_id equivocado y el agente salía en 0 horas.
+     *
+     * Por defecto solo toca los días HUÉRFANOS (sin user_id o con un user_id
+     * borrado): esas horas no eran de nadie, atribuirlas al empleado mapeado es
+     * siempre correcto. Con $all = true re-asigna TODO el histórico de la cuenta,
+     * para el caso deliberado de "esta cuenta de Vicidial cambió de dueño" —
+     * ojo, eso SÍ le quita los días viejos al empleado anterior.
+     *
+     * @return array{rows:int, hours:float, first:?string, last:?string}
+     */
+    function vicidialRestampTimesheetUserId(PDO $pdo, string $vicidialUser, ?int $newUserId, bool $all = false): array
+    {
+        $out = ['rows' => 0, 'hours' => 0.0, 'first' => null, 'last' => null];
+        if ($vicidialUser === '' || $newUserId === null) {
+            return $out;
+        }
+
+        // "<=>" es el igual seguro-con-NULL de MySQL: NOT (user_id <=> X) deja
+        // fuera las filas que ya están correctas, incluidas las de user_id NULL.
+        $where = $all
+            ? "t.vicidial_user = :vu AND NOT (t.user_id <=> :uid)"
+            : "t.vicidial_user = :vu AND NOT (t.user_id <=> :uid) AND (t.user_id IS NULL OR u.id IS NULL)";
+
+        try {
+            $sel = $pdo->prepare("
+                SELECT COUNT(*) AS rows_n, COALESCE(SUM(t.total_logged_seconds), 0) AS secs,
+                       MIN(t.report_date) AS first_d, MAX(t.report_date) AS last_d
+                FROM vicidial_agent_timesheet t
+                LEFT JOIN users u ON u.id = t.user_id
+                WHERE {$where}
+            ");
+            $sel->execute([':vu' => $vicidialUser, ':uid' => $newUserId]);
+            $r = $sel->fetch(PDO::FETCH_ASSOC) ?: [];
+            $out['rows']  = (int) ($r['rows_n'] ?? 0);
+            $out['hours'] = round(((int) ($r['secs'] ?? 0)) / 3600, 2);
+            $out['first'] = $r['first_d'] ?? null;
+            $out['last']  = $r['last_d'] ?? null;
+
+            if ($out['rows'] > 0) {
+                // UPDATE con el mismo filtro (JOIN incluido) para no re-consultar ids.
+                $upd = $pdo->prepare("
+                    UPDATE vicidial_agent_timesheet t
+                    LEFT JOIN users u ON u.id = t.user_id
+                    SET t.user_id = :uid2
+                    WHERE {$where}
+                ");
+                $upd->execute([':vu' => $vicidialUser, ':uid' => $newUserId, ':uid2' => $newUserId]);
+            }
+        } catch (Throwable $e) {
+            error_log('vicidialRestampTimesheetUserId: ' . $e->getMessage());
+            return ['rows' => 0, 'hours' => 0.0, 'first' => null, 'last' => null];
+        }
+
+        return $out;
+    }
+}
+
 if (!function_exists('ensureVicidialStatusBreakdownColumn')) {
     /**
      * Garantiza la columna `vicidial_agent_timesheet.status_breakdown` (JSON con

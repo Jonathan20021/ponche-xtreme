@@ -43,6 +43,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 $stmt->execute([':uid' => $uid, ':ig' => $ignore, ':vu' => $vu]);
                 $okMsgs[] = 'Mapeo de ' . $vu . ' guardado.';
+
+                // El importador copia el user_id del mapeo vigente dentro de cada
+                // fila, y la nómina lee por user_id. Sin esto, corregir el mapeo
+                // no rescataba los días ya importados: el agente seguía en 0 horas.
+                if ($uid !== null && $ignore === 0) {
+                    $all = isset($_POST['restamp_all']);
+                    $re = vicidialRestampTimesheetUserId($pdo, $vu, $uid, $all);
+                    if ($re['rows'] > 0) {
+                        $okMsgs[] = 'Historial recuperado: ' . $re['rows'] . ' día(s) (' . $re['hours'] . ' h) de '
+                            . $re['first'] . ' a ' . $re['last'] . ' ahora cuentan para este empleado. '
+                            . 'Si esos días caen en una quincena ya generada, regenérala para que se le paguen.';
+                    }
+                }
             } catch (PDOException $e) {
                 $errMsgs[] = 'Error al guardar el mapeo de ' . $vu . '.';
             }
@@ -294,9 +307,20 @@ if ($tab === 'concile') {
 $mapRows = [];
 $activeUsers = [];
 if ($tab === 'mapping') {
+    // orphan_days = días ya importados de esa cuenta que no cuentan para nadie
+    // (sin user_id, o con un user_id de un empleado borrado). Son horas que el
+    // agente trabajó y la nómina no ve. Se sanean solos al guardar el mapeo.
     $mapRows = $pdo->query("
         SELECT m.vicidial_user, m.vicidial_name, m.user_id, m.auto_matched, m.ignore_agent,
-               u.username, u.full_name
+               u.username, u.full_name,
+               (SELECT COUNT(*) FROM vicidial_agent_timesheet t
+                  LEFT JOIN users tu ON tu.id = t.user_id
+                 WHERE t.vicidial_user = m.vicidial_user
+                   AND (t.user_id IS NULL OR tu.id IS NULL)) AS orphan_days,
+               (SELECT ROUND(COALESCE(SUM(t2.total_logged_seconds), 0) / 3600, 1) FROM vicidial_agent_timesheet t2
+                  LEFT JOIN users tu2 ON tu2.id = t2.user_id
+                 WHERE t2.vicidial_user = m.vicidial_user
+                   AND (t2.user_id IS NULL OR tu2.id IS NULL)) AS orphan_hours
         FROM vicidial_user_map m
         LEFT JOIN users u ON u.id = m.user_id
         ORDER BY (m.user_id IS NULL) DESC, m.auto_matched DESC, m.vicidial_user ASC
@@ -554,6 +578,13 @@ include 'header.php';
                 <span class="text-amber-300 font-medium">automáticas</span> (por nombre) deben confirmarse. Marca
                 <span class="text-slate-400 font-medium">"Ignorar"</span> las cuentas que no son empleados (IT, entrenamiento, pruebas).
             </p>
+            <p class="text-slate-400 text-xs mt-2">
+                <i class="fas fa-triangle-exclamation text-orange-400 mr-1"></i>
+                Si una cuenta muestra <span class="text-orange-300 font-medium">"días sin atribuir"</span>, son días que el agente
+                ya trabajó en Vicidial pero que no le cuentan a nadie (se mapeó tarde, o el empleado fue borrado y recreado).
+                Guarda el mapeo y esos días se recuperan solos. Si caen en una quincena ya generada, hay que
+                <strong>regenerarla</strong> para que se le paguen.
+            </p>
         </div>
         <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
             <div class="overflow-x-auto">
@@ -587,6 +618,15 @@ include 'header.php';
                                         <?php else: ?>
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-green-500/15 text-green-300"><i class="fas fa-circle-check"></i> Confirmado</span>
                                         <?php endif; ?>
+                                        <?php if ((int) $m['orphan_days'] > 0 && (int) $m['ignore_agent'] !== 1): ?>
+                                            <div class="mt-1">
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-orange-500/15 text-orange-300"
+                                                      title="Días ya importados de Vicidial que no cuentan para ningún empleado. Guarda el mapeo para recuperarlos.">
+                                                    <i class="fas fa-triangle-exclamation"></i>
+                                                    <?= (int) $m['orphan_days'] ?> día(s) sin atribuir · <?= htmlspecialchars((string) $m['orphan_hours']) ?> h
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="px-3 py-3">
                                         <select name="user_id" class="w-full max-w-xs px-3 py-1.5 bg-slate-900/50 border border-slate-600 rounded-lg text-slate-200 text-sm">
@@ -602,6 +642,11 @@ include 'header.php';
                                         <input type="checkbox" name="ignore_agent" value="1" class="w-4 h-4 accent-slate-500" <?= (int) $m['ignore_agent'] === 1 ? 'checked' : '' ?>>
                                     </td>
                                     <td class="px-4 py-3 text-right">
+                                        <label class="flex items-center justify-end gap-1.5 text-[11px] text-slate-400 mb-1.5 cursor-pointer"
+                                               title="Solo si esta cuenta de Vicidial cambió de dueño: le quita TODOS los días viejos al empleado anterior y se los pasa al nuevo.">
+                                            <input type="checkbox" name="restamp_all" value="1" class="w-3.5 h-3.5 accent-orange-500">
+                                            Reasignar todo el historial
+                                        </label>
                                         <button type="submit" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium">
                                             <i class="fas fa-save mr-1"></i>Guardar
                                         </button>
