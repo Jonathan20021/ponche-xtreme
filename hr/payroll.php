@@ -6,10 +6,12 @@ require_once 'loans_payroll_bridge.php';
 require_once '../lib/logging_functions.php';
 require_once '../lib/work_hours_calculator.php';
 require_once '../lib/vicidial_api_client.php';
+require_once '../lib/night_incentive_calculator.php';
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
 ensurePayrollManualIncentivesTable($pdo);
+ensureCampaignNightIncentivesTable($pdo);
 ensurePayrollPeriodsVisibilityColumn($pdo);
 ensurePayrollHolidaysTable($pdo);
 ensureUserPayrollSourceColumn($pdo);
@@ -138,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         // no podemos verificar que trabajaron en el período y se han dado casos
         // de doble pago (ej. registros duplicados marcados terminados sin fecha).
         $empStmt = $pdo->prepare("
-            SELECT e.id, e.employment_status,
+            SELECT e.id, e.employment_status, e.campaign_id,
                    u.id as user_id, u.hourly_rate, u.monthly_salary, u.monthly_salary_dop, u.overtime_multiplier,
                    u.compensation_type, u.role,
                    COALESCE(u.payroll_source, 'manual') AS payroll_source
@@ -164,6 +166,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         // Alertas de la fuente Vicidial (días con tope / sin datos) para revisar
         // antes de aprobar. NO bloquean el cálculo; solo se muestran.
         $vicidialPayrollFlags = ['capped' => [], 'no_data' => [], 'backfilled' => []];
+
+        // Incentivo nocturno automático: reglas por campaña (ej. Delivery paga
+        // RD$5.00 por cada hora trabajada a partir de las 7:00 PM). Se configuran
+        // en hr/payroll_settings.php.
+        $nightRules = getActiveCampaignNightIncentiveRules($pdo, $period['end_date']);
 
         foreach ($employees as $emp) {
             $userId = $emp['user_id'];
@@ -213,6 +220,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             );
 
             $dailyWorkSeconds = calculateDailyWorkSecondsFromPunchRows($punches, $paidTypeSlugs);
+            // Fuente con que se termina pagando cada día. Importa para el incentivo
+            // nocturno: de un día de ponche salen las horas exactas, de uno de
+            // Vicidial solo una estimación.
+            $hoursSourceByDate = [];
 
             // === FUENTE VICIDIAL (Fase 3) ===
             // Para agentes marcados payroll_source='vicidial', las horas pagables
@@ -230,6 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 $vEff  = getVicidialPayrollEffectiveDate($pdo);
                 $merge = vicidialMergeDailySeconds($punchDaily, $vd, $vEff);
                 $dailyWorkSeconds = $merge['by_date'];
+                $hoursSourceByDate = $merge['source'];
 
                 if (!empty($vd['capped_days'])) {
                     $vicidialPayrollFlags['capped'][] = ['user_id' => (int) $userId, 'days' => $vd['capped_days']];
@@ -251,6 +263,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                         $vicidialPayrollFlags['backfilled'][] = ['user_id' => (int) $userId, 'days' => $bf];
                     }
                 }
+            }
+
+            // === INCENTIVO NOCTURNO AUTOMÁTICO (por campaña) ===
+            // Monto fijo por cada hora pagable dentro de la franja nocturna. Se
+            // calcula sobre las horas REALES del día, antes del recargo de feriado
+            // (es RD$/hora fijo, no una tarifa horaria) y antes del corte semanal
+            // de 44h (da igual si la hora cayó en regular o en extra).
+            $autoNight = ['amount' => 0.0, 'hours' => 0.0, 'estimated_hours' => 0.0];
+            $nightRule = $nightRules[(int) ($emp['campaign_id'] ?? 0)] ?? null;
+            if ($nightRule) {
+                $autoNight = calculateNightIncentiveForUser(
+                    $pdo,
+                    (int) $userId,
+                    $nightRule,
+                    $period['start_date'],
+                    $period['end_date'],
+                    $punches,
+                    $paidTypeSlugs,
+                    $dailyWorkSeconds,
+                    $hoursSourceByDate
+                );
             }
 
             $weeklySplit = splitWeeklyRegularOvertimeSeconds(
@@ -332,14 +365,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
             }
 
             $daysWorked = (int) ceil(max($totalRegularHours + $totalOvertimeHours, 0) / max($scheduledHours, 0.01));
-            
+
+            // Incentivo nocturno: manda el valor que RRHH escriba a mano en los
+            // ajustes del período; si lo deja en 0, se paga el automático de la
+            // campaña. Nunca se suman — eso pagaría doble a quien ya lo tenía
+            // capturado a mano. Las horas nocturnas se guardan siempre, aunque el
+            // monto venga a mano, para poder auditar el override.
+            $manualNight = (float) ($manualIncentivesMap[$employeeId]['night_incentive'] ?? 0);
+            $nightHours = (float) $autoNight['hours'];
+            if ($manualNight > 0) {
+                $nightAmount = $manualNight;
+                $nightSource = 'manual';
+            } elseif ((float) $autoNight['amount'] > 0) {
+                $nightAmount = (float) $autoNight['amount'];
+                $nightSource = 'auto';
+            } else {
+                $nightAmount = 0.0;
+                $nightSource = '';
+            }
+
             // Calculate payroll
             $hoursData = [
                 'regular_hours' => $totalRegularHours,
                 'overtime_hours' => $totalOvertimeHours,
                 'days_worked' => $daysWorked,
                 'hours_by_date' => $hoursByDate,
-                'bonuses' => (float)($manualIncentivesMap[$employeeId]['night_incentive'] ?? 0),
+                // El incentivo nocturno viaja en `bonuses` porque así es como entra
+                // al bruto (y así paga AFP/SFS/ISR). La columna night_incentive de
+                // payroll_records guarda el mismo monto desglosado.
+                'bonuses' => $nightAmount,
+                'night_incentive' => $nightAmount,
                 'commissions' => (float)($manualIncentivesMap[$employeeId]['sales_incentive'] ?? 0),
                 'other_income' => 0,
                 'cooperative_deduction' => (float)($manualIncentivesMap[$employeeId]['cooperative_deduction'] ?? 0),
@@ -368,7 +423,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                     $updateStmt = $pdo->prepare("
                         UPDATE payroll_records SET
                             base_salary = ?, regular_hours = ?, overtime_hours = ?, overtime_amount = ?,
-                            bonuses = ?, commissions = ?, other_income = ?, gross_salary = ?,
+                            bonuses = ?, night_incentive = ?, night_hours = ?, night_incentive_source = ?,
+                            commissions = ?, other_income = ?, gross_salary = ?,
                             afp_employee = ?, sfs_employee = ?, isr = ?, other_deductions = ?, total_deductions = ?,
                             afp_employer = ?, sfs_employer = ?, srl_employer = ?, infotep_employer = ?, total_employer_contributions = ?,
                             net_salary = ?, total_hours = ?, salary_segments = ?, updated_at = NOW()
@@ -376,7 +432,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                     ");
                     $updateStmt->execute([
                         $payrollData['base_salary'], $payrollData['regular_hours'], $payrollData['overtime_hours'], $payrollData['overtime_amount'],
-                        $payrollData['bonuses'], $payrollData['commissions'], $payrollData['other_income'], $payrollData['gross_salary'],
+                        $payrollData['bonuses'], $nightAmount, $nightHours, $nightSource,
+                        $payrollData['commissions'], $payrollData['other_income'], $payrollData['gross_salary'],
                         $payrollData['afp_employee'], $payrollData['sfs_employee'], $payrollData['isr'], $payrollData['other_deductions'], $payrollData['total_deductions'],
                         $payrollData['afp_employer'], $payrollData['sfs_employer'], $payrollData['srl_employer'], $payrollData['infotep_employer'], $payrollData['total_employer_contributions'],
                         $payrollData['net_salary'], $payrollData['total_hours'], $salarySegmentsJson,
@@ -388,16 +445,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                         INSERT INTO payroll_records (
                             payroll_period_id, employee_id,
                             base_salary, regular_hours, overtime_hours, overtime_amount,
-                            bonuses, commissions, other_income, gross_salary,
+                            bonuses, night_incentive, night_hours, night_incentive_source,
+                            commissions, other_income, gross_salary,
                             afp_employee, sfs_employee, isr, other_deductions, total_deductions,
                             afp_employer, sfs_employer, srl_employer, infotep_employer, total_employer_contributions,
                             net_salary, total_hours, salary_segments
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ");
                     $insertStmt->execute([
                         $periodId, $employeeId,
                         $payrollData['base_salary'], $payrollData['regular_hours'], $payrollData['overtime_hours'], $payrollData['overtime_amount'],
-                        $payrollData['bonuses'], $payrollData['commissions'], $payrollData['other_income'], $payrollData['gross_salary'],
+                        $payrollData['bonuses'], $nightAmount, $nightHours, $nightSource,
+                        $payrollData['commissions'], $payrollData['other_income'], $payrollData['gross_salary'],
                         $payrollData['afp_employee'], $payrollData['sfs_employee'], $payrollData['isr'], $payrollData['other_deductions'], $payrollData['total_deductions'],
                         $payrollData['afp_employer'], $payrollData['sfs_employer'], $payrollData['srl_employer'], $payrollData['infotep_employer'], $payrollData['total_employer_contributions'],
                         $payrollData['net_salary'], $payrollData['total_hours'], $salarySegmentsJson
@@ -632,6 +691,7 @@ $selectedPeriodId = isset($_GET['period_id']) ? (int)$_GET['period_id'] : null;
 $selectedPeriod = null;
 $payrollRecords = [];
 $manualIncentives = [];
+$nightInfoMap = [];
 $editableEmployees = [];
 
 if ($selectedPeriodId) {
@@ -680,7 +740,11 @@ if ($selectedPeriodId) {
         $recordsStmt = $pdo->prepare("
             SELECT pr.*, e.first_name, e.last_name, e.employee_code, e.identification_number, d.name as department_name,
                    COALESCE(pmi.sales_incentive, 0) as sales_incentive,
-                   COALESCE(pmi.night_incentive, 0) as night_incentive,
+                   -- El monto pagado sale del registro de nómina (ya resuelve
+                   -- automático vs. manual). Los períodos calculados antes de que
+                   -- existiera la columna caen al valor manual de siempre.
+                   COALESCE(NULLIF(pr.night_incentive, 0), pmi.night_incentive, 0) as night_incentive,
+                   COALESCE(pmi.night_incentive, 0) as night_incentive_manual,
                    COALESCE(pmi.use_manual_hours, 0) as use_manual_hours,
                    COALESCE(pmi.manual_regular_hours, 0) as manual_regular_hours,
                    COALESCE(pmi.manual_overtime_hours, 0) as manual_overtime_hours,
@@ -697,6 +761,31 @@ if ($selectedPeriodId) {
         ");
         $recordsStmt->execute([$selectedPeriodId]);
         $payrollRecords = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Lo que el último cálculo dejó de incentivo nocturno, para mostrarlo
+        // como referencia en la fila de ajustes manuales de cada colaborador.
+        $nightInfoMap = [];
+        foreach ($payrollRecords as $r) {
+            $nightInfoMap[(int) $r['employee_id']] = [
+                'amount' => (float) ($r['night_incentive'] ?? 0),
+                'hours'  => (float) ($r['night_hours'] ?? 0),
+                'source' => (string) ($r['night_incentive_source'] ?? ''),
+            ];
+        }
+    }
+}
+
+// Campañas con incentivo nocturno vigente: se avisa en la pantalla del período
+// para que RRHH sepa que ese renglón se calcula solo.
+$activeNightRules = getActiveCampaignNightIncentiveRules($pdo, $selectedPeriod['end_date'] ?? null);
+$nightRuleCampaignNames = [];
+if (!empty($activeNightRules)) {
+    $ids = implode(',', array_map('intval', array_keys($activeNightRules)));
+    foreach ($pdo->query("SELECT id, name FROM campaigns WHERE id IN ($ids)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+        $rule = $activeNightRules[(int) $c['id']];
+        $nightRuleCampaignNames[] = $c['name']
+            . ' (RD$' . number_format($rule['amount_per_hour'], 2) . '/h desde las '
+            . date('g:i A', strtotime($rule['start_time'])) . ')';
     }
 }
 
@@ -944,6 +1033,17 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                     </div>
                 </div>
 
+                <?php if (!empty($nightRuleCampaignNames)): ?>
+                    <div class="mb-6 rounded border border-amber-700/50 bg-amber-900/20 px-4 py-3 text-sm text-amber-100">
+                        <i class="fas fa-moon mr-1"></i>
+                        <strong>El incentivo nocturno se calcula solo</strong> para:
+                        <?= htmlspecialchars(implode(' · ', $nightRuleCampaignNames)) ?>.
+                        Deja la casilla en <strong>0.00</strong> para que se pague el automático;
+                        si escribes un monto, ese <strong>reemplaza</strong> al calculado.
+                        <a href="payroll_settings.php#incentivo-nocturno" class="underline">Cambiar la regla</a>.
+                    </div>
+                <?php endif; ?>
+
                 <?php if (empty($editableEmployees)): ?>
                     <p class="text-slate-400">No hay empleados activos disponibles para capturar ajustes.</p>
                 <?php else: ?>
@@ -1066,6 +1166,7 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                 >
                                             </td>
                                             <td class="py-2 px-2">
+                                                <?php $nightInfo = $nightInfoMap[(int)$agent['id']] ?? null; ?>
                                                 <input
                                                     type="number"
                                                     step="0.01"
@@ -1073,7 +1174,18 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                                     name="manual_incentives[<?= (int)$agent['id'] ?>][night]"
                                                     value="<?= htmlspecialchars(number_format((float)$agentIncentive['night_incentive'], 2, '.', '')) ?>"
                                                     class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                                    title="Déjalo en 0.00 para que se pague el incentivo automático de la campaña. Un monto aquí lo reemplaza."
                                                 >
+                                                <?php if ($nightInfo && $nightInfo['amount'] > 0): ?>
+                                                    <div class="text-xs mt-1 text-right <?= $nightInfo['source'] === 'manual' ? 'text-amber-300' : 'text-slate-500' ?>">
+                                                        <?php if ($nightInfo['source'] === 'manual'): ?>
+                                                            Manual: <?= formatDOP($nightInfo['amount']) ?>
+                                                        <?php else: ?>
+                                                            Auto: <?= formatDOP($nightInfo['amount']) ?>
+                                                            (<?= number_format($nightInfo['hours'], 2) ?>h noct.)
+                                                        <?php endif; ?>
+                                                    </div>
+                                                <?php endif; ?>
                                             </td>
                                             <td class="py-2 px-2">
                                                 <input
@@ -1301,7 +1413,18 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                                         </span>
                                     </td>
                                     <td class="py-2 px-2 text-right text-emerald-300"><?= formatDOP($record['sales_incentive']) ?></td>
-                                    <td class="py-2 px-2 text-right text-amber-300"><?= formatDOP($record['night_incentive']) ?></td>
+                                    <td class="py-2 px-2 text-right text-amber-300">
+                                        <?= formatDOP($record['night_incentive']) ?>
+                                        <?php if ((float)($record['night_incentive'] ?? 0) > 0): ?>
+                                            <div class="text-xs text-slate-500">
+                                                <?php if (($record['night_incentive_source'] ?? '') === 'manual'): ?>
+                                                    manual
+                                                <?php elseif ((float)($record['night_hours'] ?? 0) > 0): ?>
+                                                    <?= number_format((float)$record['night_hours'], 2) ?>h noct.
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="py-2 px-2 text-right font-semibold"><?= formatDOP($record['gross_salary']) ?></td>
                                     <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($record['afp_employee']) ?></td>
                                     <td class="py-2 px-2 text-right text-red-400"><?= formatDOP($record['sfs_employee']) ?></td>

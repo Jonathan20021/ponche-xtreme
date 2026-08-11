@@ -156,7 +156,9 @@ if ($selectedPeriod) {
                 SELECT pr.*, e.first_name, e.last_name, e.employee_code, e.identification_number,
                        d.name AS department_name,
                        COALESCE(pmi.sales_incentive, 0) AS sales_incentive,
-                       COALESCE(pmi.night_incentive, 0) AS night_incentive,
+                       -- Monto ya resuelto (automático de la campaña o el manual
+                       -- que lo sobrescribe); períodos viejos caen al manual.
+                       COALESCE(NULLIF(pr.night_incentive, 0), pmi.night_incentive, 0) AS night_incentive,
                        COALESCE(pmi.cooperative_deduction, 0) AS cooperative_deduction,
                        COALESCE(pmi.additional_deduction, 0) AS additional_deduction
                 FROM payroll_records pr

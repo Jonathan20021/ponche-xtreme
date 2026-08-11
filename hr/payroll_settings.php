@@ -3,10 +3,12 @@ session_start();
 require_once '../db.php';
 require_once 'payroll_functions.php';
 require_once '../lib/labor_benefits_calculator.php';
+require_once '../lib/night_incentive_calculator.php';
 
 // Check permissions
 ensurePermission('hr_payroll', '../unauthorized.php');
 ensurePayrollHolidaysTable($pdo);
+ensureCampaignNightIncentivesTable($pdo);
 
 $theme = $_SESSION['theme'] ?? 'dark';
 $bodyClass = $theme === 'light' ? 'theme-light' : 'theme-dark';
@@ -165,6 +167,77 @@ if (!empty($successMsg) && isset($_POST['update_benefits'])) {
 }
 
 // Get all deduction configurations
+// Incentivo nocturno por campaña: RD$ por cada hora pagable trabajada dentro de
+// la franja. Se guarda una fila por campaña; monto 0 o casilla apagada = no paga.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_night_incentives'])) {
+    $rows = $_POST['night'] ?? [];
+
+    $pdo->beginTransaction();
+    try {
+        $deleteStmt = $pdo->prepare("DELETE FROM campaign_night_incentives WHERE campaign_id = ?");
+        $upsertStmt = $pdo->prepare("
+            INSERT INTO campaign_night_incentives
+                (campaign_id, start_time, end_time, amount_per_hour, is_active, effective_from, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                start_time = VALUES(start_time),
+                end_time = VALUES(end_time),
+                amount_per_hour = VALUES(amount_per_hour),
+                is_active = VALUES(is_active),
+                effective_from = VALUES(effective_from),
+                notes = VALUES(notes)
+        ");
+
+        foreach ($rows as $campaignId => $values) {
+            $campaignId = (int) $campaignId;
+            if ($campaignId <= 0) {
+                continue;
+            }
+
+            $amount = round(max((float) ($values['amount'] ?? 0), 0), 2);
+            $isActive = !empty($values['is_active']) ? 1 : 0;
+
+            // Sin monto no hay regla que guardar: se borra la fila para que la
+            // tabla no acumule campañas vacías.
+            if ($amount <= 0) {
+                $deleteStmt->execute([$campaignId]);
+                continue;
+            }
+
+            // El input type="time" manda "19:00", pero algunos navegadores añaden
+            // los segundos. Se aceptan las dos formas y se normaliza a HH:MM:SS.
+            $normalizeTime = static function (string $raw, string $fallback): string {
+                $raw = trim($raw);
+                if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $raw, $m)) {
+                    return $fallback;
+                }
+                if ((int) $m[1] > 23 || (int) $m[2] > 59) {
+                    return $fallback;
+                }
+                return sprintf('%02d:%02d:%02d', (int) $m[1], (int) $m[2], (int) ($m[3] ?? 0));
+            };
+
+            $startTime = $normalizeTime((string) ($values['start_time'] ?? ''), '19:00:00');
+            $endTime   = $normalizeTime((string) ($values['end_time'] ?? ''), '00:00:00');
+
+            $effectiveFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', trim((string) ($values['effective_from'] ?? '')))
+                ? trim((string) $values['effective_from'])
+                : null;
+
+            $notes = trim((string) ($values['notes'] ?? ''));
+            $notes = $notes !== '' ? mb_substr($notes, 0, 255) : null;
+
+            $upsertStmt->execute([$campaignId, $startTime, $endTime, $amount, $isActive, $effectiveFrom, $notes]);
+        }
+
+        $pdo->commit();
+        $successMsg = "Incentivo nocturno actualizado. Vuelve a CALCULAR los períodos abiertos para que tome efecto.";
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        $errorMsg = "Error al guardar el incentivo nocturno: " . $e->getMessage();
+    }
+}
+
 $deductions = $pdo->query("SELECT * FROM payroll_deduction_config ORDER BY code")->fetchAll(PDO::FETCH_ASSOC);
 
 // Get ISR scales
@@ -172,6 +245,19 @@ $isrScales = $pdo->query("SELECT * FROM payroll_isr_scales WHERE year = 2025 ORD
 
 // Get holidays list
 $holidays = $pdo->query("SELECT id, holiday_date, name, multiplier, is_active FROM payroll_holidays ORDER BY holiday_date DESC")->fetchAll(PDO::FETCH_ASSOC);
+
+// Campañas con gente activa arriba: son las que interesan para el incentivo.
+$nightCampaigns = $pdo->query("
+    SELECT c.id, c.name,
+           COUNT(e.id) AS active_employees
+    FROM campaigns c
+    LEFT JOIN employees e
+        ON e.campaign_id = c.id
+       AND e.employment_status IN ('ACTIVE', 'TRIAL')
+    GROUP BY c.id, c.name
+    ORDER BY active_employees DESC, c.name
+")->fetchAll(PDO::FETCH_ASSOC);
+$nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -484,6 +570,130 @@ $holidays = $pdo->query("SELECT id, holiday_date, name, multiplier, is_active FR
                     <button type="submit" class="btn-primary">
                         <i class="fas fa-save"></i>
                         Guardar Escalas
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Incentivo nocturno automático por campaña -->
+        <div class="glass-card mt-8" id="incentivo-nocturno">
+            <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
+                <div>
+                    <h2 class="text-xl font-semibold mb-1">
+                        <i class="fas fa-moon text-amber-400 mr-2"></i>
+                        Incentivo Nocturno Automático
+                    </h2>
+                    <p class="text-sm text-slate-400">
+                        Un monto fijo en RD$ por cada <strong>hora pagable</strong> que el colaborador trabaje
+                        dentro de la franja. Se calcula solo al presionar <strong>Calcular</strong> en el período
+                        y entra al bruto (paga AFP, SFS e ISR como cualquier ingreso).
+                    </p>
+                </div>
+            </div>
+
+            <div class="mb-4 rounded border border-slate-700 bg-slate-900/50 p-4 text-xs text-slate-400 leading-relaxed">
+                <p class="mb-2">
+                    <strong class="text-slate-200">Cómo se cuentan las horas nocturnas.</strong>
+                    La hora es la local de República Dominicana (GMT-4), la misma del ponche.
+                    Un turno de 3:30 PM a 9:30 PM con la franja en 7:00 PM rinde 2.50 horas nocturnas:
+                    a RD$5.00 son RD$12.50 ese día.
+                </p>
+                <p class="mb-2">
+                    A quien se le paga por <strong>ponche</strong>, las horas salen exactas de sus marcaciones
+                    (las pausas no pagadas no cuentan). A quien se le paga por <strong>Vicidial</strong>, se toma
+                    el solape de su ventana de login con la franja y se prorratea según qué parte de esa jornada
+                    resultó pagable — es una estimación, porque la hoja de tiempo de Vicidial no guarda el detalle
+                    minuto a minuto. Nunca se pagan más horas nocturnas que las horas pagadas de ese día.
+                </p>
+                <p>
+                    Si RRHH escribe un monto a mano en <em>Ajustes Manuales por Empleado</em> del período,
+                    ese <strong>reemplaza</strong> al automático para esa persona. Nunca se suman.
+                </p>
+            </div>
+
+            <form method="POST">
+                <input type="hidden" name="update_night_incentives" value="1">
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-700">
+                                <th class="text-left py-2 px-2">Campaña</th>
+                                <th class="text-center py-2 px-2">Activo</th>
+                                <th class="text-right py-2 px-2">RD$ por hora</th>
+                                <th class="text-center py-2 px-2">Desde</th>
+                                <th class="text-center py-2 px-2">Hasta</th>
+                                <th class="text-center py-2 px-2">Aplica desde</th>
+                                <th class="text-left py-2 px-2">Nota</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($nightCampaigns as $campaign):
+                                $cid = (int) $campaign['id'];
+                                $rule = $nightRulesByCampaign[$cid] ?? null;
+                                $activeEmployees = (int) $campaign['active_employees'];
+                                // Campañas sin gente y sin regla solo estorban la tabla.
+                                if ($activeEmployees === 0 && !$rule) {
+                                    continue;
+                                }
+                            ?>
+                                <tr class="border-b border-slate-800 hover:bg-slate-800/40">
+                                    <td class="py-2 px-2">
+                                        <div class="font-medium"><?= htmlspecialchars($campaign['name']) ?></div>
+                                        <div class="text-xs text-slate-500"><?= $activeEmployees ?> activo(s)</div>
+                                    </td>
+                                    <td class="py-2 px-2 text-center">
+                                        <input type="checkbox"
+                                               name="night[<?= $cid ?>][is_active]"
+                                               value="1"
+                                               <?= ($rule && $rule['is_active']) ? 'checked' : '' ?>
+                                               class="h-4 w-4 rounded border-slate-600 bg-slate-900">
+                                    </td>
+                                    <td class="py-2 px-2">
+                                        <input type="number" step="0.01" min="0"
+                                               name="night[<?= $cid ?>][amount]"
+                                               value="<?= $rule ? htmlspecialchars(number_format((float) $rule['amount_per_hour'], 2, '.', '')) : '0.00' ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                               title="Monto en RD$ por cada hora dentro de la franja. En 0 se borra la regla.">
+                                    </td>
+                                    <td class="py-2 px-2">
+                                        <input type="time"
+                                               name="night[<?= $cid ?>][start_time]"
+                                               value="<?= $rule ? htmlspecialchars(substr($rule['start_time'], 0, 5)) : '19:00' ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center">
+                                    </td>
+                                    <td class="py-2 px-2">
+                                        <input type="time"
+                                               name="night[<?= $cid ?>][end_time]"
+                                               value="<?= $rule ? htmlspecialchars(substr($rule['end_time'], 0, 5)) : '00:00' ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center"
+                                               title="00:00 = hasta la medianoche. Si el fin es menor o igual al inicio, la franja cruza al día siguiente (ej. 19:00 a 06:00).">
+                                    </td>
+                                    <td class="py-2 px-2">
+                                        <input type="date"
+                                               name="night[<?= $cid ?>][effective_from]"
+                                               value="<?= $rule && $rule['effective_from'] ? htmlspecialchars($rule['effective_from']) : '' ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center"
+                                               title="Opcional. Los días anteriores a esta fecha no cobran el incentivo, aunque se regenere una quincena vieja.">
+                                    </td>
+                                    <td class="py-2 px-2">
+                                        <input type="text"
+                                               name="night[<?= $cid ?>][notes]"
+                                               value="<?= $rule ? htmlspecialchars((string) $rule['notes']) : '' ?>"
+                                               maxlength="255"
+                                               placeholder="Acuerdo, quién lo autorizó..."
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2">
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        Guardar Incentivo Nocturno
                     </button>
                 </div>
             </form>

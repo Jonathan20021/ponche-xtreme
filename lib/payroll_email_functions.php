@@ -192,7 +192,9 @@ function getEmployeePayrollData(PDO $pdo, int $periodId, int $employeeId): ?arra
                d.name as department_name,
                u.hourly_rate, u.monthly_salary, u.overtime_multiplier,
                COALESCE(pmi.sales_incentive, 0) as sales_incentive,
-               COALESCE(pmi.night_incentive, 0) as night_incentive,
+               -- Monto ya resuelto (automático de la campaña o el manual que lo
+               -- sobrescribe); períodos viejos caen al manual de siempre.
+               COALESCE(NULLIF(pr.night_incentive, 0), pmi.night_incentive, 0) as night_incentive,
                COALESCE(pmi.cooperative_deduction, 0) as cooperative_deduction,
                COALESCE(pmi.additional_deduction, 0) as additional_deduction,
                pmi.notes as incentive_notes
@@ -436,10 +438,17 @@ function generatePayrollSlipHTML(array $data): string {
                         <td class="amount positive"><?= formatDOP($data['overtime_amount']) ?></td>
                     </tr>
                     <?php endif; ?>
-                    <?php if ($data['bonuses'] > 0): ?>
+                    <?php
+                    // El incentivo nocturno viaja dentro de `bonuses` (así entra al
+                    // bruto). Se resta aquí para no mostrarle al colaborador el
+                    // mismo dinero dos veces: una como bonificación y otra en su
+                    // propia línea más abajo.
+                    $otherBonuses = round((float) $data['bonuses'] - (float) ($data['night_incentive'] ?? 0), 2);
+                    ?>
+                    <?php if ($otherBonuses > 0): ?>
                     <tr>
                         <td>Bonificaciones</td>
-                        <td class="amount positive"><?= formatDOP($data['bonuses']) ?></td>
+                        <td class="amount positive"><?= formatDOP($otherBonuses) ?></td>
                     </tr>
                     <?php endif; ?>
                     <?php if ($data['commissions'] > 0): ?>
@@ -450,7 +459,7 @@ function generatePayrollSlipHTML(array $data): string {
                     <?php endif; ?>
                     <?php if (($data['night_incentive'] ?? 0) > 0): ?>
                     <tr>
-                        <td>Incentivo Nocturno</td>
+                        <td>Incentivo Nocturno<?= ((float) ($data['night_hours'] ?? 0) > 0) ? ' (' . number_format((float) $data['night_hours'], 2) . ' hrs)' : '' ?></td>
                         <td class="amount positive"><?= formatDOP($data['night_incentive']) ?></td>
                     </tr>
                     <?php endif; ?>
@@ -604,14 +613,19 @@ function generatePayrollSlipPlainText(array $data): string {
     if ($data['overtime_amount'] > 0) {
         $text .= "Horas Extra (" . number_format($data['overtime_hours'], 2) . " hrs): " . formatDOP($data['overtime_amount']) . "\n";
     }
-    if ($data['bonuses'] > 0) {
-        $text .= "Bonificaciones: " . formatDOP($data['bonuses']) . "\n";
+    // El incentivo nocturno viaja dentro de `bonuses`: se descuenta para no
+    // listarlo dos veces (ver la versión HTML del volante).
+    $otherBonusesText = round((float) $data['bonuses'] - (float) ($data['night_incentive'] ?? 0), 2);
+    if ($otherBonusesText > 0) {
+        $text .= "Bonificaciones: " . formatDOP($otherBonusesText) . "\n";
     }
     if ($data['commissions'] > 0) {
         $text .= "Incentivo por Ventas: " . formatDOP($data['commissions']) . "\n";
     }
     if (($data['night_incentive'] ?? 0) > 0) {
-        $text .= "Incentivo Nocturno: " . formatDOP($data['night_incentive']) . "\n";
+        $nightHrs = (float) ($data['night_hours'] ?? 0);
+        $text .= "Incentivo Nocturno" . ($nightHrs > 0 ? " (" . number_format($nightHrs, 2) . " hrs)" : "")
+            . ": " . formatDOP($data['night_incentive']) . "\n";
     }
     if ($data['other_income'] > 0) {
         $text .= "Otros Ingresos: " . formatDOP($data['other_income']) . "\n";
