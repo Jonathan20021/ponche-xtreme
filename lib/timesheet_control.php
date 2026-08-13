@@ -1143,6 +1143,40 @@ if (!function_exists('timesheetOpenExceptions')) {
     }
 }
 
+if (!function_exists('timesheetStoreDayValue')) {
+    /**
+     * Guarda cuanto vale el dia (segundos pagables + RD$) en timesheet_day_status.
+     *
+     * No cambia la etapa: si la fila no existe nace en OPEN (o CLOSED si es
+     * anterior al arranque del procedimiento) y si existe se respeta la que tenga.
+     * En un dia CLOSED/LOCKED que ya trae valor NO se pisa nada: ese numero es la
+     * foto del momento del cierre y es lo que auditoria revisa.
+     */
+    function timesheetStoreDayValue(PDO $pdo, int $userId, string $workDate, int $seconds): void
+    {
+        if (!timesheetTablesReady($pdo) || $userId <= 0) {
+            return;
+        }
+        try {
+            $amount  = timesheetAmountForSeconds($pdo, $userId, $seconds);
+            $initial = $workDate < timesheetControlStartDate($pdo) ? 'CLOSED' : 'OPEN';
+
+            $pdo->prepare("
+                INSERT INTO timesheet_day_status
+                    (user_id, work_date, status, work_seconds, amount_dop)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    work_seconds = IF(status IN ('CLOSED','LOCKED') AND work_seconds IS NOT NULL,
+                                      work_seconds, VALUES(work_seconds)),
+                    amount_dop   = IF(status IN ('CLOSED','LOCKED') AND amount_dop IS NOT NULL,
+                                      amount_dop, VALUES(amount_dop))
+            ")->execute([$userId, $workDate, $initial, $seconds, $amount]);
+        } catch (Throwable $e) {
+            error_log('timesheetStoreDayValue: ' . $e->getMessage());
+        }
+    }
+}
+
 if (!function_exists('timesheetDetectExceptions')) {
     /**
      * Barrido del dia. Idempotente: se puede correr las veces que sea.
@@ -1205,6 +1239,13 @@ if (!function_exists('timesheetDetectExceptions')) {
             $day     = timesheetDaySeconds($pdo, (int) $userId, $workDate);
             $seconds = $day['seconds'];
             $hours   = $seconds / 3600;
+
+            // Se deja escrito cuanto vale el dia AUNQUE siga abierto. Finanzas lee
+            // estas columnas para su tarjeta de impacto economico y no tiene el
+            // calculador de horas: si solo se escribieran al cerrar, la pantalla de
+            // Finanzas mostraria RD$ 0.00 todos los dias hasta el cierre.
+            // En un dia ya cerrado NO se pisa el valor: esa es la foto del cierre.
+            timesheetStoreDayValue($pdo, (int) $userId, $workDate, $seconds);
 
             // 1. Jornada abierta: el ultimo punch no es la salida. Solo aplica a
             //    quien se mide por ponche — en Vicidial no hay "salida" que marcar,
