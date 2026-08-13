@@ -72,6 +72,12 @@ $navItems = [
                 'icon' => 'fa-hourglass-half',
             ],
             [
+                'section' => 'timesheet_control',
+                'label' => 'Control de Horas',
+                'href' => $baseHref . 'hr/timesheet_control.php',
+                'icon' => 'fa-shield-halved',
+            ],
+            [
                 'section' => 'hr_payroll',
                 'label' => 'Nómina',
                 'href' => $baseHref . 'hr/payroll.php',

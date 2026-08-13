@@ -851,6 +851,12 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                     Ajuste de Horas
                 </a>
                 <?php endif; ?>
+                <?php if (userHasPermission('timesheet_control')): ?>
+                <a href="payroll_control.php<?= $selectedPeriodId ? ('?period_id=' . (int) $selectedPeriodId) : '' ?>" class="btn-secondary">
+                    <i class="fas fa-shield-halved"></i>
+                    Control del Período
+                </a>
+                <?php endif; ?>
                 <a href="payroll_settings.php" class="btn-secondary">
                     <i class="fas fa-cog"></i>
                     Configuración

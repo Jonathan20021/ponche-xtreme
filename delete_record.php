@@ -140,9 +140,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Historial de modificaciones del ponche: borrar un punch cambia las horas
     // del día, así que se guarda cómo estaban antes.
     require_once __DIR__ . '/lib/attendance_audit.php';
+    require_once __DIR__ . '/lib/timesheet_control.php';
     $auditUserId   = (int) ($recordData['user_id'] ?? 0);
     $auditWorkDate = !empty($recordData['timestamp']) ? date('Y-m-d', strtotime($recordData['timestamp'])) : date('Y-m-d');
+
+    // Candado del procedimiento: día cerrado, período bloqueado o ventana vencida.
+    $guard = timesheetGuard($pdo, $auditUserId, $auditWorkDate, [
+        'context'   => 'delete_records',
+        'auth_code' => $authorizationCode,
+        'reason'    => $deleteReason,
+    ]);
+    if (!$guard['allowed']) {
+        $_SESSION['error'] = $guard['message'];
+        header('Location: records.php');
+        exit;
+    }
+
     $auditBefore   = attendanceAuditSnapshot($pdo, $auditUserId, $auditWorkDate);
+
+    // El punch eliminado se archiva ANTES de borrarlo: el ponche original no se
+    // destruye nunca, solo deja de contar para las horas.
+    try {
+        $pdo->prepare("
+            INSERT INTO attendance_voided
+                (attendance_id, user_id, work_date, type, timestamp, ip_address,
+                 row_json, reason, source, voided_by, authorization_code_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'delete_record', ?, ?)
+        ")->execute([
+            $id,
+            $auditUserId,
+            $auditWorkDate,
+            $recordData['type'] ?? '',
+            $recordData['timestamp'] ?? null,
+            $recordData['ip_address'] ?? null,
+            json_encode($recordData, JSON_UNESCAPED_UNICODE),
+            mb_substr($deleteReason, 0, 255),
+            $_SESSION['user_id'] ?? null,
+            $authCodeId ?: ($guard['code_id'] ?? null),
+        ]);
+    } catch (Throwable $e) {
+        // Sin archivo no se borra: perder la evidencia es peor que no borrar.
+        error_log('delete_record archivo: ' . $e->getMessage());
+        $_SESSION['error'] = 'No se pudo archivar el registro antes de eliminarlo. '
+            . 'El punch NO fue eliminado (la evidencia no se puede perder).';
+        header('Location: records.php');
+        exit;
+    }
 
     // Delete record
     $query = "DELETE FROM attendance WHERE id = ?";
@@ -161,7 +204,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'reason'        => $deleteReason,
         'source'        => 'delete_record',
         'performed_by'  => $_SESSION['user_id'] ?? null,
+        'stage_at_change'       => $guard['stage'] ?? null,
+        'authorization_code_id' => $authCodeId ?: ($guard['code_id'] ?? null),
+        'was_outside_window'    => $guard['outside_window'] ?? false,
+        'was_after_close'       => $guard['after_close'] ?? false,
     ], $auditBefore);
+
+    timesheetAfterChange($pdo, $auditUserId, $auditWorkDate, $guard, [
+        'reason'      => $deleteReason,
+        'source'      => 'delete_record',
+        'old_seconds' => (int) ($auditBefore['work_seconds'] ?? 0),
+        'new_seconds' => timesheetDayWorkSeconds($pdo, $auditUserId, $auditWorkDate),
+    ]);
 
     // Log the authorization code usage
     if ($authCodeId) {

@@ -196,6 +196,21 @@ if ($authRequired) {
 // Foto de las horas del día ANTES de agregar el punch: es lo que permite
 // mostrar "original vs modificado" en el historial, como en Vicidial.
 require_once __DIR__ . '/lib/attendance_audit.php';
+require_once __DIR__ . '/lib/timesheet_control.php';
+
+// Candado del procedimiento: agregar un punch a un día cerrado es exactamente
+// la puerta trasera que el control tiene que tapar.
+$guard = timesheetGuard($pdo, $targetUserId, $punchDate, [
+    'context'   => 'edit_records',
+    'auth_code' => $authorizationCodeInput,
+    'reason'    => $notes ?? '',
+]);
+if (!$guard['allowed']) {
+    $_SESSION['punch_error'] = $guard['message'];
+    header('Location: ' . $redirectUrl);
+    exit;
+}
+
 $auditBefore = attendanceAuditSnapshot($pdo, $targetUserId, $punchDate);
 
 try {
@@ -237,7 +252,18 @@ try {
         'reason'        => $notes,
         'source'        => 'registro manual',
         'performed_by'  => $currentUserId ?: null,
+        'stage_at_change'       => $guard['stage'] ?? null,
+        'authorization_code_id' => $authorizationCodeId ?: ($guard['code_id'] ?? null),
+        'was_outside_window'    => $guard['outside_window'] ?? false,
+        'was_after_close'       => $guard['after_close'] ?? false,
     ], $auditBefore);
+
+    timesheetAfterChange($pdo, $targetUserId, $punchDate, $guard, [
+        'reason'      => $notes,
+        'source'      => 'registro manual',
+        'old_seconds' => (int) ($auditBefore['work_seconds'] ?? 0),
+        'new_seconds' => timesheetDayWorkSeconds($pdo, $targetUserId, $punchDate),
+    ]);
 
     if ($authorizationCodeId) {
         logAuthorizationCodeUsage(

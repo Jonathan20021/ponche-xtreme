@@ -171,9 +171,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Foto de las horas del día ANTES de tocarlo: es lo que permite
             // mostrar después "original vs modificado" como en Vicidial.
             require_once __DIR__ . '/lib/attendance_audit.php';
+            require_once __DIR__ . '/lib/timesheet_control.php';
             $auditUserId   = (int) $record['user_id'];
             $auditOldDate  = date('Y-m-d', strtotime($record['timestamp']));
             $auditNewDate  = date('Y-m-d', strtotime($timestamp));
+
+            // Candado del procedimiento. Mover un punch a otro día toca DOS días,
+            // así que los dos tienen que estar disponibles: si el destino está
+            // cerrado, la edición entraría por la puerta de atrás.
+            $guardCode  = trim((string) ($_GET['auth_code'] ?? $_POST['authorization_code'] ?? ''));
+            $guard      = timesheetGuard($pdo, $auditUserId, $auditOldDate, [
+                'context'   => 'edit_records',
+                'auth_code' => $guardCode,
+                'reason'    => $notes,
+            ]);
+            $guardNewDay = ($auditNewDate !== $auditOldDate)
+                ? timesheetGuard($pdo, $auditUserId, $auditNewDate, [
+                    'context'   => 'edit_records',
+                    'auth_code' => $guardCode,
+                    'reason'    => $notes,
+                ])
+                : null;
+
+            if (!$guard['allowed'] || ($guardNewDay !== null && !$guardNewDay['allowed'])) {
+                // Bloqueado: se vuelve al formulario con el motivo del rechazo.
+                $blocked = !$guard['allowed'] ? $guard : $guardNewDay;
+                $message = $blocked['message'];
+                $messageType = 'error';
+            } else {
+
             $auditBefore   = attendanceAuditSnapshot($pdo, $auditUserId, $auditOldDate);
             $auditBeforeNewDay = ($auditNewDate !== $auditOldDate)
                 ? attendanceAuditSnapshot($pdo, $auditUserId, $auditNewDate)
@@ -195,7 +221,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'reason'        => $notes ?? null,
                 'source'        => 'edit_record',
                 'performed_by'  => $_SESSION['user_id'] ?? null,
+                'stage_at_change'       => $guard['stage'] ?? null,
+                'authorization_code_id' => $validatedAuthCodeId ?: ($guard['code_id'] ?? null),
+                'was_outside_window'    => $guard['outside_window'] ?? false,
+                'was_after_close'       => $guard['after_close'] ?? false,
             ], $auditBefore);
+
+            timesheetAfterChange($pdo, $auditUserId, $auditOldDate, $guard, [
+                'reason'      => $notes,
+                'source'      => 'edit_record',
+                'old_seconds' => (int) ($auditBefore['work_seconds'] ?? 0),
+                'new_seconds' => timesheetDayWorkSeconds($pdo, $auditUserId, $auditOldDate),
+            ]);
 
             // Si el punch se movió a otro día, ese día también cambió de horas.
             if ($auditBeforeNewDay !== null) {
@@ -211,7 +248,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'reason'        => $notes ?? null,
                     'source'        => 'edit_record (cambio de fecha)',
                     'performed_by'  => $_SESSION['user_id'] ?? null,
+                    'stage_at_change'       => $guardNewDay['stage'] ?? null,
+                    'authorization_code_id' => $validatedAuthCodeId ?: ($guardNewDay['code_id'] ?? null),
+                    'was_outside_window'    => $guardNewDay['outside_window'] ?? false,
+                    'was_after_close'       => $guardNewDay['after_close'] ?? false,
                 ], $auditBeforeNewDay);
+
+                timesheetAfterChange($pdo, $auditUserId, $auditNewDate, $guardNewDay, [
+                    'reason'      => $notes,
+                    'source'      => 'edit_record (cambio de fecha)',
+                    'old_seconds' => (int) ($auditBeforeNewDay['work_seconds'] ?? 0),
+                    'new_seconds' => timesheetDayWorkSeconds($pdo, $auditUserId, $auditNewDate),
+                ]);
             }
 
             if ($validatedAuthCodeId) {
@@ -256,6 +304,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['punch_success'] = 'Registro actualizado exitosamente.';
             header('Location: records.php');
             exit;
+
+            } // fin del bloque autorizado por el control de horas
         }
     }
 

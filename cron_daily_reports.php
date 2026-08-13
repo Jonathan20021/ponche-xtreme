@@ -66,6 +66,9 @@ $REPORTS = [
     // propio script valida que sea el día de la semana configurado.
     'overtime'            => 'cron_weekly_overtime_report.php',
     'over8h'              => 'cron_daily_over8h_report.php',
+    // Control de horas: barre excepciones del día anterior y manda el resumen
+    // de impacto económico (generado / modificado / pendiente / excepciones).
+    'timesheet'           => 'cron_daily_timesheet_report.php',
 ];
 
 // Argumentos

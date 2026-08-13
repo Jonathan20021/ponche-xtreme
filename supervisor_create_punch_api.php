@@ -137,11 +137,22 @@ try {
 
     // Foto de las horas del día ANTES de agregar el punch.
     require_once __DIR__ . '/lib/attendance_audit.php';
-    $auditBeforeCreate = attendanceAuditSnapshot(
-        $pdo,
-        (int) $targetUserId,
-        $hasCustomTimestamp ? $newDate : date('Y-m-d')
-    );
+    require_once __DIR__ . '/lib/timesheet_control.php';
+    $guardDate = $hasCustomTimestamp ? $newDate : date('Y-m-d');
+
+    // Candado del procedimiento: no se agregan punches a un día ya cerrado.
+    $guard = timesheetGuard($pdo, (int) $targetUserId, $guardDate, [
+        'context'   => 'edit_records',
+        'auth_code' => (string) ($input['authorization_code'] ?? $_POST['authorization_code'] ?? ''),
+        'reason'    => $auditReason,
+    ]);
+    if (!$guard['allowed']) {
+        http_response_code(423); // Locked
+        echo json_encode(['success' => false, 'error' => $guard['message']]);
+        exit;
+    }
+
+    $auditBeforeCreate = attendanceAuditSnapshot($pdo, (int) $targetUserId, $guardDate);
 
     $customTimestamp = null;
     if ($hasCustomTimestamp) {
@@ -177,7 +188,18 @@ try {
         'reason'        => $auditReason ?: 'Punch agregado por supervisor',
         'source'        => 'monitor supervisor',
         'performed_by'  => $_SESSION['user_id'] ?? null,
+        'stage_at_change'       => $guard['stage'] ?? null,
+        'authorization_code_id' => $guard['code_id'] ?? null,
+        'was_outside_window'    => $guard['outside_window'] ?? false,
+        'was_after_close'       => $guard['after_close'] ?? false,
     ], $auditBeforeCreate);
+
+    timesheetAfterChange($pdo, (int) $targetUserId, $auditWorkDate, $guard, [
+        'reason'      => $auditReason ?: 'Punch agregado por supervisor',
+        'source'      => 'monitor supervisor',
+        'old_seconds' => (int) ($auditBeforeCreate['work_seconds'] ?? 0),
+        'new_seconds' => timesheetDayWorkSeconds($pdo, (int) $targetUserId, $auditWorkDate),
+    ]);
 
     $supervisorId = (int)$_SESSION['user_id'];
     $supervisorName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Supervisor';

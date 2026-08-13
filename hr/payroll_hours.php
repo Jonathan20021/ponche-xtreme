@@ -95,7 +95,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($reason === '') {
             $err[] = 'El motivo es obligatorio: queda en la bitácora de auditoría.';
         } else {
+            // Candado del procedimiento de horas. Ajustar los segundos pagables de
+            // Vicidial mueve dinero igual que editar un punch, así que pasa por la
+            // misma puerta: día cerrado, período bloqueado o ventana vencida.
+            require_once __DIR__ . '/../lib/timesheet_control.php';
+            $guard = timesheetGuard($pdo, $uid, $workDate, [
+                'context'   => 'edit_records',
+                'auth_code' => trim((string) ($_POST['authorization_code'] ?? '')),
+                'reason'    => $reason,
+            ]);
+        }
+
+        if (empty($err) && !$guard['allowed']) {
+            $err[] = $guard['message'];
+        }
+
+        if (empty($err)) {
             try {
+                $antesSeconds = timesheetDayWorkSeconds($pdo, $uid, $workDate);
+
                 $prev = $pdo->prepare("SELECT adjusted_seconds FROM vicidial_payroll_adjustments WHERE user_id = ? AND work_date = ?");
                 $prev->execute([$uid, $workDate]);
                 $oldSeconds = $prev->fetchColumn();
@@ -126,6 +144,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $oldSeconds, $seconds, $original, $reason, $currentUserId,
                 ]);
 
+                // El ajuste entra al mismo expediente que los del ponche: etapa,
+                // impacto en RD$, excepciones y alerta si toca dinero ya cerrado.
+                timesheetAfterChange($pdo, $uid, $workDate, $guard, [
+                    'reason'      => $reason,
+                    'source'      => 'ajuste vicidial',
+                    'old_seconds' => $antesSeconds,
+                    'new_seconds' => timesheetDayWorkSeconds($pdo, $uid, $workDate),
+                ]);
+
                 $ok[] = 'Horas de ' . $workDate . ' guardadas: ' . ph_hms($seconds)
                       . ' (Vicidial reportó ' . ph_hms($original) . ').';
             } catch (Throwable $e) {
@@ -133,7 +160,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'delete_adjustment' && $uid > 0 && $validDate) {
-        try {
+        require_once __DIR__ . '/../lib/timesheet_control.php';
+        $guard = timesheetGuard($pdo, $uid, $workDate, [
+            'context'   => 'delete_records',
+            'auth_code' => trim((string) ($_POST['authorization_code'] ?? '')),
+            'reason'    => 'Eliminación del ajuste de horas de Vicidial',
+        ]);
+
+        if (!$guard['allowed']) {
+            $err[] = $guard['message'];
+        } else try {
+            $antesSeconds = timesheetDayWorkSeconds($pdo, $uid, $workDate);
+
             $prev = $pdo->prepare("SELECT adjusted_seconds, original_seconds FROM vicidial_payroll_adjustments WHERE user_id = ? AND work_date = ?");
             $prev->execute([$uid, $workDate]);
             $row = $prev->fetch(PDO::FETCH_ASSOC);
@@ -149,6 +187,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 $log->execute([$uid, $workDate, (int) $row['adjusted_seconds'], (int) $row['original_seconds'], $currentUserId]);
             }
+
+            timesheetAfterChange($pdo, $uid, $workDate, $guard, [
+                'reason'      => 'Eliminación del ajuste de horas de Vicidial',
+                'source'      => 'ajuste vicidial',
+                'old_seconds' => $antesSeconds,
+                'new_seconds' => timesheetDayWorkSeconds($pdo, $uid, $workDate),
+            ]);
+
             $ok[] = 'Ajuste de ' . $workDate . ' eliminado. Vuelve a mandar el dato de Vicidial.';
         } catch (Throwable $e) {
             $err[] = 'No se pudo eliminar el ajuste: ' . $e->getMessage();

@@ -149,7 +149,23 @@ try {
     // Foto de las horas del día ANTES del cambio, para el historial de
     // modificaciones del ponche (equivalente al de Vicidial).
     require_once __DIR__ . '/lib/attendance_audit.php';
+    require_once __DIR__ . '/lib/timesheet_control.php';
     $auditWorkDate = date('Y-m-d', strtotime($punch['timestamp']));
+
+    // Candado del procedimiento. El Modo Ninja del monitor era la via mas
+    // silenciosa de todas: aqui tambien se detiene si el dia ya esta cerrado.
+    $guard = timesheetGuard($pdo, (int) $targetUserId, $auditWorkDate, [
+        'context'   => 'edit_records',
+        'auth_code' => (string) ($input['authorization_code'] ?? $_POST['authorization_code'] ?? ''),
+        'reason'    => $auditReason,
+    ]);
+    if (!$guard['allowed']) {
+        $pdo->rollBack();
+        http_response_code(423); // Locked
+        echo json_encode(['success' => false, 'error' => $guard['message']]);
+        exit;
+    }
+
     $auditBefore   = attendanceAuditSnapshot($pdo, (int) $targetUserId, $auditWorkDate);
 
     $updateQuery = "UPDATE attendance SET " . implode(', ', $updates) . " WHERE id = ?";
@@ -175,7 +191,18 @@ try {
         'reason'        => $auditReason ?: 'Corrección de punch desde el monitor de supervisión',
         'source'        => 'monitor supervisor',
         'performed_by'  => $_SESSION['user_id'] ?? null,
+        'stage_at_change'       => $guard['stage'] ?? null,
+        'authorization_code_id' => $guard['code_id'] ?? null,
+        'was_outside_window'    => $guard['outside_window'] ?? false,
+        'was_after_close'       => $guard['after_close'] ?? false,
     ], $auditBefore);
+
+    timesheetAfterChange($pdo, (int) $targetUserId, $auditWorkDate, $guard, [
+        'reason'      => $auditReason ?: 'Corrección de punch desde el monitor de supervisión',
+        'source'      => 'monitor supervisor',
+        'old_seconds' => (int) ($auditBefore['work_seconds'] ?? 0),
+        'new_seconds' => timesheetDayWorkSeconds($pdo, (int) $targetUserId, $auditWorkDate),
+    ]);
 
     $supervisorId = (int) $_SESSION['user_id'];
     $supervisorName = $_SESSION['full_name'] ?? $_SESSION['username'] ?? 'Supervisor';

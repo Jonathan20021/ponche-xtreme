@@ -88,16 +88,43 @@ if (!function_exists('attendanceAuditRecord')) {
 
             $after = attendanceAuditSnapshot($pdo, $userId, $workDate);
 
+            // Columnas del control de horas (migración run_timesheet_control_migration).
+            // Se detectan una sola vez: si la migración no corrió, el INSERT
+            // sigue siendo el de siempre y nada se rompe.
+            static $hasControlCols = null;
+            if ($hasControlCols === null) {
+                try {
+                    $chk = $pdo->query("
+                        SELECT COUNT(*) FROM information_schema.COLUMNS
+                        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_audit'
+                          AND COLUMN_NAME IN ('stage_at_change','impact_amount','authorization_code_id',
+                                              'was_outside_window','was_after_close')
+                    ");
+                    $hasControlCols = ((int) $chk->fetchColumn()) === 5;
+                } catch (Throwable $e) {
+                    $hasControlCols = false;
+                }
+            }
+
+            $extraCols = '';
+            $extraVals = '';
+            if ($hasControlCols) {
+                $extraCols = ', stage_at_change, impact_amount, authorization_code_id,
+                               was_outside_window, was_after_close';
+                $extraVals = ', ?, ?, ?, ?, ?';
+            }
+
             $stmt = $pdo->prepare("
                 INSERT INTO attendance_audit
                     (attendance_id, user_id, work_date, action,
                      old_type, new_type, old_timestamp, new_timestamp,
                      old_work_seconds, new_work_seconds,
                      old_durations_json, new_durations_json,
-                     reason, source, performed_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     reason, source, performed_by{$extraCols})
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?{$extraVals})
             ");
-            $stmt->execute([
+
+            $params = [
                 isset($change['attendance_id']) && $change['attendance_id'] ? (int) $change['attendance_id'] : null,
                 $userId,
                 $workDate,
@@ -117,7 +144,26 @@ if (!function_exists('attendanceAuditRecord')) {
                     : null,
                 $change['source'] ?? null,
                 isset($change['performed_by']) && $change['performed_by'] ? (int) $change['performed_by'] : ($_SESSION['user_id'] ?? null),
-            ]);
+            ];
+
+            if ($hasControlCols) {
+                // El impacto en pesos sale de la MISMA diferencia de segundos que
+                // ya se guarda arriba, valorada a la tarifa del colaborador. Es
+                // una estimación para el revisor, no el cálculo que paga.
+                $impact = $change['impact_amount'] ?? null;
+                if ($impact === null && function_exists('timesheetAmountForSeconds')) {
+                    $deltaSeconds = (int) ($after['work_seconds'] ?? 0) - (int) ($before['work_seconds'] ?? 0);
+                    $impact = timesheetAmountForSeconds($pdo, $userId, $deltaSeconds);
+                }
+
+                $params[] = $change['stage_at_change'] ?? null;
+                $params[] = $impact !== null ? round((float) $impact, 2) : null;
+                $params[] = !empty($change['authorization_code_id']) ? (int) $change['authorization_code_id'] : null;
+                $params[] = !empty($change['was_outside_window']) ? 1 : 0;
+                $params[] = !empty($change['was_after_close']) ? 1 : 0;
+            }
+
+            $stmt->execute($params);
 
             return (int) $pdo->lastInsertId();
         } catch (Throwable $e) {

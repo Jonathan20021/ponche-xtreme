@@ -1113,6 +1113,61 @@ try {
                 }
                 break;
 
+            case 'update_timesheet_control_config':
+                // Procedimiento de seguridad de horas y nómina. Todo configurable
+                // aquí: nada de umbrales ni ventanas escritos en el código.
+                $tsEnabled   = isset($_POST['timesheet_control_enabled']) ? 1 : 0;
+                $tsEnforced  = isset($_POST['timesheet_lock_enforced']) ? 1 : 0;
+                $tsRequire   = isset($_POST['timesheet_require_code_after_window']) ? 1 : 0;
+                $tsAlerts    = isset($_POST['timesheet_alerts_enabled']) ? 1 : 0;
+                $tsReport    = isset($_POST['timesheet_report_enabled']) ? 1 : 0;
+
+                $tsHour = trim((string) ($_POST['timesheet_adjust_deadline_hour'] ?? '11:00'));
+                if (!preg_match('/^\d{1,2}:\d{2}$/', $tsHour)) { $tsHour = '11:00'; }
+                $tsReportTime = trim((string) ($_POST['timesheet_report_time'] ?? '08:00'));
+                if (!preg_match('/^\d{1,2}:\d{2}$/', $tsReportTime)) { $tsReportTime = '08:00'; }
+
+                $tsDays      = max(0, min(30, (int) ($_POST['timesheet_adjust_deadline_days'] ?? 1)));
+                $tsOver      = max(1, min(24, (int) ($_POST['timesheet_exception_over_hours'] ?? 8)));
+                $tsCritical  = max($tsOver, min(24, (int) ($_POST['timesheet_exception_critical_hours'] ?? 12)));
+                $tsImpact    = max(0, (float) ($_POST['timesheet_exception_impact_amount'] ?? 500));
+                $tsStart     = trim((string) ($_POST['timesheet_control_start_date'] ?? ''));
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tsStart)) { $tsStart = date('Y-m-d'); }
+
+                $tsAlertTo   = trim((string) ($_POST['timesheet_alert_recipients'] ?? ''));
+                $tsReportTo  = trim((string) ($_POST['timesheet_report_recipients'] ?? ''));
+                $tsRoles     = trim((string) ($_POST['timesheet_alert_roles'] ?? 'Admin,GeneralManager,HR'));
+
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value, setting_type, category)
+                        VALUES (?, ?, ?, 'timesheet_control')
+                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+                    ");
+
+                    $stmt->execute(['timesheet_control_enabled',           (string) $tsEnabled,  'boolean']);
+                    $stmt->execute(['timesheet_lock_enforced',             (string) $tsEnforced, 'boolean']);
+                    $stmt->execute(['timesheet_require_code_after_window', (string) $tsRequire,  'boolean']);
+                    $stmt->execute(['timesheet_adjust_deadline_hour',      $tsHour,              'text']);
+                    $stmt->execute(['timesheet_adjust_deadline_days',      (string) $tsDays,     'number']);
+                    $stmt->execute(['timesheet_control_start_date',        $tsStart,             'text']);
+                    $stmt->execute(['timesheet_exception_over_hours',      (string) $tsOver,     'number']);
+                    $stmt->execute(['timesheet_exception_critical_hours',  (string) $tsCritical, 'number']);
+                    $stmt->execute(['timesheet_exception_impact_amount',   (string) $tsImpact,   'number']);
+                    $stmt->execute(['timesheet_alerts_enabled',            (string) $tsAlerts,   'boolean']);
+                    $stmt->execute(['timesheet_alert_recipients',          $tsAlertTo,           'text']);
+                    $stmt->execute(['timesheet_alert_roles',               $tsRoles,             'text']);
+                    $stmt->execute(['timesheet_report_enabled',            (string) $tsReport,   'boolean']);
+                    $stmt->execute(['timesheet_report_time',               $tsReportTime,        'text']);
+                    $stmt->execute(['timesheet_report_recipients',         $tsReportTo,          'text']);
+
+                    $successMessages[] = 'Configuración del Control de Horas guardada.'
+                        . ($tsEnforced ? '' : ' Ojo: el bloqueo está en MODO AVISO, los cambios sobre días cerrados pasarán igual.');
+                } catch (PDOException $e) {
+                    $errorMessages[] = 'Error al guardar la configuración del Control de Horas.';
+                }
+                break;
+
             case 'update_polling_config':
                 // Intervalos de actualización (polling) para reducir el 429 de HostGator.
                 // Se guardan en segundos; getPollingConfig() los convierte a ms y aplica mínimos.
@@ -4240,6 +4295,169 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 </button>
                 <span class="text-xs text-muted ml-2">Ejecuta el barrido de inventario en este momento, para comprobar la
                     configuración sin esperar a la revisión programada.</span>
+            </form>
+        </section>
+
+        <section id="timesheet-control-config" class="glass-card space-y-6">
+            <?php
+            require_once __DIR__ . '/lib/timesheet_control.php';
+            $tsInstalado = timesheetTablesReady($pdo);
+            $tsCfg = timesheetSettings($pdo);
+            $tsGet = static function (string $k, string $def) use ($tsCfg): string {
+                $v = $tsCfg[$k] ?? '';
+                return $v === '' ? $def : $v;
+            };
+            ?>
+            <div class="panel-heading">
+                <div>
+                    <h2 class="text-primary text-xl font-semibold">
+                        <i class="fas fa-shield-halved text-indigo-400"></i>
+                        Control de Horas y Nómina
+                    </h2>
+                    <p class="text-muted text-sm">
+                        Procedimiento de seguridad de las horas que generan dinero: ventana de ajuste,
+                        cierre del día, bloqueo del período y alertas cuando un cambio impacta la nómina.
+                        <strong>Nadie puede modificar silenciosamente una hora que genere dinero.</strong>
+                    </p>
+                </div>
+                <span class="chip">
+                    <i class="fas fa-<?= $tsInstalado ? 'check-circle text-green-400' : 'times-circle text-amber-400' ?>"></i>
+                    <?= $tsInstalado ? 'Instalado' : 'Falta correr la migración' ?>
+                </span>
+            </div>
+
+            <?php if (!$tsInstalado): ?>
+                <div class="p-4 rounded-lg" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4)">
+                    <p class="text-sm">Las tablas del control todavía no existen. Corre
+                        <code>run_timesheet_control_migration.php</code> antes de configurar nada.
+                        Mientras tanto el ponche funciona igual que siempre, sin etapas ni bloqueo.</p>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" class="space-y-5">
+                <input type="hidden" name="action" value="update_timesheet_control_config">
+
+                <div class="space-y-3">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="timesheet_control_enabled" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $tsGet('timesheet_control_enabled', '1') === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Activar el control de horas</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Interruptor maestro. Apagado, el ponche vuelve al
+                        comportamiento anterior: se sigue guardando el historial pero no se bloquea nada.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="timesheet_lock_enforced" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $tsGet('timesheet_lock_enforced', '1') === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Bloquear de verdad (no solo avisar)</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Activado, un cambio sobre un día cerrado se <strong>rechaza</strong>.
+                        Desactivado (modo aviso) el cambio pasa pero queda marcado y alerta: útil solo durante la
+                        marcha blanca.</p>
+
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="timesheet_require_code_after_window" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $tsGet('timesheet_require_code_after_window', '1') === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Exigir código de autorización fuera de la ventana</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Usa el mismo código semanal que ya rota el sistema.
+                        Quien tenga el permiso <code>timesheet_adjust_outside</code> no necesita código.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-hourglass-half"></i> Hora límite del ajuste</label>
+                        <input type="time" name="timesheet_adjust_deadline_hour"
+                            value="<?= htmlspecialchars($tsGet('timesheet_adjust_deadline_hour', '11:00')) ?>"
+                            class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Hasta qué hora se puede ajustar sin pedir código.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-calendar-day"></i> Días de gracia</label>
+                        <input type="number" name="timesheet_adjust_deadline_days" min="0" max="30"
+                            value="<?= (int) $tsGet('timesheet_adjust_deadline_days', '1') ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">0 = el mismo día · 1 = hasta el día siguiente (recomendado).</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-flag-checkered"></i> El control aplica desde</label>
+                        <input type="date" name="timesheet_control_start_date"
+                            value="<?= htmlspecialchars($tsGet('timesheet_control_start_date', date('Y-m-d'))) ?>"
+                            class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Los días anteriores se tratan como cerrados: nadie revisa
+                            hacia atrás, pero tampoco se tocan sin autorización.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="form-label"><i class="fas fa-clock"></i> Jornada larga (horas)</label>
+                        <input type="number" name="timesheet_exception_over_hours" min="1" max="24"
+                            value="<?= (int) $tsGet('timesheet_exception_over_hours', '8') ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Sobre este valor se levanta una excepción media.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-triangle-exclamation"></i> Jornada crítica (horas)</label>
+                        <input type="number" name="timesheet_exception_critical_hours" min="1" max="24"
+                            value="<?= (int) $tsGet('timesheet_exception_critical_hours', '12') ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Excepción crítica: bloquea el cierre del día.</p>
+                    </div>
+                    <div>
+                        <label class="form-label"><i class="fas fa-money-bill-trend-up"></i> Ajuste de alto impacto (RD$)</label>
+                        <input type="number" step="0.01" min="0" name="timesheet_exception_impact_amount"
+                            value="<?= htmlspecialchars($tsGet('timesheet_exception_impact_amount', '500')) ?>" class="input-control" required>
+                        <p class="text-xs text-muted mt-1">Un ajuste que mueva más de este monto alerta y abre excepción.</p>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="timesheet_alerts_enabled" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $tsGet('timesheet_alerts_enabled', '1') === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Avisar cuando un cambio impacte la nómina</span>
+                    </label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-envelope"></i> Correos que reciben las alertas</label>
+                            <input type="text" name="timesheet_alert_recipients"
+                                value="<?= htmlspecialchars($tsGet('timesheet_alert_recipients', '')) ?>"
+                                class="input-control" placeholder="hugo@evallishbpo.com, mrosario@evallishbpo.com">
+                            <p class="text-xs text-muted mt-1">Separados por coma.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-user-shield"></i> Roles que ven la campana</label>
+                            <input type="text" name="timesheet_alert_roles"
+                                value="<?= htmlspecialchars($tsGet('timesheet_alert_roles', 'Admin,GeneralManager,HR')) ?>"
+                                class="input-control" placeholder="Admin,GeneralManager,HR">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                        <input type="checkbox" name="timesheet_report_enabled" value="1" class="w-5 h-5 accent-indigo-500"
+                            <?= $tsGet('timesheet_report_enabled', '1') === '1' ? 'checked' : '' ?>>
+                        <span class="font-semibold">Enviar el resumen diario de impacto económico</span>
+                    </label>
+                    <p class="text-sm text-muted ml-8">Cuánto se generó, qué se modificó, qué falta cerrar y qué
+                        excepciones requieren revisión. Lo despacha <code>cron_daily_reports.php</code>.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-clock"></i> Hora de envío</label>
+                            <input type="time" name="timesheet_report_time"
+                                value="<?= htmlspecialchars($tsGet('timesheet_report_time', '08:00')) ?>" class="input-control" required>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-paper-plane"></i> Destinatarios del resumen</label>
+                            <input type="text" name="timesheet_report_recipients"
+                                value="<?= htmlspecialchars($tsGet('timesheet_report_recipients', '')) ?>"
+                                class="input-control" placeholder="hugo@evallishbpo.com">
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i> Guardar configuración del Control de Horas
+                </button>
             </form>
         </section>
 
@@ -7807,6 +8025,12 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                 label: 'Notificaciones (Campana)',
                 icon: 'fas fa-bell',
                 selectors: ['#notifications-config']
+            },
+            {
+                key: 'timesheet_control',
+                label: 'Control de Horas y Nómina (Seguridad)',
+                icon: 'fas fa-shield-halved',
+                selectors: ['#timesheet-control-config']
             },
             {
                 key: 'polling_intervals',
