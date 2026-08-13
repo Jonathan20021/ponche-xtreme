@@ -868,6 +868,58 @@ function resolvePayrollCompensationAmounts(PDO $pdo, array $comp, string $role):
 }
 
 /**
+ * Tarifa/hora NORMAL de un colaborador día por día dentro de un rango.
+ *
+ * Sale de los MISMOS tramos con que se le paga la quincena (historial de
+ * compensación), así que si cambió de salario a mitad de período cada día lleva
+ * la tarifa que de verdad le tocaba. Lo usa el recargo nocturno por porcentaje:
+ * el % de ley se aplica sobre la hora normal, no sobre la hora ya recargada.
+ *
+ * @return array<string,float> 'Y-m-d' => tarifa por hora (moneda preferida)
+ */
+function getHourlyRateByDate(PDO $pdo, int $userId, string $role, string $start, string $end): array
+{
+    if ($start === '' || $end === '' || $end < $start) {
+        return [];
+    }
+
+    $segments = getCompensationSegments($pdo, $userId, $start, $end);
+    if (empty($segments)) {
+        $segments = [[
+            'start' => $start,
+            'end'   => $end,
+            'comp'  => getCurrentCompensation($pdo, $userId),
+        ]];
+    }
+
+    $out = [];
+    foreach ($segments as $seg) {
+        $resolved = resolvePayrollCompensationAmounts($pdo, $seg['comp'], $role);
+        $rate = (float) $resolved['hourly'];
+
+        // A quien se le paga por día (o por mes sin tarifa cargada) igual hay que
+        // sacarle el valor de la hora normal para poder aplicarle el recargo:
+        // la misma convención del resto de la nómina (23.83 días/mes × 8 h/día).
+        if ($rate <= 0) {
+            if ((float) $resolved['daily'] > 0) {
+                $rate = round((float) $resolved['daily'] / 8, 4);
+            } elseif ((float) $resolved['monthly'] > 0) {
+                $rate = round((float) $resolved['monthly'] / 23.83 / 8, 4);
+            }
+        }
+
+        $cursor = (string) $seg['start'];
+        $segEnd = (string) $seg['end'];
+        while ($cursor !== '' && $cursor <= $segEnd) {
+            $out[$cursor] = $rate;
+            $cursor = date('Y-m-d', strtotime($cursor . ' +1 day'));
+        }
+    }
+
+    return $out;
+}
+
+/**
  * Reparte las horas de un tramo cuando NO se conoce el detalle día por día.
  * Se prorratea por días calendario del tramo — aproximación honesta, solo se usa
  * si quien llama no pasó `hours_by_date`.

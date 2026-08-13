@@ -167,10 +167,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
         // antes de aprobar. NO bloquean el cálculo; solo se muestran.
         $vicidialPayrollFlags = ['capped' => [], 'no_data' => [], 'backfilled' => []];
 
-        // Incentivo nocturno automático: reglas por campaña (ej. Delivery paga
-        // RD$5.00 por cada hora trabajada a partir de las 7:00 PM). Se configuran
-        // en hr/payroll_settings.php.
-        $nightRules = getActiveCampaignNightIncentiveRules($pdo, $period['end_date']);
+        // Incentivo (recargo) nocturno automático: regla GENERAL para todo el
+        // mundo (15% de la hora normal, 9:00 PM a 12:00 AM — art. 204 del Código
+        // de Trabajo) más las excepciones por campaña. Se configuran en
+        // hr/payroll_settings.php y están versionadas por fecha, así que cada día
+        // del período se paga con la regla que estaba vigente ese día.
+        $nightRuleSet = getNightIncentiveRuleSet($pdo);
+        // El modo porcentaje necesita la tarifa/hora día por día; si ninguna regla
+        // es porcentual, no hace falta resolverla.
+        $nightNeedsHourlyRate = nightIncentiveRuleSetUsesPercent($nightRuleSet);
+        // Días en que tocaba recargo por % pero el colaborador no tiene tarifa
+        // horaria resoluble: se avisa al terminar en vez de pagar 0 en silencio.
+        $nightMissingRate = [];
 
         foreach ($employees as $emp) {
             $userId = $emp['user_id'];
@@ -265,25 +273,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 }
             }
 
-            // === INCENTIVO NOCTURNO AUTOMÁTICO (por campaña) ===
-            // Monto fijo por cada hora pagable dentro de la franja nocturna. Se
-            // calcula sobre las horas REALES del día, antes del recargo de feriado
-            // (es RD$/hora fijo, no una tarifa horaria) y antes del corte semanal
-            // de 44h (da igual si la hora cayó en regular o en extra).
-            $autoNight = ['amount' => 0.0, 'hours' => 0.0, 'estimated_hours' => 0.0];
-            $nightRule = $nightRules[(int) ($emp['campaign_id'] ?? 0)] ?? null;
-            if ($nightRule) {
-                $autoNight = calculateNightIncentiveForUser(
+            // === INCENTIVO (RECARGO) NOCTURNO AUTOMÁTICO ===
+            // Por cada hora pagable dentro de la franja nocturna: un % de la hora
+            // normal (lo de ley) o un monto fijo en RD$, según la regla vigente
+            // ese día. Se calcula sobre las horas REALES, antes del recargo de
+            // feriado (el % va sobre la hora normal, no sobre la ya recargada) y
+            // antes del corte semanal de 44h (da igual si la hora cayó en regular
+            // o en extra).
+            $nightHourlyByDate = $nightNeedsHourlyRate
+                ? getHourlyRateByDate(
                     $pdo,
                     (int) $userId,
-                    $nightRule,
+                    (string) ($emp['role'] ?? ''),
                     $period['start_date'],
-                    $period['end_date'],
-                    $punches,
-                    $paidTypeSlugs,
-                    $dailyWorkSeconds,
-                    $hoursSourceByDate
-                );
+                    $period['end_date']
+                )
+                : [];
+
+            $autoNight = calculateNightIncentiveForUser(
+                $pdo,
+                (int) $userId,
+                $nightRuleSet,
+                (int) ($emp['campaign_id'] ?? 0),
+                $period['start_date'],
+                $period['end_date'],
+                $punches,
+                $paidTypeSlugs,
+                $dailyWorkSeconds,
+                $hoursSourceByDate,
+                $nightHourlyByDate
+            );
+
+            if (!empty($autoNight['missing_rate_days'])) {
+                $nightMissingRate[] = (int) $userId;
             }
 
             $weeklySplit = splitWeeklyRegularOvertimeSeconds(
@@ -507,6 +529,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_payroll']))
                 $successMsg .= " $nNoData agente(s) Vicidial SIN datos en el período (no se loguearon o discador caído) — se les dejó el PONCHE como respaldo (no cobran 0); revísalos.";
             }
             $successMsg .= " Revísalos antes de aprobar.";
+        }
+        if (!empty($nightMissingRate)) {
+            $successMsg .= " ⚠️ Nocturno: " . count(array_unique($nightMissingRate))
+                . " colaborador(es) trabajaron en la franja nocturna pero no tienen tarifa por hora"
+                . " definida, así que no se les pudo calcular el % de recargo. Revisa su compensación.";
         }
         if (!empty($loanSync)) {
             if (!$loanSync['ok']) {
@@ -775,17 +802,36 @@ if ($selectedPeriodId) {
     }
 }
 
-// Campañas con incentivo nocturno vigente: se avisa en la pantalla del período
-// para que RRHH sepa que ese renglón se calcula solo.
-$activeNightRules = getActiveCampaignNightIncentiveRules($pdo, $selectedPeriod['end_date'] ?? null);
+// Reglas de incentivo nocturno vigentes al cierre del período: se avisan en la
+// pantalla para que RRHH sepa que ese renglón se calcula solo.
 $nightRuleCampaignNames = [];
-if (!empty($activeNightRules)) {
-    $ids = implode(',', array_map('intval', array_keys($activeNightRules)));
-    foreach ($pdo->query("SELECT id, name FROM campaigns WHERE id IN ($ids)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
-        $rule = $activeNightRules[(int) $c['id']];
-        $nightRuleCampaignNames[] = $c['name']
-            . ' (RD$' . number_format($rule['amount_per_hour'], 2) . '/h desde las '
-            . date('g:i A', strtotime($rule['start_time'])) . ')';
+if (!empty($selectedPeriod['end_date'])) {
+    $ruleSetForView = getNightIncentiveRuleSet($pdo);
+    $refDate = (string) $selectedPeriod['end_date'];
+
+    $generalRule = nightIncentiveRuleForDate($ruleSetForView, 0, $refDate);
+    if ($generalRule) {
+        $nightRuleCampaignNames[] = 'Todos (' . nightIncentiveRuleLabel($generalRule) . ')';
+    }
+
+    // Solo se listan las campañas cuya regla propia difiere de la general
+    // (excepciones y exclusiones); el resto ya queda cubierto por "Todos".
+    $campaignIds = array_keys($ruleSetForView['by_campaign'] ?? []);
+    if (!empty($campaignIds)) {
+        $ids = implode(',', array_map('intval', $campaignIds));
+        foreach ($pdo->query("SELECT id, name FROM campaigns WHERE id IN ($ids)")->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $cid = (int) $c['id'];
+            $own = null;
+            foreach ($ruleSetForView['by_campaign'][$cid] as $r) {
+                if (nightIncentiveRuleInForce($r, $refDate)) {
+                    $own = $r;
+                }
+            }
+            if (!$own) {
+                continue;
+            }
+            $nightRuleCampaignNames[] = $c['name'] . ' (' . nightIncentiveRuleLabel($own) . ')';
+        }
     }
 }
 

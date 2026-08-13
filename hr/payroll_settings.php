@@ -167,71 +167,140 @@ if (!empty($successMsg) && isset($_POST['update_benefits'])) {
 }
 
 // Get all deduction configurations
-// Incentivo nocturno por campaña: RD$ por cada hora pagable trabajada dentro de
-// la franja. Se guarda una fila por campaña; monto 0 o casilla apagada = no paga.
+// Incentivo (recargo) nocturno. Una regla GENERAL (campaign_id = 0) para todo el
+// mundo más excepciones por campaña, versionadas por fecha: al cambiar una regla
+// NO se pisa la anterior, se le pone fecha de cierre el día antes de que entre la
+// nueva. Así, regenerar una quincena vieja sigue pagando lo que aplicaba esos días.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_night_incentives'])) {
-    $rows = $_POST['night'] ?? [];
+    // El input type="time" manda "21:00", pero algunos navegadores añaden los
+    // segundos. Se aceptan las dos formas y se normaliza a HH:MM:SS.
+    $normalizeTime = static function (string $raw, string $fallback): string {
+        $raw = trim($raw);
+        if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $raw, $m)) {
+            return $fallback;
+        }
+        if ((int) $m[1] > 23 || (int) $m[2] > 59) {
+            return $fallback;
+        }
+        return sprintf('%02d:%02d:%02d', (int) $m[1], (int) $m[2], (int) ($m[3] ?? 0));
+    };
+
+    // La regla vigente (sin fecha de cierre) de cada campaña. Es la que se edita;
+    // las cerradas son historia y no se tocan.
+    $openRules = [];
+    foreach (getCampaignNightIncentiveRules($pdo) as $rule) {
+        if ($rule['effective_to'] === null) {
+            $openRules[$rule['campaign_id']] = $rule;
+        }
+    }
 
     $pdo->beginTransaction();
     try {
-        $deleteStmt = $pdo->prepare("DELETE FROM campaign_night_incentives WHERE campaign_id = ?");
-        $upsertStmt = $pdo->prepare("
+        $insertStmt = $pdo->prepare("
             INSERT INTO campaign_night_incentives
-                (campaign_id, start_time, end_time, amount_per_hour, is_active, effective_from, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                start_time = VALUES(start_time),
-                end_time = VALUES(end_time),
-                amount_per_hour = VALUES(amount_per_hour),
-                is_active = VALUES(is_active),
-                effective_from = VALUES(effective_from),
-                notes = VALUES(notes)
+                (campaign_id, mode, start_time, end_time, amount_per_hour, percent_of_hourly, is_active, effective_from, effective_to, notes)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, NULL, ?)
         ");
+        $updateStmt = $pdo->prepare("
+            UPDATE campaign_night_incentives
+            SET mode = ?, start_time = ?, end_time = ?, amount_per_hour = ?, percent_of_hourly = ?,
+                is_active = 1, effective_from = ?, notes = ?
+            WHERE id = ?
+        ");
+        $closeStmt = $pdo->prepare("UPDATE campaign_night_incentives SET effective_to = ? WHERE id = ?");
+
+        $rows = $_POST['night'] ?? [];
+        if (isset($_POST['night_general'])) {
+            $rows[0] = $_POST['night_general'];
+        }
+
+        $versionsCreated = 0;
 
         foreach ($rows as $campaignId => $values) {
             $campaignId = (int) $campaignId;
-            if ($campaignId <= 0) {
+            if ($campaignId < 0) {
                 continue;
             }
 
-            $amount = round(max((float) ($values['amount'] ?? 0), 0), 2);
-            $isActive = !empty($values['is_active']) ? 1 : 0;
-
-            // Sin monto no hay regla que guardar: se borra la fila para que la
-            // tabla no acumule campañas vacías.
-            if ($amount <= 0) {
-                $deleteStmt->execute([$campaignId]);
-                continue;
+            $mode = strtolower(trim((string) ($values['mode'] ?? '')));
+            if (!in_array($mode, ['percent', 'fixed', 'none', ''], true)) {
+                $mode = '';
+            }
+            // La general no puede quedar "sin regla": para apagarla se usa 'none'.
+            if ($campaignId === 0 && $mode === '') {
+                $mode = 'none';
             }
 
-            // El input type="time" manda "19:00", pero algunos navegadores añaden
-            // los segundos. Se aceptan las dos formas y se normaliza a HH:MM:SS.
-            $normalizeTime = static function (string $raw, string $fallback): string {
-                $raw = trim($raw);
-                if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $raw, $m)) {
-                    return $fallback;
-                }
-                if ((int) $m[1] > 23 || (int) $m[2] > 59) {
-                    return $fallback;
-                }
-                return sprintf('%02d:%02d:%02d', (int) $m[1], (int) $m[2], (int) ($m[3] ?? 0));
-            };
-
-            $startTime = $normalizeTime((string) ($values['start_time'] ?? ''), '19:00:00');
-            $endTime   = $normalizeTime((string) ($values['end_time'] ?? ''), '00:00:00');
-
+            // Fecha en que entra el cambio. Sin fecha, entra hoy (nunca hacia
+            // atrás: retroactivo se paga volviendo a poner la fecha a mano).
             $effectiveFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', trim((string) ($values['effective_from'] ?? '')))
                 ? trim((string) $values['effective_from'])
-                : null;
+                : date('Y-m-d');
+
+            $current = $openRules[$campaignId] ?? null;
+
+            // "Usa la regla general": se cierra la excepción de la campaña el día
+            // antes de la fecha del cambio. La historia queda intacta.
+            if ($mode === '') {
+                if ($current) {
+                    $closeStmt->execute([date('Y-m-d', strtotime($effectiveFrom . ' -1 day')), $current['id']]);
+                    $versionsCreated++;
+                }
+                continue;
+            }
+
+            $startTime = $normalizeTime((string) ($values['start_time'] ?? ''), '21:00:00');
+            $endTime   = $normalizeTime((string) ($values['end_time'] ?? ''), '00:00:00');
+            $amount    = round(max((float) ($values['amount'] ?? 0), 0), 2);
+            $percent   = round(max((float) ($values['percent'] ?? 0), 0), 2);
 
             $notes = trim((string) ($values['notes'] ?? ''));
             $notes = $notes !== '' ? mb_substr($notes, 0, 255) : null;
 
-            $upsertStmt->execute([$campaignId, $startTime, $endTime, $amount, $isActive, $effectiveFrom, $notes]);
+            // Una excepción de campaña que no paga nada y no excluye a nadie no
+            // tiene sentido guardarla.
+            if ($campaignId > 0 && $mode !== 'none' && (($mode === 'percent' && $percent <= 0) || ($mode === 'fixed' && $amount <= 0))) {
+                if ($current) {
+                    $closeStmt->execute([date('Y-m-d', strtotime($effectiveFrom . ' -1 day')), $current['id']]);
+                    $versionsCreated++;
+                }
+                continue;
+            }
+
+            if (!$current) {
+                $insertStmt->execute([$campaignId, $mode, $startTime, $endTime, $amount, $percent, $effectiveFrom, $notes]);
+                $versionsCreated++;
+                continue;
+            }
+
+            $sinCambios = $current['mode'] === $mode
+                && $current['start_time'] === $startTime
+                && $current['end_time'] === $endTime
+                && abs($current['amount_per_hour'] - $amount) < 0.005
+                && abs($current['percent_of_hourly'] - $percent) < 0.005
+                && (string) $current['effective_from'] === $effectiveFrom
+                && (string) $current['notes'] === (string) $notes
+                && (int) $current['is_active'] === 1;
+            if ($sinCambios) {
+                continue;
+            }
+
+            // Si la regla vigente arranca el mismo día o después, esto es una
+            // CORRECCIÓN de esa versión (todavía no había pagado distinto). Si
+            // arrancó antes, es una versión NUEVA y la anterior se cierra.
+            if ($current['effective_from'] !== null && $current['effective_from'] >= $effectiveFrom) {
+                $updateStmt->execute([$mode, $startTime, $endTime, $amount, $percent, $effectiveFrom, $notes, $current['id']]);
+            } else {
+                $closeStmt->execute([date('Y-m-d', strtotime($effectiveFrom . ' -1 day')), $current['id']]);
+                $insertStmt->execute([$campaignId, $mode, $startTime, $endTime, $amount, $percent, $effectiveFrom, $notes]);
+            }
+            $versionsCreated++;
         }
 
         $pdo->commit();
-        $successMsg = "Incentivo nocturno actualizado. Vuelve a CALCULAR los períodos abiertos para que tome efecto.";
+        $successMsg = $versionsCreated > 0
+            ? "Incentivo nocturno actualizado. Vuelve a CALCULAR los períodos abiertos para que tome efecto."
+            : "No hubo cambios que guardar en el incentivo nocturno.";
     } catch (Exception $e) {
         $pdo->rollBack();
         $errorMsg = "Error al guardar el incentivo nocturno: " . $e->getMessage();
@@ -257,7 +326,30 @@ $nightCampaigns = $pdo->query("
     GROUP BY c.id, c.name
     ORDER BY active_employees DESC, c.name
 ")->fetchAll(PDO::FETCH_ASSOC);
-$nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
+
+// La regla VIGENTE de cada campaña (la que no tiene fecha de cierre) es la que se
+// edita; las cerradas se muestran abajo como historial de solo lectura.
+$nightAllRules = getCampaignNightIncentiveRules($pdo);
+$nightRulesByCampaign = [];
+$nightRuleHistory = [];
+foreach ($nightAllRules as $rule) {
+    if ($rule['effective_to'] === null && $rule['is_active']) {
+        $nightRulesByCampaign[$rule['campaign_id']] = $rule;
+    } else {
+        $nightRuleHistory[] = $rule;
+    }
+}
+$nightGeneralRule = $nightRulesByCampaign[0] ?? null;
+
+// Nombre de campaña para el historial.
+$nightCampaignNames = [0 => 'Todos (general)'];
+foreach ($nightCampaigns as $c) {
+    $nightCampaignNames[(int) $c['id']] = (string) $c['name'];
+}
+
+// Por defecto, un cambio entra en la próxima quincena (es como se acuerdan estas
+// cosas), nunca a mitad de un período ya pagado.
+$nightDefaultFrom = nightIncentiveNextPayrollPeriodStart();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -575,7 +667,7 @@ $nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
             </form>
         </div>
 
-        <!-- Incentivo nocturno automático por campaña -->
+        <!-- Incentivo (recargo) nocturno automático -->
         <div class="glass-card mt-8" id="incentivo-nocturno">
             <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
                 <div>
@@ -584,9 +676,11 @@ $nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
                         Incentivo Nocturno Automático
                     </h2>
                     <p class="text-sm text-slate-400">
-                        Un monto fijo en RD$ por cada <strong>hora pagable</strong> que el colaborador trabaje
-                        dentro de la franja. Se calcula solo al presionar <strong>Calcular</strong> en el período
-                        y entra al bruto (paga AFP, SFS e ISR como cualquier ingreso).
+                        Se paga por cada <strong>hora pagable</strong> trabajada dentro de la franja nocturna:
+                        un <strong>porcentaje de la hora normal</strong> (lo que manda el art. 204 del Código de
+                        Trabajo: mínimo 15%) o un <strong>monto fijo en RD$</strong>. Se calcula solo al presionar
+                        <strong>Calcular</strong> en el período y entra al bruto (paga AFP, SFS e ISR como
+                        cualquier ingreso).
                     </p>
                 </div>
             </div>
@@ -595,8 +689,8 @@ $nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
                 <p class="mb-2">
                     <strong class="text-slate-200">Cómo se cuentan las horas nocturnas.</strong>
                     La hora es la local de República Dominicana (GMT-4), la misma del ponche.
-                    Un turno de 3:30 PM a 9:30 PM con la franja en 7:00 PM rinde 2.50 horas nocturnas:
-                    a RD$5.00 son RD$12.50 ese día.
+                    Un turno de 7:30 PM a 11:30 PM con la franja en 9:00 PM rinde 2.50 horas nocturnas:
+                    al 15% con una tarifa de RD$100/h son RD$37.50 ese día.
                 </p>
                 <p class="mb-2">
                     A quien se le paga por <strong>ponche</strong>, las horas salen exactas de sus marcaciones
@@ -604,6 +698,13 @@ $nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
                     el solape de su ventana de login con la franja y se prorratea según qué parte de esa jornada
                     resultó pagable — es una estimación, porque la hoja de tiempo de Vicidial no guarda el detalle
                     minuto a minuto. Nunca se pagan más horas nocturnas que las horas pagadas de ese día.
+                </p>
+                <p class="mb-2">
+                    <strong class="text-slate-200">Las reglas se versionan por fecha.</strong>
+                    Al cambiar una regla no se pisa la anterior: se cierra el día antes de <em>Aplica desde</em> y
+                    queda en el historial. Por eso, regenerar una quincena vieja vuelve a pagar lo que de verdad
+                    aplicaba esos días. El porcentaje se calcula sobre la hora normal, nunca sobre la hora ya
+                    recargada por feriado u horas extra.
                 </p>
                 <p>
                     Si RRHH escribe un monto a mano en <em>Ajustes Manuales por Empleado</em> del período,
@@ -614,13 +715,99 @@ $nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
             <form method="POST">
                 <input type="hidden" name="update_night_incentives" value="1">
 
+                <?php
+                    $nightModeOptions = [
+                        'percent' => '% de la hora normal',
+                        'fixed'   => 'Monto fijo RD$/h',
+                        'none'    => 'No paga',
+                    ];
+                ?>
+
+                <!-- Regla general: aplica a TODO el mundo -->
+                <div class="rounded border border-amber-700/50 bg-amber-900/10 p-4 mb-6">
+                    <h3 class="text-base font-semibold text-amber-100 mb-1">
+                        <i class="fas fa-users mr-1"></i>
+                        Regla general — aplica a todos los colaboradores
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">
+                        El recargo nocturno es de ley, así que por defecto lo cobra cualquiera que trabaje dentro
+                        de la franja, sin importar su campaña. Abajo se pueden poner excepciones.
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Cómo se paga</label>
+                            <select name="night_general[mode]"
+                                    class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2">
+                                <?php foreach ($nightModeOptions as $val => $label): ?>
+                                    <option value="<?= $val ?>" <?= ($nightGeneralRule && $nightGeneralRule['mode'] === $val) ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($label) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">% sobre la hora</label>
+                            <input type="number" step="0.01" min="0"
+                                   name="night_general[percent]"
+                                   value="<?= htmlspecialchars(number_format($nightGeneralRule ? (float) $nightGeneralRule['percent_of_hourly'] : 15.00, 2, '.', '')) ?>"
+                                   class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                   title="Solo se usa en modo porcentaje. La ley pide un mínimo de 15%.">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">RD$ por hora</label>
+                            <input type="number" step="0.01" min="0"
+                                   name="night_general[amount]"
+                                   value="<?= htmlspecialchars(number_format($nightGeneralRule ? (float) $nightGeneralRule['amount_per_hour'] : 0, 2, '.', '')) ?>"
+                                   class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
+                                   title="Solo se usa en modo monto fijo.">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Franja desde</label>
+                            <input type="time" name="night_general[start_time]"
+                                   value="<?= htmlspecialchars(substr($nightGeneralRule['start_time'] ?? '21:00:00', 0, 5)) ?>"
+                                   class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Hasta</label>
+                            <input type="time" name="night_general[end_time]"
+                                   value="<?= htmlspecialchars(substr($nightGeneralRule['end_time'] ?? '00:00:00', 0, 5)) ?>"
+                                   class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center"
+                                   title="00:00 = hasta la medianoche. Si el fin es menor o igual al inicio, la franja cruza al día siguiente (ej. 21:00 a 07:00, la jornada nocturna completa del Código de Trabajo).">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Aplica desde</label>
+                            <input type="date" name="night_general[effective_from]"
+                                   value="<?= htmlspecialchars($nightGeneralRule['effective_from'] ?? $nightDefaultFrom) ?>"
+                                   class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center"
+                                   title="Los días anteriores a esta fecha se pagan con la regla que estaba vigente entonces.">
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="block text-xs text-slate-400 mb-1">Nota</label>
+                        <input type="text" name="night_general[notes]"
+                               value="<?= htmlspecialchars((string) ($nightGeneralRule['notes'] ?? '')) ?>"
+                               maxlength="255"
+                               placeholder="Acuerdo, quién lo autorizó..."
+                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2">
+                    </div>
+                </div>
+
+                <h3 class="text-base font-semibold mb-1">Excepciones por campaña</h3>
+                <p class="text-xs text-slate-400 mb-3">
+                    Solo hace falta tocar esto si una campaña paga distinto a la regla general.
+                    <strong>Usa la regla general</strong> deja a la campaña con lo de todos;
+                    <strong>No paga</strong> la excluye a propósito.
+                </p>
+
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b border-slate-700">
                                 <th class="text-left py-2 px-2">Campaña</th>
-                                <th class="text-center py-2 px-2">Activo</th>
-                                <th class="text-right py-2 px-2">RD$ por hora</th>
+                                <th class="text-left py-2 px-2">Cómo se paga</th>
+                                <th class="text-right py-2 px-2">%</th>
+                                <th class="text-right py-2 px-2">RD$/h</th>
                                 <th class="text-center py-2 px-2">Desde</th>
                                 <th class="text-center py-2 px-2">Hasta</th>
                                 <th class="text-center py-2 px-2">Aplica desde</th>
@@ -642,47 +829,56 @@ $nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
                                         <div class="font-medium"><?= htmlspecialchars($campaign['name']) ?></div>
                                         <div class="text-xs text-slate-500"><?= $activeEmployees ?> activo(s)</div>
                                     </td>
-                                    <td class="py-2 px-2 text-center">
-                                        <input type="checkbox"
-                                               name="night[<?= $cid ?>][is_active]"
-                                               value="1"
-                                               <?= ($rule && $rule['is_active']) ? 'checked' : '' ?>
-                                               class="h-4 w-4 rounded border-slate-600 bg-slate-900">
+                                    <td class="py-2 px-2">
+                                        <select name="night[<?= $cid ?>][mode]"
+                                                class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2">
+                                            <option value="" <?= !$rule ? 'selected' : '' ?>>Usa la regla general</option>
+                                            <?php foreach ($nightModeOptions as $val => $label): ?>
+                                                <option value="<?= $val ?>" <?= ($rule && $rule['mode'] === $val) ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars($label) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+                                    <td class="py-2 px-2">
+                                        <input type="number" step="0.01" min="0"
+                                               name="night[<?= $cid ?>][percent]"
+                                               value="<?= htmlspecialchars(number_format($rule ? (float) $rule['percent_of_hourly'] : 0, 2, '.', '')) ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-right">
                                     </td>
                                     <td class="py-2 px-2">
                                         <input type="number" step="0.01" min="0"
                                                name="night[<?= $cid ?>][amount]"
-                                               value="<?= $rule ? htmlspecialchars(number_format((float) $rule['amount_per_hour'], 2, '.', '')) : '0.00' ?>"
-                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-right"
-                                               title="Monto en RD$ por cada hora dentro de la franja. En 0 se borra la regla.">
+                                               value="<?= htmlspecialchars(number_format($rule ? (float) $rule['amount_per_hour'] : 0, 2, '.', '')) ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-right">
                                     </td>
                                     <td class="py-2 px-2">
                                         <input type="time"
                                                name="night[<?= $cid ?>][start_time]"
-                                               value="<?= $rule ? htmlspecialchars(substr($rule['start_time'], 0, 5)) : '19:00' ?>"
-                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center">
+                                               value="<?= htmlspecialchars(substr($rule['start_time'] ?? '21:00:00', 0, 5)) ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-center">
                                     </td>
                                     <td class="py-2 px-2">
                                         <input type="time"
                                                name="night[<?= $cid ?>][end_time]"
-                                               value="<?= $rule ? htmlspecialchars(substr($rule['end_time'], 0, 5)) : '00:00' ?>"
-                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center"
-                                               title="00:00 = hasta la medianoche. Si el fin es menor o igual al inicio, la franja cruza al día siguiente (ej. 19:00 a 06:00).">
+                                               value="<?= htmlspecialchars(substr($rule['end_time'] ?? '00:00:00', 0, 5)) ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-center"
+                                               title="00:00 = hasta la medianoche. Si el fin es menor o igual al inicio, la franja cruza al día siguiente (ej. 21:00 a 07:00).">
                                     </td>
                                     <td class="py-2 px-2">
                                         <input type="date"
                                                name="night[<?= $cid ?>][effective_from]"
-                                               value="<?= $rule && $rule['effective_from'] ? htmlspecialchars($rule['effective_from']) : '' ?>"
-                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-center"
-                                               title="Opcional. Los días anteriores a esta fecha no cobran el incentivo, aunque se regenere una quincena vieja.">
+                                               value="<?= htmlspecialchars($rule['effective_from'] ?? $nightDefaultFrom) ?>"
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-center"
+                                               title="Fecha en que entra el cambio. La regla anterior se cierra el día antes y queda en el historial.">
                                     </td>
                                     <td class="py-2 px-2">
                                         <input type="text"
                                                name="night[<?= $cid ?>][notes]"
-                                               value="<?= $rule ? htmlspecialchars((string) $rule['notes']) : '' ?>"
+                                               value="<?= htmlspecialchars((string) ($rule['notes'] ?? '')) ?>"
                                                maxlength="255"
                                                placeholder="Acuerdo, quién lo autorizó..."
-                                               class="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2">
+                                               class="w-full rounded border border-slate-700 bg-slate-900 px-2 py-2">
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -697,6 +893,33 @@ $nightRulesByCampaign = getCampaignNightIncentiveRules($pdo);
                     </button>
                 </div>
             </form>
+
+            <?php if (!empty($nightRuleHistory)): ?>
+                <details class="mt-6 rounded border border-slate-700 bg-slate-900/40 p-4">
+                    <summary class="cursor-pointer text-sm text-slate-300">
+                        <i class="fas fa-clock-rotate-left mr-1"></i>
+                        Historial de reglas (<?= count($nightRuleHistory) ?>) — lo que se pagó antes
+                    </summary>
+                    <ul class="mt-3 space-y-2 text-xs text-slate-400">
+                        <?php foreach (array_reverse($nightRuleHistory) as $old): ?>
+                            <li class="flex flex-wrap gap-x-2">
+                                <span class="text-slate-200 font-medium">
+                                    <?= htmlspecialchars($nightCampaignNames[$old['campaign_id']] ?? ('Campaña #' . $old['campaign_id'])) ?>
+                                </span>
+                                <span><?= htmlspecialchars(nightIncentiveRuleLabel($old)) ?></span>
+                                <span class="text-slate-500">
+                                    (<?= htmlspecialchars($old['effective_from'] ?? 'siempre') ?>
+                                    →
+                                    <?= htmlspecialchars($old['effective_to'] ?? 'sin cierre') ?><?= $old['is_active'] ? '' : ', desactivada' ?>)
+                                </span>
+                                <?php if ($old['notes']): ?>
+                                    <span class="text-slate-600"><?= htmlspecialchars($old['notes']) ?></span>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </details>
+            <?php endif; ?>
         </div>
 
         <!-- Días Festivos (pago doble) -->
