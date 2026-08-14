@@ -94,29 +94,20 @@ if ($departmentFilter !== null) {
         : ' AND e.department_id IS NULL';
 }
 
+// Las columnas son las del reporte de nómina de Finanzas, que es el formato
+// que acordó la auditoría, así que basta con el registro de nómina y los datos
+// del empleado.
 $recordsStmt = $pdo->prepare("
     SELECT pr.*,
            e.first_name, e.last_name, e.employee_code, e.identification_number, e.position,
-           d.name as department_name,
-           u.hourly_rate, u.monthly_salary, u.hourly_rate_dop, u.monthly_salary_dop,
-           u.daily_salary_usd, u.daily_salary_dop, u.preferred_currency, u.compensation_type, u.role,
-           COALESCE(pmi.sales_incentive, 0) as sales_incentive,
-           -- Monto ya resuelto (automático de la campaña o el manual que lo
-           -- sobrescribe). Los períodos viejos caen al valor manual de siempre.
-           COALESCE(NULLIF(pr.night_incentive, 0), pmi.night_incentive, 0) as night_incentive,
-           COALESCE(pmi.cooperative_deduction, 0) as cooperative_deduction,
-           COALESCE(pmi.additional_deduction, 0) as additional_deduction
+           d.name as department_name
     FROM payroll_records pr
     JOIN employees e ON e.id = pr.employee_id
-    LEFT JOIN users u ON u.id = e.user_id
     LEFT JOIN departments d ON d.id = e.department_id
-    LEFT JOIN payroll_manual_incentives pmi
-        ON pmi.payroll_period_id = pr.payroll_period_id
-       AND pmi.employee_id = pr.employee_id
     WHERE pr.payroll_period_id = ?
     $campaignWhere
     $departmentWhere
-    ORDER BY e.last_name, e.first_name
+    ORDER BY e.first_name, e.last_name
 ");
 $bindings = [$periodId];
 if ($campaignFilter !== null && $campaignFilter > 0) {
@@ -128,10 +119,10 @@ if ($departmentFilter !== null && $departmentFilter > 0) {
 $recordsStmt->execute($bindings);
 $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Cargar cuotas de préstamo por empleado para el período (batched, 1 query)
-$loanDeductionsByEmployee = [];
+// Novedades de personal del período (ingresos, salidas, vacaciones, permisos, licencias)
+$noveltiesByEmployee = [];
 if (!empty($records)) {
-    $loanDeductionsByEmployee = getLoanDeductionsForEmployees(
+    $noveltiesByEmployee = getPayrollNoveltiesForEmployees(
         $pdo,
         array_map(static fn($r) => (int) $r['employee_id'], $records),
         $period['start_date'],
@@ -139,54 +130,15 @@ if (!empty($records)) {
     );
 }
 
-// Resolve effective compensation type and base rate (in DOP) for an employee row.
-$resolveBaseRate = function (array $r) use ($pdo) {
-    $hourlyRateUsd = (float)($r['hourly_rate'] ?? 0);
-    $hourlyRateDop = (float)($r['hourly_rate_dop'] ?? 0);
-    $monthlySalaryUsd = (float)($r['monthly_salary'] ?? 0);
-    $monthlySalaryDop = (float)($r['monthly_salary_dop'] ?? 0);
-    $dailySalaryUsd = (float)($r['daily_salary_usd'] ?? 0);
-    $dailySalaryDop = (float)($r['daily_salary_dop'] ?? 0);
-
-    $hourlyDop = $hourlyRateDop > 0
-        ? $hourlyRateDop
-        : ($hourlyRateUsd > 0 ? convertCurrency($pdo, $hourlyRateUsd, 'USD', 'DOP') : 0.0);
-    $monthlyDop = $monthlySalaryDop > 0
-        ? $monthlySalaryDop
-        : ($monthlySalaryUsd > 0 ? convertCurrency($pdo, $monthlySalaryUsd, 'USD', 'DOP') : 0.0);
-    $dailyDop = $dailySalaryDop > 0
-        ? $dailySalaryDop
-        : ($dailySalaryUsd > 0 ? convertCurrency($pdo, $dailySalaryUsd, 'USD', 'DOP') : 0.0);
-
-    $compType = strtolower(trim($r['compensation_type'] ?? 'hourly'));
-    $role = strtoupper(trim($r['role'] ?? ''));
-    if ($compType === '' || $compType === 'hourly') {
-        if ($role !== 'AGENT' && $monthlyDop > 0) {
-            $compType = 'fixed';
-        }
-    }
-
-    if ($compType === 'fixed') {
-        return ['label' => 'Fijo', 'rate' => $monthlyDop];
-    }
-    if ($compType === 'daily') {
-        return ['label' => 'Diario', 'rate' => $dailyDop];
-    }
-    return ['label' => 'Por Hora', 'rate' => $hourlyDop];
-};
-
 // Calculate totals
-$totals = [
+$emptyTotals = static fn(): array => [
+    'base' => 0,
+    'total_hours' => 0,
     'gross' => 0,
-    'sales_incentive' => 0,
-    'night_incentive' => 0,
     'afp_employee' => 0,
     'sfs_employee' => 0,
     'isr' => 0,
-    'cooperative' => 0,
-    'additional' => 0,
-    'loans' => 0,
-    'others_only' => 0,
+    'other_deductions' => 0,
     'total_deductions' => 0,
     'afp_employer' => 0,
     'sfs_employer' => 0,
@@ -196,30 +148,48 @@ $totals = [
     'net' => 0
 ];
 
-foreach ($records as $record) {
-    // other_deductions includes cooperativa + descuento + préstamos + custom; split for the report.
-    $coopAmt = (float)$record['cooperative_deduction'];
-    $addAmt = (float)$record['additional_deduction'];
-    $loanAmt = (float)($loanDeductionsByEmployee[(int)$record['employee_id']] ?? 0);
-    $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
+$totals = $emptyTotals();
 
-    $totals['sales_incentive'] += $record['sales_incentive'];
-    $totals['night_incentive'] += $record['night_incentive'];
-    $totals['gross'] += $record['gross_salary'];
-    $totals['afp_employee'] += $record['afp_employee'];
-    $totals['sfs_employee'] += $record['sfs_employee'];
-    $totals['isr'] += $record['isr'];
-    $totals['cooperative'] += $coopAmt;
-    $totals['additional'] += $addAmt;
-    $totals['loans'] += $loanAmt;
-    $totals['others_only'] += $othersOnly;
-    $totals['total_deductions'] += $record['total_deductions'];
-    $totals['afp_employer'] += $record['afp_employer'];
-    $totals['sfs_employer'] += $record['sfs_employer'];
-    $totals['srl_employer'] += $record['srl_employer'];
-    $totals['infotep_employer'] += $record['infotep_employer'];
-    $totals['total_employer'] += $record['total_employer_contributions'];
-    $totals['net'] += $record['net_salary'];
+// Agrupar por departamento: la auditoría revisa la nómina dividida por área,
+// cada bloque con su subtotal y al final el total general. "Sin Departamento"
+// va de último.
+$byDepartment = [];
+foreach ($records as $record) {
+    $deptName = trim((string) ($record['department_name'] ?? ''));
+    $byDepartment[$deptName !== '' ? $deptName : 'Sin Departamento'][] = $record;
+}
+uksort($byDepartment, static function (string $a, string $b): int {
+    if ($a === 'Sin Departamento') return 1;
+    if ($b === 'Sin Departamento') return -1;
+    return strcasecmp($a, $b);
+});
+
+$departmentTotals = [];
+foreach ($byDepartment as $deptName => $deptRecords) {
+    $deptTotals = $emptyTotals();
+    foreach ($deptRecords as $record) {
+        $amounts = [
+            'base' => (float)$record['base_salary'],
+            'total_hours' => (float)$record['total_hours'],
+            'gross' => (float)$record['gross_salary'],
+            'afp_employee' => (float)$record['afp_employee'],
+            'sfs_employee' => (float)$record['sfs_employee'],
+            'isr' => (float)$record['isr'],
+            'other_deductions' => (float)$record['other_deductions'],
+            'total_deductions' => (float)$record['total_deductions'],
+            'afp_employer' => (float)$record['afp_employer'],
+            'sfs_employer' => (float)$record['sfs_employer'],
+            'srl_employer' => (float)$record['srl_employer'],
+            'infotep_employer' => (float)$record['infotep_employer'],
+            'total_employer' => (float)$record['total_employer_contributions'],
+            'net' => (float)$record['net_salary'],
+        ];
+        foreach ($amounts as $key => $value) {
+            $deptTotals[$key] += $value;
+            $totals[$key] += $value;
+        }
+    }
+    $departmentTotals[$deptName] = $deptTotals;
 }
 
 // Generate HTML
@@ -297,6 +267,22 @@ ob_start();
             background: #dbeafe !important;
             font-weight: bold;
         }
+        /* Bloques por departamento: encabezado y subtotal del área. El !important
+           es para ganarle al zebra de nth-child de la tabla. */
+        .dept-row td {
+            background: #e5e7eb !important;
+            color: #1e3a8a;
+            font-size: 10px;
+        }
+        .subtotal-row td {
+            background: #f1f5f9 !important;
+            font-weight: bold;
+        }
+        .novelties {
+            font-size: 7px;
+            color: #374151;
+            width: 140px;
+        }
         .section-title {
             background: #1e40af;
             color: white;
@@ -355,65 +341,72 @@ ob_start();
             <tr>
                 <th>Código</th>
                 <th>Empleado</th>
-                <th>Cédula</th>
-                <th>Tipo Comp.</th>
                 <th class="text-right">Salario Base</th>
-                <th class="text-right">Inc. Ventas</th>
-                <th class="text-right">Inc. Nocturno</th>
-                <th class="text-right">Salario Bruto</th>
-                <th class="text-right">AFP (<?= number_format($deductionRates['AFP']['employee_percentage'], 2) ?>%)</th>
-                <th class="text-right">SFS (<?= number_format($deductionRates['SFS']['employee_percentage'], 2) ?>%)</th>
+                <th class="text-right">H. Tot.</th>
+                <th class="text-right">Bruto</th>
+                <th class="text-right">AFP</th>
+                <th class="text-right">SFS</th>
                 <th class="text-right">ISR</th>
-                <th class="text-right">Cooperativa</th>
-                <th class="text-right">Descuento</th>
-                <th class="text-right">Préstamos</th>
-                <th class="text-right">Otros</th>
+                <th class="text-right">Otros Desc.</th>
                 <th class="text-right">Total Desc.</th>
-                <th class="text-right">Salario Neto</th>
+                <th class="text-right">Aporte Patr.</th>
+                <th class="text-right">Neto</th>
+                <th class="text-center">Pag.</th>
+                <th>Novedades de personal</th>
             </tr>
         </thead>
         <tbody>
-            <?php foreach ($records as $record):
-                $base = $resolveBaseRate($record);
-                $coopAmt = (float)$record['cooperative_deduction'];
-                $addAmt = (float)$record['additional_deduction'];
-                $loanAmt = (float)($loanDeductionsByEmployee[(int)$record['employee_id']] ?? 0);
-                $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
-            ?>
+            <?php foreach ($byDepartment as $deptName => $deptRecords): ?>
+            <tr class="dept-row">
+                <td colspan="14"><strong>DEPARTAMENTO: <?= htmlspecialchars(mb_strtoupper($deptName, 'UTF-8')) ?></strong> (<?= count($deptRecords) ?> <?= count($deptRecords) === 1 ? 'empleado' : 'empleados' ?>)</td>
+            </tr>
+            <?php foreach ($deptRecords as $record): ?>
             <tr>
                 <td><?= htmlspecialchars($record['employee_code']) ?></td>
                 <td><?= htmlspecialchars($record['first_name'] . ' ' . $record['last_name']) ?></td>
-                <td><?= htmlspecialchars($record['identification_number'] ?: 'N/A') ?></td>
-                <td><?= htmlspecialchars($base['label']) ?></td>
-                <td class="text-right"><?= formatDOP($base['rate']) ?></td>
-                <td class="text-right"><?= formatDOP($record['sales_incentive']) ?></td>
-                <td class="text-right"><?= formatDOP($record['night_incentive']) ?></td>
+                <td class="text-right"><?= formatDOP($record['base_salary']) ?></td>
+                <td class="text-right"><?= number_format((float)$record['total_hours'], 2) ?></td>
                 <td class="text-right"><?= formatDOP($record['gross_salary']) ?></td>
                 <td class="text-right"><?= formatDOP($record['afp_employee']) ?></td>
                 <td class="text-right"><?= formatDOP($record['sfs_employee']) ?></td>
                 <td class="text-right"><?= formatDOP($record['isr']) ?></td>
-                <td class="text-right"><?= formatDOP($coopAmt) ?></td>
-                <td class="text-right"><?= formatDOP($addAmt) ?></td>
-                <td class="text-right"><?= formatDOP($loanAmt) ?></td>
-                <td class="text-right"><?= formatDOP($othersOnly) ?></td>
+                <td class="text-right"><?= formatDOP($record['other_deductions']) ?></td>
                 <td class="text-right"><?= formatDOP($record['total_deductions']) ?></td>
+                <td class="text-right"><?= formatDOP($record['total_employer_contributions']) ?></td>
                 <td class="text-right"><strong><?= formatDOP($record['net_salary']) ?></strong></td>
+                <td class="text-center"><?= ((int)$record['is_paid']) ? 'Sí' : 'No' ?></td>
+                <td class="novelties"><?= htmlspecialchars($noveltiesByEmployee[(int)$record['employee_id']] ?? '') ?></td>
+            </tr>
+            <?php endforeach; ?>
+            <?php $dt = $departmentTotals[$deptName]; ?>
+            <tr class="subtotal-row">
+                <td colspan="2"><strong>SUBTOTAL <?= htmlspecialchars(mb_strtoupper($deptName, 'UTF-8')) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['base']) ?></strong></td>
+                <td class="text-right"><strong><?= number_format($dt['total_hours'], 2) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['gross']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['afp_employee']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['sfs_employee']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['isr']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['other_deductions']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['total_deductions']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['total_employer']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($dt['net']) ?></strong></td>
+                <td colspan="2"></td>
             </tr>
             <?php endforeach; ?>
             <tr class="totals-row">
-                <td colspan="5"><strong>TOTALES</strong></td>
-                <td class="text-right"><strong><?= formatDOP($totals['sales_incentive']) ?></strong></td>
-                <td class="text-right"><strong><?= formatDOP($totals['night_incentive']) ?></strong></td>
+                <td colspan="2"><strong>TOTALES GENERALES</strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['base']) ?></strong></td>
+                <td class="text-right"><strong><?= number_format($totals['total_hours'], 2) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['gross']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['afp_employee']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['sfs_employee']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['isr']) ?></strong></td>
-                <td class="text-right"><strong><?= formatDOP($totals['cooperative']) ?></strong></td>
-                <td class="text-right"><strong><?= formatDOP($totals['additional']) ?></strong></td>
-                <td class="text-right"><strong><?= formatDOP($totals['loans']) ?></strong></td>
-                <td class="text-right"><strong><?= formatDOP($totals['others_only']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['other_deductions']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['total_deductions']) ?></strong></td>
+                <td class="text-right"><strong><?= formatDOP($totals['total_employer']) ?></strong></td>
                 <td class="text-right"><strong><?= formatDOP($totals['net']) ?></strong></td>
+                <td colspan="2"></td>
             </tr>
         </tbody>
     </table>

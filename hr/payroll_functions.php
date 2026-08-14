@@ -1398,4 +1398,142 @@ function generateDGIIReport($pdo, $periodId)
     $stmt->execute([$periodId]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+/**
+ * Novedades de personal del período, por empleado: ingresos, salidas,
+ * vacaciones, permisos y licencias médicas que caen dentro de la quincena.
+ *
+ * Es la columna "Novedades" de los reportes de nómina (Excel y PDF). Cada
+ * fuente se consulta por separado y con try/catch propio: si a una instalación
+ * le falta alguna de las tablas del módulo de RRHH, el reporte sigue saliendo
+ * con las novedades que sí existen en vez de morirse.
+ *
+ * Solo se consideran solicitudes aprobadas (y las licencias médicas extendidas
+ * o completadas): una solicitud pendiente todavía no es un hecho de la nómina.
+ *
+ * @param int[] $employeeIds
+ * @return array<int,string> [employee_id => "Ingreso 05/08 · Vacaciones 3 d (01/08-03/08)"]
+ */
+function getPayrollNoveltiesForEmployees(PDO $pdo, array $employeeIds, string $periodStart, string $periodEnd): array
+{
+    if (empty($employeeIds)) {
+        return [];
+    }
+
+    $ids = array_values(array_unique(array_map('intval', $employeeIds)));
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $notes = [];   // [employee_id => string[]]
+
+    $add = static function (int $employeeId, string $note) use (&$notes): void {
+        $notes[$employeeId][] = $note;
+    };
+    $d = static fn(?string $date): string => $date ? date('d/m', strtotime($date)) : '';
+    // Los días vienen en decimal(5,2): "1.00" se lee mejor como "1" y "0.50" como "0.5".
+    $days = static fn($value): string => rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.');
+
+    // Una ausencia puede empezar antes o terminar después de la quincena. Se
+    // muestran los días de la solicitud completa y, si se sale del período, los
+    // que realmente caen dentro — si no, "Vacaciones 14 d" en una quincena de 15
+    // días se lee como si toda la quincena estuviera de vacaciones.
+    $spanNote = static function (string $kind, $totalDays, ?string $start, ?string $end) use ($d, $days, $periodStart, $periodEnd): string {
+        $start = $start ?: $periodStart;
+        $end = $end ?: $start;
+        $note = $kind . ' ' . $days($totalDays) . ' d (' . $d($start) . '-' . $d($end) . ')';
+        if ($start < $periodStart || $end > $periodEnd) {
+            $from = max($start, $periodStart);
+            $to = min($end, $periodEnd);
+            $inPeriod = (int) ((strtotime($to) - strtotime($from)) / 86400) + 1;
+            if ($inPeriod > 0 && $inPeriod < (float) $totalDays) {
+                $note .= ', ' . $inPeriod . ' d en el período';
+            }
+        }
+        return $note;
+    };
+
+    // Ingresos y salidas del período
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id, hire_date, termination_date, employment_status
+            FROM employees
+            WHERE id IN ($placeholders)
+              AND (hire_date BETWEEN ? AND ? OR termination_date BETWEEN ? AND ?)
+        ");
+        $stmt->execute(array_merge($ids, [$periodStart, $periodEnd, $periodStart, $periodEnd]));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $employeeId = (int) $row['id'];
+            $hire = $row['hire_date'];
+            $term = $row['termination_date'];
+            if ($hire && $hire >= $periodStart && $hire <= $periodEnd) {
+                $add($employeeId, 'Ingreso ' . $d($hire));
+            }
+            if ($term && $term >= $periodStart && $term <= $periodEnd) {
+                $add($employeeId, 'Salida ' . $d($term));
+            }
+        }
+    } catch (PDOException $e) {
+        // sin novedades de ingreso/salida
+    }
+
+    // Vacaciones aprobadas que solapan el período
+    try {
+        $stmt = $pdo->prepare("
+            SELECT employee_id, start_date, end_date, total_days
+            FROM vacation_requests
+            WHERE employee_id IN ($placeholders)
+              AND status = 'APPROVED'
+              AND start_date <= ? AND end_date >= ?
+        ");
+        $stmt->execute(array_merge($ids, [$periodEnd, $periodStart]));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $add((int) $row['employee_id'], $spanNote('Vacaciones', $row['total_days'], $row['start_date'], $row['end_date']));
+        }
+    } catch (PDOException $e) {
+        // sin módulo de vacaciones
+    }
+
+    // Permisos aprobados que solapan el período
+    try {
+        $stmt = $pdo->prepare("
+            SELECT employee_id, request_type, start_date, end_date, total_days
+            FROM permission_requests
+            WHERE employee_id IN ($placeholders)
+              AND status = 'APPROVED'
+              AND start_date <= ? AND COALESCE(end_date, start_date) >= ?
+        ");
+        $stmt->execute(array_merge($ids, [$periodEnd, $periodStart]));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $add((int) $row['employee_id'], $spanNote('Permiso', $row['total_days'], $row['start_date'], $row['end_date']));
+        }
+    } catch (PDOException $e) {
+        // sin módulo de permisos
+    }
+
+    // Licencias médicas vigentes en el período
+    try {
+        $stmt = $pdo->prepare("
+            SELECT employee_id, leave_type, start_date, end_date, total_days, is_paid
+            FROM medical_leaves
+            WHERE employee_id IN ($placeholders)
+              AND status IN ('APPROVED', 'EXTENDED', 'COMPLETED')
+              AND start_date <= ? AND COALESCE(end_date, start_date) >= ?
+        ");
+        $stmt->execute(array_merge($ids, [$periodEnd, $periodStart]));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $label = strtoupper((string) $row['leave_type']) === 'MATERNITY' ? 'Licencia maternidad' : 'Licencia médica';
+            $note = $spanNote($label, $row['total_days'], $row['start_date'], $row['end_date']);
+            if (isset($row['is_paid']) && !(int) $row['is_paid']) {
+                $note .= ' no pagada';
+            }
+            $add((int) $row['employee_id'], $note);
+        }
+    } catch (PDOException $e) {
+        // sin módulo de licencias médicas
+    }
+
+    $out = [];
+    foreach ($notes as $employeeId => $list) {
+        $out[$employeeId] = implode(' · ', $list);
+    }
+    return $out;
+}
 ?>

@@ -96,29 +96,21 @@ if ($departmentFilter !== null) {
         : ' AND e.department_id IS NULL';
 }
 
+// Las columnas son las del reporte de nómina de Finanzas, que es el formato
+// que acordó la auditoría: los incentivos ya vienen dentro del registro de
+// nómina (comisiones ← incentivo de ventas, otros ingresos ← nocturno), así que
+// no hace falta traer las tarifas del usuario ni los incentivos manuales.
 $recordsStmt = $pdo->prepare("
     SELECT pr.*,
            e.first_name, e.last_name, e.employee_code, e.identification_number, e.position,
-           d.name as department_name,
-           u.hourly_rate, u.monthly_salary, u.hourly_rate_dop, u.monthly_salary_dop,
-           u.daily_salary_usd, u.daily_salary_dop, u.preferred_currency, u.compensation_type, u.role,
-           COALESCE(pmi.sales_incentive, 0) as sales_incentive,
-           -- Monto ya resuelto (automático de la campaña o el manual que lo
-           -- sobrescribe). Los períodos viejos caen al valor manual de siempre.
-           COALESCE(NULLIF(pr.night_incentive, 0), pmi.night_incentive, 0) as night_incentive,
-           COALESCE(pmi.cooperative_deduction, 0) as cooperative_deduction,
-           COALESCE(pmi.additional_deduction, 0) as additional_deduction
+           d.name as department_name
     FROM payroll_records pr
     JOIN employees e ON e.id = pr.employee_id
-    LEFT JOIN users u ON u.id = e.user_id
     LEFT JOIN departments d ON d.id = e.department_id
-    LEFT JOIN payroll_manual_incentives pmi
-        ON pmi.payroll_period_id = pr.payroll_period_id
-       AND pmi.employee_id = pr.employee_id
     WHERE pr.payroll_period_id = ?
     $campaignWhere
     $departmentWhere
-    ORDER BY e.last_name, e.first_name
+    ORDER BY e.first_name, e.last_name
 ");
 $bindings = [$periodId];
 if ($campaignFilter !== null && $campaignFilter > 0) {
@@ -129,68 +121,6 @@ if ($departmentFilter !== null && $departmentFilter > 0) {
 }
 $recordsStmt->execute($bindings);
 $records = $recordsStmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Resolve effective compensation type and base rate (in DOP) for an employee row.
-// Mirrors the rate-selection logic from calculateEmployeePayroll() so the report
-// shows what the employee is actually paid by.
-// Si el período se pagó con MÁS DE UN salario (cambio de campaña a mitad de
-// quincena), el desglose quedó guardado en pr.salary_segments: se muestra el
-// último salario vigente y se avisa en la etiqueta, en vez de dar a entender que
-// toda la quincena se pagó a esa tarifa.
-$resolveBaseRate = function (array $r) use ($pdo) {
-    $segments = [];
-    if (!empty($r['salary_segments'])) {
-        $decoded = json_decode((string) $r['salary_segments'], true);
-        if (is_array($decoded)) {
-            $segments = $decoded;
-        }
-    }
-    if (count($segments) > 1) {
-        $last = $segments[count($segments) - 1];
-        $type = $last['type'] ?? 'hourly';
-        $rate = $type === 'fixed'
-            ? (float) ($last['monthly_salary'] ?? 0)
-            : ($type === 'daily' ? (float) ($last['daily_salary'] ?? 0) : (float) ($last['hourly_rate'] ?? 0));
-        $typeLabel = $type === 'fixed' ? 'Fijo (mensual)' : ($type === 'daily' ? 'Diario' : 'Por Hora');
-        return [
-            'label' => $typeLabel . ' · ' . count($segments) . ' salarios en el período',
-            'rate'  => $rate,
-        ];
-    }
-
-    $hourlyRateUsd = (float)($r['hourly_rate'] ?? 0);
-    $hourlyRateDop = (float)($r['hourly_rate_dop'] ?? 0);
-    $monthlySalaryUsd = (float)($r['monthly_salary'] ?? 0);
-    $monthlySalaryDop = (float)($r['monthly_salary_dop'] ?? 0);
-    $dailySalaryUsd = (float)($r['daily_salary_usd'] ?? 0);
-    $dailySalaryDop = (float)($r['daily_salary_dop'] ?? 0);
-
-    $hourlyDop = $hourlyRateDop > 0
-        ? $hourlyRateDop
-        : ($hourlyRateUsd > 0 ? convertCurrency($pdo, $hourlyRateUsd, 'USD', 'DOP') : 0.0);
-    $monthlyDop = $monthlySalaryDop > 0
-        ? $monthlySalaryDop
-        : ($monthlySalaryUsd > 0 ? convertCurrency($pdo, $monthlySalaryUsd, 'USD', 'DOP') : 0.0);
-    $dailyDop = $dailySalaryDop > 0
-        ? $dailySalaryDop
-        : ($dailySalaryUsd > 0 ? convertCurrency($pdo, $dailySalaryUsd, 'USD', 'DOP') : 0.0);
-
-    $compType = strtolower(trim($r['compensation_type'] ?? 'hourly'));
-    $role = strtoupper(trim($r['role'] ?? ''));
-    if ($compType === '' || $compType === 'hourly') {
-        if ($role !== 'AGENT' && $monthlyDop > 0) {
-            $compType = 'fixed';
-        }
-    }
-
-    if ($compType === 'fixed') {
-        return ['label' => 'Fijo (mensual)', 'rate' => $monthlyDop];
-    }
-    if ($compType === 'daily') {
-        return ['label' => 'Diario', 'rate' => $dailyDop];
-    }
-    return ['label' => 'Por Hora', 'rate' => $hourlyDop];
-};
 
 // Create spreadsheet
 $spreadsheet = new Spreadsheet();
@@ -218,11 +148,11 @@ if ($groupHeaderLabel !== null) {
     $headerTitle .= ' — ' . $groupHeaderLabel;
 }
 $sheet->setCellValue('B1', $headerTitle);
-$sheet->mergeCells('B1:W1');
-$sheet->getStyle('B1:W1')->getFont()->setBold(true)->setSize(16);
-$sheet->getStyle('B1:W1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle('A1:W1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
-$sheet->getStyle('B1:W1')->getFont()->getColor()->setRGB('FFFFFF');
+$sheet->mergeCells('B1:Z1');
+$sheet->getStyle('B1:Z1')->getFont()->setBold(true)->setSize(16);
+$sheet->getStyle('B1:Z1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$sheet->getStyle('A1:Z1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('2563EB');
+$sheet->getStyle('B1:Z1')->getFont()->getColor()->setRGB('FFFFFF');
 
 // Period info
 $periodLabel = 'Período: ' . $period['name'];
@@ -234,12 +164,12 @@ $sheet->mergeCells('A2:F2');
 $sheet->setCellValue('G2', 'Fechas: ' . date('d/m/Y', strtotime($period['start_date'])) . ' - ' . date('d/m/Y', strtotime($period['end_date'])));
 $sheet->mergeCells('G2:L2');
 $sheet->setCellValue('M2', 'Pago: ' . date('d/m/Y', strtotime($period['payment_date'])));
-$sheet->mergeCells('M2:W2');
+$sheet->mergeCells('M2:Z2');
 
-// Cargar cuotas de préstamo por empleado en una sola query batched
-$loanDeductionsByEmployee = [];
+// Novedades de personal del período (ingresos, salidas, vacaciones, permisos, licencias)
+$noveltiesByEmployee = [];
 if (!empty($records)) {
-    $loanDeductionsByEmployee = getLoanDeductionsForEmployees(
+    $noveltiesByEmployee = getPayrollNoveltiesForEmployees(
         $pdo,
         array_map(static fn($r) => (int) $r['employee_id'], $records),
         $period['start_date'],
@@ -247,34 +177,37 @@ if (!empty($records)) {
     );
 }
 
-// Column headers
+// Column headers — mismas columnas, mismo orden y mismos rótulos que el reporte
+// de nómina de Finanzas (Nómina → Detalle de nómina): ese es el formato único
+// que acordó la auditoría, para que el documento sea el mismo salga de donde salga.
 $row = 4;
-// Multiplicador de horas extra vigente (para rotular la columna de recargo).
-$overtimeMultiplierLabel = number_format((float) (getScheduleConfig($pdo)['overtime_multiplier'] ?? 1.35), 2);
 $headers = [
     'A' => 'Código',
     'B' => 'Empleado',
-    'C' => 'Cédula',
-    'D' => 'Departamento',
-    'E' => 'Tipo Comp.',
-    'F' => 'Salario Base',
-    'G' => 'Horas Reg.',
-    'H' => 'Horas Extra',
-    'I' => 'Pago H. Extra (' . $overtimeMultiplierLabel . 'x)',
-    'J' => 'Inc. Ventas',
-    'K' => 'Inc. Nocturno',
-    'L' => 'Salario Bruto',
-    'M' => 'AFP (' . number_format($deductionRates['AFP']['employee_percentage'], 2) . '%)',
-    'N' => 'SFS (' . number_format($deductionRates['SFS']['employee_percentage'], 2) . '%)',
-    'O' => 'ISR',
-    'P' => 'Cooperativa',
-    'Q' => 'Descuento',
-    'R' => 'Préstamos',
-    'S' => 'Otros Desc.',
-    'T' => 'Total Desc.',
-    'U' => 'Salario Neto',
-    'V' => 'AFP Patronal (' . number_format($deductionRates['AFP']['employer_percentage'], 2) . '%)',
-    'W' => 'SFS Patronal (' . number_format($deductionRates['SFS']['employer_percentage'], 2) . '%)'
+    'C' => 'Departamento',
+    'D' => 'Posición',
+    'E' => 'Salario Base',
+    'F' => 'Horas Reg.',
+    'G' => 'Horas Extra',
+    'H' => 'Horas Tot.',
+    'I' => 'Monto Extra',
+    'J' => 'Bonos',
+    'K' => 'Comisiones',
+    'L' => 'Otros Ingresos',
+    'M' => 'Bruto',
+    'N' => 'AFP',
+    'O' => 'SFS',
+    'P' => 'ISR',
+    'Q' => 'Otros Desc.',
+    'R' => 'Total Desc.',
+    'S' => 'AFP Patronal',
+    'T' => 'SFS Patronal',
+    'U' => 'SRL (Riesgo)',
+    'V' => 'INFOTEP',
+    'W' => 'Total Patronal',
+    'X' => 'Neto',
+    'Y' => 'Pagado',
+    'Z' => 'Novedades de personal'
 ];
 
 foreach ($headers as $col => $header) {
@@ -287,115 +220,189 @@ $headerStyle = [
     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
     'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
 ];
-$sheet->getStyle('A' . $row . ':W' . $row)->applyFromArray($headerStyle);
+$sheet->getStyle('A' . $row . ':Z' . $row)->applyFromArray($headerStyle);
+
+// La fila de encabezados queda fija al hacer scroll: con la nómina dividida en
+// bloques por departamento el listado es largo y se perdía la referencia.
+$sheet->freezePane('A' . ($row + 1));
 
 // Data rows
 $row++;
-$totals = ['reg_hours' => 0, 'ot_hours' => 0, 'ot_pay' => 0, 'sales' => 0, 'night' => 0, 'gross' => 0, 'afp_emp' => 0, 'sfs_emp' => 0, 'isr' => 0, 'coop' => 0, 'add' => 0, 'loans' => 0, 'other' => 0, 'deductions' => 0, 'net' => 0, 'afp_pat' => 0, 'sfs_pat' => 0];
 
+$emptyTotals = static fn(): array => [
+    'base' => 0, 'reg_hours' => 0, 'ot_hours' => 0, 'total_hours' => 0, 'ot_pay' => 0,
+    'bonuses' => 0, 'commissions' => 0, 'other_income' => 0, 'gross' => 0,
+    'afp' => 0, 'sfs' => 0, 'isr' => 0, 'other' => 0, 'deductions' => 0,
+    'afp_pat' => 0, 'sfs_pat' => 0, 'srl_pat' => 0, 'infotep_pat' => 0, 'employer' => 0,
+    'net' => 0,
+];
+$totals = $emptyTotals();
+
+// Agrupar por departamento. El departamento es la división que pidió la
+// auditoría: cada bloque lleva su encabezado y su subtotal, y al final va el
+// total general. "Sin Departamento" siempre de último.
+$byDepartment = [];
 foreach ($records as $record) {
-    $base = $resolveBaseRate($record);
+    $deptName = trim((string) ($record['department_name'] ?? ''));
+    $byDepartment[$deptName !== '' ? $deptName : 'Sin Departamento'][] = $record;
+}
+uksort($byDepartment, static function (string $a, string $b): int {
+    if ($a === 'Sin Departamento') return 1;
+    if ($b === 'Sin Departamento') return -1;
+    return strcasecmp($a, $b);
+});
 
-    // other_deductions includes cooperativa + descuento + préstamos + custom; split for the report.
-    $coopAmt = (float)$record['cooperative_deduction'];
-    $addAmt = (float)$record['additional_deduction'];
-    $loanAmt = (float)($loanDeductionsByEmployee[(int)$record['employee_id']] ?? 0);
-    $othersOnly = max(0, (float)$record['other_deductions'] - $coopAmt - $addAmt - $loanAmt);
+$currencyCols = ['E', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X'];
+$hourCols = ['F', 'G', 'H'];
 
-    $sheet->setCellValue('A' . $row, $record['employee_code']);
-    $sheet->setCellValue('B' . $row, $record['first_name'] . ' ' . $record['last_name']);
-    $sheet->setCellValue('C' . $row, $record['identification_number'] ?: 'N/A');
-    $sheet->setCellValue('D' . $row, $record['department_name'] ?: 'N/A');
-    $sheet->setCellValue('E' . $row, $base['label']);
-    $sheet->setCellValue('F' . $row, $base['rate']);
-    // Horas con 4 decimales: el bruto se calcula con las horas exactas, así que
-    // mostrarlas redondeadas a 2 hacía que "tarifa × horas" no cuadrara por centavos.
-    $sheet->setCellValue('G' . $row, round((float)$record['regular_hours'], 4));
-    $sheet->setCellValue('H' . $row, round((float)$record['overtime_hours'], 4));
-    $sheet->setCellValue('I' . $row, $record['overtime_amount']);
-    $sheet->setCellValue('J' . $row, $record['sales_incentive']);
-    $sheet->setCellValue('K' . $row, $record['night_incentive']);
-    $sheet->setCellValue('L' . $row, $record['gross_salary']);
-    $sheet->setCellValue('M' . $row, $record['afp_employee']);
-    $sheet->setCellValue('N' . $row, $record['sfs_employee']);
-    $sheet->setCellValue('O' . $row, $record['isr']);
-    $sheet->setCellValue('P' . $row, $coopAmt);
-    $sheet->setCellValue('Q' . $row, $addAmt);
-    $sheet->setCellValue('R' . $row, $loanAmt);
-    $sheet->setCellValue('S' . $row, $othersOnly);
-    $sheet->setCellValue('T' . $row, $record['total_deductions']);
-    $sheet->setCellValue('U' . $row, $record['net_salary']);
-    $sheet->setCellValue('V' . $row, $record['afp_employer']);
-    $sheet->setCellValue('W' . $row, $record['sfs_employer']);
+// Escribe una fila de totales (subtotal de departamento o total general).
+$writeTotalsRow = function (int $row, string $label, array $t, string $fillRgb) use ($sheet, $currencyCols, $hourCols): void {
+    $sheet->setCellValue('A' . $row, $label);
+    $sheet->mergeCells('A' . $row . ':D' . $row);
+    $sheet->setCellValue('E' . $row, $t['base']);
+    $sheet->setCellValue('F' . $row, round($t['reg_hours'], 4));
+    $sheet->setCellValue('G' . $row, round($t['ot_hours'], 4));
+    $sheet->setCellValue('H' . $row, round($t['total_hours'], 4));
+    $sheet->setCellValue('I' . $row, $t['ot_pay']);
+    $sheet->setCellValue('J' . $row, $t['bonuses']);
+    $sheet->setCellValue('K' . $row, $t['commissions']);
+    $sheet->setCellValue('L' . $row, $t['other_income']);
+    $sheet->setCellValue('M' . $row, $t['gross']);
+    $sheet->setCellValue('N' . $row, $t['afp']);
+    $sheet->setCellValue('O' . $row, $t['sfs']);
+    $sheet->setCellValue('P' . $row, $t['isr']);
+    $sheet->setCellValue('Q' . $row, $t['other']);
+    $sheet->setCellValue('R' . $row, $t['deductions']);
+    $sheet->setCellValue('S' . $row, $t['afp_pat']);
+    $sheet->setCellValue('T' . $row, $t['sfs_pat']);
+    $sheet->setCellValue('U' . $row, $t['srl_pat']);
+    $sheet->setCellValue('V' . $row, $t['infotep_pat']);
+    $sheet->setCellValue('W' . $row, $t['employer']);
+    $sheet->setCellValue('X' . $row, $t['net']);
 
-    // Format currency (montos; las horas G/H quedan como número simple)
-    foreach (['F', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'] as $col) {
+    foreach ($currencyCols as $col) {
         $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
     }
-    foreach (['G', 'H'] as $col) {
+    foreach ($hourCols as $col) {
         $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.0000');
     }
 
-    $totals['reg_hours'] += (float)$record['regular_hours'];
-    $totals['ot_hours'] += (float)$record['overtime_hours'];
-    $totals['ot_pay'] += (float)$record['overtime_amount'];
-    $totals['sales'] += $record['sales_incentive'];
-    $totals['night'] += $record['night_incentive'];
-    $totals['gross'] += $record['gross_salary'];
-    $totals['afp_emp'] += $record['afp_employee'];
-    $totals['sfs_emp'] += $record['sfs_employee'];
-    $totals['isr'] += $record['isr'];
-    $totals['coop'] += $coopAmt;
-    $totals['add'] += $addAmt;
-    $totals['loans'] += $loanAmt;
-    $totals['other'] += $othersOnly;
-    $totals['deductions'] += $record['total_deductions'];
-    $totals['net'] += $record['net_salary'];
-    $totals['afp_pat'] += $record['afp_employer'];
-    $totals['sfs_pat'] += $record['sfs_employer'];
+    $sheet->getStyle('A' . $row . ':Z' . $row)->applyFromArray([
+        'font' => ['bold' => true],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $fillRgb]],
+        'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+    ]);
+};
 
+$isFirstDepartment = true;
+foreach ($byDepartment as $deptName => $deptRecords) {
+    if (!$isFirstDepartment) {
+        $row++; // fila en blanco entre bloques
+    }
+    $isFirstDepartment = false;
+
+    // Encabezado del bloque
+    $sheet->setCellValue('A' . $row, 'DEPARTAMENTO: ' . mb_strtoupper($deptName, 'UTF-8') . ' (' . count($deptRecords) . ' ' . (count($deptRecords) === 1 ? 'empleado' : 'empleados') . ')');
+    $sheet->mergeCells('A' . $row . ':Z' . $row);
+    $sheet->getStyle('A' . $row . ':Z' . $row)->applyFromArray([
+        'font' => ['bold' => true, 'color' => ['rgb' => '1E3A8A']],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'E5E7EB']],
+        'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
+    ]);
+    $row++;
+
+    $deptTotals = $emptyTotals();
+
+    foreach ($deptRecords as $record) {
+        $sheet->setCellValue('A' . $row, $record['employee_code']);
+        $sheet->setCellValue('B' . $row, $record['first_name'] . ' ' . $record['last_name']);
+        $sheet->setCellValue('C' . $row, $record['department_name'] ?: 'Sin departamento');
+        $sheet->setCellValue('D' . $row, $record['position'] ?: '');
+        $sheet->setCellValue('E' . $row, $record['base_salary']);
+        // Horas con 4 decimales: el bruto se calcula con las horas exactas, así que
+        // mostrarlas redondeadas a 2 hacía que "tarifa × horas" no cuadrara por centavos.
+        $sheet->setCellValue('F' . $row, round((float)$record['regular_hours'], 4));
+        $sheet->setCellValue('G' . $row, round((float)$record['overtime_hours'], 4));
+        $sheet->setCellValue('H' . $row, round((float)$record['total_hours'], 4));
+        $sheet->setCellValue('I' . $row, $record['overtime_amount']);
+        $sheet->setCellValue('J' . $row, $record['bonuses']);
+        $sheet->setCellValue('K' . $row, $record['commissions']);
+        $sheet->setCellValue('L' . $row, $record['other_income']);
+        $sheet->setCellValue('M' . $row, $record['gross_salary']);
+        $sheet->setCellValue('N' . $row, $record['afp_employee']);
+        $sheet->setCellValue('O' . $row, $record['sfs_employee']);
+        $sheet->setCellValue('P' . $row, $record['isr']);
+        $sheet->setCellValue('Q' . $row, $record['other_deductions']);
+        $sheet->setCellValue('R' . $row, $record['total_deductions']);
+        $sheet->setCellValue('S' . $row, $record['afp_employer']);
+        $sheet->setCellValue('T' . $row, $record['sfs_employer']);
+        $sheet->setCellValue('U' . $row, $record['srl_employer']);
+        $sheet->setCellValue('V' . $row, $record['infotep_employer']);
+        $sheet->setCellValue('W' . $row, $record['total_employer_contributions']);
+        $sheet->setCellValue('X' . $row, $record['net_salary']);
+        $sheet->setCellValue('Y' . $row, ((int) $record['is_paid']) ? 'Sí' : 'No');
+        // Novedades del período; vacía si el empleado no tuvo ninguna, para que
+        // RRHH pueda anotar a mano lo que no está en el sistema.
+        $sheet->setCellValueExplicit(
+            'Z' . $row,
+            (string) ($noveltiesByEmployee[(int)$record['employee_id']] ?? ''),
+            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+        );
+
+        // Format currency (montos; las horas F/G/H quedan como número simple)
+        foreach ($currencyCols as $col) {
+            $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
+        }
+        foreach ($hourCols as $col) {
+            $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.0000');
+        }
+
+        foreach ([
+            'base' => (float)$record['base_salary'],
+            'reg_hours' => (float)$record['regular_hours'],
+            'ot_hours' => (float)$record['overtime_hours'],
+            'total_hours' => (float)$record['total_hours'],
+            'ot_pay' => (float)$record['overtime_amount'],
+            'bonuses' => (float)$record['bonuses'],
+            'commissions' => (float)$record['commissions'],
+            'other_income' => (float)$record['other_income'],
+            'gross' => (float)$record['gross_salary'],
+            'afp' => (float)$record['afp_employee'],
+            'sfs' => (float)$record['sfs_employee'],
+            'isr' => (float)$record['isr'],
+            'other' => (float)$record['other_deductions'],
+            'deductions' => (float)$record['total_deductions'],
+            'afp_pat' => (float)$record['afp_employer'],
+            'sfs_pat' => (float)$record['sfs_employer'],
+            'srl_pat' => (float)$record['srl_employer'],
+            'infotep_pat' => (float)$record['infotep_employer'],
+            'employer' => (float)$record['total_employer_contributions'],
+            'net' => (float)$record['net_salary'],
+        ] as $key => $value) {
+            $deptTotals[$key] += $value;
+            $totals[$key] += $value;
+        }
+
+        $row++;
+    }
+
+    $writeTotalsRow($row, 'SUBTOTAL ' . mb_strtoupper($deptName, 'UTF-8'), $deptTotals, 'F1F5F9');
     $row++;
 }
 
-// Totals row (Salario Base column F left blank — base rates are per-employee and not summable across hourly/fixed/daily)
-$sheet->setCellValue('A' . $row, 'TOTALES');
-$sheet->mergeCells('A' . $row . ':F' . $row);
-$sheet->setCellValue('G' . $row, round($totals['reg_hours'], 4));
-$sheet->setCellValue('H' . $row, round($totals['ot_hours'], 4));
-$sheet->setCellValue('I' . $row, $totals['ot_pay']);
-$sheet->setCellValue('J' . $row, $totals['sales']);
-$sheet->setCellValue('K' . $row, $totals['night']);
-$sheet->setCellValue('L' . $row, $totals['gross']);
-$sheet->setCellValue('M' . $row, $totals['afp_emp']);
-$sheet->setCellValue('N' . $row, $totals['sfs_emp']);
-$sheet->setCellValue('O' . $row, $totals['isr']);
-$sheet->setCellValue('P' . $row, $totals['coop']);
-$sheet->setCellValue('Q' . $row, $totals['add']);
-$sheet->setCellValue('R' . $row, $totals['loans']);
-$sheet->setCellValue('S' . $row, $totals['other']);
-$sheet->setCellValue('T' . $row, $totals['deductions']);
-$sheet->setCellValue('U' . $row, $totals['net']);
-$sheet->setCellValue('V' . $row, $totals['afp_pat']);
-$sheet->setCellValue('W' . $row, $totals['sfs_pat']);
-
-foreach (['I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'] as $col) {
-    $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"RD$"#,##0.00');
-}
-foreach (['G', 'H'] as $col) {
-    $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('#,##0.0000');
-}
-
-$totalsStyle = [
-    'font' => ['bold' => true],
-    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'DBEAFE']],
-    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]
-];
-$sheet->getStyle('A' . $row . ':W' . $row)->applyFromArray($totalsStyle);
+// Total general
+$row++;
+$writeTotalsRow($row, 'TOTALES GENERALES', $totals, 'DBEAFE');
 
 // Auto-size columns
-foreach (range('A', 'W') as $col) {
+foreach (range('A', 'Z') as $col) {
     $sheet->getColumnDimension($col)->setAutoSize(true);
 }
+// La columna de novedades es texto libre: ancho fijo y ajuste de línea, porque
+// el auto-size la estiraría hasta romper la impresión.
+$sheet->getColumnDimension('Z')->setAutoSize(false);
+$sheet->getColumnDimension('Z')->setWidth(45);
+$sheet->getStyle('Z5:Z' . $row)->getAlignment()->setWrapText(true);
 
 // Output
 $slugParts = [];
