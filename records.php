@@ -497,6 +497,12 @@ unset($record);
 // Historial de modificaciones de cada punch (quién lo tocó y por qué), para
 // mostrarlo aquí igual que el ajuste de horas de Vicidial. Lo alimentan los
 // cinco puntos de edición del ponche a través de lib/attendance_audit.php.
+//
+// Se traen TODOS los cambios de cada registro, no solo el último: el cliente
+// pidió poder ver la cadena completa cuando una hora se corrige varias veces
+// ("quién la puso en 5 minutos después de que otro la había puesto en 2").
+require_once __DIR__ . '/lib/attendance_audit.php';
+
 $recordAuditMap = [];
 if (!empty($records)) {
     $recordIds = array_values(array_unique(array_filter(array_map(
@@ -509,6 +515,9 @@ if (!empty($records)) {
         try {
             $auditStmt = $pdo->prepare("
                 SELECT aa.attendance_id, aa.action, aa.reason, aa.source, aa.created_at,
+                       aa.old_type, aa.new_type, aa.old_timestamp, aa.new_timestamp,
+                       aa.old_work_seconds, aa.new_work_seconds,
+                       aa.old_durations_json, aa.new_durations_json,
                        COALESCE(NULLIF(TRIM(pu.full_name), ''), pu.username) AS performed_by_name
                 FROM attendance_audit aa
                 LEFT JOIN users pu ON pu.id = aa.performed_by
@@ -517,6 +526,21 @@ if (!empty($records)) {
             ");
             $auditStmt->execute($recordIds);
             foreach ($auditStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $auditRow) {
+                $oldSec = (int) ($auditRow['old_work_seconds'] ?? 0);
+                $newSec = (int) ($auditRow['new_work_seconds'] ?? 0);
+                $auditRow['diff_seconds']   = $newSec - $oldSec;
+                $auditRow['old_formatted']  = attendanceAuditFormatSeconds($oldSec);
+                $auditRow['new_formatted']  = attendanceAuditFormatSeconds($newSec);
+                $auditRow['diff_formatted'] = ($newSec - $oldSec >= 0 ? '+' : '')
+                    . attendanceAuditFormatSeconds($newSec - $oldSec);
+                // Qué estado se movió y cuánto: es la lectura que pidió el cliente.
+                $auditRow['state_changes'] = attendanceAuditDurationDiff(
+                    $pdo,
+                    $auditRow['old_durations_json'] ?? null,
+                    $auditRow['new_durations_json'] ?? null
+                );
+                unset($auditRow['old_durations_json'], $auditRow['new_durations_json']);
+
                 $recordAuditMap[(int) $auditRow['attendance_id']][] = $auditRow;
             }
         } catch (Throwable $e) {
@@ -1244,9 +1268,17 @@ $tardinessTotal = count($tardiness_data);
                                                 <i class="fas fa-comment-alt"></i> <?= htmlspecialchars($auditReasonText) ?>
                                             </div>
                                         <?php endif; ?>
-                                        <?php if ($auditCount > 1): ?>
-                                            <div class="text-muted text-xs"><?= (int) $auditCount ?> cambios registrados</div>
-                                        <?php endif; ?>
+                                        <button type="button"
+                                                class="audit-history-link"
+                                                onclick="openAuditHistory(<?= (int) $record['id'] ?>)"
+                                                title="Ver todos los cambios de este registro">
+                                            <i class="fas fa-clock-rotate-left"></i>
+                                            <?php if ($auditCount > 1): ?>
+                                                Ver historial (<?= (int) $auditCount ?> cambios)
+                                            <?php else: ?>
+                                                Ver historial
+                                            <?php endif; ?>
+                                        </button>
                                     </div>
                                 <?php endif; ?>
                             </td>
@@ -2131,6 +2163,62 @@ $(document).ready(function() {
     transform: translateY(-2px);
     box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
 }
+
+/* Historial de modificaciones ------------------------------------------- */
+.audit-history-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: 0.15rem;
+    font-size: 0.7rem;
+    color: #38bdf8;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.audit-history-link:hover { color: #7dd3fc; text-decoration: underline; }
+
+.audit-timeline { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.audit-entry {
+    border-left: 3px solid rgba(56, 189, 248, 0.5);
+    padding: 0.5rem 0 0.5rem 0.85rem;
+}
+
+.audit-entry.is-latest { border-left-color: #22c55e; }
+
+.audit-entry-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.audit-entry-who { font-weight: 600; color: #e2e8f0; }
+.audit-entry-when { color: #94a3b8; font-size: 0.75rem; }
+
+.audit-chip {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.45rem;
+    border-radius: 9999px;
+    background: rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+}
+
+.audit-chip.create { background: rgba(34, 197, 94, 0.2); color: #86efac; }
+.audit-chip.update { background: rgba(56, 189, 248, 0.2); color: #7dd3fc; }
+.audit-chip.delete { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+
+.audit-entry-detail { font-size: 0.78rem; color: #cbd5e1; margin-top: 0.3rem; }
+.audit-entry-detail .neg { color: #fca5a5; }
+.audit-entry-detail .pos { color: #86efac; }
+.audit-entry-reason { font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem; font-style: italic; }
+.audit-empty { color: #94a3b8; font-size: 0.85rem; }
 </style>
 
 <?php
@@ -2240,6 +2328,30 @@ $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
     </div>
 </div>
 <?php endif; ?>
+
+<!-- Modal: historial completo de modificaciones de un registro.
+     Antes la tabla solo mostraba el ÚLTIMO cambio: si una hora se corregía dos
+     veces, la corrección anterior desaparecía de la vista aunque siguiera
+     guardada en attendance_audit. Aquí se ve la cadena completa. -->
+<div id="auditHistoryModal" class="modal">
+    <div class="modal-content" style="max-width: 720px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-clock-rotate-left"></i> Historial de modificaciones</h3>
+            <button class="modal-close" onclick="closeAuditHistory()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-info">
+                <p id="auditHistoryContext"><i class="fas fa-info-circle"></i> Registro</p>
+            </div>
+            <div id="auditHistoryBody" class="audit-timeline"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="modal-btn modal-btn-secondary" onclick="closeAuditHistory()">
+                <i class="fas fa-times"></i> Cerrar
+            </button>
+        </div>
+    </div>
+</div>
 
 <!-- Modal: Agregar registro manual (para cuadre de nómina) -->
 <?php $manualAuthRequired = $editAuthRequired; ?>
@@ -2373,6 +2485,98 @@ $deleteAuthRequired = isAuthorizationRequiredForContext($pdo, 'delete_records');
 </div>
 
 <script>
+// ---------------------------------------------------------------------------
+// Historial de modificaciones (todos los cambios, no solo el último)
+// ---------------------------------------------------------------------------
+const AUDIT_TRAILS = <?= json_encode($recordAuditMap, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+const AUDIT_RECORD_META = <?= json_encode(array_reduce($records, static function (array $acc, array $r): array {
+    $acc[(int) $r['id']] = [
+        'employee' => $r['full_name'] ?? '',
+        'date'     => $r['record_date'] ?? '',
+        'time'     => $r['record_time'] ?? '',
+        'type'     => $r['type_label'] ?? '',
+    ];
+    return $acc;
+}, []), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+const AUDIT_ACTION_LABELS = { CREATE: 'Creado', UPDATE: 'Editado', DELETE: 'Eliminado' };
+
+function auditEscape(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function openAuditHistory(recordId) {
+    const trail = AUDIT_TRAILS[recordId] || [];
+    const meta = AUDIT_RECORD_META[recordId] || {};
+    const context = document.getElementById('auditHistoryContext');
+    const body = document.getElementById('auditHistoryBody');
+
+    context.innerHTML = '<i class="fas fa-info-circle"></i> '
+        + auditEscape(meta.employee || 'Colaborador')
+        + ' — ' + auditEscape(meta.type || '')
+        + ' del ' + auditEscape(meta.date || '') + ' ' + auditEscape(meta.time || '')
+        + ' (registro #' + Number(recordId) + ')';
+
+    if (!trail.length) {
+        body.innerHTML = '<p class="audit-empty">Este registro no tiene modificaciones registradas.</p>';
+    } else {
+        // Más reciente arriba: es lo primero que se busca al auditar.
+        const entries = trail.slice().reverse().map(function (entry, index) {
+            const action = String(entry.action || 'UPDATE').toUpperCase();
+            const chipClass = action === 'CREATE' ? 'create' : action === 'DELETE' ? 'delete' : 'update';
+            const diff = Number(entry.diff_seconds || 0);
+
+            let detalle = '';
+            if (entry.old_timestamp || entry.new_timestamp) {
+                detalle += '<div>Hora: <strong>' + auditEscape(entry.old_timestamp || '—')
+                        + '</strong> → <strong>' + auditEscape(entry.new_timestamp || '—') + '</strong></div>';
+            }
+            if (entry.old_type && entry.new_type && entry.old_type !== entry.new_type) {
+                detalle += '<div>Tipo: <strong>' + auditEscape(entry.old_type)
+                        + '</strong> → <strong>' + auditEscape(entry.new_type) + '</strong></div>';
+            }
+            if (diff !== 0) {
+                detalle += '<div>Horas del día: <strong>' + auditEscape(entry.old_formatted)
+                        + '</strong> → <strong>' + auditEscape(entry.new_formatted) + '</strong> '
+                        + '<span class="' + (diff < 0 ? 'neg' : 'pos') + '">('
+                        + auditEscape(entry.diff_formatted) + ')</span></div>';
+            }
+            (entry.state_changes || []).forEach(function (change) {
+                const min = function (s) { return Math.round(Number(s || 0) / 60); };
+                detalle += '<div>' + auditEscape(change.label) + ': <strong>' + min(change.old)
+                        + ' min</strong> → <strong>' + min(change.new) + ' min</strong></div>';
+            });
+            if (!detalle) {
+                detalle = '<div>Sin cambio en las horas pagadas.</div>';
+            }
+
+            return '<div class="audit-entry' + (index === 0 ? ' is-latest' : '') + '">'
+                + '<div class="audit-entry-head">'
+                +   '<span class="audit-chip ' + chipClass + '">'
+                +     auditEscape(AUDIT_ACTION_LABELS[action] || 'Modificado') + '</span>'
+                +   '<span class="audit-entry-who">' + auditEscape(entry.performed_by_name || 'Sistema') + '</span>'
+                +   '<span class="audit-entry-when">' + auditEscape(entry.created_at || '') + '</span>'
+                +   (entry.source ? '<span class="audit-entry-when">· ' + auditEscape(entry.source) + '</span>' : '')
+                + '</div>'
+                + '<div class="audit-entry-detail">' + detalle + '</div>'
+                + (entry.reason
+                    ? '<div class="audit-entry-reason"><i class="fas fa-comment-alt"></i> ' + auditEscape(entry.reason) + '</div>'
+                    : '')
+                + '</div>';
+        });
+        body.innerHTML = entries.join('');
+    }
+
+    document.getElementById('auditHistoryModal').style.display = 'block';
+}
+
+function closeAuditHistory() {
+    const modal = document.getElementById('auditHistoryModal');
+    if (modal) modal.style.display = 'none';
+}
+
 // Edit modal functions
 function openEditModal(recordId) {
     document.getElementById('edit_record_id').value = recordId;
@@ -2533,11 +2737,17 @@ window.onclick = function(event) {
     if (event.target === manualModal) {
         closeManualPunchModal();
     }
+    if (event.target === document.getElementById('auditHistoryModal')) {
+        closeAuditHistory();
+    }
 }
 
 // Close modals with ESC key
 document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
+        // Primero el historial: los modales de editar/eliminar solo existen para
+        // usuarios con permiso y sus funciones revientan si no están en el DOM.
+        closeAuditHistory();
         closeEditModal();
         closeDeleteModal();
         closeManualPunchModal();

@@ -347,6 +347,30 @@ try {
     $flash['err'][] = 'Falta la tabla de ajustes. Corre sql/create_vicidial_payroll_adjustments.sql.';
 }
 
+// Bitácora COMPLETA de cada día ajustado. La tabla de arriba solo guarda el
+// ajuste vigente: si un día se corrige tres veces, las dos correcciones
+// anteriores solo viven aquí. Antes nunca se mostraban, y por eso al hacer una
+// modificación posterior se perdía de vista quién había puesto el valor previo.
+$logMap = [];
+try {
+    $lStmt = $pdo->prepare("
+        SELECT l.user_id, l.work_date, l.action, l.old_seconds, l.new_seconds,
+               l.original_seconds, l.reason, l.created_at,
+               COALESCE(NULLIF(TRIM(u.full_name), ''), u.username) AS performed_by_name
+        FROM vicidial_payroll_adjustment_log l
+        LEFT JOIN users u ON u.id = l.performed_by
+        WHERE l.work_date BETWEEN ? AND ?
+        ORDER BY l.id ASC
+    ");
+    $lStmt->execute([$start, $end]);
+    foreach ($lStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $l) {
+        $logMap[$l['user_id'] . '|' . $l['work_date']][] = $l;
+    }
+} catch (Throwable $e) {
+    // Sin bitácora la pantalla sigue funcionando; solo se pierde el historial.
+    error_log('payroll_hours (bitácora vicidial): ' . $e->getMessage());
+}
+
 $rows = array_values($byKey);
 $totRaw = 0; $totFinal = 0; $nAdj = 0;
 foreach ($rows as $r) {
@@ -683,6 +707,37 @@ foreach ($rows as $r) {
                                 <div class="text-xs text-slate-500 mt-1">
                                     <?= htmlspecialchars($adj['by_name'] ?? '—') ?> · <?= htmlspecialchars((string) $adj['updated_at']) ?>
                                 </div>
+                            <?php endif; ?>
+                            <?php $historial = $logMap[$key] ?? []; ?>
+                            <?php if (!empty($historial)): ?>
+                                <details class="mt-1">
+                                    <summary class="text-xs text-sky-400 cursor-pointer select-none">
+                                        <i class="fas fa-clock-rotate-left"></i>
+                                        Historial (<?= count($historial) ?> <?= count($historial) === 1 ? 'cambio' : 'cambios' ?>)
+                                    </summary>
+                                    <div class="mt-1 space-y-1 border-l-2 border-sky-500/40 pl-2">
+                                        <?php foreach (array_reverse($historial) as $h):
+                                            $accion = strtolower((string) ($h['action'] ?? 'update'));
+                                            $etiqueta = ['create' => 'Creado', 'update' => 'Editado', 'delete' => 'Eliminado'][$accion] ?? 'Modificado';
+                                            $antes = $h['old_seconds'] === null ? null : (int) $h['old_seconds'];
+                                            $despues = $h['new_seconds'] === null ? null : (int) $h['new_seconds'];
+                                        ?>
+                                            <div class="text-xs text-slate-400">
+                                                <span class="text-slate-200 font-semibold"><?= htmlspecialchars($etiqueta) ?></span>
+                                                por <?= htmlspecialchars($h['performed_by_name'] ?: 'Sistema') ?>
+                                                · <?= htmlspecialchars((string) $h['created_at']) ?>
+                                                <div>
+                                                    <?= $antes === null ? 'Vicidial ' . ph_hms((int) $h['original_seconds']) : ph_hms($antes) ?>
+                                                    →
+                                                    <?= $despues === null ? '<span class="text-amber-300">sin ajuste (vuelve a Vicidial)</span>' : ph_hms($despues) ?>
+                                                </div>
+                                                <?php if (!empty($h['reason'])): ?>
+                                                    <div class="italic text-slate-500">“<?= htmlspecialchars($h['reason']) ?>”</div>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </details>
                             <?php endif; ?>
                         </td>
                         <td class="px-4 py-2 whitespace-nowrap">
