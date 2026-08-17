@@ -1161,6 +1161,29 @@ try {
                     $stmt->execute(['timesheet_report_time',               $tsReportTime,        'text']);
                     $stmt->execute(['timesheet_report_recipients',         $tsReportTo,          'text']);
 
+                    // Autorización de Gerencia para días vencidos. Los emisores se
+                    // guardan por ID de usuario y NO por rol: el rol ADMIN lo comparte
+                    // más de una persona, así que por rol no sería "solo el CEO".
+                    $ovEnabled = isset($_POST['timesheet_override_enabled']) ? 1 : 0;
+                    $ovEmail   = isset($_POST['timesheet_override_notify_email']) ? 1 : 0;
+                    $ovIssuers = array_values(array_unique(array_filter(array_map(
+                        'intval',
+                        (array) ($_POST['timesheet_override_issuers'] ?? [])
+                    ))));
+                    $ovTtl   = max(5, min(60 * 24 * 7, (int) ($_POST['timesheet_override_ttl_minutes'] ?? 240)));
+                    $ovUses  = max(1, min(50, (int) ($_POST['timesheet_override_max_uses'] ?? 1)));
+
+                    $stmt->execute(['timesheet_override_enabled',      (string) $ovEnabled, 'boolean']);
+                    $stmt->execute(['timesheet_override_issuers',      implode(',', $ovIssuers), 'text']);
+                    $stmt->execute(['timesheet_override_ttl_minutes',  (string) $ovTtl,     'number']);
+                    $stmt->execute(['timesheet_override_max_uses',     (string) $ovUses,    'number']);
+                    $stmt->execute(['timesheet_override_notify_email', (string) $ovEmail,   'boolean']);
+
+                    if ($ovEnabled && empty($ovIssuers)) {
+                        $errorMessages[] = 'Ojo: activaste "solo Gerencia" pero no marcaste a nadie que pueda '
+                            . 'emitir el código. Nadie va a poder corregir un día vencido.';
+                    }
+
                     $successMessages[] = 'Configuración del Control de Horas guardada.'
                         . ($tsEnforced ? '' : ' Ojo: el bloqueo está en MODO AVISO, los cambios sobre días cerrados pasarán igual.');
                 } catch (PDOException $e) {
@@ -4360,8 +4383,89 @@ foreach ($permStmt->fetchAll(PDO::FETCH_ASSOC) as $permission) {
                             <?= $tsGet('timesheet_require_code_after_window', '1') === '1' ? 'checked' : '' ?>>
                         <span class="font-semibold">Exigir código de autorización fuera de la ventana</span>
                     </label>
-                    <p class="text-sm text-muted ml-8">Usa el mismo código semanal que ya rota el sistema.
-                        Quien tenga el permiso <code>timesheet_adjust_outside</code> no necesita código.</p>
+                    <p class="text-sm text-muted ml-8">Quien tenga el permiso
+                        <code>timesheet_adjust_outside</code> no necesita código.</p>
+                </div>
+
+                <?php
+                // Autorización de Gerencia. Se elige por PERSONA y no por rol a
+                // propósito: el rol ADMIN lo comparte más de un usuario, así que
+                // restringirlo por rol no sería "solo el CEO".
+                $ovIssuersActuales = array_filter(array_map('intval', preg_split('/[\s,;]+/', (string) $tsGet('timesheet_override_issuers', '')) ?: []));
+                $ovCandidatos = [];
+                try {
+                    $ovCandidatos = $pdo->query("
+                        SELECT u.id, COALESCE(NULLIF(TRIM(u.full_name), ''), u.username) AS nombre, u.role
+                        FROM users u
+                        WHERE u.is_active = 1
+                          AND UPPER(u.role) IN ('ADMIN','GENERALMANAGER','DIRECTOR','DESARROLLADOR','OPERATIONSMANAGER')
+                        ORDER BY nombre
+                    ")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+                } catch (Throwable $e) {
+                    $ovCandidatos = [];
+                }
+                ?>
+                <div class="p-4 rounded-lg space-y-4" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35)">
+                    <div>
+                        <label class="inline-flex items-center gap-3 text-base cursor-pointer">
+                            <input type="checkbox" name="timesheet_override_enabled" value="1" class="w-5 h-5 accent-amber-500"
+                                <?= $tsGet('timesheet_override_enabled', '0') === '1' ? 'checked' : '' ?>>
+                            <span class="font-semibold">Un día vencido solo lo abre Gerencia</span>
+                        </label>
+                        <p class="text-sm text-muted ml-8 mt-1">
+                            Activado, el código semanal <strong>deja de servir</strong> para corregir un día que ya
+                            venció: hace falta un código emitido por las personas marcadas abajo, de un solo uso y
+                            con vencimiento corto. Nómina lo pide desde la pantalla de Ajuste de Horas y a quien
+                            emite le llega la campana y el correo. El semanal sigue igual para entrada temprana,
+                            hora extra y edición de registros.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="form-label"><i class="fas fa-user-shield"></i> Quién puede emitirlo</label>
+                        <?php if (empty($ovCandidatos)): ?>
+                            <p class="text-sm text-muted">No hay usuarios de gerencia activos para listar.</p>
+                        <?php else: ?>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                                <?php foreach ($ovCandidatos as $c): ?>
+                                    <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+                                        <input type="checkbox" name="timesheet_override_issuers[]" value="<?= (int) $c['id'] ?>"
+                                               class="w-4 h-4 accent-amber-500"
+                                            <?= in_array((int) $c['id'], $ovIssuersActuales, true) ? 'checked' : '' ?>>
+                                        <span><?= htmlspecialchars($c['nombre']) ?>
+                                            <span class="text-muted text-xs">(<?= htmlspecialchars($c['role']) ?>)</span>
+                                        </span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                        <p class="text-xs text-muted mt-2">
+                            Se marca por persona, no por rol: el rol Admin lo comparte más de un usuario.
+                            Si no marcas a nadie y el modo está activo, nadie podrá corregir un día vencido.
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="form-label"><i class="fas fa-stopwatch"></i> Vigencia del código (min)</label>
+                            <input type="number" name="timesheet_override_ttl_minutes" min="5" max="10080"
+                                value="<?= (int) $tsGet('timesheet_override_ttl_minutes', '240') ?>" class="input-control">
+                            <p class="text-xs text-muted mt-1">240 = 4 horas. Pasado ese tiempo hay que pedir otro.</p>
+                        </div>
+                        <div>
+                            <label class="form-label"><i class="fas fa-hashtag"></i> Usos por código</label>
+                            <input type="number" name="timesheet_override_max_uses" min="1" max="50"
+                                value="<?= (int) $tsGet('timesheet_override_max_uses', '1') ?>" class="input-control">
+                            <p class="text-xs text-muted mt-1">1 = una sola corrección por autorización.</p>
+                        </div>
+                        <div class="flex items-end">
+                            <label class="inline-flex items-center gap-3 text-sm cursor-pointer pb-2">
+                                <input type="checkbox" name="timesheet_override_notify_email" value="1" class="w-5 h-5 accent-amber-500"
+                                    <?= $tsGet('timesheet_override_notify_email', '1') === '1' ? 'checked' : '' ?>>
+                                <span>Avisar también por correo</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

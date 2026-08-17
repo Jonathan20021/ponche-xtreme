@@ -83,7 +83,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $workDate = trim($_POST['work_date'] ?? '');
     $validDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $workDate) === 1;
 
-    if ($action === 'save_adjustment' && $uid > 0 && $validDate) {
+    if ($action === 'request_override' && $uid > 0 && $validDate) {
+        // Nómina no puede abrir el día sola: se lo pide a Gerencia y queda escrito.
+        if (file_exists(__DIR__ . '/../lib/timesheet_override.php')) {
+            require_once __DIR__ . '/../lib/timesheet_override.php';
+        }
+        if (!function_exists('timesheetOverrideRequestCreate')) {
+            $res = ['ok' => false, 'message' => 'Falta subir lib/timesheet_override.php al servidor.'];
+        } else {
+            $res = timesheetOverrideRequestCreate($pdo, [
+                'requested_by'     => $currentUserId,
+                'target_user_id'   => $uid,
+                'work_date'        => $workDate,
+                'source'           => 'vicidial',
+                'reason'           => (string) ($_POST['request_reason'] ?? ''),
+                'proposed_seconds' => ph_parseHoursToSeconds((string) ($_POST['proposed_hours'] ?? '')),
+            ]);
+        }
+        $res['ok'] ? $ok[] = $res['message'] : $err[] = $res['message'];
+
+    } elseif ($action === 'save_adjustment' && $uid > 0 && $validDate) {
         $seconds = ph_parseHoursToSeconds((string) ($_POST['hours'] ?? ''));
         $reason = trim((string) ($_POST['reason'] ?? ''));
         $original = max(0, (int) ($_POST['original_seconds'] ?? 0));
@@ -147,10 +166,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // El ajuste entra al mismo expediente que los del ponche: etapa,
                 // impacto en RD$, excepciones y alerta si toca dinero ya cerrado.
                 timesheetAfterChange($pdo, $uid, $workDate, $guard, [
-                    'reason'      => $reason,
-                    'source'      => 'ajuste vicidial',
-                    'old_seconds' => $antesSeconds,
-                    'new_seconds' => timesheetDayWorkSeconds($pdo, $uid, $workDate),
+                    'reason'          => $reason,
+                    'source'          => 'ajuste vicidial',
+                    'reference_table' => 'vicidial_payroll_adjustments',
+                    'old_seconds'     => $antesSeconds,
+                    'new_seconds'     => timesheetDayWorkSeconds($pdo, $uid, $workDate),
                 ]);
 
                 $ok[] = 'Horas de ' . $workDate . ' guardadas: ' . ph_hms($seconds)
@@ -189,10 +209,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             timesheetAfterChange($pdo, $uid, $workDate, $guard, [
-                'reason'      => 'Eliminación del ajuste de horas de Vicidial',
-                'source'      => 'ajuste vicidial',
-                'old_seconds' => $antesSeconds,
-                'new_seconds' => timesheetDayWorkSeconds($pdo, $uid, $workDate),
+                'reason'          => 'Eliminación del ajuste de horas de Vicidial',
+                'source'          => 'ajuste vicidial',
+                'reference_table' => 'vicidial_payroll_adjustments',
+                'old_seconds'     => $antesSeconds,
+                'new_seconds'     => timesheetDayWorkSeconds($pdo, $uid, $workDate),
             ]);
 
             $ok[] = 'Ajuste de ' . $workDate . ' eliminado. Vuelve a mandar el dato de Vicidial.';
@@ -379,6 +400,104 @@ foreach ($rows as $r) {
     $totFinal += isset($adjMap[$key]) ? (int) $adjMap[$key]['adjusted_seconds'] : $r['raw_paid'];
     if (isset($adjMap[$key])) { $nAdj++; }
 }
+
+// ---------------------------------------------------------------------------
+// Candado del control de horas, del lado de la pantalla.
+//
+// El POST ya exigía código fuera de la ventana de ajuste, pero el formulario
+// nunca mandaba uno: la página pedía un código que no tenía dónde escribirse y
+// nómina quedaba sin poder corregir nada más viejo que ayer. Aquí se calcula
+// qué días de la tabla ya vencieron (o están cerrados) para mostrar el campo y
+// marcar las filas afectadas.
+// ---------------------------------------------------------------------------
+require_once __DIR__ . '/../lib/timesheet_control.php';
+
+$tsControlOn   = timesheetControlEnabled($pdo);
+$tsRequireCode = $tsControlOn && timesheetSetting($pdo, 'timesheet_require_code_after_window', '1') === '1';
+// Gerencia no necesita código: el permiso ya la autoriza.
+$tsBypass      = $tsControlOn && function_exists('userHasPermission') && userHasPermission('timesheet_adjust_outside');
+$tsStartDate   = $tsControlOn ? timesheetControlStartDate($pdo) : '2000-01-01';
+
+// Etapa real del día (CLOSED/LOCKED no se arreglan con código: hay que reabrir).
+$tsDayStage = [];
+if ($tsControlOn) {
+    try {
+        $sStmt = $pdo->prepare("
+            SELECT user_id, work_date, status
+            FROM timesheet_day_status
+            WHERE work_date BETWEEN ? AND ?
+        ");
+        $sStmt->execute([$start, $end]);
+        foreach ($sStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $d) {
+            $tsDayStage[$d['user_id'] . '|' . $d['work_date']] = (string) $d['status'];
+        }
+    } catch (Throwable $e) {
+        error_log('payroll_hours (etapas): ' . $e->getMessage());
+    }
+}
+
+/** 'ok' | 'code' (vencido, se arregla con código) | 'closed' (hay que reabrir) */
+$tsRowState = [];
+$tsWindowLabels = [];
+$nVencidos = 0; $nCerrados = 0;
+if ($tsControlOn) {
+    foreach ($rows as $r) {
+        $key = $r['user_id'] . '|' . $r['report_date'];
+        $fecha = $r['report_date'];
+        $etapa = $tsDayStage[$key] ?? ($fecha < $tsStartDate ? 'CLOSED' : 'OPEN');
+
+        if (in_array($etapa, ['CLOSED', 'LOCKED'], true)) {
+            $tsRowState[$key] = 'closed';
+            $nCerrados++;
+            continue;
+        }
+        if (!isset($tsWindowLabels[$fecha])) {
+            $tsWindowLabels[$fecha] = timesheetIsWithinWindow($pdo, $fecha)
+                ? null
+                : timesheetWindowLabel($pdo, $fecha);
+        }
+        if ($tsWindowLabels[$fecha] !== null && !$tsBypass && $tsRequireCode) {
+            $tsRowState[$key] = 'code';
+            $nVencidos++;
+        } else {
+            $tsRowState[$key] = 'ok';
+        }
+    }
+}
+$needsCode = $nVencidos > 0;
+
+// Solicitudes de autorización vivas del rango, para que la fila diga en qué va
+// (pendiente / ya aprobada) en vez de dejar a nómina pidiendo dos veces.
+// El file_exists cubre un despliegue a medias: sin el módulo, la pantalla vuelve
+// al comportamiento anterior en vez de tumbarse con un fatal.
+if (file_exists(__DIR__ . '/../lib/timesheet_override.php')) {
+    require_once __DIR__ . '/../lib/timesheet_override.php';
+}
+$hayOverride    = function_exists('timesheetOverrideEnabled');
+$soloGerencia   = $hayOverride && timesheetOverrideEnabled($pdo);
+$puedeEmitir    = $hayOverride && timesheetOverrideCanIssue($pdo, $currentUserId);
+$emisores       = $hayOverride ? timesheetOverrideIssuers($pdo) : [];
+$nombresEmisores = implode(' o ', array_map(
+    static fn($e) => $e['full_name'] ?: $e['username'],
+    $emisores
+)) ?: 'Gerencia';
+
+$solicitudes = [];
+if ($soloGerencia && timesheetOverrideTableReady($pdo)) {
+    try {
+        $rStmt = $pdo->prepare("
+            SELECT target_user_id, work_date, status, created_at
+            FROM timesheet_override_requests
+            WHERE work_date BETWEEN ? AND ? AND status IN ('PENDING','APPROVED')
+        ");
+        $rStmt->execute([$start, $end]);
+        foreach ($rStmt->fetchAll(PDO::FETCH_ASSOC) ?: [] as $s) {
+            $solicitudes[$s['target_user_id'] . '|' . $s['work_date']] = $s;
+        }
+    } catch (Throwable $e) {
+        error_log('payroll_hours (solicitudes): ' . $e->getMessage());
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -405,9 +524,20 @@ foreach ($rows as $r) {
                     El agente ve el ajuste en su portal de inmediato.
                 </p>
             </div>
-            <a href="payroll.php" class="px-4 py-2 rounded-lg bg-slate-700/60 hover:bg-slate-600/60 text-slate-200 text-sm">
-                <i class="fas fa-arrow-left mr-2"></i>Volver a Nómina
-            </a>
+            <div class="flex gap-2">
+                <?php if ($puedeEmitir): ?>
+                    <?php $ovPend = timesheetOverridePendingCount($pdo); ?>
+                    <a href="authorizations.php" class="px-4 py-2 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-white text-sm">
+                        <i class="fas fa-user-shield mr-2"></i>Autorizaciones
+                        <?php if ($ovPend > 0): ?>
+                            <span class="ml-1 px-2 py-0.5 rounded-full bg-white/25 text-xs font-bold"><?= (int) $ovPend ?></span>
+                        <?php endif; ?>
+                    </a>
+                <?php endif; ?>
+                <a href="payroll.php" class="px-4 py-2 rounded-lg bg-slate-700/60 hover:bg-slate-600/60 text-slate-200 text-sm">
+                    <i class="fas fa-arrow-left mr-2"></i>Volver a Nómina
+                </a>
+            </div>
         </div>
 
         <!-- Selector de fuente: Vicidial (ajuste) vs Ponche (historial de cambios) -->
@@ -586,6 +716,61 @@ foreach ($rows as $r) {
             </button>
         </form>
 
+        <?php if ($needsCode): ?>
+            <!-- Fuera de la ventana de ajuste el guard exige código: aquí es donde se escribe. -->
+            <div class="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+                <div class="flex flex-wrap items-end gap-4">
+                    <div class="flex-1 min-w-[260px]">
+                        <div class="text-amber-200 font-semibold text-sm mb-1">
+                            <i class="fas fa-key mr-2"></i>Código de autorización
+                        </div>
+                        <p class="text-amber-100/80 text-xs leading-relaxed">
+                            <?= (int) $nVencidos ?> <?= $nVencidos === 1 ? 'día de esta lista ya venció' : 'días de esta lista ya vencieron' ?>
+                            su ventana de ajuste (<i class="fas fa-lock text-amber-400"></i> en la fecha).
+                            <?php if ($soloGerencia): ?>
+                                Estos días solo los abre un código que emite <strong><?= htmlspecialchars($nombresEmisores) ?></strong>,
+                                y cada código sirve <strong>una sola vez</strong>.
+                                <span class="text-amber-100">El código semanal no funciona aquí.</span>
+                                Pulsa <em>Pedir permiso</em> en la fila que necesitas corregir; cuando te
+                                lo emitan, escríbelo aquí y guarda normal.
+                            <?php else: ?>
+                                Escribe aquí el <strong>código semanal</strong> y guarda normal: se usa solo en
+                                los días vencidos y queda registrado con tu nombre y el motivo.
+                            <?php endif; ?>
+                        </p>
+                        <?php if ($soloGerencia && $puedeEmitir): ?>
+                            <p class="text-xs text-amber-200/70 mt-2">
+                                <i class="fas fa-user-shield mr-1"></i>
+                                Tú puedes emitirlo:
+                                <a href="authorizations.php" class="underline">Autorizaciones de Gerencia</a>.
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-amber-200/80 mb-1" for="phAuthCode">Código</label>
+                        <input type="text" id="phAuthCode" autocomplete="off" spellcheck="false"
+                               placeholder="Ej. WSH4DVG2"
+                               class="w-44 px-3 py-2 rounded-lg bg-slate-900/70 border border-amber-500/50 text-amber-100 text-sm tracking-widest uppercase font-mono focus:outline-none focus:border-amber-400">
+                    </div>
+                </div>
+                <?php if ($nCerrados > 0): ?>
+                    <p class="text-xs text-rose-200/90 mt-3 pt-3 border-t border-amber-500/20">
+                        <i class="fas fa-triangle-exclamation mr-1"></i>
+                        Además hay <?= (int) $nCerrados ?> <?= $nCerrados === 1 ? 'día cerrado' : 'días cerrados' ?>
+                        (<i class="fas fa-lock text-rose-400"></i> rojo): esos no se abren con código, hay que
+                        reabrirlos desde <a href="timesheet_control.php" class="underline">Control de Horas</a>.
+                    </p>
+                <?php endif; ?>
+            </div>
+        <?php elseif ($nCerrados > 0): ?>
+            <div class="mb-6 rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-100 text-sm">
+                <i class="fas fa-lock mr-2"></i>
+                <?= (int) $nCerrados ?> <?= $nCerrados === 1 ? 'día de esta lista está cerrado' : 'días de esta lista están cerrados' ?>.
+                Para corregirlos hay que reabrirlos desde
+                <a href="timesheet_control.php" class="underline">Control de Horas</a>.
+            </div>
+        <?php endif; ?>
+
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4">
                 <div class="text-xs text-slate-400 mb-1">Horas según Vicidial</div>
@@ -664,12 +849,23 @@ foreach ($rows as $r) {
                         $r['full_name'] . ' ' . $r['report_date'] . ' ' . implode(' ', $r['accounts'])
                     );
                     $flagged = $r['capped'] || $r['uncoded_dropped'] > 0;
+                    $estadoTs = $tsRowState[$key] ?? 'ok';
+                    $etiquetaVentana = $tsWindowLabels[$r['report_date']] ?? null;
                 ?>
                     <tr class="ph-row border-b border-slate-800/60 <?= $adj ? 'bg-blue-500/5' : '' ?>"
                         data-search="<?= htmlspecialchars($haystack) ?>"
                         data-adjusted="<?= $adj ? '1' : '0' ?>"
                         data-flagged="<?= $flagged ? '1' : '0' ?>">
-                        <td class="px-4 py-2 text-slate-300 whitespace-nowrap"><?= htmlspecialchars($r['report_date']) ?></td>
+                        <td class="px-4 py-2 text-slate-300 whitespace-nowrap">
+                            <?= htmlspecialchars($r['report_date']) ?>
+                            <?php if ($estadoTs === 'code'): ?>
+                                <i class="fas fa-lock text-amber-400 ml-1"
+                                   title="La ventana de ajuste venció el <?= htmlspecialchars((string) $etiquetaVentana) ?>. Para guardar, escribe el código de autorización arriba."></i>
+                            <?php elseif ($estadoTs === 'closed'): ?>
+                                <i class="fas fa-lock text-rose-400 ml-1"
+                                   title="Día cerrado o dentro de un período de nómina bloqueado. No se abre con código: hay que reabrirlo desde Control de Horas."></i>
+                            <?php endif; ?>
+                        </td>
                         <td class="px-4 py-2 text-slate-200">
                             <?= htmlspecialchars($r['full_name']) ?>
                             <?php if (count($r['accounts']) > 1): ?>
@@ -741,11 +937,13 @@ foreach ($rows as $r) {
                             <?php endif; ?>
                         </td>
                         <td class="px-4 py-2 whitespace-nowrap">
-                            <form method="post" id="<?= $fid ?>" class="inline">
+                            <form method="post" id="<?= $fid ?>" class="inline" data-needs-code="<?= $estadoTs === 'code' ? '1' : '0' ?>">
                                 <input type="hidden" name="action" value="save_adjustment">
                                 <input type="hidden" name="user_id" value="<?= (int) $r['user_id'] ?>">
                                 <input type="hidden" name="work_date" value="<?= htmlspecialchars($r['report_date']) ?>">
                                 <input type="hidden" name="original_seconds" value="<?= (int) $r['raw_paid'] ?>">
+                                <!-- Lo llena el JS con el código escrito arriba (solo si el día lo exige). -->
+                                <input type="hidden" name="authorization_code" class="ph-auth-code" value="">
                                 <input type="hidden" name="start" value="<?= htmlspecialchars($start) ?>">
                                 <input type="hidden" name="end" value="<?= htmlspecialchars($end) ?>">
                                 <input type="hidden" name="agent" value="<?= $agentFilter ?>">
@@ -754,10 +952,12 @@ foreach ($rows as $r) {
                                 </button>
                             </form>
                             <?php if ($adj): ?>
-                                <form method="post" id="<?= $fdel ?>" class="inline" onsubmit="return confirm('¿Quitar el ajuste y volver al dato de Vicidial?');">
+                                <form method="post" id="<?= $fdel ?>" class="inline" data-needs-code="<?= $estadoTs === 'code' ? '1' : '0' ?>"
+                                      onsubmit="return confirm('¿Quitar el ajuste y volver al dato de Vicidial?');">
                                     <input type="hidden" name="action" value="delete_adjustment">
                                     <input type="hidden" name="user_id" value="<?= (int) $r['user_id'] ?>">
                                     <input type="hidden" name="work_date" value="<?= htmlspecialchars($r['report_date']) ?>">
+                                    <input type="hidden" name="authorization_code" class="ph-auth-code" value="">
                                     <input type="hidden" name="start" value="<?= htmlspecialchars($start) ?>">
                                     <input type="hidden" name="end" value="<?= htmlspecialchars($end) ?>">
                                     <input type="hidden" name="agent" value="<?= $agentFilter ?>">
@@ -765,6 +965,31 @@ foreach ($rows as $r) {
                                         <i class="fas fa-rotate-left"></i>
                                     </button>
                                 </form>
+                            <?php endif; ?>
+
+                            <?php if ($soloGerencia && $estadoTs === 'code'):
+                                $sol = $solicitudes[$key] ?? null; ?>
+                                <?php if ($sol === null): ?>
+                                    <button type="button"
+                                            class="ph-ask px-3 py-1.5 rounded bg-amber-600/80 hover:bg-amber-500 text-white text-xs"
+                                            title="Pedir a <?= htmlspecialchars($nombresEmisores) ?> la autorización de este día"
+                                            data-user="<?= (int) $r['user_id'] ?>"
+                                            data-date="<?= htmlspecialchars($r['report_date']) ?>"
+                                            data-name="<?= htmlspecialchars($r['full_name']) ?>"
+                                            data-hours="<?= ph_hms($final) ?>">
+                                        <i class="fas fa-hand"></i> Pedir permiso
+                                    </button>
+                                <?php elseif ($sol['status'] === 'PENDING'): ?>
+                                    <span class="px-3 py-1.5 rounded bg-slate-700/60 text-amber-200 text-xs whitespace-nowrap"
+                                          title="Solicitado el <?= date('d/m/Y H:i', strtotime($sol['created_at'])) ?>">
+                                        <i class="fas fa-hourglass-half"></i> Esperando
+                                    </span>
+                                <?php else: ?>
+                                    <span class="px-3 py-1.5 rounded bg-emerald-600/25 text-emerald-200 text-xs whitespace-nowrap"
+                                          title="Ya te emitieron el código. Escríbelo arriba y guarda.">
+                                        <i class="fas fa-key"></i> Autorizado
+                                    </span>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                     </tr>
@@ -779,6 +1004,61 @@ foreach ($rows as $r) {
             </div>
         </div>
 
+        <?php if ($soloGerencia): ?>
+        <!-- Pedirle el permiso al CEO sin salir de la pantalla. -->
+        <div id="phAskModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/70 p-4">
+            <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-lg shadow-2xl">
+                <form method="post" id="phAskForm">
+                    <input type="hidden" name="action" value="request_override">
+                    <input type="hidden" name="user_id" id="askUser">
+                    <input type="hidden" name="work_date" id="askDate">
+                    <input type="hidden" name="proposed_hours" id="askHours">
+                    <input type="hidden" name="start" value="<?= htmlspecialchars($start) ?>">
+                    <input type="hidden" name="end" value="<?= htmlspecialchars($end) ?>">
+                    <input type="hidden" name="agent" value="<?= $agentFilter ?>">
+
+                    <div class="px-5 py-4 border-b border-slate-700">
+                        <h3 class="text-lg font-semibold text-white">
+                            <i class="fas fa-hand text-amber-400 mr-2"></i>Pedir autorización
+                        </h3>
+                        <p class="text-slate-400 text-sm mt-1">
+                            Le llega a <strong><?= htmlspecialchars($nombresEmisores) ?></strong> con el detalle
+                            del día y cuánto dinero mueve.
+                        </p>
+                    </div>
+
+                    <div class="px-5 py-4 space-y-4">
+                        <div class="bg-slate-900/60 rounded-lg p-3 text-sm">
+                            <div class="text-white font-semibold" id="askName">—</div>
+                            <div class="text-slate-400 text-xs" id="askInfo">—</div>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">
+                                ¿Por qué hay que corregir este día? <span class="text-rose-400">*</span>
+                            </label>
+                            <textarea name="request_reason" id="askReason" rows="3" maxlength="500" required
+                                      placeholder="Ej. El agente trabajó pero Vicidial no registró la sesión de la tarde; el supervisor lo confirmó."
+                                      class="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-700 text-slate-100 text-sm"></textarea>
+                            <p class="text-xs text-slate-500 mt-1">
+                                Es lo único que va a leer para decidir. Sé concreta.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="px-5 py-4 border-t border-slate-700 flex justify-end gap-2">
+                        <button type="button" id="phAskCancel"
+                                class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold">
+                            <i class="fas fa-paper-plane mr-2"></i>Enviar solicitud
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <p class="text-xs text-slate-500 mt-4">
             <i class="fas fa-circle-info mr-1"></i>
             Los ajustes mandan sobre Vicidial en la nómina y en el portal del agente. Todo cambio queda
@@ -788,6 +1068,65 @@ foreach ($rows as $r) {
     </div>
 
     <script>
+    // El código de autorización se escribe UNA vez arriba y viaja con la fila que
+    // se guarde. Sin esto el POST llegaba sin código y el guard rechazaba el
+    // cambio con "se requiere un codigo de autorizacion" sin dar dónde ponerlo.
+    (function () {
+        const box = document.getElementById('phAuthCode');
+        if (!box) { return; }
+
+        box.addEventListener('input', function () {
+            box.value = box.value.toUpperCase().replace(/\s+/g, '');
+        });
+
+        document.addEventListener('submit', function (e) {
+            const form = e.target;
+            if (!form || !form.querySelector) { return; }
+            const hidden = form.querySelector('.ph-auth-code');
+            if (!hidden) { return; }
+
+            const code = box.value.trim();
+            if (form.dataset.needsCode === '1' && code === '') {
+                e.preventDefault();
+                e.stopPropagation();
+                box.focus();
+                box.classList.add('border-rose-400');
+                alert('Ese día ya venció su ventana de ajuste.\n\nEscribe el código de autorización de la semana en el recuadro amarillo antes de guardar.');
+                return;
+            }
+            hidden.value = code;
+        }, true);
+    })();
+
+    // Modal de solicitud de autorización.
+    (function () {
+        const modal  = document.getElementById('phAskModal');
+        if (!modal) { return; }
+        const cancel = document.getElementById('phAskCancel');
+
+        function abrir(btn) {
+            document.getElementById('askUser').value  = btn.dataset.user;
+            document.getElementById('askDate').value  = btn.dataset.date;
+            document.getElementById('askHours').value = btn.dataset.hours || '';
+            document.getElementById('askName').textContent = btn.dataset.name;
+            const f = btn.dataset.date.split('-');
+            document.getElementById('askInfo').textContent =
+                'Día ' + f[2] + '/' + f[1] + '/' + f[0] + ' · horas actuales ' + (btn.dataset.hours || '—');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('askReason').focus();
+        }
+        function cerrar() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        document.querySelectorAll('.ph-ask').forEach(b => b.addEventListener('click', () => abrir(b)));
+        cancel.addEventListener('click', cerrar);
+        modal.addEventListener('click', e => { if (e.target === modal) { cerrar(); } });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrar(); } });
+    })();
+
     (function () {
         const input    = document.getElementById('phSearch');
         const clearBtn = document.getElementById('phSearchClear');

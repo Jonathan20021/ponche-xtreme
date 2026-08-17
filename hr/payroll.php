@@ -903,6 +903,23 @@ if ($selectedPeriod && !empty($payrollRecords)) {
                     Control del Período
                 </a>
                 <?php endif; ?>
+                <?php
+                // Solo lo ve el CEO (o quien él haya designado): es su bandeja de
+                // autorizaciones de horas fuera de ventana.
+                if (file_exists(__DIR__ . '/../lib/timesheet_override.php')) {
+                    require_once __DIR__ . '/../lib/timesheet_override.php';
+                }
+                if (function_exists('timesheetOverrideCanIssue') && timesheetOverrideCanIssue($pdo)):
+                    $ovPendientes = timesheetOverridePendingCount($pdo);
+                ?>
+                <a href="authorizations.php" class="btn-secondary">
+                    <i class="fas fa-user-shield"></i>
+                    Autorizaciones
+                    <?php if ($ovPendientes > 0): ?>
+                        <span class="ml-1 px-2 py-0.5 rounded-full bg-amber-500 text-slate-900 text-xs font-bold"><?= (int) $ovPendientes ?></span>
+                    <?php endif; ?>
+                </a>
+                <?php endif; ?>
                 <a href="payroll_settings.php" class="btn-secondary">
                     <i class="fas fa-cog"></i>
                     Configuración

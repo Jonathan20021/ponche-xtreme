@@ -526,6 +526,7 @@ if (!function_exists('timesheetGuard')) {
             'outside_window' => false,
             'after_close'    => false,
             'requires_code'  => false,
+            'requires_ceo_code' => false,
             'code_id'        => null,
             'enforced'       => true,
             'deadline_label' => '',
@@ -540,6 +541,7 @@ if (!function_exists('timesheetGuard')) {
 
         $enforced = timesheetLockEnforced($pdo);
         $result['enforced'] = $enforced;
+        $result['context']  = $context;
         $result['deadline_label'] = timesheetWindowLabel($pdo, $workDate);
 
         $day   = timesheetGetDay($pdo, $userId, $workDate);
@@ -581,15 +583,40 @@ if (!function_exists('timesheetGuard')) {
                 return $result;
             }
 
+            // Que codigo abre un dia vencido. El semanal es de uso general (lo
+            // tiene quien autoriza entradas tempranas y horas extra, y dura 7
+            // dias); corregir una hora vencida mueve dinero que ya iba a la
+            // nomina, asi que el CEO pidio que eso solo lo abra un codigo
+            // emitido por el, de un solo uso. Si el modo esta apagado, se vuelve
+            // al comportamiento anterior.
+            // El file_exists no sobra: estos archivos se suben a mano a dos
+            // servidores. Si llega este sin timesheet_override.php, el ponche
+            // entero moriria con un fatal; asi solo se comporta como antes.
+            $soloGerencia = false;
+            if (file_exists(__DIR__ . '/timesheet_override.php')) {
+                require_once __DIR__ . '/timesheet_override.php';
+                $soloGerencia = function_exists('timesheetOverrideEnabled')
+                    && timesheetOverrideEnabled($pdo);
+            }
+            $result['requires_ceo_code'] = $soloGerencia;
+
             if ($code === '') {
                 $result['allowed'] = !$enforced;
                 $result['message'] = 'La ventana de ajuste de este dia vencio el '
-                    . $result['deadline_label'] . '. Se requiere un codigo de autorizacion.';
+                    . $result['deadline_label'] . '. '
+                    . ($soloGerencia
+                        ? 'Hace falta un codigo de autorizacion emitido por Gerencia (el codigo semanal no sirve para esto).'
+                        : 'Se requiere un codigo de autorizacion.');
                 return $result;
             }
 
-            require_once __DIR__ . '/authorization_functions.php';
-            $validation = validateAuthorizationCode($pdo, $code, $context, $actor);
+            if ($soloGerencia) {
+                $validation = timesheetOverrideValidate($pdo, $code);
+            } else {
+                require_once __DIR__ . '/authorization_functions.php';
+                $validation = validateAuthorizationCode($pdo, $code, $context, $actor);
+            }
+
             if (empty($validation['valid'])) {
                 $result['allowed'] = !$enforced;
                 $result['message'] = 'Codigo de autorizacion invalido: '
@@ -600,6 +627,66 @@ if (!function_exists('timesheetGuard')) {
         }
 
         return $result;
+    }
+}
+
+if (!function_exists('timesheetConsumeCode')) {
+    /**
+     * Quema el codigo con el que entro el cambio: incrementa su contador de usos
+     * (por eso una autorizacion de un solo uso no sirve dos veces), deja el
+     * rastro en authorization_code_logs y cierra la solicitud que lo origino.
+     *
+     * Se ejecuta UNA sola vez por codigo y request: edit_record.php evalua DOS
+     * dias cuando un punch cambia de fecha, y una sola correccion no puede
+     * consumir dos autorizaciones.
+     */
+    function timesheetConsumeCode(PDO $pdo, array $guard, array $ctx = []): void
+    {
+        $codeId = (int) ($guard['code_id'] ?? 0);
+        if ($codeId <= 0) {
+            return;
+        }
+
+        static $consumidos = [];
+        if (isset($consumidos[$codeId])) {
+            return;
+        }
+        $consumidos[$codeId] = true;
+
+        $actor = (int) ($ctx['performed_by'] ?? ($_SESSION['user_id'] ?? 0));
+
+        try {
+            require_once __DIR__ . '/authorization_functions.php';
+            if (function_exists('logAuthorizationCodeUsage')) {
+                logAuthorizationCodeUsage(
+                    $pdo,
+                    $codeId,
+                    $actor,
+                    (string) ($guard['context'] ?? 'edit_records'),
+                    null,
+                    (string) ($ctx['reference_table'] ?? 'attendance'),
+                    [
+                        'accion'    => $ctx['source'] ?? 'ajuste de horas fuera de ventana',
+                        'user_id'   => $ctx['user_id'] ?? null,
+                        'work_date' => $ctx['work_date'] ?? null,
+                        'motivo'    => $ctx['reason'] ?? null,
+                    ]
+                );
+            }
+        } catch (Throwable $e) {
+            error_log('timesheetConsumeCode(log): ' . $e->getMessage());
+        }
+
+        try {
+            if (file_exists(__DIR__ . '/timesheet_override.php')) {
+                require_once __DIR__ . '/timesheet_override.php';
+                if (function_exists('timesheetOverrideMarkUsed')) {
+                    timesheetOverrideMarkUsed($pdo, $codeId);
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('timesheetConsumeCode(solicitud): ' . $e->getMessage());
+        }
     }
 }
 
@@ -666,6 +753,18 @@ if (!function_exists('timesheetAfterChange')) {
             'authorization_code_id' => $guard['code_id'] ?? null,
             'amount_dop'  => $impact,
             'performed_by'=> $actor,
+        ]);
+
+        // El codigo se quema aqui, con el cambio ya aplicado: si el guard lo
+        // hubiera consumido al validar, un intento fallido mas adelante habria
+        // dejado a la persona sin autorizacion y sin correccion.
+        timesheetConsumeCode($pdo, $guard, [
+            'performed_by'    => $actor,
+            'user_id'         => $userId,
+            'work_date'       => $workDate,
+            'reason'          => $change['reason'] ?? null,
+            'source'          => $change['source'] ?? null,
+            'reference_table' => $change['reference_table'] ?? 'attendance',
         ]);
 
         // Excepciones que nacen del cambio mismo
